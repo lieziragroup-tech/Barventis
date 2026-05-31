@@ -16,6 +16,12 @@ const getActiveTenantId = async () => {
   return user?.tenant_id ?? null;
 };
 
+// Helper to get authenticated user ID — session-based, no localStorage
+const getActiveUserId = async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.user?.id ?? null;
+};
+
 // Helper for Audit Logging — session-based, no localStorage
 const logAudit = async (action, description) => {
   try {
@@ -746,8 +752,7 @@ export const api = {
 
   receiveInvoice: async (id) => {
     const tenantId = await getActiveTenantId();
-    const userStr = localStorage.getItem('umatis_user');
-    const userId = userStr ? JSON.parse(userStr).id : null;
+    const userId = await getActiveUserId();
 
     // Fetch invoice with items
     const { data: invoice, error: fetchErr } = await supabase
@@ -837,8 +842,7 @@ export const api = {
   // --- POS SYNCHRONIZATION ---
   syncPos: async (filename, salesData) => {
     const tenantId = await getActiveTenantId();
-    const userStr = localStorage.getItem('umatis_user');
-    const userId = userStr ? JSON.parse(userStr).id : null;
+    const userId = await getActiveUserId();
     const nowStr = new Date().toISOString().split('T')[0];
 
     // 1. Calculate File Hash for deduplication (SHA-256)
@@ -941,12 +945,17 @@ export const api = {
             negativeWarnings.push(`Stok ${material.name} tidak cukup. Butuh ${deductQty.toFixed(2)}, tersedia ${currentResto.toFixed(2)}. Selisih: ${Math.abs(newQty).toFixed(2)}`);
           }
 
-          // Atomic deduction in Supabase
-          const finalRestoQty = Math.max(0, newQty);
-          await supabase
-            .from('materials')
-            .update({ qty_resto: finalRestoQty })
-            .eq('id', material.id);
+          // Atomic deduction via RPC — prevents race condition (BUG-004)
+          // Uses PostgreSQL GREATEST(0, qty_resto - deductQty) on server side
+          const { error: deductErr } = await supabase.rpc('deduct_stock_atomic', {
+            p_material_id: material.id,
+            p_deduct_qty: deductQty
+          });
+          if (deductErr) {
+            // Fallback to direct update if RPC not yet deployed
+            const finalRestoQty = Math.max(0, newQty);
+            await supabase.from('materials').update({ qty_resto: finalRestoQty }).eq('id', material.id);
+          }
 
           const unitPrice = parseFloat(material.new_price ?? material.price ?? 0);
           const isFreeItem = totalRevenue <= 0;
@@ -1005,8 +1014,7 @@ export const api = {
   // --- STOCK OPNAME ---
   completeOpname: async (opnameData) => {
     const tenantId = await getActiveTenantId();
-    const userStr = localStorage.getItem('umatis_user');
-    const userId = userStr ? JSON.parse(userStr).id : null;
+    const userId = await getActiveUserId();
     
     const location = opnameData.location;
     const items = opnameData.items;

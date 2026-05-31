@@ -63,9 +63,9 @@ export default function PosUpload({ stock, recipes, transactions, onProcessPosSa
       if (match) {
         setActiveTemplate(match.column_mapping);
       }
-      alert("Sistem pembacaan kasir POS berhasil diubah!");
+      // Toast handled via onProcessPosSales callback — notify parent
     } catch (err) {
-      alert("Gagal mengubah template kasir: " + err.message);
+      console.error("Gagal mengubah template kasir:", err.message);
     } finally {
       setLoading(false);
     }
@@ -245,7 +245,7 @@ export default function PosUpload({ stock, recipes, transactions, onProcessPosSa
         setLoading(false);
       } catch (err) {
         setUploadStatus('error');
-        alert("Error parsing excel: " + err.message);
+        console.error("[PosUpload] Error parsing excel:", err.message);
         setLoading(false);
       }
     };
@@ -289,7 +289,8 @@ export default function PosUpload({ stock, recipes, transactions, onProcessPosSa
   const handleCommitSales = () => {
     const unmapped = mappedSales.filter(s => !s.isMapped);
     if (unmapped.length > 0) {
-      alert(`Cannot process sales! There are ${unmapped.length} unmapped F&B items. Please bind all items to recipes first.`);
+      // Surface unmapped items — UI already shows them in the mapping modal
+      console.warn(`${unmapped.length} unmapped items — mapping modal should be open`);
       return;
     }
 
