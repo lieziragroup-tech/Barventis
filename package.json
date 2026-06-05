@@ -1,5 +1,5 @@
 {
-  "name": "zidu-app",
+  "name": "barventis-v2",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -11,7 +11,6 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",
-    "@tailwindcss/vite": "^4.2.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.34.2",
@@ -21,12 +20,13 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.13.0",
-    "tailwind-merge": "^3.5.0",
     "recharts": "^2.12.7",
+    "tailwind-merge": "^3.5.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
+    "@tailwindcss/vite": "^4.2.0",
     "@types/react": "^19.2.13",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.3",
@@ -37,7 +37,6 @@
     "globals": "^17.3.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.0.0",
-    "@tailwindcss/vite": "^4.0.0",
     "vite": "^7.3.1"
   }
 }
