@@ -18,9 +18,13 @@ export default function AuthScreen({ onAuthSuccess }) {
 
     try {
       if (isLogin) {
-        // Authenticate user
+        // Authenticate user (SuperAdmin tidak perlu tenantName)
         const data = await api.login(tenantName, email, password);
-        onAuthSuccess(data.user, data.tenant.name);
+        if (data.user.role === 'SuperAdmin') {
+          onAuthSuccess(data.user, 'superadmin');
+        } else {
+          onAuthSuccess(data.user, data.tenant.name);
+        }
       } else {
         // Register new restaurant / tenant and run programmatic migrations
         const data = await api.register(tenantName, companyName, adminName, email, password);
@@ -117,10 +121,9 @@ export default function AuthScreen({ onAuthSuccess }) {
             <input
               type="text"
               className="form-control"
-              placeholder="e.g. barventis"
+              placeholder="e.g. barventis (kosongkan jika Super Admin)"
               value={tenantName}
               onChange={(e) => setTenantName(e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, ''))}
-              required
               disabled={loading}
               style={{
                 width: '100%',

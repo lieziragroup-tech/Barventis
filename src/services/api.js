@@ -92,22 +92,7 @@ function calculateIngredientCost(material, qtyInUse, recipeUnit) {
 export const api = {
   // --- AUTHENTICATION ---
   login: async (tenantName, email, password) => {
-    // 1. Verify tenant name
-    const { data: tenant, error: tenantErr } = await supabase
-      .from('tenants')
-      .select('*')
-      .eq('name', tenantName.toLowerCase())
-      .single();
-
-    if (tenantErr || !tenant) {
-      throw new Error('Tenant / ID Resto tidak terdaftar.');
-    }
-
-    if (tenant.status !== 'active') {
-      throw new Error('Tenant Resto sedang dinonaktifkan.');
-    }
-
-    // 2. Perform Supabase authentication
+    // 1. Perform Supabase authentication first
     const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
       email,
       password
@@ -117,7 +102,7 @@ export const api = {
       throw new Error('Email atau password salah.');
     }
 
-    // 3. Fetch user profile and verify tenant matching
+    // 2. Fetch user profile
     const { data: userProfile, error: profileErr } = await supabase
       .from('users')
       .select('*')
@@ -125,7 +110,47 @@ export const api = {
       .single();
 
     if (profileErr || !userProfile) {
+      await supabase.auth.signOut();
       throw new Error('Profil user tidak ditemukan di database.');
+    }
+
+    // 3. SuperAdmin: bypass tenant check
+    if (userProfile.role === 'SuperAdmin') {
+      return {
+        token: authData.session.access_token,
+        tenant: { name: 'superadmin', company_name: 'Super Admin' },
+        user: {
+          id: userProfile.id,
+          tenant_id: null,
+          name: userProfile.name,
+          email: userProfile.email,
+          role: userProfile.role,
+          tenant_name: 'superadmin'
+        }
+      };
+    }
+
+    // 4. User biasa: wajib ada tenantName
+    if (!tenantName) {
+      await supabase.auth.signOut();
+      throw new Error('Subdomain / ID Restoran wajib diisi.');
+    }
+
+    // 5. Verify tenant name
+    const { data: tenant, error: tenantErr } = await supabase
+      .from('tenants')
+      .select('*')
+      .eq('name', tenantName.toLowerCase())
+      .single();
+
+    if (tenantErr || !tenant) {
+      await supabase.auth.signOut();
+      throw new Error('Tenant / ID Resto tidak terdaftar.');
+    }
+
+    if (tenant.status !== 'active') {
+      await supabase.auth.signOut();
+      throw new Error('Tenant Resto sedang dinonaktifkan.');
     }
 
     if (userProfile.tenant_id !== tenant.id) {
@@ -133,8 +158,6 @@ export const api = {
       throw new Error('User ini tidak terdaftar di ID Resto ' + tenantName.toUpperCase() + '.');
     }
 
-    // 4. Session is managed by Supabase Auth (no localStorage write needed)
-    // Audit log is handled after onAuthStateChange fires in App.jsx
     try { await logAudit('LOGIN', `User ${userProfile.name} berhasil login ke resto.`); } catch (_) {}
 
     return {
