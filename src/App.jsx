@@ -16,6 +16,7 @@ import AuthScreen from './components/AuthScreen';
 import AuditLogs from './components/AuditLogs';
 import BackupCenter from './components/BackupCenter';
 import ErrorBoundary from './components/ErrorBoundary';
+import SuperAdminPanel from './components/SuperAdminPanel';
 import Onboarding from './components/Onboarding';
 
 // Import API service & Supabase client
@@ -45,16 +46,19 @@ export default function App() {
 
   // 1.5 Role-Based Access Control (RBAC) — Strict separation
   const TAB_ROLES = {
-    dashboard:      ['Admin / Owner', 'Staff'],
-    stock:          ['Admin / Owner', 'Staff'],
-    pos:            ['Admin / Owner', 'Staff'],
-    recipes:        ['Admin / Owner', 'Staff'],
-    invoicing:      ['Admin / Owner'],       // Hanya Owner
-    opname:         ['Admin / Owner'],       // Hanya Owner
-    audit:          ['Admin / Owner'],       // Hanya Owner
-    'cost-control': ['Admin / Owner'],       // Data keuangan
-    backup:         ['Admin / Owner']        // KRITIS
+    dashboard:      ['Admin / Owner', 'Staff', 'SuperAdmin'],
+    stock:          ['Admin / Owner', 'Staff', 'SuperAdmin'],
+    pos:            ['Admin / Owner', 'Staff', 'SuperAdmin'],
+    recipes:        ['Admin / Owner', 'Staff', 'SuperAdmin'],
+    invoicing:      ['Admin / Owner', 'SuperAdmin'],
+    opname:         ['Admin / Owner', 'SuperAdmin'],
+    audit:          ['Admin / Owner', 'SuperAdmin'],
+    'cost-control': ['Admin / Owner', 'SuperAdmin'],
+    backup:         ['Admin / Owner', 'SuperAdmin'],
+    superadmin:     ['SuperAdmin']
   };
+
+  const isSuperAdmin = activeUser?.role === 'SuperAdmin';
 
   const isTabAllowed = (tab) => {
     return TAB_ROLES[tab]?.includes(activeUser?.role);
@@ -454,14 +458,14 @@ export default function App() {
         <div style={{
           padding: '4px 16px',
           fontSize: '0.725rem',
-          color: '#3b82f6',
+          color: isSuperAdmin ? '#f59e0b' : '#3b82f6',
           fontWeight: '700',
           letterSpacing: '0.05em',
           textTransform: 'uppercase',
           marginBottom: '10px',
           opacity: 0.85
         }}>
-          RESTO ID: {tenantName.toUpperCase()}
+          {isSuperAdmin ? '⚡ SUPER ADMIN' : `RESTO ID: ${tenantName.toUpperCase()}`}
         </div>
 
         <ul className="nav-links">
@@ -510,6 +514,12 @@ export default function App() {
               <Database size={18} /> Backup & Restore
             </li>
           )}
+          {isSuperAdmin && (
+            <li className={`nav-item ${activeTab === 'superadmin' ? 'active' : ''}`} onClick={() => setActiveTab('superadmin')}
+              style={{ borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: '8px', paddingTop: '8px', color: '#f59e0b' }}>
+              <LayoutDashboard size={18} /> Super Admin Panel
+            </li>
+          )}
         </ul>
 
         <div className="user-widget">
@@ -539,6 +549,7 @@ export default function App() {
               {activeTab === 'audit' && "Jejak Audit Sistem (Audit Logs)"}
               {activeTab === 'cost-control' && "Monthly Cost Control Sheet"}
               {activeTab === 'backup' && "Backup & Restore Center"}
+              {activeTab === 'superadmin' && "Super Admin Panel"}
             </h1>
             <p>
               {activeTab === 'dashboard' && "Real-time F&B Beverage HPP analytics, top variance and metrics."}
@@ -550,6 +561,7 @@ export default function App() {
               {activeTab === 'audit' && "Linimasa riwayat log aktivitas, perubahan operasional dan parameter sistem."}
               {activeTab === 'cost-control' && "Compare opening, purchasing, and closing opnames to hit <27% target."}
               {activeTab === 'backup' && "Unduh, unggah, buat, dan kelola file cadangan database SQLite Barventis."}
+              {activeTab === 'superadmin' && "Kelola semua tenant, pengguna, dan konfigurasi sistem."}
             </p>
           </div>
           <div className="header-actions">
@@ -616,6 +628,7 @@ export default function App() {
               {activeTab === 'audit' && <AuditLogs activeUser={activeUser} />}
               {activeTab === 'cost-control' && <CostControl stock={stock} transactions={transactions} invoices={invoices} />}
               {activeTab === 'backup' && <BackupCenter activeUser={activeUser} />}
+              {activeTab === 'superadmin' && <SuperAdminPanel activeUser={activeUser} />}
             </ErrorBoundary>
           )}
         </section>
