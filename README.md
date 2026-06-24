@@ -1,16 +1,62 @@
-# React + Vite
+# Barventis — Platform Inventory & Cost Control F&B
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Barventis adalah platform SaaS multi-tenant untuk inventory management dan cost control khusus industri Food & Beverage Indonesia.
 
-Currently, two official plugins are available:
+## Stack
+- **Frontend**: React 19 + Vite 8
+- **Backend**: Supabase (PostgreSQL 16 + Auth + Realtime + RLS)
+- **Deployment**: Vercel
+- **Payment**: Midtrans *(planned)*
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Arsitektur
+- Single codebase, satu folder, deploy ke Vercel
+- Multi-tenant via Supabase Row Level Security (RLS)
+- Setiap tenant terisolasi otomatis oleh `tenant_id` di setiap tabel
+- Tidak ada server/backend terpisah — semua via Supabase client SDK
 
-## React Compiler
+## Setup Development
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+# Clone & install
+npm install
 
-## Expanding the ESLint configuration
+# Buat file .env (copy dari .env.example)
+cp .env.example .env
+# Isi VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY dari Supabase dashboard
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+# Jalankan dev server
+npm run dev
+```
+
+## Setup Supabase
+
+1. Buat project baru di supabase.com
+2. Buka SQL Editor
+3. Jalankan `database/supabase_schema_complete.sql` (schema lengkap: tabel, RLS, RPC, storage, seed — satu file, idempotent)
+4. Copy URL dan anon key ke file `.env`
+
+## Deploy ke Vercel
+
+1. Push ke GitHub
+2. Buka vercel.com → New Project → import repo
+3. Set Environment Variables:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+4. Deploy
+
+## Fitur Phase 1
+- [x] Auth multi-tenant (register outlet, login, logout)
+- [x] Stock Materials CRUD
+- [x] Recipe / COGS management
+- [x] POS Upload (Excel parser, multi-template, deduplication)
+- [x] Purchase Invoice & Stock-In
+- [x] Stock Opname (digital signature)
+- [x] Cost Control dashboard (< 27% target)
+- [x] Audit Trail
+- [x] Backup & Restore
+
+## Roadmap
+- [ ] Bulk Import Excel (Materials, Recipes)
+- [ ] Super Admin dashboard (`admin.barventis.id`)
+- [ ] Billing via Midtrans
+- [ ] Subscription plans (Starter / Professional / Enterprise)

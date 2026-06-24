@@ -18,4 +18,12 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
   },
+  // Node-context files (build config + dev scripts) — recognize Node globals
+  // like process / __dirname so they aren't flagged as undefined.
+  {
+    files: ['scripts/**/*.js', 'vite.config.js', 'eslint.config.js', 'convert_seed.js'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
 ])
