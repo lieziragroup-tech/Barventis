@@ -1,9 +1,7 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 
 export default function AuthScreen({ onAuthSuccess, isSuperAdminMode = false }) {
-  const navigate = useNavigate();
   const [tenantName, setTenantName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -247,25 +245,6 @@ export default function AuthScreen({ onAuthSuccess, isSuperAdminMode = false }) 
             {loading ? 'Sedang Memproses...' : 'Masuk ke Sistem'}
           </button>
         </form>
-
-        {/* Toggle between Tenant Login and Super Admin Portal */}
-        <div style={{ textAlign: 'center', marginTop: '20px' }}>
-          <button
-            type="button"
-            onClick={() => navigate(isSuperAdminMode ? '/' : '/superadmin')}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: isSuperAdminMode ? '#fbbf24' : '#3b82f6',
-              fontSize: '0.8rem',
-              cursor: 'pointer',
-              textDecoration: 'underline',
-              opacity: 0.8
-            }}
-          >
-            {isSuperAdminMode ? 'Masuk sebagai Tenant / Restoran' : 'Portal Keamanan Super Admin'}
-          </button>
-        </div>
 
         {/* CSS for Spinner animation */}
         <style>{`
