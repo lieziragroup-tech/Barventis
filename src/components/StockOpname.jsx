@@ -1,17 +1,19 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Plus, ClipboardCheck, ArrowRight, ShieldCheck, 
-  MapPin, CheckCircle, Save, FileText, RefreshCw, X, Palette
+import { useState, useRef, useEffect } from 'react';
+import {
+  ClipboardCheck, ArrowRight, ShieldCheck,
+  Palette, UploadCloud
 } from 'lucide-react';
+import BulkImport from './BulkImport';
 import confetti from 'canvas-confetti';
 
-export default function StockOpname({ stock, transactions, onCompleteOpname }) {
+export default function StockOpname({ stock, onCompleteOpname }) {
   const [step, setStep] = useState(1); // 1: Init, 2: Count, 3: Reconcile, 4: Approve & Sign
   const [location, setLocation] = useState('RESTO'); // RESTO, CENTRAL
   const [opnameItems, setOpnameItems] = useState([]);
-  const [signatureData, setSignatureData] = useState(null);
+  const [, setSignatureData] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [activeCategory, setActiveCategory] = useState('');
+  const [showBulkImport, setShowBulkImport] = useState(false);
   
   const canvasRef = useRef(null);
 
@@ -89,10 +91,13 @@ export default function StockOpname({ stock, transactions, onCompleteOpname }) {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     
-    // Get mouse/touch position relative to canvas
+    // Get mouse/touch position relative to canvas. Pick the touch point when present,
+    // otherwise the mouse event itself — avoids NaN when clientX is a legitimate 0
+    // (left edge) on a mouse event, where the old `||` fell through to undefined. (LOW #17)
     const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
-    const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+    const point = (e.touches && e.touches[0]) ? e.touches[0] : e;
+    const x = point.clientX - rect.left;
+    const y = point.clientY - rect.top;
 
     ctx.lineTo(x, y);
     ctx.stroke();
@@ -111,16 +116,20 @@ export default function StockOpname({ stock, transactions, onCompleteOpname }) {
 
   const saveSignature = () => {
     if (canvasRef.current) {
-      const canvas = canvasRef.current;
-      const dataUrl = canvas.toDataURL();
+      const dataUrl = canvasRef.current.toDataURL();
       setSignatureData(dataUrl);
+      return dataUrl;
     }
+    return null;
   };
 
   // 5. Complete and Commit Opname
   const handleCommitOpname = () => {
-    saveSignature();
-    
+    // Capture the signature synchronously. setSignatureData is async, so reading the
+    // signatureData state in the same tick would send the STALE previous value
+    // (null on first submit) — C-2. Use the returned dataURL directly instead.
+    const currentSignature = saveSignature();
+
     // Calculate total variance and value adjustment
     const reconciliation = opnameItems.map(item => {
       const pQty = item.physical_qty === '' ? item.book_qty : item.physical_qty;
@@ -133,7 +142,7 @@ export default function StockOpname({ stock, transactions, onCompleteOpname }) {
       };
     });
 
-    onCompleteOpname(location, reconciliation, signatureData);
+    onCompleteOpname(location, reconciliation, currentSignature);
     
     confetti({
       particleCount: 150,
@@ -205,6 +214,13 @@ export default function StockOpname({ stock, transactions, onCompleteOpname }) {
             
             {/* Category tabs */}
             <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', maxWidth: '60%' }}>
+              <button 
+                className="btn btn-secondary" 
+                style={{ padding: '6px 12px', fontSize: '0.8rem', whiteSpace: 'nowrap', display: 'flex', gap: '6px', alignItems: 'center', borderColor: 'var(--accent)' }} 
+                onClick={() => setShowBulkImport(true)}
+              >
+                <UploadCloud size={14} style={{ color: 'var(--accent)' }} /> Import Excel
+              </button>
               {categories.map(cat => (
                 <button 
                   key={cat} 
@@ -401,6 +417,39 @@ export default function StockOpname({ stock, transactions, onCompleteOpname }) {
           </div>
         </div>
       )}
+
+      {/* Bulk Import Modal */}
+      <BulkImport
+        isOpen={showBulkImport}
+        onClose={() => setShowBulkImport(false)}
+        type="opname"
+        title="Bulk Import Hasil Opname"
+        description="Upload data perhitungan fisik dari Excel. Data akan langsung mengisi grid di bawah."
+        onCommit={async (rows) => {
+          const updated = [...opnameItems];
+          let success = 0;
+          let failed = 0;
+          
+          rows.forEach(row => {
+            const idx = updated.findIndex(u => u.name.toLowerCase() === (row.material_name || '').toLowerCase());
+            if (idx >= 0) {
+              updated[idx].physical_qty = parseFloat(row.physical_qty || 0);
+              updated[idx].notes = row.notes || '';
+              success++;
+            } else {
+              failed++;
+            }
+          });
+          
+          setOpnameItems(updated);
+          return { success, failed };
+        }}
+        expectedColumns={[
+          { key: 'material_name', label: 'material_name', required: true, type: 'string', description: 'Nama bahan baku (sama persis dengan sistem)', sample: 'Espresso Bean' },
+          { key: 'physical_qty', label: 'physical_qty', required: true, type: 'number', description: 'Hasil perhitungan fisik (angka)', sample: 12 },
+          { key: 'notes', label: 'notes', required: false, type: 'string', description: 'Catatan selisih (opsional)', sample: 'Tumpah 2 pack' }
+        ]}
+      />
 
     </div>
   );

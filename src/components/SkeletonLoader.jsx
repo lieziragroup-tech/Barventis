@@ -1,4 +1,3 @@
-import React from 'react';
 
 // Single shimmer animation via CSS keyframes injected once
 const shimmerStyle = `

@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Package, UploadCloud, ClipboardCheck, 
-  ChefHat, DollarSign, LogOut, Bell, FileText, History, Database, X
+  ChefHat, DollarSign, LogOut, Bell, FileText, History, Database, X,
+  FileSpreadsheet, Wrench
 } from 'lucide-react';
 
 // Import subcomponents
@@ -16,8 +18,11 @@ import AuthScreen from './components/AuthScreen';
 import AuditLogs from './components/AuditLogs';
 import BackupCenter from './components/BackupCenter';
 import ErrorBoundary from './components/ErrorBoundary';
-import SuperAdminPanel from './components/SuperAdminPanel';
 import Onboarding from './components/Onboarding';
+import Maintenance from './components/Maintenance';
+
+// Lazy load SuperAdminPanel to avoid bundle bloat for regular users
+const SuperAdminPanel = React.lazy(() => import('./components/SuperAdminPanel'));
 
 // Import API service & Supabase client
 import { api } from './services/api';
@@ -25,11 +30,20 @@ import { supabase } from './lib/supabase';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [authSession, setAuthSession] = useState(null);
+  
+  // React Router replacements for activeTab state
+  const navigate = useNavigate();
+  const location = useLocation();
+  const activeTab = location.pathname === '/' ? 'dashboard' : location.pathname.substring(1);
+  const setActiveTab = (tab) => {
+    navigate(tab === 'dashboard' ? '/' : `/${tab}`);
+  };
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const realtimeChannelRef = useRef(null);
+  const isFetchingProfileRef = useRef(false);
 
   const showToast = (message, type = 'error') => {
     setToast({ message, type });
@@ -46,21 +60,22 @@ export default function App() {
 
   // 1.5 Role-Based Access Control (RBAC) — Strict separation
   const TAB_ROLES = {
-    dashboard:      ['Admin / Owner', 'Staff', 'SuperAdmin'],
-    stock:          ['Admin / Owner', 'Staff', 'SuperAdmin'],
-    pos:            ['Admin / Owner', 'Staff', 'SuperAdmin'],
-    recipes:        ['Admin / Owner', 'Staff', 'SuperAdmin'],
-    invoicing:      ['Admin / Owner', 'SuperAdmin'],
-    opname:         ['Admin / Owner', 'SuperAdmin'],
-    audit:          ['Admin / Owner', 'SuperAdmin'],
-    'cost-control': ['Admin / Owner', 'SuperAdmin'],
-    backup:         ['Admin / Owner', 'SuperAdmin'],
-    superadmin:     ['SuperAdmin']
+    dashboard:      ['Admin / Owner', 'Staff'],
+    stock:          ['Admin / Owner', 'Staff'],
+    pos:            ['Admin / Owner', 'Staff'],
+    recipes:        ['Admin / Owner', 'Staff'],
+    invoicing:      ['Admin / Owner'],       // Hanya Owner
+    opname:         ['Admin / Owner'],       // Hanya Owner
+    audit:          ['Admin / Owner'],       // Hanya Owner
+    'cost-control': ['Admin / Owner'],       // Data keuangan
+    backup:         ['Admin / Owner'],        // KRITIS
+    maintenance:    ['Admin / Owner', 'Staff'] // Owner: full tools; Staff: read-only health
   };
 
-  const isSuperAdmin = activeUser?.role === 'SuperAdmin';
-
   const isTabAllowed = (tab) => {
+    if (activeUser?.role === 'Super Admin' || activeUser?.role === 'SuperAdmin') {
+      return tab === 'dashboard' || tab.startsWith('superadmin') || tab.startsWith('super-admin');
+    }
     return TAB_ROLES[tab]?.includes(activeUser?.role);
   };
 
@@ -90,49 +105,85 @@ export default function App() {
     realtimeChannelRef.current = channel;
   };
 
-  // 2. Auth State Listener (replaces localStorage pattern — KRITIS-01 fix)
+  // 2. Auth State Listener — Synchronous Event Listener to prevent Web Lock deadlocks
   useEffect(() => {
-    // Check initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setIsAuthenticated(true);
-        // Fetch user profile from DB
-        api.getProfile().then(profile => {
-          if (profile) {
-            setActiveUser(profile);
-            setTenantName(profile.tenant_name || '');
-            if (profile.tenant_id) subscribeToLowStockAlerts(profile.tenant_id);
-          }
-        }).catch(console.warn);
-      }
-    });
-
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        setIsAuthenticated(true);
-        try {
-          const profile = await api.getProfile();
-          if (profile) {
-            setActiveUser(profile);
-            setTenantName(profile.tenant_name || '');
-            if (profile.tenant_id) subscribeToLowStockAlerts(profile.tenant_id);
-          }
-        } catch (e) { console.warn('Profile fetch failed:', e); }
-      } else if (event === 'SIGNED_OUT') {
-        setIsAuthenticated(false);
-        setActiveUser(null);
-        setTenantName('');
-        setStock([]); setRecipes([]); setTransactions([]); setInvoices([]);
-        if (realtimeChannelRef.current) supabase.removeChannel(realtimeChannelRef.current);
-      }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log(`[Auth Event] Triggered: ${event}`, session?.user?.email);
+      // Only set session state synchronously (no async DB/auth calls inside the event listener!)
+      setAuthSession(session);
     });
 
     return () => {
       subscription.unsubscribe();
-      if (realtimeChannelRef.current) supabase.removeChannel(realtimeChannelRef.current);
     };
   }, []);
+
+  // 2.1 Async Profile Loader — Runs outside the auth event listener context (no deadlocks)
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadProfile = async () => {
+      if (authSession) {
+        setIsAuthenticated(true);
+        
+        // Prevent concurrent duplicate profile fetches
+        if (isFetchingProfileRef.current) {
+          console.log("[Auth Flow] Profile fetch already in progress, skipping.");
+          return;
+        }
+        isFetchingProfileRef.current = true;
+
+        try {
+          console.log("[Auth Flow] Starting profile fetch...");
+          const profile = await api.getProfile();
+          console.log("[Auth Flow] Profile fetch completed:", profile);
+          
+          if (profile && isMounted) {
+            setActiveUser(profile);
+            setTenantName(profile.tenant_name || '');
+            // Initialize memory cache in api service
+            api.setSessionData(profile.tenant_id, profile.id);
+            if (profile.tenant_id) subscribeToLowStockAlerts(profile.tenant_id);
+          } else if (isMounted) {
+            console.warn("[Auth Flow] Profile not found, logging out...");
+            setIsAuthenticated(false);
+            setActiveUser(null);
+            api.setSessionData(null, null);
+            await supabase.auth.signOut();
+          }
+        } catch (e) {
+          console.error('[Auth Flow] Profile fetch failed with error:', e);
+          if (isMounted) {
+            setIsAuthenticated(false);
+            setActiveUser(null);
+            api.setSessionData(null, null);
+            await supabase.auth.signOut();
+          }
+        } finally {
+          isFetchingProfileRef.current = false;
+        }
+      } else {
+        console.log("[Auth Flow] No session active, clearing states.");
+        setIsAuthenticated(false);
+        setActiveUser(null);
+        setTenantName('');
+        setStock([]);
+        setRecipes([]);
+        setTransactions([]);
+        setInvoices([]);
+        api.setSessionData(null, null);
+        if (realtimeChannelRef.current) supabase.removeChannel(realtimeChannelRef.current);
+        sessionStorage.removeItem('barventis_onboarding_dismissed');
+      }
+    };
+
+    loadProfile();
+
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authSession]);
 
   // 2.5 Parallel Data Fetcher — uses Promise.all (LOW-02 fix)
   const fetchAllData = async () => {
@@ -154,7 +205,7 @@ export default function App() {
         total_cost: r.basic_cost,
         yield: "1",
         ingredients: (r.ingredients || []).map(ing => ({
-          item_name: ing.material ? ing.material.name : 'Bahan Terhapus',
+          item_name: ing.item_name || (ing.material ? ing.material.name : 'Bahan Terhapus'),
           qty_in_use: parseFloat(ing.qty_in_use),
           unit: ing.unit,
           unit_price: parseFloat(ing.unit_price),
@@ -176,7 +227,8 @@ export default function App() {
       setTransactions(txData);
 
       // Show onboarding for fresh tenants (no stock yet)
-      if (materialsData.length === 0) {
+      const hasDismissed = sessionStorage.getItem('barventis_onboarding_dismissed') === 'true';
+      if (materialsData.length === 0 && !hasDismissed) {
         setShowOnboarding(true);
       }
     } catch (e) {
@@ -187,10 +239,18 @@ export default function App() {
     setLoading(false);
   };
 
-  // Trigger data fetch when authenticated
+  // Trigger data fetch when authenticated, activeUser profile is loaded, or when switching tabs
   useEffect(() => {
-    if (isAuthenticated) fetchAllData();
-  }, [isAuthenticated]);
+    if (isAuthenticated && activeUser) {
+      if (activeUser.role === 'Super Admin' || activeUser.role === 'SuperAdmin') {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setLoading(false);
+      } else {
+        fetchAllData();
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, activeUser, activeTab]);
 
   // Legacy auth handler (from AuthScreen)
   const handleAuthSuccess = (user, tenant) => {
@@ -296,6 +356,7 @@ export default function App() {
 
       await api.updateRecipe(match.id, {
         menu_name: updatedRecipe.menu_name,
+        category: updatedRecipe.category,
         selling_price: updatedRecipe.selling_price,
         ingredients: mappedIngredients
       });
@@ -319,6 +380,7 @@ export default function App() {
 
       await api.createRecipe({
         menu_name: newRecipe.menu_name,
+        category: newRecipe.category,
         selling_price: newRecipe.selling_price,
         ingredients: mappedIngredients
       });
@@ -403,9 +465,72 @@ export default function App() {
     }
   };
 
-  // If not authenticated, render beautiful Login/Signup Screen
+  // If not authenticated, render Login Screen
   if (!isAuthenticated) {
-    return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
+    const isSA = location.pathname === '/superadmin' || location.pathname === '/super-admin';
+    return <AuthScreen onAuthSuccess={handleAuthSuccess} isSuperAdminMode={isSA} />;
+  }
+
+  // Loading profile guard to prevent mounting routes or layouts before role is determined
+  if (isAuthenticated && !activeUser) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        background: '#060913',
+        color: '#fff',
+        fontFamily: 'system-ui, sans-serif',
+        padding: '20px',
+        textAlign: 'center'
+      }}>
+        <div style={{
+          width: '36px',
+          height: '36px',
+          border: '3px solid rgba(255,255,255,0.1)',
+          borderTopColor: '#3b82f6',
+          borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite',
+          marginBottom: '16px'
+        }}></div>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '20px' }}>Memuat Profil Pengguna...</p>
+        
+        {/* Safe recovery action for user if connection hangs or session gets corrupted */}
+        <button
+          onClick={async () => {
+            try {
+              await supabase.auth.signOut();
+            } catch { /* ignore: best-effort */ }
+            setIsAuthenticated(false);
+            setActiveUser(null);
+            window.location.reload();
+          }}
+          style={{
+            fontSize: '0.75rem',
+            padding: '8px 14px',
+            borderRadius: '6px',
+            background: 'rgba(255, 255, 255, 0.04)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            color: 'var(--text-muted)',
+            cursor: 'pointer',
+            fontWeight: '600',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.08)'}
+          onMouseLeave={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.04)'}
+        >
+          Keluar & Kembali ke Login
+        </button>
+        
+        <style>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
   }
 
   // Loading spinner during background fetch
@@ -458,67 +583,82 @@ export default function App() {
         <div style={{
           padding: '4px 16px',
           fontSize: '0.725rem',
-          color: isSuperAdmin ? '#f59e0b' : '#3b82f6',
+          color: '#3b82f6',
           fontWeight: '700',
           letterSpacing: '0.05em',
           textTransform: 'uppercase',
           marginBottom: '10px',
           opacity: 0.85
         }}>
-          {isSuperAdmin ? '⚡ SUPER ADMIN' : `RESTO ID: ${tenantName.toUpperCase()}`}
+          RESTO ID: {tenantName.toUpperCase()}
         </div>
 
         <ul className="nav-links">
-          {isTabAllowed('dashboard') && (
-            <li className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
-              <LayoutDashboard size={18} /> Dashboard
-            </li>
-          )}
-          {isTabAllowed('stock') && (
-            <li className={`nav-item ${activeTab === 'stock' ? 'active' : ''}`} onClick={() => setActiveTab('stock')}>
-              <Package size={18} /> Stock Materials
-            </li>
-          )}
-          {isTabAllowed('pos') && (
-            <li className={`nav-item ${activeTab === 'pos' ? 'active' : ''}`} onClick={() => setActiveTab('pos')}>
-              <UploadCloud size={18} /> Upload POS Sales
-            </li>
-          )}
-          {isTabAllowed('recipes') && (
-            <li className={`nav-item ${activeTab === 'recipes' ? 'active' : ''}`} onClick={() => setActiveTab('recipes')}>
-              <ChefHat size={18} /> F&B Recipes (COGS)
-            </li>
-          )}
-          {isTabAllowed('invoicing') && (
-            <li className={`nav-item ${activeTab === 'invoicing' ? 'active' : ''}`} onClick={() => setActiveTab('invoicing')}>
-              <FileText size={18} /> Invoicing / PO
-            </li>
-          )}
-          {isTabAllowed('opname') && (
-            <li className={`nav-item ${activeTab === 'opname' ? 'active' : ''}`} onClick={() => setActiveTab('opname')}>
-              <ClipboardCheck size={18} /> Stock Opname
-            </li>
-          )}
-          {isTabAllowed('audit') && (
-            <li className={`nav-item ${activeTab === 'audit' ? 'active' : ''}`} onClick={() => setActiveTab('audit')}>
-              <History size={18} /> Jejak Audit
-            </li>
-          )}
-          {isTabAllowed('cost-control') && (
-            <li className={`nav-item ${activeTab === 'cost-control' ? 'active' : ''}`} onClick={() => setActiveTab('cost-control')}>
-              <DollarSign size={18} /> Cost Control
-            </li>
-          )}
-          {isTabAllowed('backup') && (
-            <li className={`nav-item ${activeTab === 'backup' ? 'active' : ''}`} onClick={() => setActiveTab('backup')}>
-              <Database size={18} /> Backup & Restore
-            </li>
-          )}
-          {isSuperAdmin && (
-            <li className={`nav-item ${activeTab === 'superadmin' ? 'active' : ''}`} onClick={() => setActiveTab('superadmin')}
-              style={{ borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: '8px', paddingTop: '8px', color: '#f59e0b' }}>
-              <LayoutDashboard size={18} /> Super Admin Panel
-            </li>
+          {(activeUser?.role === 'Super Admin' || activeUser?.role === 'SuperAdmin') ? (
+            <>
+              <li className={`nav-item ${(activeTab === 'superadmin' || activeTab === 'super-admin') ? 'active' : ''}`} onClick={() => setActiveTab('superadmin')}>
+                <LayoutDashboard size={18} style={{ color: '#fbbf24' }} /> Kelola Tenant
+              </li>
+              <li className={`nav-item ${activeTab === 'superadmin/templates' ? 'active' : ''}`} onClick={() => setActiveTab('superadmin/templates')}>
+                <FileSpreadsheet size={18} style={{ color: '#fbbf24' }} /> POS Templates
+              </li>
+              <li className={`nav-item ${activeTab === 'superadmin/logs' ? 'active' : ''}`} onClick={() => setActiveTab('superadmin/logs')}>
+                <History size={18} style={{ color: '#fbbf24' }} /> Log Audit Global
+              </li>
+            </>
+          ) : (
+            <>
+              {isTabAllowed('dashboard') && (
+                <li className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
+                  <LayoutDashboard size={18} /> Dashboard
+                </li>
+              )}
+              {isTabAllowed('stock') && (
+                <li className={`nav-item ${activeTab === 'stock' ? 'active' : ''}`} onClick={() => setActiveTab('stock')}>
+                  <Package size={18} /> Stock Materials
+                </li>
+              )}
+              {isTabAllowed('pos') && (
+                <li className={`nav-item ${activeTab === 'pos' ? 'active' : ''}`} onClick={() => setActiveTab('pos')}>
+                  <UploadCloud size={18} /> Upload POS Sales
+                </li>
+              )}
+              {isTabAllowed('recipes') && (
+                <li className={`nav-item ${activeTab === 'recipes' ? 'active' : ''}`} onClick={() => setActiveTab('recipes')}>
+                  <ChefHat size={18} /> F&B Recipes (COGS)
+                </li>
+              )}
+              {isTabAllowed('invoicing') && (
+                <li className={`nav-item ${activeTab === 'invoicing' ? 'active' : ''}`} onClick={() => setActiveTab('invoicing')}>
+                  <FileText size={18} /> Invoicing / PO
+                </li>
+              )}
+              {isTabAllowed('opname') && (
+                <li className={`nav-item ${activeTab === 'opname' ? 'active' : ''}`} onClick={() => setActiveTab('opname')}>
+                  <ClipboardCheck size={18} /> Stock Opname
+                </li>
+              )}
+              {isTabAllowed('audit') && (
+                <li className={`nav-item ${activeTab === 'audit' ? 'active' : ''}`} onClick={() => setActiveTab('audit')}>
+                  <History size={18} /> Jejak Audit
+                </li>
+              )}
+              {isTabAllowed('cost-control') && (
+                <li className={`nav-item ${activeTab === 'cost-control' ? 'active' : ''}`} onClick={() => setActiveTab('cost-control')}>
+                  <DollarSign size={18} /> Cost Control
+                </li>
+              )}
+              {isTabAllowed('backup') && (
+                <li className={`nav-item ${activeTab === 'backup' ? 'active' : ''}`} onClick={() => setActiveTab('backup')}>
+                  <Database size={18} /> Backup & Restore
+                </li>
+              )}
+              {isTabAllowed('maintenance') && (
+                <li className={`nav-item ${activeTab === 'maintenance' ? 'active' : ''}`} onClick={() => setActiveTab('maintenance')}>
+                  <Wrench size={18} /> Maintenance
+                </li>
+              )}
+            </>
           )}
         </ul>
 
@@ -540,28 +680,48 @@ export default function App() {
         <header className="content-header">
           <div className="header-title-sec">
             <h1>
-              {activeTab === 'dashboard' && "Cost Control Dashboard"}
-              {activeTab === 'stock' && "Warehouse Stocks & Ledgers"}
-              {activeTab === 'pos' && "POS Kasir Integration"}
-              {activeTab === 'recipes' && "Menu COGS & Recipe Builder"}
-              {activeTab === 'invoicing' && "Purchase Invoicing"}
-              {activeTab === 'opname' && "Stock Opname & Auditing"}
-              {activeTab === 'audit' && "Jejak Audit Sistem (Audit Logs)"}
-              {activeTab === 'cost-control' && "Monthly Cost Control Sheet"}
-              {activeTab === 'backup' && "Backup & Restore Center"}
-              {activeTab === 'superadmin' && "Super Admin Panel"}
+              {(activeUser?.role === 'Super Admin' || activeUser?.role === 'SuperAdmin') ? (
+                <>
+                  {(activeTab === 'superadmin' || activeTab === 'super-admin') && "Platform Tenants Management"}
+                  {activeTab === 'superadmin/templates' && "Global POS Excel Templates"}
+                  {activeTab === 'superadmin/logs' && "Global System Audit Trail"}
+                </>
+              ) : (
+                <>
+                  {activeTab === 'dashboard' && "Cost Control Dashboard"}
+                  {activeTab === 'stock' && "Warehouse Stocks & Ledgers"}
+                  {activeTab === 'pos' && "POS Kasir Integration"}
+                  {activeTab === 'recipes' && "Menu COGS & Recipe Builder"}
+                  {activeTab === 'invoicing' && "Purchase Invoicing"}
+                  {activeTab === 'opname' && "Stock Opname & Auditing"}
+                  {activeTab === 'audit' && "Jejak Audit Sistem (Audit Logs)"}
+                  {activeTab === 'cost-control' && "Monthly Cost Control Sheet"}
+                  {activeTab === 'backup' && "Backup & Restore Center"}
+                  {activeTab === 'maintenance' && "System Maintenance"}
+                </>
+              )}
             </h1>
             <p>
-              {activeTab === 'dashboard' && "Real-time F&B Beverage HPP analytics, top variance and metrics."}
-              {activeTab === 'stock' && "Manage raw materials — edit supplier, price, stock levels. Dual-unit display."}
-              {activeTab === 'pos' && "Browser-side Excel parser. Drag and drop POS reports to deduct raw stock."}
-              {activeTab === 'recipes' && "Configure ingredients, fixed costs, and selling HPP percentages."}
-              {activeTab === 'invoicing' && "Create purchase orders, track invoices, auto stock-in on receive."}
-              {activeTab === 'opname' && "Wizard-style month-end counting sheet with digital signature."}
-              {activeTab === 'audit' && "Linimasa riwayat log aktivitas, perubahan operasional dan parameter sistem."}
-              {activeTab === 'cost-control' && "Compare opening, purchasing, and closing opnames to hit <27% target."}
-              {activeTab === 'backup' && "Unduh, unggah, buat, dan kelola file cadangan database SQLite Barventis."}
-              {activeTab === 'superadmin' && "Kelola semua tenant, pengguna, dan konfigurasi sistem."}
+              {(activeUser?.role === 'Super Admin' || activeUser?.role === 'SuperAdmin') ? (
+                <>
+                  {(activeTab === 'superadmin' || activeTab === 'super-admin') && "Manage client databases, licenses, active/inactive statuses, and seed metrics."}
+                  {activeTab === 'superadmin/templates' && "Define global Excel sheet mappings for Moka, Pawoon, Olsera, and other POS engines."}
+                  {activeTab === 'superadmin/logs' && "Consolidated platform-wide security audit trails and log tracking."}
+                </>
+              ) : (
+                <>
+                  {activeTab === 'dashboard' && "Real-time F&B Beverage HPP analytics, top variance and metrics."}
+                  {activeTab === 'stock' && "Manage raw materials — edit supplier, price, stock levels. Dual-unit display."}
+                  {activeTab === 'pos' && "Browser-side Excel parser. Drag and drop POS reports to deduct raw stock."}
+                  {activeTab === 'recipes' && "Configure ingredients, fixed costs, and selling HPP percentages."}
+                  {activeTab === 'invoicing' && "Create purchase orders, track invoices, auto stock-in on receive."}
+                  {activeTab === 'opname' && "Wizard-style month-end counting sheet with digital signature."}
+                  {activeTab === 'audit' && "Linimasa riwayat log aktivitas, perubahan operasional dan parameter sistem."}
+                  {activeTab === 'cost-control' && "Compare opening, purchasing, and closing opnames to hit <27% target."}
+                  {activeTab === 'backup' && "Unduh, unggah, buat, dan kelola file cadangan database SQLite Barventis."}
+                  {activeTab === 'maintenance' && "Status kesehatan sistem, pemeriksaan integritas data, hitung ulang HPP, dan manajemen role staff."}
+                </>
+              )}
             </p>
           </div>
           <div className="header-actions">
@@ -569,7 +729,7 @@ export default function App() {
               <Bell size={20} />
               <div style={{ position: 'absolute', top: '-4px', right: '-2px', width: '8px', height: '8px', borderRadius: '50%', background: 'var(--danger)' }}></div>
             </div>
-            {activeTab !== 'pos' && (
+            {activeUser?.role !== 'Super Admin' && activeUser?.role !== 'SuperAdmin' && activeTab !== 'pos' && (
               <button className="btn btn-primary" style={{ padding: '8px 14px', fontSize: '0.825rem', display: 'flex', gap: '6px', alignItems: 'center' }} onClick={() => setActiveTab('pos')}>
                 <UploadCloud size={14} /> Quick POS Sync
               </button>
@@ -610,7 +770,13 @@ export default function App() {
                 </p>
                 <button
                   className="btn btn-primary"
-                  onClick={() => setActiveTab('dashboard')}
+                  onClick={() => {
+                    if (activeUser?.role === 'Super Admin' || activeUser?.role === 'SuperAdmin') {
+                      setActiveTab('superadmin');
+                    } else {
+                      setActiveTab('dashboard');
+                    }
+                  }}
                   style={{ padding: '10px 24px', fontWeight: '700', borderRadius: '8px' }}
                 >
                   Kembali ke Dashboard
@@ -618,17 +784,49 @@ export default function App() {
               </div>
             </div>
           ) : (
-            <ErrorBoundary label="Halaman ini">
-              {activeTab === 'dashboard' && <Dashboard stock={stock} recipes={recipes} transactions={transactions} onNavigate={setActiveTab} />}
-              {activeTab === 'stock' && <StockLedger stock={stock} transactions={transactions} onAdjustStock={handleAdjustStock} onUpdateItem={handleUpdateItem} onAddItem={handleAddItem} onDeleteItem={handleDeleteItem} />}
-              {activeTab === 'pos' && <PosUpload stock={stock} recipes={recipes} transactions={transactions} onProcessPosSales={handleProcessPosSales} />}
-              {activeTab === 'recipes' && <Recipes stock={stock} recipes={recipes} onSaveRecipe={handleSaveRecipe} onAddRecipe={handleAddRecipe} />}
-              {activeTab === 'invoicing' && <Invoicing stock={stock} invoices={invoices} onCreateInvoice={handleCreateInvoice} onReceiveInvoice={handleReceiveInvoice} onCancelInvoice={handleCancelInvoice} />}
-              {activeTab === 'opname' && <StockOpname stock={stock} transactions={transactions} onCompleteOpname={handleCompleteOpname} />}
-              {activeTab === 'audit' && <AuditLogs activeUser={activeUser} />}
-              {activeTab === 'cost-control' && <CostControl stock={stock} transactions={transactions} invoices={invoices} />}
-              {activeTab === 'backup' && <BackupCenter activeUser={activeUser} />}
-              {activeTab === 'superadmin' && <SuperAdminPanel activeUser={activeUser} />}
+            <ErrorBoundary label="Halaman ini" role={activeUser?.role}>
+              <Routes>
+                {(activeUser?.role === 'Super Admin' || activeUser?.role === 'SuperAdmin') ? (
+                  <>
+                    <Route path="/superadmin" element={
+                      <React.Suspense fallback={<div className="glass-card" style={{ padding: '40px', textAlign: 'center', color: '#fff' }}>Memuat Panel Sistem...</div>}>
+                        <SuperAdminPanel tab="tenants" activeUser={activeUser} />
+                      </React.Suspense>
+                    } />
+                    <Route path="/super-admin" element={
+                      <React.Suspense fallback={<div className="glass-card" style={{ padding: '40px', textAlign: 'center', color: '#fff' }}>Memuat Panel Sistem...</div>}>
+                        <SuperAdminPanel tab="tenants" activeUser={activeUser} />
+                      </React.Suspense>
+                    } />
+                    <Route path="/superadmin/templates" element={
+                      <React.Suspense fallback={<div className="glass-card" style={{ padding: '40px', textAlign: 'center', color: '#fff' }}>Memuat Panel Sistem...</div>}>
+                        <SuperAdminPanel tab="templates" activeUser={activeUser} />
+                      </React.Suspense>
+                    } />
+                    <Route path="/superadmin/logs" element={
+                      <React.Suspense fallback={<div className="glass-card" style={{ padding: '40px', textAlign: 'center', color: '#fff' }}>Memuat Panel Sistem...</div>}>
+                        <SuperAdminPanel tab="logs" activeUser={activeUser} />
+                      </React.Suspense>
+                    } />
+                    <Route path="/" element={<Navigate to="/superadmin" replace />} />
+                    <Route path="*" element={<Navigate to="/superadmin" replace />} />
+                  </>
+                ) : (
+                  <>
+                    <Route path="/" element={<Dashboard stock={stock} recipes={recipes} transactions={transactions} onNavigate={setActiveTab} />} />
+                    <Route path="/stock" element={<StockLedger stock={stock} transactions={transactions} onAdjustStock={handleAdjustStock} onUpdateItem={handleUpdateItem} onAddItem={handleAddItem} onDeleteItem={handleDeleteItem} />} />
+                    <Route path="/pos" element={<PosUpload stock={stock} recipes={recipes} transactions={transactions} onProcessPosSales={handleProcessPosSales} />} />
+                    <Route path="/recipes" element={<Recipes stock={stock} recipes={recipes} onSaveRecipe={handleSaveRecipe} onAddRecipe={handleAddRecipe} />} />
+                    <Route path="/invoicing" element={<Invoicing stock={stock} invoices={invoices} onCreateInvoice={handleCreateInvoice} onReceiveInvoice={handleReceiveInvoice} onCancelInvoice={handleCancelInvoice} />} />
+                    <Route path="/opname" element={<StockOpname stock={stock} transactions={transactions} onCompleteOpname={handleCompleteOpname} />} />
+                    <Route path="/audit" element={<AuditLogs activeUser={activeUser} />} />
+                    <Route path="/cost-control" element={<CostControl stock={stock} transactions={transactions} invoices={invoices} />} />
+                    <Route path="/backup" element={<BackupCenter activeUser={activeUser} />} />
+                    <Route path="/maintenance" element={<Maintenance activeUser={activeUser} />} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </>
+                )}
+              </Routes>
             </ErrorBoundary>
           )}
         </section>
@@ -641,7 +839,10 @@ export default function App() {
         <Onboarding
           tenantName={tenantName}
           onNavigate={(tab) => setActiveTab(tab)}
-          onDismiss={() => setShowOnboarding(false)}
+          onDismiss={() => {
+            setShowOnboarding(false);
+            sessionStorage.setItem('barventis_onboarding_dismissed', 'true');
+          }}
         />
       )}
 

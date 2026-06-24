@@ -56,16 +56,32 @@ export default class ErrorBoundary extends React.Component {
               {this.state.error.message}
             </code>
           )}
-          <button
-            className="btn btn-secondary"
-            style={{ display: 'flex', gap: '8px', alignItems: 'center' }}
-            onClick={() => {
-              this.setState({ hasError: false, error: null, errorInfo: null });
-              window.location.reload();
-            }}
-          >
-            <RefreshCw size={14} /> Muat Ulang Halaman
-          </button>
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+            <button
+              className="btn btn-secondary"
+              style={{ display: 'flex', gap: '8px', alignItems: 'center' }}
+              onClick={() => {
+                this.setState({ hasError: false, error: null, errorInfo: null });
+                window.location.reload();
+              }}
+            >
+              <RefreshCw size={14} /> Muat Ulang Halaman
+            </button>
+            <button
+              className="btn btn-primary"
+              style={{ display: 'flex', gap: '8px', alignItems: 'center' }}
+              onClick={() => {
+                this.setState({ hasError: false, error: null, errorInfo: null });
+                if (this.props.role === 'Super Admin' || this.props.role === 'SuperAdmin') {
+                  window.location.href = '/superadmin';
+                } else {
+                  window.location.href = '/';
+                }
+              }}
+            >
+              Kembali ke Dashboard
+            </button>
+          </div>
         </div>
       );
     }

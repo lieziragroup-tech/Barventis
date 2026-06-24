@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  History, Search, ShieldAlert, Filter, Calendar, 
+import { useState, useEffect } from 'react';
+import {
+  History, Search, ShieldAlert, Calendar,
   ArrowRight, Clock, Laptop, RefreshCw, X, AlertTriangle, CheckCircle, Info
 } from 'lucide-react';
 import { api } from '../services/api';
@@ -15,6 +15,7 @@ export default function AuditLogs({ activeUser }) {
 
   // Fetch logs on mount
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability
     fetchLogs();
   }, []);
 
@@ -33,7 +34,7 @@ export default function AuditLogs({ activeUser }) {
   };
 
   const getActionColor = (action) => {
-    const act = action.toUpperCase();
+    const act = (action || '').toUpperCase();
     if (act.includes('CREATE') || act.includes('RECEIVE') || act.includes('LOGIN') || act.includes('REGISTER')) {
       return {
         badge: 'rgba(81, 207, 102, 0.12)',
@@ -63,7 +64,7 @@ export default function AuditLogs({ activeUser }) {
   };
 
   const getActionCategory = (action) => {
-    const act = action.toUpperCase();
+    const act = (action || '').toUpperCase();
     if (act.includes('LOGIN') || act.includes('REGISTER')) return 'AUTH';
     if (act.includes('MATERIAL') || act.includes('PRICE') || act.includes('ADJUST')) return 'MATERIAL';
     if (act.includes('RECIPE')) return 'RECIPE';
@@ -110,10 +111,10 @@ export default function AuditLogs({ activeUser }) {
   const totalLogsCount = logs.length;
   const uniqueUsers = new Set(logs.map(l => l.username)).size;
   const securityAlerts = logs.filter(l => {
-    const act = l.action.toUpperCase();
+    const act = (l.action || '').toUpperCase();
     return act.includes('DELETE') || act.includes('CANCEL');
   }).length;
-  const syncsCount = logs.filter(l => l.action.toUpperCase().includes('SYNC')).length;
+  const syncsCount = logs.filter(l => (l.action || '').toUpperCase().includes('SYNC')).length;
 
   return (
     <div className="audit-logs-container">
@@ -529,7 +530,7 @@ export default function AuditLogs({ activeUser }) {
                 <div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Status Evaluasi Keamanan</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', fontWeight: '600' }}>
-                    {selectedLog.action.toUpperCase().includes('DELETE') || selectedLog.action.toUpperCase().includes('CANCEL') ? (
+                    {(selectedLog.action || '').toUpperCase().includes('DELETE') || (selectedLog.action || '').toUpperCase().includes('CANCEL') ? (
                       <>
                         <ShieldAlert size={14} style={{ color: 'var(--danger)' }} />
                         <span style={{ color: 'var(--danger)' }}>KRITIS (Modifikasi Sensitif)</span>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Database, Download, Trash2, RefreshCw, UploadCloud, 
   AlertTriangle, ShieldAlert, CheckCircle, Clock, FileArchive, X, Info
@@ -7,7 +7,7 @@ import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
 import confetti from 'canvas-confetti';
 
-export default function BackupCenter({ activeUser }) {
+export default function BackupCenter() {
   const [backups, setBackups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -15,7 +15,7 @@ export default function BackupCenter({ activeUser }) {
   
   // File Upload states
   const [dragActive, setDragActive] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState(null);
+  const [, setUploadedFile] = useState(null);
 
   // Restore Modal states
   const [showRestoreModal, setShowRestoreModal] = useState(false);
@@ -24,6 +24,7 @@ export default function BackupCenter({ activeUser }) {
   const [isRestoring, setIsRestoring] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability
     fetchBackups();
   }, []);
 
@@ -149,16 +150,15 @@ export default function BackupCenter({ activeUser }) {
 
     setIsRestoring(true);
     try {
-      let res;
       // If restoring from uploaded file
       if (selectedRestoreBackup instanceof File) {
         const formData = new FormData();
         formData.append('backup_file', selectedRestoreBackup);
-        res = await api.restoreBackup(formData);
-      } 
+        await api.restoreBackup(formData);
+      }
       // If restoring from local file list
       else {
-        res = await api.restoreBackup(selectedRestoreBackup.filename);
+        await api.restoreBackup(selectedRestoreBackup.filename);
       }
 
       // Success Confetti

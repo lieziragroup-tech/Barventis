@@ -1,9 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import { useState } from 'react';
 import {
   Search, Plus, Edit, History, X, Download, Trash2,
-  ArrowLeftRight, AlertTriangle, CheckCircle, Package
+  Package, UploadCloud
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import BulkImport from './BulkImport';
+import { api } from '../services/api';
 
 export default function StockLedger({ stock, transactions, onAdjustStock, onUpdateItem, onAddItem, onDeleteItem }) {
   const [activeLoc, setActiveLoc] = useState('ALL');
@@ -18,6 +20,7 @@ export default function StockLedger({ stock, transactions, onAdjustStock, onUpda
   const [adjustNotes, setAdjustNotes] = useState('');
   const [editItem, setEditItem] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
   const [newItem, setNewItem] = useState({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15 });
 
   const categories = ['ALL', ...new Set(stock.map(item => item.category))];
@@ -38,7 +41,7 @@ export default function StockLedger({ stock, transactions, onAdjustStock, onUpda
   const filteredStock = stock.filter(item => {
     const totalQty = (item.qty_resto || 0) + (item.qty_central || 0);
     const minLevel = item.min_stock || 15;
-    const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) || item.supplier.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = (item.name || '').toLowerCase().includes(search.toLowerCase()) || (item.supplier || '').toLowerCase().includes(search.toLowerCase());
     const matchesCat = catFilter === 'ALL' || item.category === catFilter;
     let matchesAlert = true;
     if (alertFilter === 'CRITICAL') matchesAlert = totalQty === 0;
@@ -136,6 +139,9 @@ export default function StockLedger({ stock, transactions, onAdjustStock, onUpda
             <button className="btn btn-primary" style={{ padding: '8px 14px', fontSize: '0.8rem' }} onClick={() => setShowAddModal(true)}>
               <Plus size={14} /> Tambah Bahan
             </button>
+            <button className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '0.8rem' }} onClick={() => setShowBulkImport(true)}>
+              <UploadCloud size={14} /> Bulk Import
+            </button>
             <button className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '0.8rem' }} onClick={handleExport}>
               <Download size={14} /> Export Excel
             </button>
@@ -173,7 +179,7 @@ export default function StockLedger({ stock, transactions, onAdjustStock, onUpda
                   else if (total < min) badge = <span className="badge badge-warning">Low</span>;
 
                   return (
-                    <tr key={item.name}>
+                    <tr key={item.id ?? item.name}>
                       <td>
                         <div style={{ fontWeight: 600 }}>{item.name}</div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{item.full_pack || item.unit} / {item.unit}</div>
@@ -428,6 +434,32 @@ export default function StockLedger({ stock, transactions, onAdjustStock, onUpda
           </div>
         </div>
       )}
+
+      {/* Bulk Import Modal */}
+      <BulkImport
+        isOpen={showBulkImport}
+        onClose={() => setShowBulkImport(false)}
+        type="materials"
+        title="Bulk Import Bahan Baku"
+        description="Upload data bahan baku sekaligus dari file Excel."
+        onCommit={async (rows) => {
+          const res = await api.bulkImportMaterials(rows);
+          if (res.success > 0) {
+            // reload to fetch new data
+            window.location.reload();
+          }
+          return res;
+        }}
+        expectedColumns={[
+          { key: 'name', label: 'name', required: true, type: 'string', description: 'Nama unik bahan baku', sample: 'Espresso Bean' },
+          { key: 'category', label: 'category', required: true, type: 'string', description: 'Kategori (Coffee, Milk, dll)', sample: 'Coffee & Tea' },
+          { key: 'supplier', label: 'supplier', required: false, type: 'string', description: 'Nama supplier', sample: 'Vendor A' },
+          { key: 'unit', label: 'unit', required: true, type: 'string', description: 'Satuan beli (pck, btl, ltr, dll)', sample: 'kg' },
+          { key: 'full_pack', label: 'full_pack', required: false, type: 'string', description: 'Isi per pack (1000 gr)', sample: '1000 gr' },
+          { key: 'price', label: 'price', required: true, type: 'number', description: 'Harga beli (angka)', sample: 120000 },
+          { key: 'min_stock', label: 'min_stock', required: false, type: 'number', description: 'Batas alert stok minimum', sample: 5 }
+        ]}
+      />
     </div>
   );
 }

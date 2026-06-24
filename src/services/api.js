@@ -1,44 +1,47 @@
 // UMATIS Serverless API Service Client for Supabase Backend Integration
 import { supabase } from '../lib/supabase';
 
-// Helper to get active tenant info — uses Supabase session (KRITIS-01 fix, no localStorage)
+let activeTenantId = null;
+let activeUserId = null;
+
+// Helper to get active tenant info — uses cached memory first, falls back to Supabase session (KRITIS-01 fix)
 const getActiveTenantId = async () => {
+  if (activeTenantId !== null) return activeTenantId;
+
+  console.log("[api.getActiveTenantId] Cache miss. Fetching session...");
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) return null;
 
-  // Try users table first (fast lookup)
   const { data: user } = await supabase
     .from('users')
     .select('tenant_id')
     .eq('id', session.user.id)
     .maybeSingle();
 
-  return user?.tenant_id ?? null;
+  activeTenantId = user?.tenant_id ?? null;
+  return activeTenantId;
 };
 
-// Helper to get authenticated user ID — session-based, no localStorage
+// Helper to get authenticated user ID — uses cached memory first, falls back to Supabase session
 const getActiveUserId = async () => {
+  if (activeUserId !== null) return activeUserId;
+
+  console.log("[api.getActiveUserId] Cache miss. Fetching session...");
   const { data: { session } } = await supabase.auth.getSession();
-  return session?.user?.id ?? null;
+  activeUserId = session?.user?.id ?? null;
+  return activeUserId;
 };
 
-// Helper for Audit Logging — session-based, no localStorage
+// Helper for Audit Logging — uses cached values to prevent lock deadlocks
 const logAudit = async (action, description) => {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) return;
-
-    const { data: user } = await supabase
-      .from('users')
-      .select('tenant_id')
-      .eq('id', session.user.id)
-      .maybeSingle();
-
-    if (!user?.tenant_id) return;
+    const tenantId = await getActiveTenantId();
+    const userId = await getActiveUserId();
+    if (!userId) return;
 
     await supabase.from('audit_logs').insert({
-      tenant_id: user.tenant_id,
-      user_id: session.user.id,
+      tenant_id: tenantId,
+      user_id: userId,
       action,
       description
     });
@@ -48,7 +51,9 @@ const logAudit = async (action, description) => {
 };
 
 // --- F&B BULK METRIC CONVERSION UTILITIES (from Laravel RecipeController) ---
-function parsePackSize(fullPack) {
+// Exported so maintenanceService reuses the SAME canonical cost logic (single
+// source of truth — avoids HPP divergence, see C-1 fix).
+export function parsePackSize(fullPack) {
   if (!fullPack) return 0;
   fullPack = fullPack.toLowerCase().trim();
   
@@ -75,7 +80,7 @@ function parsePackSize(fullPack) {
   return 0;
 }
 
-function calculateIngredientCost(material, qtyInUse, recipeUnit) {
+export function calculateIngredientCost(material, qtyInUse, recipeUnit) {
   const price = parseFloat(material.new_price ?? material.price ?? 0);
   const packUnit = (material.unit || '').toLowerCase().trim();
   recipeUnit = (recipeUnit || '').toLowerCase().trim();
@@ -88,18 +93,24 @@ function calculateIngredientCost(material, qtyInUse, recipeUnit) {
   return packSize > 0 ? qtyInUse * (price / packSize) : qtyInUse * price;
 }
 
-// Main API object mapping 1-to-1 with Laravel API endpoints
 export const api = {
+  // Set memory cache to avoid async locks in browser
+  setSessionData: (tenantId, userId) => {
+    activeTenantId = tenantId;
+    activeUserId = userId;
+    console.log("[api.setSessionData] Cached tenant ID:", tenantId, "user ID:", userId);
+  },
+
   // --- AUTHENTICATION ---
   login: async (tenantName, email, password) => {
-    // 1. Perform Supabase authentication first
+    // 1. Perform Supabase authentication first (so RLS policies will be satisfied for profile and tenant queries)
     const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
       email,
       password
     });
 
     if (authErr || !authData.user) {
-      throw new Error('Email atau password salah.');
+      throw new Error(authErr.message || 'Email atau password salah.');
     }
 
     // 2. Fetch user profile
@@ -111,41 +122,31 @@ export const api = {
 
     if (profileErr || !userProfile) {
       await supabase.auth.signOut();
-      throw new Error('Profil user tidak ditemukan di database.');
+      throw new Error('Profil user tidak ditemukan: ' + (profileErr?.message || 'Data kosong'));
     }
 
-    // 3. SuperAdmin: bypass tenant check
-    if (userProfile.role === 'SuperAdmin') {
-      return {
-        token: authData.session.access_token,
-        tenant: { name: 'superadmin', company_name: 'Super Admin' },
-        user: {
-          id: userProfile.id,
-          tenant_id: null,
-          name: userProfile.name,
-          email: userProfile.email,
-          role: userProfile.role,
-          tenant_name: 'superadmin'
-        }
-      };
-    }
+    let tenant;
+    // H-4: Super Admin status is determined by the DB role on the authenticated
+    // profile — NOT by a hardcoded email. The real boundary is the user's role
+    // (also enforced by RLS is_super_admin()), so no magic email is needed.
+    const isSALogin = userProfile.role === 'Super Admin' || userProfile.role === 'SuperAdmin';
 
-    // 4. User biasa: wajib ada tenantName
-    if (!tenantName) {
-      await supabase.auth.signOut();
-      throw new Error('Subdomain / ID Restoran wajib diisi.');
-    }
+    if (isSALogin) {
+      // Bypass database tenant query for Super Admin (since tenant_id is null in public.users)
+      tenant = { name: 'superadmin', company_name: 'Barventis System Management', id: null, status: 'active' };
+    } else {
+      // 3. Fetch tenant details (now that we're authenticated, RLS allows selecting our own tenant)
+      const { data: tenantData, error: tenantErr } = await supabase
+        .from('tenants')
+        .select('*')
+        .eq('id', userProfile.tenant_id)
+        .single();
 
-    // 5. Verify tenant name
-    const { data: tenant, error: tenantErr } = await supabase
-      .from('tenants')
-      .select('*')
-      .eq('name', tenantName.toLowerCase())
-      .single();
-
-    if (tenantErr || !tenant) {
-      await supabase.auth.signOut();
-      throw new Error('Tenant / ID Resto tidak terdaftar.');
+      if (tenantErr || !tenantData) {
+        await supabase.auth.signOut();
+        throw new Error('Tenant / ID Resto tidak terdaftar.');
+      }
+      tenant = tenantData;
     }
 
     if (tenant.status !== 'active') {
@@ -153,12 +154,19 @@ export const api = {
       throw new Error('Tenant Resto sedang dinonaktifkan.');
     }
 
-    if (userProfile.tenant_id !== tenant.id) {
-      await supabase.auth.signOut();
-      throw new Error('User ini tidak terdaftar di ID Resto ' + tenantName.toUpperCase() + '.');
+    // Verify tenant match for regular users. (Super Admins are validated by role
+    // above and are not bound to a tenant.) A non-SA user attempting to sign in via
+    // the "superadmin" screen is rejected here by the tenant-name mismatch.
+    if (!isSALogin) {
+      if (tenant.name.toLowerCase() !== tenantName.toLowerCase()) {
+        await supabase.auth.signOut();
+        throw new Error('User ini tidak terdaftar di ID Resto ' + tenantName.toUpperCase() + '.');
+      }
     }
 
-    try { await logAudit('LOGIN', `User ${userProfile.name} berhasil login ke resto.`); } catch (_) {}
+    // 4. Session is managed by Supabase Auth (no localStorage write needed)
+    // Audit log is handled after onAuthStateChange fires in App.jsx
+    try { await logAudit('LOGIN', `User ${userProfile.name} berhasil login ke resto.`); } catch { /* ignore: best-effort */ }
 
     return {
       token: authData.session.access_token,
@@ -236,7 +244,7 @@ export const api = {
     }
 
     // 5. Session managed by Supabase Auth — no localStorage writes
-    try { await logAudit('REGISTER', `Pendaftaran akun resto baru ${companyName} berhasil oleh ${adminName}.`); } catch (_) {}
+    try { await logAudit('REGISTER', `Pendaftaran akun resto baru ${companyName} berhasil oleh ${adminName}.`); } catch { /* ignore: best-effort */ }
 
     return {
       token: authData.session?.access_token,
@@ -246,7 +254,7 @@ export const api = {
   },
 
   logout: async () => {
-    try { await logAudit('LOGOUT', 'User melakukan logout dari sistem.'); } catch (_) {}
+    try { await logAudit('LOGOUT', 'User melakukan logout dari sistem.'); } catch { /* ignore: best-effort */ }
     // Clear any legacy localStorage keys (backward compat cleanup)
     localStorage.removeItem('umatis_token');
     localStorage.removeItem('umatis_tenant_name');
@@ -257,34 +265,53 @@ export const api = {
 
   // getProfile — reads from Supabase DB, not localStorage (KRITIS-01 fix)
   getProfile: async () => {
+    console.log("[api.getProfile] getSession starting...");
     const { data: { session } } = await supabase.auth.getSession();
+    console.log("[api.getProfile] getSession complete. Session user ID:", session?.user?.id);
     if (!session?.user) throw new Error('No active session.');
 
+    console.log("[api.getProfile] Querying users table...");
     const { data: userProfile, error } = await supabase
       .from('users')
       .select('id, tenant_id, name, email, role')
       .eq('id', session.user.id)
       .single();
+    console.log("[api.getProfile] Querying users table complete. Error:", error ? error.message : "none", "Profile:", userProfile);
 
     if (error || !userProfile) throw new Error('Profil tidak ditemukan.');
 
     // Also fetch tenant name
-    const { data: tenant } = await supabase
-      .from('tenants')
-      .select('name, company_name')
-      .eq('id', userProfile.tenant_id)
-      .maybeSingle();
+    let tenantName = '';
+    let companyName = '';
+    if (userProfile.role === 'Super Admin' || userProfile.role === 'SuperAdmin') {
+      tenantName = 'superadmin';
+      companyName = 'Barventis System Management';
+      console.log("[api.getProfile] Super Admin detected, skipping tenant table query.");
+    } else if (userProfile.tenant_id) {
+      console.log("[api.getProfile] Querying tenants table for ID:", userProfile.tenant_id);
+      const { data: tenant } = await supabase
+        .from('tenants')
+        .select('name, company_name')
+        .eq('id', userProfile.tenant_id)
+        .maybeSingle();
+      console.log("[api.getProfile] Querying tenants table complete. Tenant:", tenant);
+      if (tenant) {
+        tenantName = tenant.name;
+        companyName = tenant.company_name;
+      }
+    }
 
     return {
       ...userProfile,
-      tenant_name: tenant?.name ?? '',
-      company_name: tenant?.company_name ?? ''
+      tenant_name: tenantName,
+      company_name: companyName
     };
   },
 
   // --- LEDGER TRANSACTIONS ---
   getTransactions: async () => {
     const tenantId = await getActiveTenantId();
+    if (!tenantId) return []; // H-2: Super Admin / no-tenant — avoid malformed .eq('tenant_id', null) query
     const { data, error } = await supabase
       .from('transactions')
       .select('*, materials(name)')
@@ -309,6 +336,7 @@ export const api = {
   // --- STOCK / MATERIALS ---
   getMaterials: async () => {
     const tenantId = await getActiveTenantId();
+    if (!tenantId) return []; // H-2: Super Admin / no-tenant — avoid malformed .eq('tenant_id', null) query
     const { data, error } = await supabase
       .from('materials')
       .select('*')
@@ -411,7 +439,7 @@ export const api = {
     const unitPrice = parseFloat(material.new_price ?? material.price ?? 0);
     const parsedQty = parseFloat(qty);
 
-    let finalQty = parsedQty;
+    let finalQty;
     let newQtyResto = parseFloat(material.qty_resto);
     let newQtyCentral = parseFloat(material.qty_central);
 
@@ -478,6 +506,7 @@ export const api = {
   // --- RECIPES ---
   getRecipes: async () => {
     const tenantId = await getActiveTenantId();
+    if (!tenantId) return []; // H-2: Super Admin / no-tenant — avoid malformed .eq('tenant_id', null) query
     const { data, error } = await supabase
       .from('recipes')
       .select('*, recipe_ingredients(*, materials(*))')
@@ -491,6 +520,7 @@ export const api = {
       id: r.id,
       menu_name: r.menu_name,
       pos_code: r.pos_code,
+      category: r.category || 'NON-KOPI',
       selling_price: parseFloat(r.selling_price),
       basic_cost: parseFloat(r.basic_cost),
       fix_cost: parseFloat(r.fix_cost),
@@ -547,6 +577,7 @@ export const api = {
       .insert({
         tenant_id: tenantId,
         menu_name: recipeData.menu_name,
+        category: recipeData.category || 'NON-KOPI',
         selling_price: sellingPrice,
         subtotal: parseFloat(subtotal.toFixed(2)),
         fix_cost: parseFloat(fixCost.toFixed(2)),
@@ -615,6 +646,9 @@ export const api = {
       .from('recipes')
       .update({
         menu_name: recipeData.menu_name,
+        // Only touch category when explicitly provided, so recalc (which omits it)
+        // never clobbers an existing category. (M-2)
+        ...(recipeData.category !== undefined ? { category: recipeData.category } : {}),
         selling_price: sellingPrice,
         subtotal: parseFloat(subtotal.toFixed(2)),
         fix_cost: parseFloat(fixCost.toFixed(2)),
@@ -651,6 +685,7 @@ export const api = {
   // --- INVOICES ---
   getInvoices: async () => {
     const tenantId = await getActiveTenantId();
+    if (!tenantId) return []; // H-2: Super Admin / no-tenant — avoid malformed .eq('tenant_id', null) query
     const { data, error } = await supabase
       .from('invoices')
       .select('*, invoice_items(*, materials(*))')
@@ -777,87 +812,29 @@ export const api = {
     const tenantId = await getActiveTenantId();
     const userId = await getActiveUserId();
 
-    // Fetch invoice with items
-    const { data: invoice, error: fetchErr } = await supabase
+    const { data: rpcRes, error: rpcErr } = await supabase.rpc('receive_invoice_atomic', {
+      p_invoice_id: id,
+      p_tenant_id: tenantId,
+      p_user_id: userId
+    });
+
+    if (rpcErr) throw new Error("Gagal menerima PO secara atomik: " + rpcErr.message);
+
+    // Fetch the updated invoice to return to the UI
+    const { data: updatedInvoice, error: fetchErr } = await supabase
       .from('invoices')
-      .select('*, invoice_items(*)')
-      .eq('id', id)
-      .single();
-
-    if (fetchErr || !invoice) throw new Error("Invoice PO tidak ditemukan.");
-    if (invoice.status === 'RECEIVED') throw new Error("Invoice PO sudah pernah diterima.");
-    if (invoice.status === 'CANCELLED') throw new Error("Tidak bisa memproses invoice PO yang dibatalkan.");
-
-    const nowStr = new Date().toISOString().split('T')[0];
-    const location = invoice.location || 'CENTRAL';
-
-    // 1. Process Auto Stock-In and update prices
-    const matIds = invoice.invoice_items.map(i => i.material_id);
-    const { data: materials } = await supabase.from('materials').select('*').in('id', matIds);
-    const materialsMap = new Map(materials.map(m => [m.id, m]));
-
-    const transactionRows = [];
-
-    for (const item of invoice.invoice_items) {
-      const material = materialsMap.get(item.material_id);
-      if (material) {
-        let newQtyResto = parseFloat(material.qty_resto);
-        let newQtyCentral = parseFloat(material.qty_central);
-        const qtyToAdd = parseFloat(item.qty);
-
-        if (location === 'RESTO') {
-          newQtyResto += qtyToAdd;
-        } else {
-          newQtyCentral += qtyToAdd;
-        }
-
-        // Update price to new purchase rate
-        const { error: matUpdateErr } = await supabase
-          .from('materials')
-          .update({
-            qty_resto: newQtyResto,
-            qty_central: newQtyCentral,
-            new_price: parseFloat(item.unit_price)
-          })
-          .eq('id', material.id);
-
-        if (matUpdateErr) throw new Error(`Gagal memperbarui stok bahan ${material.name}: ${matUpdateErr.message}`);
-
-        // Prepare ledger transaction log
-        transactionRows.push({
-          tenant_id: tenantId,
-          date: nowStr,
-          material_id: material.id,
-          type: 'PURCHASE_IN',
-          location,
-          qty: qtyToAdd,
-          amount: qtyToAdd * parseFloat(item.unit_price),
-          notes: `Auto stock-in from invoice: ${invoice.invoice_no}`,
-          created_by: userId
-        });
-      }
-    }
-
-    // 2. Bulk Insert Transactions
-    if (transactionRows.length > 0) {
-      await supabase.from('transactions').insert(transactionRows);
-    }
-
-    // 3. Update Invoice Status
-    const { data: updatedInvoice, error: updateInvoiceErr } = await supabase
-      .from('invoices')
-      .update({
-        status: 'RECEIVED',
-        received_date: nowStr
-      })
-      .eq('id', id)
       .select('*')
+      .eq('id', id)
       .single();
 
-    if (updateInvoiceErr) throw new Error("Gagal update status RECEIVED: " + updateInvoiceErr.message);
+    if (fetchErr || !updatedInvoice) throw new Error("Gagal memuat invoice yang diperbarui.");
 
-    const formattedTotal = new Intl.NumberFormat('id-ID').format(invoice.total);
-    await logAudit('RECEIVE_PO', `Menerima barang untuk Purchase Order (PO): ${invoice.invoice_no} dari Supplier "${invoice.supplier}" senilai Rp${formattedTotal}. Stok gudang ${location} bertambah.`);
+    try {
+      const formattedTotal = new Intl.NumberFormat('id-ID').format(updatedInvoice.total);
+      await logAudit('RECEIVE_PO', `Menerima barang untuk Purchase Order (PO): ${updatedInvoice.invoice_no} dari Supplier "${updatedInvoice.supplier}" senilai Rp${formattedTotal}. Stok gudang ${updatedInvoice.location || 'CENTRAL'} bertambah.`);
+    } catch (e) {
+      console.warn("Failed to log audit for receive PO:", e);
+    }
 
     return updatedInvoice;
   },
@@ -901,6 +878,7 @@ export const api = {
     let skippedRecords = 0;
     let deductionLogsCount = 0;
     const negativeWarnings = [];
+    const deductionErrors = []; // H-5: atomic-RPC failures (deduction NOT applied)
 
     const transactionRows = [];
 
@@ -956,9 +934,17 @@ export const api = {
       for (const ing of recipe.recipe_ingredients) {
         const material = ing.materials;
         if (material) {
-          const unitLower = ing.unit.toLowerCase();
-          const isGramMl = (unitLower === 'gr' || unitLower === 'ml' || unitLower === 'grm');
-          const factor = isGramMl ? 1000.00 : 1.00;
+          const matUnit = (material.unit || '').toLowerCase().trim();
+          const ingUnit = (ing.unit || '').toLowerCase().trim();
+          
+          let factor = 1.00;
+          if (ingUnit !== matUnit) {
+            const isIngGramMl = (ingUnit === 'gr' || ingUnit === 'ml' || ingUnit === 'grm');
+            const isMatKgL = (matUnit === 'kg' || matUnit === 'l' || matUnit === 'liter' || matUnit === 'ltr');
+            if (isIngGramMl && isMatKgL) {
+              factor = 1000.00;
+            }
+          }
 
           const deductQty = (parseFloat(ing.qty_in_use) * saleQty) / factor;
           const currentResto = parseFloat(material.qty_resto);
@@ -975,9 +961,13 @@ export const api = {
             p_deduct_qty: deductQty
           });
           if (deductErr) {
-            // Fallback to direct update if RPC not yet deployed
-            const finalRestoQty = Math.max(0, newQty);
-            await supabase.from('materials').update({ qty_resto: finalRestoQty }).eq('id', material.id);
+            // H-5: do NOT fall back to a client-side non-atomic update — that
+            // reintroduces the exact lost-update race deduct_stock_atomic exists to
+            // prevent. Record the failure and skip this ingredient's ledger entry so
+            // we never log a deduction that did not actually happen.
+            deductionErrors.push(`${material.name}: ${deductErr.message}`);
+            console.error('[syncPos] deduct_stock_atomic failed for', material.name, deductErr.message);
+            continue;
           }
 
           const unitPrice = parseFloat(material.new_price ?? material.price ?? 0);
@@ -1019,7 +1009,8 @@ export const api = {
     });
 
     const warningMsg = negativeWarnings.length > 0 ? ` (Terdapat ${negativeWarnings.length} peringatan stok habis)` : "";
-    await logAudit('POS_SYNC', `Sinkronisasi POS berhasil dari file "${filename}". Memproses ${processedRecords} penjualan, ${skippedRecords} dilewati. Mencatat ${deductionLogsCount} mutasi stok RESTO${warningMsg}.`);
+    const errorMsg = deductionErrors.length > 0 ? ` (${deductionErrors.length} pengurangan stok GAGAL diterapkan — perlu ditinjau)` : "";
+    await logAudit('POS_SYNC', `Sinkronisasi POS berhasil dari file "${filename}". Memproses ${processedRecords} penjualan, ${skippedRecords} dilewati. Mencatat ${deductionLogsCount} mutasi stok RESTO${warningMsg}${errorMsg}.`);
 
     return {
       message: 'POS synchronization completed successfully.',
@@ -1029,7 +1020,8 @@ export const api = {
         unmapped_recipes_skipped: skippedRecords,
         stock_deduction_ledger_entries: deductionLogsCount,
         negative_stock_warnings: negativeWarnings,
-        status: 'COMPLETED'
+        deduction_errors: deductionErrors,
+        status: deductionErrors.length > 0 ? 'COMPLETED_WITH_ERRORS' : 'COMPLETED'
       }
     };
   },
@@ -1041,7 +1033,6 @@ export const api = {
     
     const location = opnameData.location;
     const items = opnameData.items;
-    const nowStr = new Date().toISOString().split('T')[0];
     const currentMonth = new Date().getMonth() + 1;
     const currentYear = new Date().getFullYear();
 
@@ -1060,7 +1051,7 @@ export const api = {
       await supabase.from('stock_opnames').delete().eq('id', oldOpname.id);
     }
 
-    // 2. Create Persistent Stock Opname record
+    // 2. Create Persistent Stock Opname record as DRAFT first
     const { data: opname, error: opnameErr } = await supabase
       .from('stock_opnames')
       .insert({
@@ -1068,25 +1059,19 @@ export const api = {
         period_month: currentMonth,
         period_year: currentYear,
         location,
-        status: 'APPROVED',
+        status: 'DRAFT',
         signature_svg: opnameData.signature_svg || '',
         created_by: userId,
-        approved_by: userId,
-        submitted_at: new Date().toISOString(),
-        approved_at: new Date().toISOString()
+        submitted_at: new Date().toISOString()
       })
       .select('*')
       .single();
 
     if (opnameErr) throw new Error("Gagal membuat data audit opname: " + opnameErr.message);
 
-    let adjustmentCount = 0;
-    let totalVariance = 0.00;
-
     const opnameItems = [];
-    const transactionRows = [];
 
-    // Pre-fetch materials
+    // Pre-fetch materials system book quantities
     const matIds = items.map(i => i.material_id);
     const { data: materials } = await supabase.from('materials').select('*').in('id', matIds);
     const materialsMap = new Map(materials.map(m => [m.id, m]));
@@ -1097,7 +1082,6 @@ export const api = {
 
       const physicalQty = parseFloat(item.physical_qty || 0);
       const systemQty = location === 'RESTO' ? parseFloat(material.qty_resto) : parseFloat(material.qty_central);
-      const variance = physicalQty - systemQty;
 
       opnameItems.push({
         opname_id: opname.id,
@@ -1106,46 +1090,35 @@ export const api = {
         physical_qty: physicalQty,
         notes: item.notes || null
       });
-
-      // Adjust if variance exists
-      if (Math.abs(variance) > 0.001) {
-        const updateField = location === 'RESTO' ? { qty_resto: physicalQty } : { qty_central: physicalQty };
-        
-        await supabase
-          .from('materials')
-          .update(updateField)
-          .eq('id', material.id);
-
-        const unitPrice = parseFloat(material.new_price ?? material.price ?? 0);
-
-        transactionRows.push({
-          tenant_id: tenantId,
-          date: nowStr,
-          material_id: material.id,
-          type: 'OPNAME_ADJ',
-          location,
-          qty: variance,
-          amount: variance * unitPrice,
-          notes: item.notes || `Stock Opname adjustment (Physical: ${physicalQty}, System: ${systemQty})`,
-          created_by: userId
-        });
-
-        adjustmentCount++;
-        totalVariance += Math.abs(variance);
-      }
     }
 
     // Insert stock opname items
     if (opnameItems.length > 0) {
-      await supabase.from('stock_opname_items').insert(opnameItems);
+      const { error: itemsErr } = await supabase.from('stock_opname_items').insert(opnameItems);
+      if (itemsErr) {
+        await supabase.from('stock_opnames').delete().eq('id', opname.id);
+        throw new Error("Gagal menyimpan rincian item opname: " + itemsErr.message);
+      }
     }
 
-    // Insert transactions
-    if (transactionRows.length > 0) {
-      await supabase.from('transactions').insert(transactionRows);
+    // 3. Call the atomic RPC to complete and adjust stock!
+    const { data: rpcRes, error: rpcErr } = await supabase.rpc('complete_opname_atomic', {
+      p_opname_id: opname.id,
+      p_tenant_id: tenantId,
+      p_location: location,
+      p_user_id: userId
+    });
+
+    if (rpcErr) {
+      // Rollback
+      await supabase.from('stock_opname_items').delete().eq('opname_id', opname.id);
+      await supabase.from('stock_opnames').delete().eq('id', opname.id);
+      throw new Error("Gagal menyelesaikan opname secara atomik: " + rpcErr.message);
     }
 
-    await logAudit('COMPLETE_OPNAME', `Menyelesaikan Stock Opname di gudang ${location}. Menyesuaikan ${adjustmentCount} item dengan total varians ${totalVariance.toFixed(2)} unit.`);
+    const adjustmentsCount = rpcRes.adjustments_made || 0;
+
+    await logAudit('COMPLETE_OPNAME', `Menyelesaikan Stock Opname di gudang ${location}. Menyesuaikan ${adjustmentsCount} item.`);
 
     return {
       message: `Stock opname berhasil diselesaikan untuk gudang ${location}.`,
@@ -1153,8 +1126,7 @@ export const api = {
         opname_id: opname.id,
         location,
         items_audited: items.length,
-        adjustments_made: adjustmentCount,
-        total_variance_units: parseFloat(totalVariance.toFixed(2))
+        adjustments_made: adjustmentsCount
       }
     };
   },
@@ -1173,25 +1145,72 @@ export const api = {
     const lastDay = new Date(year, m, 0).getDate();
     const endDate = `${month}-${String(lastDay).padStart(2, '0')}`;
 
-    // 1. Fetch Materials and closing valuation
-    const { data: materials } = await supabase.from('materials').select('*').eq('tenant_id', tenantId).eq('is_active', true);
-    
+    // 1. Fetch closing valuation from this month's opnames if they exist (RESTO + CENTRAL)
+    const { data: thisOpnames } = await supabase
+      .from('stock_opnames')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('period_month', m)
+      .eq('period_year', year);
+
     let closingValuation = 0.00;
-    const categoryGroup = {};
+    let categoryValuation = [];
+    let hasThisMonthOpname = false;
 
-    for (const mat of (materials || [])) {
-      const price = parseFloat(mat.new_price ?? mat.price ?? 0);
-      const val = (parseFloat(mat.qty_resto) + parseFloat(mat.qty_central)) * price;
-      closingValuation += val;
+    if (thisOpnames && thisOpnames.length > 0) {
+      const opnameIds = thisOpnames.map(o => o.id);
+      const { data: opnameItems } = await supabase
+        .from('stock_opname_items')
+        .select('physical_qty, material_id, materials(new_price, price, category)')
+        .in('opname_id', opnameIds);
 
-      const cat = mat.category || 'Lain-lain';
-      categoryGroup[cat] = (categoryGroup[cat] || 0) + val;
+      if (opnameItems && opnameItems.length > 0) {
+        hasThisMonthOpname = true;
+        const matValuationMap = {};
+        
+        opnameItems.forEach(item => {
+          const matId = item.material_id;
+          const qty = parseFloat(item.physical_qty || 0);
+          const price = parseFloat(item.materials?.new_price ?? item.materials?.price ?? 0);
+          const val = qty * price;
+          const cat = item.materials?.category || 'Lain-lain';
+
+          if (!matValuationMap[matId]) {
+            matValuationMap[matId] = { qty: 0, val: 0, price, cat };
+          }
+          matValuationMap[matId].qty += qty;
+          matValuationMap[matId].val += val;
+        });
+
+        const categoryGroup = {};
+        for (const item of Object.values(matValuationMap)) {
+          closingValuation += item.val;
+          categoryGroup[item.cat] = (categoryGroup[item.cat] || 0) + item.val;
+        }
+
+        categoryValuation = Object.entries(categoryGroup).map(([name, value]) => ({
+          name,
+          value: parseFloat(value.toFixed(2))
+        }));
+      }
     }
 
-    const categoryValuation = Object.entries(categoryGroup).map(([name, value]) => ({
-      name,
-      value: parseFloat(value.toFixed(2))
-    }));
+    if (!hasThisMonthOpname) {
+      const { data: materials } = await supabase.from('materials').select('*').eq('tenant_id', tenantId).eq('is_active', true);
+      const categoryGroup = {};
+      for (const mat of (materials || [])) {
+        const price = parseFloat(mat.new_price ?? mat.price ?? 0);
+        const val = (parseFloat(mat.qty_resto) + parseFloat(mat.qty_central)) * price;
+        closingValuation += val;
+
+        const cat = mat.category || 'Lain-lain';
+        categoryGroup[cat] = (categoryGroup[cat] || 0) + val;
+      }
+      categoryValuation = Object.entries(categoryGroup).map(([name, value]) => ({
+        name,
+        value: parseFloat(value.toFixed(2))
+      }));
+    }
 
     // 2. Query Transactions for calculations
     const { data: transactions } = await supabase
@@ -1224,19 +1243,15 @@ export const api = {
       .select('id')
       .eq('tenant_id', tenantId)
       .eq('period_month', prevMonth)
-      .eq('period_year', prevYear)
-      .limit(1);
+      .eq('period_year', prevYear);
 
     let openingValuation = 0;
     if (prevOpnames && prevOpnames.length > 0) {
-      // Use previous month closing stock valuation (recalc from materials value at that time)
-      // Since we don't store historical prices, use current price as approximation
-      // For exact calculation, opening = what closing was last month
-      // Best approximation: sum physical_qty * current price from prev opname items
+      const prevOpnameIds = prevOpnames.map(o => o.id);
       const { data: prevOpnameItems } = await supabase
         .from('stock_opname_items')
         .select('physical_qty, material_id, materials(new_price, price)')
-        .eq('opname_id', prevOpnames[0].id);
+        .in('opname_id', prevOpnameIds);
       
       if (prevOpnameItems && prevOpnameItems.length > 0) {
         openingValuation = prevOpnameItems.reduce((sum, item) => {
@@ -1370,7 +1385,7 @@ export const api = {
 
   restoreBackup: async (formDataOrFilename) => {
     const tenantId = await getActiveTenantId();
-    let backupPayload = null;
+    let backupPayload;
 
     // 1. Resolve payload either from DB select or uploaded File text parsing
     if (typeof formDataOrFilename === 'string') {
@@ -1392,68 +1407,13 @@ export const api = {
 
     if (!backupPayload) throw new Error("Data pemulihan kosong atau rusak.");
 
-    // 2. Perform Tenant Data Wipe
-    // Cascade-able tables wipe (materials cascade deletes recipe_ingredients, invoice_items, transactions, stock_opname_items)
-    await supabase.from('materials').delete().eq('tenant_id', tenantId);
-    await supabase.from('recipes').delete().eq('tenant_id', tenantId);
-    await supabase.from('invoices').delete().eq('tenant_id', tenantId);
-    await supabase.from('audit_logs').delete().eq('tenant_id', tenantId);
-    await supabase.from('pos_upload_logs').delete().eq('tenant_id', tenantId);
-    await supabase.from('stock_opnames').delete().eq('tenant_id', tenantId);
+    // 2. Perform Atomic Tenant Data Wipe and Restore via RPC
+    const { error: rpcErr } = await supabase.rpc('restore_tenant_backup_atomic', {
+      p_tenant_id: tenantId,
+      p_payload: backupPayload
+    });
 
-    // 3. Restore all records sequentially using Supabase Bulk Insert
-    if (backupPayload.materials.length > 0) {
-      await supabase.from('materials').insert(backupPayload.materials.map(m => ({ ...m, tenant_id: tenantId })));
-    }
-    if (backupPayload.recipes.length > 0) {
-      await supabase.from('recipes').insert(backupPayload.recipes.map(r => ({ ...r, tenant_id: tenantId })));
-    }
-    if (backupPayload.recipe_ingredients.length > 0) {
-      // Ingredients don't have tenant_id directly, they reference recipe_id. Ensure recipe references are verified.
-      await supabase.from('recipe_ingredients').insert(backupPayload.recipe_ingredients.map(ing => ({
-        id: ing.id,
-        recipe_id: ing.recipe_id,
-        material_id: ing.material_id,
-        qty_in_use: ing.qty_in_use,
-        unit: ing.unit,
-        unit_price: ing.unit_price,
-        amount: ing.amount
-      })));
-    }
-    if (backupPayload.transactions.length > 0) {
-      await supabase.from('transactions').insert(backupPayload.transactions.map(t => ({ ...t, tenant_id: tenantId })));
-    }
-    if (backupPayload.invoices.length > 0) {
-      await supabase.from('invoices').insert(backupPayload.invoices.map(i => ({ ...i, tenant_id: tenantId })));
-    }
-    if (backupPayload.invoice_items.length > 0) {
-      await supabase.from('invoice_items').insert(backupPayload.invoice_items.map(item => ({
-        id: item.id,
-        invoice_id: item.invoice_id,
-        material_id: item.material_id,
-        qty: item.qty,
-        unit_price: item.unit_price
-      })));
-    }
-    if (backupPayload.audit_logs.length > 0) {
-      await supabase.from('audit_logs').insert(backupPayload.audit_logs.map(log => ({ ...log, tenant_id: tenantId })));
-    }
-    if (backupPayload.pos_upload_logs.length > 0) {
-      await supabase.from('pos_upload_logs').insert(backupPayload.pos_upload_logs.map(log => ({ ...log, tenant_id: tenantId })));
-    }
-    if (backupPayload.stock_opnames.length > 0) {
-      await supabase.from('stock_opnames').insert(backupPayload.stock_opnames.map(so => ({ ...so, tenant_id: tenantId })));
-    }
-    if (backupPayload.stock_opname_items.length > 0) {
-      await supabase.from('stock_opname_items').insert(backupPayload.stock_opname_items.map(item => ({
-        id: item.id,
-        opname_id: item.opname_id,
-        material_id: item.material_id,
-        book_qty: item.book_qty,
-        physical_qty: item.physical_qty,
-        notes: item.notes
-      })));
-    }
+    if (rpcErr) throw new Error("Gagal memulihkan database secara atomik: " + rpcErr.message);
 
     await logAudit('RESTORE_COMPLETE', 'Database pemulihan berhasil dipasang penuh.');
     return true;
@@ -1570,5 +1530,170 @@ export const api = {
 
     if (error || !data) return null;
     return data;
+  },
+
+  // --- BULK IMPORT ---
+  bulkImportMaterials: async (rows) => {
+    const tenantId = await getActiveTenantId();
+    let success = 0;
+    let failed = 0;
+    const errors = [];
+
+    for (const row of rows) {
+      try {
+        const { error } = await supabase.from('materials').insert({
+          tenant_id: tenantId,
+          name: row.name,
+          category: row.category || 'Others',
+          supplier: row.supplier || '',
+          unit: row.unit || 'pck',
+          full_pack: row.full_pack || '',
+          price: parseFloat(row.price || 0),
+          new_price: parseFloat(row.price || 0),
+          qty_resto: 0,
+          qty_central: 0,
+          min_stock: parseFloat(row.min_stock || 15),
+          is_active: true
+        });
+        if (error) { failed++; errors.push({ row: row.name, error: error.message }); }
+        else success++;
+      } catch (e) {
+        failed++;
+        errors.push({ row: row.name, error: e.message });
+      }
+    }
+
+    await logAudit('BULK_IMPORT_MATERIALS', `Bulk import ${success} bahan baku berhasil, ${failed} gagal.`);
+    return { success, failed, errors };
+  },
+
+  bulkImportRecipes: async (rows) => {
+    const tenantId = await getActiveTenantId();
+    let success = 0;
+    let failed = 0;
+    const errors = [];
+
+    // Pre-fetch all materials for the tenant to resolve material_id by name
+    const { data: allMaterials } = await supabase
+      .from('materials')
+      .select('id, name, unit, price, new_price')
+      .eq('tenant_id', tenantId)
+      .eq('is_active', true);
+
+    const materialsMap = new Map((allMaterials || []).map(m => [m.name.toLowerCase().trim(), m]));
+
+    // rows format: { menu_name, selling_price, ingredients_json (stringified JSON array) }
+    for (const row of rows) {
+      try {
+        let ingredients = [];
+        try { ingredients = JSON.parse(row.ingredients_json || '[]'); } catch { /* ignore: best-effort */ }
+
+        const sellingPrice = parseFloat(row.selling_price || 0);
+        let subtotal = 0;
+
+        // Simple subtotal calculation from ingredients if available
+        if (ingredients.length > 0) {
+          subtotal = ingredients.reduce((sum, ing) => {
+            const mat = materialsMap.get((ing.item_name || ing.material_name || '').toLowerCase().trim());
+            const price = mat ? parseFloat(mat.new_price ?? mat.price ?? 0) : parseFloat(ing.unit_price || 0);
+            return sum + (parseFloat(ing.qty_in_use || 0) * price);
+          }, 0);
+        }
+        const fixCost = subtotal * 0.05;
+        const basicCost = subtotal + fixCost;
+        const foodCostPct = sellingPrice > 0 ? basicCost / sellingPrice : 0;
+
+        // Upsert recipe and retrieve the generated id
+        const { data: recipeData, error: recipeErr } = await supabase
+          .from('recipes')
+          .upsert({
+            tenant_id: tenantId,
+            menu_name: row.menu_name,
+            selling_price: sellingPrice,
+            subtotal: parseFloat(subtotal.toFixed(2)),
+            fix_cost: parseFloat(fixCost.toFixed(2)),
+            basic_cost: parseFloat(basicCost.toFixed(2)),
+            food_cost_pct: parseFloat(foodCostPct.toFixed(4))
+          }, { onConflict: 'menu_name,tenant_id' })
+          .select('id')
+          .single();
+
+        if (recipeErr) throw new Error(recipeErr.message);
+
+        // Link ingredients if recipe was successfully upserted
+        if (ingredients.length > 0 && recipeData?.id) {
+          const ingredientsToInsert = [];
+          for (const ing of ingredients) {
+            const mat = materialsMap.get((ing.item_name || ing.material_name || '').toLowerCase().trim());
+            if (mat) {
+              const unit = ing.unit || mat.unit;
+              const unitPrice = parseFloat(mat.new_price ?? mat.price ?? 0);
+              const amount = calculateIngredientCost(mat, parseFloat(ing.qty_in_use || 0), unit);
+              
+              ingredientsToInsert.push({
+                recipe_id: recipeData.id,
+                material_id: mat.id,
+                qty_in_use: parseFloat(ing.qty_in_use || 0),
+                unit: unit,
+                unit_price: unitPrice,
+                amount: parseFloat(amount.toFixed(2))
+              });
+            }
+          }
+
+          if (ingredientsToInsert.length > 0) {
+            // Delete old ingredients first before inserting new ones
+            await supabase.from('recipe_ingredients').delete().eq('recipe_id', recipeData.id);
+            const { error: ingErr } = await supabase.from('recipe_ingredients').insert(ingredientsToInsert);
+            if (ingErr) throw new Error("Gagal menyimpan detail bahan resep: " + ingErr.message);
+          }
+        }
+
+        success++;
+      } catch (e) {
+        failed++;
+        errors.push({ row: row.menu_name, error: e.message });
+      }
+    }
+
+    await logAudit('BULK_IMPORT_RECIPES', `Bulk import ${success} resep berhasil, ${failed} gagal.`);
+    return { success, failed, errors };
+  },
+
+  bulkImportOpnameItems: async (opnameId, rows) => {
+    let success = 0;
+    let failed = 0;
+
+    // rows: { material_name, physical_qty, notes }
+    const { data: allMaterials } = await supabase
+      .from('materials')
+      .select('id, name')
+      .eq('tenant_id', await getActiveTenantId());
+
+    const materialMap = new Map((allMaterials || []).map(m => [m.name.toLowerCase(), m.id]));
+
+    for (const row of rows) {
+      try {
+        const materialId = materialMap.get((row.material_name || '').toLowerCase());
+        if (!materialId) { failed++; continue; }
+
+        const { error } = await supabase
+          .from('stock_opname_items')
+          .upsert({
+            opname_id: opnameId,
+            material_id: materialId,
+            physical_qty: parseFloat(row.physical_qty || 0),
+            notes: row.notes || ''
+          }, { onConflict: 'opname_id,material_id' });
+
+        if (error) failed++;
+        else success++;
+      } catch {
+        failed++;
+      }
+    }
+
+    await logAudit('BULK_IMPORT_OPNAME', `Bulk import ${success} item opname berhasil, ${failed} gagal.`);
+    return { success, failed };
   }
 };

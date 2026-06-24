@@ -1,12 +1,21 @@
-import React, { useState, useMemo } from 'react';
-import { Search, Plus, Trash2, Save, X, ChevronDown } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Search, Plus, Trash2, Save, X, UploadCloud, Coins, AlertTriangle, CheckCircle } from 'lucide-react';
+import BulkImport from './BulkImport';
+import { api } from '../services/api';
+
+// Stable client-side id for editable ingredient rows so React keys don't rely on the
+// array index (preserves input focus/state across add/remove/reorder). (LOW #19)
+const rowUid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `r${Date.now()}${Math.random()}`);
+const ensureUids = (arr = []) => arr.map(x => ({ ...x, _uid: x._uid ?? rowUid() }));
 
 export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
   const [activeRecipe, setActiveRecipe] = useState(recipes[0] || null);
   const [search, setSearch] = useState('');
-  const [editedIngredients, setEditedIngredients] = useState(activeRecipe ? [...activeRecipe.ingredients] : []);
+  const [editedIngredients, setEditedIngredients] = useState(activeRecipe ? ensureUids(activeRecipe.ingredients) : []);
   const [editedSellingPrice, setEditedSellingPrice] = useState(activeRecipe ? Math.round(activeRecipe.selling_price) : 0);
+  const [editedCategory, setEditedCategory] = useState(activeRecipe?.category || 'NON-KOPI');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
   const [newMenuName, setNewMenuName] = useState('');
   const [newMenuCategory, setNewMenuCategory] = useState('KOPI');
   const [newMenuPrice, setNewMenuPrice] = useState('');
@@ -36,7 +45,7 @@ export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
     stock.forEach(item => {
       const packInfo = parseFullPack(item.full_pack);
       // Determine available usage units for this item
-      let usageUnits = [];
+      let usageUnits;
       const packUnit = item.unit?.toLowerCase() || 'pck';
 
       if (['gr', 'ml'].includes(packInfo.unit)) {
@@ -66,11 +75,24 @@ export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
   // Select recipe
   const handleSelectRecipe = (r) => {
     setActiveRecipe(r);
-    // All ingredients are now clean (mapped to inventory in seededData)
-    setEditedIngredients([...(r.ingredients || [])]);
+    setEditedIngredients(ensureUids(r.ingredients || []));
     setEditedSellingPrice(Math.round(r.selling_price));
+    setEditedCategory(r.category || 'NON-KOPI');
     setOpenDropdown(null);
   };
+
+  // M-1: recipes arrive asynchronously. If none is selected yet (or the selected one
+  // disappeared after a refetch), auto-select the first so the editor isn't stuck blank.
+  // Selecting on data-arrival is intentional, so the related hooks rules are scoped off.
+  /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
+  useEffect(() => {
+    if (recipes.length === 0) return;
+    const stillExists = activeRecipe && recipes.some(r => r.menu_name === activeRecipe.menu_name);
+    if (!stillExists) {
+      handleSelectRecipe(recipes[0]);
+    }
+  }, [recipes]);
+  /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
   // Filter recipe list
   const filteredRecipes = recipes.filter(r => r.menu_name.toLowerCase().includes(search.toLowerCase()));
@@ -102,9 +124,13 @@ export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
       // Using gr/ml from a gr/ml pack
       return ing.qty_in_use * info.pricePerUnit;
     } else {
-      // Fallback: pack has no gr/ml decomposition (e.g. "1 pck")
-      // Use qty * packPrice / 1000 formula
-      return (ing.qty_in_use * (info.new_price || info.price)) / 1000;
+      // Fallback: unit differs from pack unit and pack has no gr/ml decomposition.
+      // Align with backend calculateIngredientCost (api.js): qty * (price / packSize)
+      // when the pack size is known, otherwise qty * price. Previously this divided
+      // by a hardcoded 1000, so the in-editor HPP diverged from the persisted value (C-1).
+      return info.packSize > 0
+        ? ing.qty_in_use * info.pricePerUnit
+        : ing.qty_in_use * (info.new_price || info.price);
     }
   };
 
@@ -133,7 +159,7 @@ export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
   };
 
   const handleAddIngredient = () => {
-    setEditedIngredients([...editedIngredients, { item_name: '', qty_in_use: 0, unit: 'gr', unit_price: 0, amount: 0 }]);
+    setEditedIngredients([...editedIngredients, { item_name: '', qty_in_use: 0, unit: 'gr', unit_price: 0, amount: 0, _uid: rowUid() }]);
   };
 
   const handleRemoveIngredient = (idx) => {
@@ -163,6 +189,7 @@ export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
       .map(ing => ({ ...ing, amount: calcRowAmount(ing) }));
     const updatedRecipe = {
       ...activeRecipe,
+      category: editedCategory,
       selling_price: editedSellingPrice,
       subtotal, fix_cost: fixCost, basic_cost: basicCost, food_cost_pct: foodCostPct,
       total_cost: basicCost,
@@ -177,6 +204,7 @@ export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
     if (!newMenuName.trim()) return;
     const newRecipe = {
       menu_name: newMenuName.trim(),
+      category: newMenuCategory,
       total_cost: 0, yield: '1',
       ingredients: [],
       subtotal: 0, fix_cost: 0, basic_cost: 0,
@@ -190,11 +218,14 @@ export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
     setActiveRecipe(newRecipe);
     setEditedIngredients([]);
     setEditedSellingPrice(parseInt(newMenuPrice) || 0);
+    setEditedCategory(newMenuCategory);
   };
 
-  // Cost badge color
+  // Cost badge color. food_cost_pct is ALWAYS stored as a fraction (basic_cost /
+  // selling_price), so convert to percent unconditionally. The previous `< 1` guess
+  // mis-handled food costs >= 100% (e.g. 1.2 shown/treated as ~1%). (M-5)
   const getCostBadge = (pct) => {
-    const p = typeof pct === 'number' && pct < 1 ? pct * 100 : pct;
+    const p = (Number(pct) || 0) * 100;
     if (p < 27) return 'badge-success';
     if (p <= 30) return 'badge-warning';
     return 'badge-danger';
@@ -215,41 +246,204 @@ export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
   };
 
   return (
-    <div style={{ display: 'flex', gap: '20px', height: 'calc(100vh - 180px)' }}>
+    <div style={{ display: 'flex', gap: '24px', height: 'calc(100vh - 180px)', fontFamily: 'var(--font-sans)', animation: 'fadeIn 0.3s ease' }}>
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .recipe-nav-item {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 12px 14px;
+          color: var(--text-secondary);
+          border-radius: 10px;
+          cursor: pointer;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+          border-left: 3px solid transparent;
+          background: rgba(255, 255, 255, 0.01);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+        }
+        .recipe-nav-item:hover {
+          color: var(--text-primary);
+          background: rgba(255, 255, 255, 0.03);
+          transform: translateX(3px);
+          border-bottom-color: rgba(255, 255, 255, 0.05);
+        }
+        .recipe-nav-item.active {
+          color: var(--text-primary);
+          background: linear-gradient(90deg, rgba(76, 110, 245, 0.08) 0%, rgba(76, 110, 245, 0.01) 100%);
+          border-left-color: var(--accent);
+          box-shadow: inset 2px 0 8px rgba(76, 110, 245, 0.05);
+        }
+        .premium-input {
+          background: rgba(15, 23, 42, 0.45) !important;
+          border: 1px solid rgba(255, 255, 255, 0.08) !important;
+          border-radius: 8px !important;
+          color: #fff !important;
+          font-family: var(--font-sans) !important;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .premium-input:focus {
+          border-color: var(--accent) !important;
+          box-shadow: 0 0 0 3px rgba(76, 110, 245, 0.18) !important;
+          background: rgba(15, 23, 42, 0.65) !important;
+        }
+        .premium-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          font-weight: 600;
+          font-family: var(--font-sans);
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+          cursor: pointer;
+        }
+        .premium-btn-primary {
+          background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+          border: none;
+          box-shadow: 0 4px 12px rgba(76, 110, 245, 0.2);
+        }
+        .premium-btn-primary:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 6px 16px rgba(76, 110, 245, 0.35);
+          filter: brightness(1.05);
+        }
+        .premium-btn-secondary {
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid var(--border);
+          color: var(--text-primary);
+        }
+        .premium-btn-secondary:hover {
+          background: rgba(255, 255, 255, 0.07);
+          border-color: rgba(255, 255, 255, 0.15);
+          transform: translateY(-1px);
+        }
+        .premium-table th {
+          font-size: 0.7rem !important;
+          text-transform: uppercase !important;
+          letter-spacing: 0.75px !important;
+          color: var(--text-muted) !important;
+          font-weight: 700 !important;
+          border-bottom: 1px solid var(--border) !important;
+          padding: 8px 10px !important;
+        }
+        .premium-table td {
+          padding: 6px 10px !important;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.03) !important;
+          vertical-align: middle !important;
+        }
+        .table-input {
+          padding: 4px 8px !important;
+          font-size: 0.75rem !important;
+          height: 28px !important;
+          background: rgba(15, 23, 42, 0.45) !important;
+          border: 1px solid rgba(255, 255, 255, 0.08) !important;
+          border-radius: 6px !important;
+          color: #fff !important;
+          width: 100% !important;
+          box-sizing: border-box !important;
+        }
+        .table-input:focus {
+          border-color: var(--accent) !important;
+          box-shadow: 0 0 0 3px rgba(76, 110, 245, 0.18) !important;
+          background: rgba(15, 23, 42, 0.65) !important;
+        }
+        .table-select {
+          appearance: none !important;
+          -webkit-appearance: none !important;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%23868e96' d='M6 8L1 3h10z'/%3E%3C/svg%3E") !important;
+          background-repeat: no-repeat !important;
+          background-position: right 8px center !important;
+          padding-right: 20px !important;
+        }
+        .glass-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .glass-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(255,255,255,0.08);
+          border-radius: 3px;
+        }
+        .glass-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: var(--accent);
+        }
+      `}</style>
+
       {/* Left: Recipe List */}
-      <div className="glass-card" style={{ width: '300px', display: 'flex', flexDirection: 'column', padding: '16px', flexShrink: 0 }}>
+      <div className="glass-card" style={{ width: '310px', display: 'flex', flexDirection: 'column', padding: '20px', flexShrink: 0, border: '1px solid var(--border)' }}>
         {/* Search */}
-        <div style={{ position: 'relative', marginBottom: '12px' }}>
-          <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-          <input type="text" placeholder="Search recipes..." className="form-control" style={{ paddingLeft: '36px', padding: '10px 16px 10px 36px' }} value={search} onChange={e => setSearch(e.target.value)} />
+        <div style={{ position: 'relative', marginBottom: '14px' }}>
+          <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <input 
+            type="text" 
+            placeholder="Cari resep menu..." 
+            className="form-control premium-input" 
+            style={{ paddingLeft: '38px', height: '40px' }} 
+            value={search} 
+            onChange={e => setSearch(e.target.value)} 
+          />
         </div>
 
         {/* Add New Button */}
-        <button className="btn btn-primary" style={{ width: '100%', marginBottom: '12px', fontSize: '0.85rem', padding: '8px' }} onClick={() => setShowAddModal(true)}>
-          <Plus size={16} /> Tambah Menu Baru
-        </button>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+          <button 
+            className="btn premium-btn premium-btn-primary" 
+            style={{ flex: 1, fontSize: '0.825rem', height: '38px', borderRadius: '8px' }} 
+            onClick={() => setShowAddModal(true)}
+          >
+            <Plus size={15} /> Tambah Menu
+          </button>
+          <button 
+            className="btn premium-btn premium-btn-secondary" 
+            style={{ width: '38px', height: '38px', padding: 0, borderRadius: '8px' }} 
+            onClick={() => setShowBulkImport(true)} 
+            title="Bulk Import Resep"
+          >
+            <UploadCloud size={15} />
+          </button>
+        </div>
 
         {/* Recipe List */}
-        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        <div className="glass-scrollbar" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', paddingRight: '4px' }}>
           {filteredRecipes.map(r => {
             const isActive = activeRecipe && activeRecipe.menu_name === r.menu_name;
             const pct = r.food_cost_pct || 0;
-            const pctDisplay = typeof pct === 'number' && pct < 1 ? (pct * 100).toFixed(0) : pct;
+            const pctDisplay = ((Number(pct) || 0) * 100).toFixed(0); // M-5: pct is always a fraction
             return (
-              <div key={r.menu_name} className={`nav-item ${isActive ? 'active' : ''}`} style={{ padding: '10px 12px', justifyContent: 'space-between' }} onClick={() => handleSelectRecipe(r)}>
+              <div
+                key={r.id ?? r.menu_name}
+                className={`recipe-nav-item ${isActive ? 'active' : ''}`}
+                style={{ justifyContent: 'space-between' }} 
+                onClick={() => handleSelectRecipe(r)}
+              >
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.menu_name}</div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>HPP: {formatIDR(r.basic_cost || 0)}</div>
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {r.menu_name}
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    HPP: {formatIDR(r.basic_cost || 0)}
+                  </div>
                 </div>
-                <span className={`badge ${getCostBadge(pct)}`} style={{ fontSize: '0.65rem', padding: '2px 6px', flexShrink: 0 }}>
+                <span 
+                  className={`badge ${getCostBadge(pct)}`} 
+                  style={{ 
+                    fontSize: '0.65rem', 
+                    padding: '3px 8px', 
+                    flexShrink: 0,
+                    background: pct < 0.27 ? 'rgba(81,207,102,0.08)' : pct <= 0.3 ? 'rgba(252,196,25,0.08)' : 'rgba(255,107,107,0.08)',
+                    border: pct < 0.27 ? '1px solid rgba(81,207,102,0.2)' : pct <= 0.3 ? '1px solid rgba(252,196,25,0.2)' : '1px solid rgba(255,107,107,0.2)',
+                    color: pct < 0.27 ? 'var(--success)' : pct <= 0.3 ? 'var(--warning)' : 'var(--danger)'
+                  }}
+                >
                   {pctDisplay}%
                 </span>
               </div>
             );
           })}
           {filteredRecipes.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-              No recipes found.
+            <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-muted)', fontSize: '0.825rem', fontStyle: 'italic' }}>
+              Tidak ada resep ditemukan
             </div>
           )}
         </div>
@@ -257,63 +451,149 @@ export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
 
       {/* Right: Recipe Editor */}
       {activeRecipe ? (
-        <div className="glass-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '24px', overflow: 'hidden' }}>
+        <div className="glass-card animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '24px', overflow: 'hidden', border: '1px solid var(--border)' }}>
           {/* Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: '16px', marginBottom: '16px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '18px', marginBottom: '18px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', gap: '16px' }}>
             <div>
-              <span className="badge badge-info" style={{ marginBottom: '6px' }}>Recipe & COGS</span>
-              <h2 style={{ fontSize: '1.3rem', fontWeight: 700 }}>{activeRecipe.menu_name}</h2>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginTop: '4px' }}>Ingredients dari inventory per porsi</p>
+              <span className="badge" style={{ marginBottom: '6px', background: 'rgba(76,110,245,0.1)', color: 'var(--accent)', border: '1px solid rgba(76,110,245,0.15)', fontSize: '0.65rem', padding: '3px 8px' }}>
+                Resep & Harga Pokok
+              </span>
+              <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'white', margin: 0 }}>{activeRecipe.menu_name}</h2>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginTop: '2px' }}>Kelola komposisi bahan baku dari inventory per porsi</p>
             </div>
-            <div style={{ display: 'flex', gap: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', padding: '12px 16px', borderRadius: '10px' }}>
-              <div>
-                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Basic Cost (HPP)</div>
-                <div style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--accent)' }}>{formatIDR(basicCost)}</div>
+            
+            <div style={{ display: 'flex', gap: '12px', flexShrink: 0 }}>
+              {/* Cost Card 1 */}
+              <div style={{ 
+                background: 'linear-gradient(135deg, rgba(76, 110, 245, 0.06) 0%, rgba(76, 110, 245, 0.01) 100%)', 
+                border: '1px solid rgba(76, 110, 245, 0.2)', 
+                padding: '10px 16px', 
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                minWidth: '150px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+              }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(76, 110, 245, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>
+                  <Coins size={16} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>HPP (Basic Cost)</div>
+                  <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#fff', marginTop: '1px' }}>{formatIDR(basicCost)}</div>
+                </div>
               </div>
-              <div style={{ width: 1, background: 'var(--border)' }} />
-              <div>
-                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Food Cost %</div>
-                <div style={{ fontWeight: 700, fontSize: '1.1rem', color: foodCostPct < 0.27 ? 'var(--success)' : foodCostPct <= 0.3 ? 'var(--warning)' : 'var(--danger)' }}>
-                  {(foodCostPct * 100).toFixed(1)}%
+
+              {/* Cost Card 2 */}
+              <div style={{ 
+                background: foodCostPct < 0.27 
+                  ? 'linear-gradient(135deg, rgba(81, 207, 102, 0.06) 0%, rgba(81, 207, 102, 0.01) 100%)' 
+                  : foodCostPct <= 0.3 
+                    ? 'linear-gradient(135deg, rgba(252, 196, 25, 0.06) 0%, rgba(252, 196, 25, 0.01) 100%)' 
+                    : 'linear-gradient(135deg, rgba(255, 107, 107, 0.06) 0%, rgba(255, 107, 107, 0.01) 100%)', 
+                border: foodCostPct < 0.27 
+                  ? '1px solid rgba(81, 207, 102, 0.2)' 
+                  : foodCostPct <= 0.3 
+                    ? '1px solid rgba(252, 196, 25, 0.2)' 
+                    : '1px solid rgba(255, 107, 107, 0.2)', 
+                padding: '10px 16px', 
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                minWidth: '150px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+              }}>
+                <div style={{ 
+                  width: '32px', height: '32px', borderRadius: '8px', 
+                  background: foodCostPct < 0.27 
+                    ? 'rgba(81, 207, 102, 0.1)' 
+                    : foodCostPct <= 0.3 
+                      ? 'rgba(252, 196, 25, 0.1)' 
+                      : 'rgba(255, 107, 107, 0.1)', 
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                  color: foodCostPct < 0.27 
+                    ? 'var(--success)' 
+                    : foodCostPct <= 0.3 
+                      ? 'var(--warning)' 
+                      : 'var(--danger)' 
+                }}>
+                  {foodCostPct < 0.27 ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>Food Cost %</div>
+                  <div style={{ 
+                    fontWeight: 800, fontSize: '1.05rem', 
+                    color: foodCostPct < 0.27 
+                      ? 'var(--success)' 
+                      : foodCostPct <= 0.3 
+                        ? 'var(--warning)' 
+                        : 'var(--danger)',
+                    marginTop: '1px' 
+                  }}>
+                    {(foodCostPct * 100).toFixed(1)}%
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Selling Price + Category */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Menu Category</label>
-              <input type="text" className="form-control" readOnly value={activeRecipe.menu_name.toLowerCase().match(/espresso|americano|latte|cappuc|kopi|coffee/) ? 'KOPI' : 'NON-KOPI / COGS'} style={{ color: 'var(--text-secondary)' }} />
+              <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Kategori Menu</label>
+              <select
+                className="form-control premium-input"
+                value={editedCategory}
+                onChange={e => setEditedCategory(e.target.value)}
+                style={{ height: '40px' }}
+              >
+                <option value="KOPI">Kopi</option>
+                <option value="NON-KOPI">Non-Kopi</option>
+                <option value="MOCKTAIL">Mocktail</option>
+                <option value="JUICE">Juice</option>
+                <option value="TEA">Tea</option>
+                <option value="BEER">Beer & Alcohol</option>
+              </select>
             </div>
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Harga Jual (IDR)</label>
-              <input type="number" className="form-control" value={editedSellingPrice} onChange={e => setEditedSellingPrice(parseInt(e.target.value) || 0)} />
+              <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Harga Jual (IDR)</label>
+              <input 
+                type="number" 
+                className="form-control premium-input" 
+                style={{ height: '40px', fontWeight: 700 }}
+                value={editedSellingPrice} 
+                onChange={e => setEditedSellingPrice(parseInt(e.target.value) || 0)} 
+              />
             </div>
           </div>
 
           {/* Ingredients Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <h3 style={{ fontSize: '0.85rem', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: '0.5px' }}>
-              Bahan Baku (dari Inventory)
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <h3 style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '1px' }}>
+              Komposisi Bahan Baku (Recipe List)
             </h3>
-            <button className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '0.8rem' }} onClick={handleAddIngredient}>
+            <button 
+              className="btn premium-btn premium-btn-secondary" 
+              style={{ padding: '6px 14px', fontSize: '0.8rem', borderRadius: '8px', display: 'flex', gap: '6px' }} 
+              onClick={handleAddIngredient}
+            >
               <Plus size={14} /> Tambah Bahan
             </button>
           </div>
 
           {/* Ingredients Table */}
-          <div style={{ flex: 1, overflowY: 'auto', marginBottom: '12px' }}>
-            <table className="custom-table">
+          <div className="glass-scrollbar" style={{ flex: 1, overflowY: 'auto', marginBottom: '16px', border: '1px solid rgba(255,255,255,0.03)', borderRadius: '10px', background: 'rgba(0,0,0,0.1)' }}>
+            <table className="custom-table premium-table" style={{ tableLayout: 'fixed', width: '100%' }}>
               <thead>
                 <tr>
-                  <th style={{ width: '30%' }}>Bahan Baku</th>
-                  <th style={{ width: '12%', textAlign: 'right' }}>Qty</th>
-                  <th style={{ width: '14%' }}>Satuan</th>
-                  <th style={{ width: '14%' }}>Pack Info</th>
-                  <th style={{ width: '14%', textAlign: 'right' }}>Harga/Pack</th>
+                  <th style={{ width: '28%' }}>Bahan Baku</th>
+                  <th style={{ width: '10%', textAlign: 'right' }}>Qty</th>
+                  <th style={{ width: '12%' }}>Satuan</th>
+                  <th style={{ width: '20%' }}>Pack Info</th>
+                  <th style={{ width: '15%', textAlign: 'right' }}>Harga/Pack</th>
                   <th style={{ width: '12%', textAlign: 'right' }}>Amount</th>
-                  <th style={{ width: '4%' }}></th>
+                  <th style={{ width: '3%', textAlign: 'center' }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -324,14 +604,13 @@ export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
                   const info = stockMap[ing.item_name];
 
                   return (
-                    <tr key={idx}>
+                    <tr key={ing._uid ?? idx}>
                       {/* Item Name with Autocomplete */}
                       <td style={{ position: 'relative' }}>
                         <input
                           type="text"
-                          className="form-control"
-                          style={{ padding: '7px 10px', fontSize: '0.85rem' }}
-                          placeholder="Pilih bahan..."
+                          className="form-control premium-input table-input"
+                          placeholder="Ketik nama bahan..."
                           value={ing.item_name}
                           onFocus={() => setOpenDropdown(idx)}
                           onChange={(e) => {
@@ -340,27 +619,42 @@ export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
                             setEditedIngredients(updated);
                             setOpenDropdown(idx);
                           }}
-                          onBlur={() => setTimeout(() => setOpenDropdown(null), 200)}
+                          onBlur={() => setTimeout(() => setOpenDropdown(null), 250)}
                         />
                         {openDropdown === idx && (
-                          <ul className="search-results-list">
+                          <ul className="search-results-list glass-scrollbar" style={{ 
+                            background: '#161922', 
+                            border: '1px solid rgba(255,255,255,0.1)', 
+                            borderRadius: '10px',
+                            boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+                            backdropFilter: 'blur(10px)',
+                            zIndex: 1000,
+                            padding: '4px',
+                            marginTop: '2px'
+                          }}>
                             {stock
                               .filter(item => item.name.toLowerCase().includes((ing.item_name || '').toLowerCase()))
                               .slice(0, 8)
-                              .map(item => {
-                                const pInfo = parseFullPack(item.full_pack);
-                                return (
-                                  <li key={item.name} className="search-results-item" onMouseDown={() => handleSelectItem(idx, item)}>
-                                    <div style={{ fontWeight: 500 }}>{item.name}</div>
-                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                                      {item.category} · {item.full_pack || item.unit} · {formatIDR(item.new_price || item.price)}
-                                    </div>
-                                  </li>
-                                );
-                              })}
+                              .map(item => (
+                                <li
+                                  key={item.id ?? item.name}
+                                  className="search-results-item"
+                                  style={{ borderRadius: '6px', padding: '8px 12px' }}
+                                  onMouseDown={() => handleSelectItem(idx, item)}
+                                >
+                                  <div style={{ fontWeight: 600, color: '#fff', fontSize: '0.825rem' }}>{item.name}</div>
+                                  <div style={{ fontSize: '0.675rem', color: 'var(--text-muted)', marginTop: '2px', display: 'flex', gap: '8px' }}>
+                                    <span>{item.category}</span>
+                                    <span>•</span>
+                                    <span>{item.full_pack}</span>
+                                    <span>•</span>
+                                    <span style={{ color: 'var(--accent)' }}>{formatIDR(item.new_price || item.price)}</span>
+                                  </div>
+                                </li>
+                              ))}
                             {stock.filter(item => item.name.toLowerCase().includes((ing.item_name || '').toLowerCase())).length === 0 && (
-                              <li className="search-results-item" style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                                Tidak ada item di inventory
+                              <li className="search-results-item" style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.75rem', padding: '8px 12px' }}>
+                                Tidak ditemukan di inventory
                               </li>
                             )}
                           </ul>
@@ -372,8 +666,8 @@ export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
                         <input
                           type="number"
                           step="any"
-                          className="form-control"
-                          style={{ padding: '7px 10px', fontSize: '0.85rem', textAlign: 'right' }}
+                          className="form-control premium-input table-input"
+                          style={{ textAlign: 'right', fontWeight: 600 }}
                           value={ing.qty_in_use}
                           onChange={e => handleQtyChange(idx, e.target.value)}
                         />
@@ -382,8 +676,7 @@ export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
                       {/* Unit Selector */}
                       <td>
                         <select
-                          className="form-control"
-                          style={{ padding: '7px 8px', fontSize: '0.8rem' }}
+                          className="form-control premium-input table-input table-select"
                           value={ing.unit || 'gr'}
                           onChange={e => handleUnitChange(idx, e.target.value)}
                         >
@@ -394,22 +687,28 @@ export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
                       </td>
 
                       {/* Pack Info */}
-                      <td style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      <td style={{ fontSize: '0.7rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={packLabel}>
                         {packLabel || '-'}
                       </td>
 
                       {/* Price per pack */}
-                      <td style={{ textAlign: 'right', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      <td style={{ textAlign: 'right', fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={info ? formatIDR(info.new_price || info.price) : formatIDR(ing.unit_price)}>
                         {info ? formatIDR(info.new_price || info.price) : formatIDR(ing.unit_price)}
                       </td>
 
                       {/* Amount */}
-                      <td style={{ textAlign: 'right', fontWeight: 600, fontSize: '0.85rem' }}>{formatIDR(rowAmount)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, fontSize: '0.75rem', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={formatIDR(rowAmount)}>
+                        {formatIDR(rowAmount)}
+                      </td>
 
                       {/* Remove */}
                       <td style={{ textAlign: 'center' }}>
-                        <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: '4px' }} onClick={() => handleRemoveIngredient(idx)}>
-                          <Trash2 size={14} />
+                        <button 
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: '6px', borderRadius: '6px', transition: 'all 0.2s' }} 
+                          className="premium-btn-danger"
+                          onClick={() => handleRemoveIngredient(idx)}
+                        >
+                          <Trash2 size={13} />
                         </button>
                       </td>
                     </tr>
@@ -417,8 +716,8 @@ export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
                 })}
                 {editedIngredients.length === 0 && (
                   <tr>
-                    <td colSpan="7" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
-                      Belum ada bahan. Klik "Tambah Bahan" untuk mulai membangun resep.
+                    <td colSpan="7" style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.825rem' }}>
+                      Belum ada bahan baku terhubung. Klik "Tambah Bahan" untuk meracik resep.
                     </td>
                   </tr>
                 )}
@@ -427,39 +726,79 @@ export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
           </div>
 
           {/* Bottom Calculation Bar - sticky */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', padding: '12px 16px', borderRadius: '10px', flexShrink: 0 }}>
-            <div style={{ display: 'flex', gap: '20px', fontSize: '0.8rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
-              <span>Subtotal: <strong style={{ color: 'var(--text-primary)' }}>{formatIDR(subtotal)}</strong></span>
-              <span>Fix Cost (5%): <strong style={{ color: 'var(--text-primary)' }}>{formatIDR(fixCost)}</strong></span>
-              <span>Basic Cost: <strong style={{ color: 'var(--accent)' }}>{formatIDR(basicCost)}</strong></span>
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            background: 'rgba(30, 41, 59, 0.4)', 
+            border: '1px solid var(--border)', 
+            padding: '14px 20px', 
+            borderRadius: '12px', 
+            flexShrink: 0,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
+            backdropFilter: 'blur(10px)'
+          }}>
+            <div style={{ display: 'flex', gap: '24px', fontSize: '0.825rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
+              <span>Subtotal: <strong style={{ color: 'white', fontWeight: 700 }}>{formatIDR(subtotal)}</strong></span>
+              <span style={{ width: 1, background: 'var(--border)', height: '14px', alignSelf: 'center' }} />
+              <span>Fix Cost (5%): <strong style={{ color: 'white', fontWeight: 700 }}>{formatIDR(fixCost)}</strong></span>
+              <span style={{ width: 1, background: 'var(--border)', height: '14px', alignSelf: 'center' }} />
+              <span>HPP Gabungan: <strong style={{ color: 'var(--accent)', fontWeight: 800 }}>{formatIDR(basicCost)}</strong></span>
             </div>
-            <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem', flexShrink: 0 }} onClick={handleSaveRecipe}>
-              <Save size={14} /> Simpan Resep
+            <button 
+              className="btn premium-btn premium-btn-primary" 
+              style={{ padding: '10px 20px', fontSize: '0.85rem', borderRadius: '8px', display: 'flex', gap: '8px' }} 
+              onClick={handleSaveRecipe}
+            >
+              <Save size={15} /> Simpan Resep
             </button>
           </div>
         </div>
       ) : (
-        <div className="glass-card empty-state" style={{ flex: 1 }}>
-          Pilih resep dari daftar, atau tambah menu baru.
+        <div className="glass-card empty-state" style={{ flex: 1, border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+            <Coins size={22} />
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <h4 style={{ fontWeight: 700, color: 'white', fontSize: '0.95rem', marginBottom: '4px' }}>Tidak Ada Resep Terpilih</h4>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', maxWidth: '250px' }}>Pilih menu di daftar kiri untuk mengedit resep atau buat menu resep baru.</p>
+          </div>
         </div>
       )}
 
       {/* Add New Recipe Modal */}
       {showAddModal && (
-        <div className="modal-overlay">
-          <div className="glass-card" style={{ width: '420px', padding: '24px', border: '1px solid var(--border-focus)' }}>
+        <div className="modal-overlay" style={{ backdropFilter: 'blur(6px)', background: 'rgba(0, 0, 0, 0.7)', zIndex: 3000 }}>
+          <div className="glass-card" style={{ width: '400px', padding: '28px', border: '1px solid var(--border-focus)', boxShadow: '0 20px 40px rgba(0,0,0,0.5)', animation: 'fadeIn 0.25s ease-out' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Tambah Menu Baru</h3>
-              <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => setShowAddModal(false)}><X size={18} /></button>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'white', margin: 0 }}>Tambah Resep Menu Baru</h3>
+              <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '4px' }} onClick={() => setShowAddModal(false)}>
+                <X size={18} />
+              </button>
             </div>
-            <form onSubmit={handleAddNewRecipe}>
-              <div className="form-group">
-                <label className="form-label">Nama Menu</label>
-                <input type="text" className="form-control" placeholder="contoh: Iced Matcha Latte" required value={newMenuName} onChange={e => setNewMenuName(e.target.value)} />
+            
+            <form onSubmit={handleAddNewRecipe} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Nama Menu</label>
+                <input 
+                  type="text" 
+                  className="form-control premium-input" 
+                  style={{ height: '40px' }}
+                  placeholder="contoh: Iced Matcha Latte" 
+                  required 
+                  value={newMenuName} 
+                  onChange={e => setNewMenuName(e.target.value)} 
+                />
               </div>
-              <div className="form-group">
-                <label className="form-label">Kategori</label>
-                <select className="form-control" value={newMenuCategory} onChange={e => setNewMenuCategory(e.target.value)}>
+              
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Kategori</label>
+                <select 
+                  className="form-control premium-input" 
+                  style={{ height: '40px' }}
+                  value={newMenuCategory} 
+                  onChange={e => setNewMenuCategory(e.target.value)}
+                >
                   <option value="KOPI">Kopi</option>
                   <option value="NON-KOPI">Non-Kopi</option>
                   <option value="MOCKTAIL">Mocktail</option>
@@ -468,18 +807,48 @@ export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
                   <option value="BEER">Beer & Alcohol</option>
                 </select>
               </div>
-              <div className="form-group">
-                <label className="form-label">Harga Jual (IDR)</label>
-                <input type="number" className="form-control" placeholder="contoh: 35000" value={newMenuPrice} onChange={e => setNewMenuPrice(e.target.value)} />
+              
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Harga Jual (IDR)</label>
+                <input 
+                  type="number" 
+                  className="form-control premium-input" 
+                  style={{ height: '40px' }}
+                  placeholder="contoh: 35000" 
+                  value={newMenuPrice} 
+                  onChange={e => setNewMenuPrice(e.target.value)} 
+                />
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowAddModal(false)}>Batal</button>
-                <button type="submit" className="btn btn-primary">Buat Resep</button>
+              
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
+                <button type="button" className="btn premium-btn premium-btn-secondary" style={{ height: '38px', borderRadius: '8px', padding: '0 16px', fontSize: '0.85rem' }} onClick={() => setShowAddModal(false)}>Batal</button>
+                <button type="submit" className="btn premium-btn premium-btn-primary" style={{ height: '38px', borderRadius: '8px', padding: '0 20px', fontSize: '0.85rem' }}>Buat Resep</button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Bulk Import Modal */}
+      <BulkImport
+        isOpen={showBulkImport}
+        onClose={() => setShowBulkImport(false)}
+        type="recipes"
+        title="Bulk Import Resep & Harga Jual"
+        description="Upload data menu, harga jual, dan resep sekaligus dari file Excel."
+        onCommit={async (rows) => {
+          const res = await api.bulkImportRecipes(rows);
+          if (res.success > 0) {
+            window.location.reload();
+          }
+          return res;
+        }}
+        expectedColumns={[
+          { key: 'menu_name', label: 'menu_name', required: true, type: 'string', description: 'Nama menu (harus sama persis dengan di POS)', sample: 'Ice Caramel Latte' },
+          { key: 'selling_price', label: 'selling_price', required: true, type: 'number', description: 'Harga Jual (angka tanpa titik)', sample: 45000 },
+          { key: 'ingredients_json', label: 'ingredients_json', required: false, type: 'string', description: 'JSON array bahan baku (kosongkan jika tidak ada resep)', sample: '[{"item_name":"Espresso Shot (Arabica)","qty_in_use":36,"unit":"gr","unit_price":1.7}]' }
+        ]}
+      />
     </div>
   );
 }

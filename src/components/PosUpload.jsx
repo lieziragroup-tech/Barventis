@@ -1,21 +1,22 @@
 import React, { useState, useRef } from 'react';
-import { 
-  Upload, FileSpreadsheet, AlertCircle, CheckCircle, 
+import {
+  Upload, FileSpreadsheet, CheckCircle,
   MapPin, Calendar, Database, ShieldAlert, Sparkles, X, Settings
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import confetti from 'canvas-confetti';
+import { api } from '../services/api';
 
-export default function PosUpload({ stock, recipes, transactions, onProcessPosSales }) {
+export default function PosUpload({ recipes, onProcessPosSales }) {
   const [dragActive, setDragActive] = useState(false);
-  const [file, setFile] = useState(null);
+  const [, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [parsedData, setParsedData] = useState(null);
   const [mappedSales, setMappedSales] = useState([]);
   const [showMappingModal, setShowMappingModal] = useState(false);
   const [mappingMenuName, setMappingMenuName] = useState('');
   const [selectedRecipeName, setSelectedRecipeName] = useState('');
-  const [uploadStatus, setUploadStatus] = useState(null); // 'success', 'warning', 'error'
+  const [, setUploadStatus] = useState(null); // 'success', 'warning', 'error'
   const fileInputRef = useRef(null);
 
   // POS Custom templates states
@@ -32,6 +33,7 @@ export default function PosUpload({ stock, recipes, transactions, onProcessPosSa
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
 
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability
     loadTemplateConfig();
   }, []);
 
@@ -287,13 +289,6 @@ export default function PosUpload({ stock, recipes, transactions, onProcessPosSa
 
   // 5. Complete Processing & Deduct Stock
   const handleCommitSales = () => {
-    const unmapped = mappedSales.filter(s => !s.isMapped);
-    if (unmapped.length > 0) {
-      // Surface unmapped items — UI already shows them in the mapping modal
-      console.warn(`${unmapped.length} unmapped items — mapping modal should be open`);
-      return;
-    }
-
     setLoading(true);
     setTimeout(() => {
       onProcessPosSales(mappedSales, parsedData.filename);
@@ -450,18 +445,18 @@ export default function PosUpload({ stock, recipes, transactions, onProcessPosSa
               <ShieldAlert size={28} style={{ color: 'var(--danger)', flexShrink: 0 }} />
               <div>
                 <h4 style={{ fontWeight: 700, fontSize: '0.95rem', color: 'white', marginBottom: '4px' }}>
-                  Action Required: {unmappedUniqueNames.length} Unmapped POS Items
+                  Perhatian: {unmappedUniqueNames.length} Menu POS Belum Terpetakan
                 </h4>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '12px' }}>
-                  The items listed below do not match any recipe in the UMATIS system. You must manually bind them to their respective resep before you can deduct stock or calculate COGS.
+                  Menu-menu di bawah ini tidak memiliki resep di dalam sistem. Anda dapat memetakan menu tersebut secara manual, atau **melanjutkan proses (klik tombol proses kuning di kanan bawah) untuk memproses pengurangan stok menu yang sudah terpetakan saja dan mengabaikan menu lainnya**.
                 </p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', maxHeight: '120px', overflowY: 'auto', padding: '6px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
                   {unmappedUniqueNames.map(name => (
                     <button 
                       key={name}
                       onClick={() => openMappingModal(name)}
                       className="btn btn-secondary" 
-                      style={{ padding: '6px 12px', fontSize: '0.75rem', display: 'flex', gap: '6px', alignItems: 'center', borderColor: 'var(--danger)' }}
+                      style={{ padding: '6px 12px', fontSize: '0.75rem', display: 'flex', gap: '6px', alignItems: 'center', borderColor: 'rgba(239,68,68,0.2)' }}
                     >
                       <Settings size={12} style={{ color: 'var(--danger)' }} /> Bind: "{name}"
                     </button>
@@ -483,19 +478,9 @@ export default function PosUpload({ stock, recipes, transactions, onProcessPosSa
                 <h4 style={{ fontWeight: 700, fontSize: '0.95rem', color: 'white', marginBottom: '2px' }}>
                   Mapping Validation Passed!
                 </h4>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
                   All {mappedSales.length} POS sales rows successfully matched their respective recipes. You are ready to process deductions.
                 </p>
-              </div>
-              <div style={{ marginLeft: 'auto' }}>
-                <button 
-                  onClick={handleCommitSales}
-                  disabled={loading}
-                  className="btn btn-success" 
-                  style={{ display: 'flex', gap: '8px', alignItems: 'center' }}
-                >
-                  <Sparkles size={16} /> {loading ? "Deducting Stock..." : "Process Stock Deductions"}
-                </button>
               </div>
             </div>
           )}
@@ -503,14 +488,31 @@ export default function PosUpload({ stock, recipes, transactions, onProcessPosSa
           {/* Action Row */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>POS Spreadsheet Rows Preview</h3>
-            <button className="btn btn-secondary" onClick={() => {
-              setFile(null);
-              setParsedData(null);
-              setMappedSales([]);
-              setUploadStatus(null);
-            }}>
-              Cancel Upload
-            </button>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button className="btn btn-secondary" onClick={() => {
+                setFile(null);
+                setParsedData(null);
+                setMappedSales([]);
+                setUploadStatus(null);
+              }}>
+                Cancel Upload
+              </button>
+              
+              <button 
+                onClick={handleCommitSales}
+                disabled={loading}
+                className={unmappedUniqueNames.length === 0 ? "btn btn-success" : "btn btn-warning"}
+                style={{ display: 'flex', gap: '8px', alignItems: 'center' }}
+              >
+                <Sparkles size={16} /> 
+                {loading 
+                  ? "Deducting Stock..." 
+                  : unmappedUniqueNames.length === 0 
+                    ? "Process Stock Deductions" 
+                    : `Process (${mappedSales.length - unmappedItems.length} Mapped / Skip ${unmappedUniqueNames.length} Unmapped)`
+                }
+              </button>
+            </div>
           </div>
 
           {/* Data Preview Table */}

@@ -1,5 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Plus, X, FileText, CheckCircle, XCircle, Clock, Package, Search, Download, Eye } from 'lucide-react';
+
+// Stable client-side id for editable line-item rows (stable React keys vs array index). (LOW #19)
+const rowUid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `r${Date.now()}${Math.random()}`);
+const blankLineItem = () => ({ item_name: '', qty: 1, unit_price: 0, unit: 'pck', _uid: rowUid() });
 
 export default function Invoicing({ stock, invoices, onCreateInvoice, onReceiveInvoice, onCancelInvoice }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -10,7 +14,7 @@ export default function Invoicing({ stock, invoices, onCreateInvoice, onReceiveI
   // New invoice form state
   const [invSupplier, setInvSupplier] = useState('');
   const [invNotes, setInvNotes] = useState('');
-  const [invItems, setInvItems] = useState([{ item_name: '', qty: 1, unit_price: 0, unit: 'pck' }]);
+  const [invItems, setInvItems] = useState([blankLineItem()]);
   const [itemDropdown, setItemDropdown] = useState(null);
 
   const formatIDR = (num) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num);
@@ -26,17 +30,9 @@ export default function Invoicing({ stock, invoices, onCreateInvoice, onReceiveI
     return matchSearch && matchStatus;
   });
 
-  // Generate invoice number
-  const genInvNo = () => {
-    const d = new Date();
-    const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-    const seq = String(invoices.length + 1).padStart(3, '0');
-    return `INV-${dateStr}-${seq}`;
-  };
-
   // Add line item
   const addLineItem = () => {
-    setInvItems([...invItems, { item_name: '', qty: 1, unit_price: 0, unit: 'pck' }]);
+    setInvItems([...invItems, blankLineItem()]);
   };
 
   const removeLineItem = (idx) => {
@@ -66,9 +62,10 @@ export default function Invoicing({ stock, invoices, onCreateInvoice, onReceiveI
     const validItems = invItems.filter(i => i.item_name && i.qty > 0);
     if (validItems.length === 0) return;
 
+    // Note: invoice_no, total, status & date are assigned authoritatively by the
+    // server (api.createInvoice → INV-YYYYMMDD-XXX with a UNIQUE constraint), so we
+    // do not generate a client-side number here (M-3). UI refreshes from DB after save.
     const invoice = {
-      id: `inv-${Date.now()}`,
-      invoice_no: genInvNo(),
       supplier: invSupplier,
       date: new Date().toISOString().split('T')[0],
       items: validItems,
@@ -82,7 +79,7 @@ export default function Invoicing({ stock, invoices, onCreateInvoice, onReceiveI
     setShowCreateModal(false);
     setInvSupplier('');
     setInvNotes('');
-    setInvItems([{ item_name: '', qty: 1, unit_price: 0, unit: 'pck' }]);
+    setInvItems([blankLineItem()]);
   };
 
   // Status badge
@@ -299,7 +296,7 @@ export default function Invoicing({ stock, invoices, onCreateInvoice, onReceiveI
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Invoice No (auto)</label>
-                  <input type="text" className="form-control" value={genInvNo()} readOnly style={{ color: 'var(--text-muted)', fontFamily: 'monospace' }} />
+                  <input type="text" className="form-control" value="Otomatis dibuat server" readOnly style={{ color: 'var(--text-muted)', fontFamily: 'monospace' }} />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Supplier</label>
@@ -331,7 +328,7 @@ export default function Invoicing({ stock, invoices, onCreateInvoice, onReceiveI
                   </thead>
                   <tbody>
                     {invItems.map((item, idx) => (
-                      <tr key={idx}>
+                      <tr key={item._uid ?? idx}>
                         <td style={{ position: 'relative' }}>
                           <input type="text" className="form-control" style={{ padding: '6px 8px', fontSize: '0.8rem' }} placeholder="Pilih bahan..." value={item.item_name}
                             onFocus={() => setItemDropdown(idx)}
@@ -340,8 +337,8 @@ export default function Invoicing({ stock, invoices, onCreateInvoice, onReceiveI
                           />
                           {itemDropdown === idx && (
                             <ul className="search-results-list">
-                              {stock.filter(s => invSupplier ? s.supplier === invSupplier : true)
-                                .filter(s => s.name.toLowerCase().includes((item.item_name || '').toLowerCase()))
+                              {stock.filter(s => invSupplier ? (s.supplier || '').trim().toLowerCase() === invSupplier.trim().toLowerCase() : true)
+                                .filter(s => (s.name || '').toLowerCase().includes((item.item_name || '').toLowerCase()))
                                 .slice(0, 6).map(s => (
                                   <li key={s.name} className="search-results-item" onMouseDown={() => selectStockItem(idx, s)}>
                                     <div style={{ fontWeight: 500, fontSize: '0.8rem' }}>{s.name}</div>

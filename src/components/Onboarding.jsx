@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Package, BookOpen, UploadCloud, CheckCircle, ArrowRight, Sparkles } from 'lucide-react';
+import { useState } from 'react';
+import { Package, BookOpen, UploadCloud, ArrowRight, Sparkles } from 'lucide-react';
 
 const STEPS = [
   {
@@ -72,7 +72,8 @@ export default function Onboarding({ onNavigate, onDismiss, tenantName }) {
           {STEPS.map((s, i) => (
             <div key={i} style={{
               flex: 1, height: '4px', borderRadius: '4px',
-              background: i <= currentStep ? step.color : 'rgba(255,255,255,0.08)',
+              // Each completed bar uses its OWN step color (was always the active step's). (LOW #24)
+              background: i <= currentStep ? s.color : 'rgba(255,255,255,0.08)',
               transition: 'background 0.3s'
             }} />
           ))}
