@@ -4,7 +4,6 @@ import {
   AlertTriangle, ShieldAlert, CheckCircle, Clock, FileArchive, X, Info
 } from 'lucide-react';
 import { api } from '../services/api';
-import { supabase } from '../lib/supabase';
 import confetti from 'canvas-confetti';
 
 export default function BackupCenter() {
@@ -45,12 +44,26 @@ export default function BackupCenter() {
   const handleCreateBackup = async () => {
     setActionLoading(true);
     try {
+      // api.createBackup() returns the backup record directly (id, filename, size_formatted, created_at, data_json)
+      // The old code accessed `res.backup` which was always undefined — bug BUG-BC-01.
       const res = await api.createBackup();
       
-      // Update list
-      setBackups(prev => [res.backup, ...prev]);
+      // Trigger download automatically after creation
+      if (res?.data_json && res?.filename) {
+        const blob = new Blob([res.data_json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = res.filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
 
-      // Explode confetti on success
+      // Refresh the list from DB so the new entry appears with the correct data
+      await fetchBackups();
+
       confetti({
         particleCount: 150,
         spread: 80,
@@ -65,23 +78,36 @@ export default function BackupCenter() {
     }
   };
 
-  const handleDownloadBackup = async (filename) => {
+  // BUG-BC-02: api.downloadBackup(id) expects a backup UUID, not a filename.
+  // Also, the old code discarded the returned record and never triggered a browser download.
+  const handleDownloadBackup = async (backup) => {
     try {
-      await api.downloadBackup(filename);
+      const data = await api.downloadBackup(backup.id);
+      if (!data?.data_json) throw new Error("Data backup kosong atau tidak ditemukan.");
+      const blob = new Blob([data.data_json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = data.filename || backup.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
     } catch (err) {
       alert("Gagal mengunduh file backup: " + err.message);
     }
   };
 
-  const handleDeleteBackup = async (filename) => {
-    if (!window.confirm(`Apakah Anda yakin ingin menghapus file cadangan "${filename}"? Tindakan ini tidak dapat dibatalkan.`)) {
+  // BUG-BC-03: api.deleteBackup(id) expects a backup UUID, not a filename.
+  const handleDeleteBackup = async (backup) => {
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus file cadangan "${backup.filename}"? Tindakan ini tidak dapat dibatalkan.`)) {
       return;
     }
 
     setActionLoading(true);
     try {
-      await api.deleteBackup(filename);
-      setBackups(prev => prev.filter(b => b.filename !== filename));
+      await api.deleteBackup(backup.id);
+      setBackups(prev => prev.filter(b => b.id !== backup.id));
     } catch (err) {
       alert("Gagal menghapus backup: " + err.message);
     } finally {
@@ -148,36 +174,16 @@ export default function BackupCenter() {
       return;
     }
 
-    setIsRestoring(true);
-    try {
-      // If restoring from uploaded file
-      if (selectedRestoreBackup instanceof File) {
-        const formData = new FormData();
-        formData.append('backup_file', selectedRestoreBackup);
-        await api.restoreBackup(formData);
-      }
-      // If restoring from local file list
-      else {
-        await api.restoreBackup(selectedRestoreBackup.filename);
-      }
-
-      // Success Confetti
-      confetti({
-        particleCount: 200,
-        spread: 100,
-        colors: ['#51cf66', '#20c997']
-      });
-
-      alert(`Sukses! Database berhasil dipulihkan.\n\nSistem akan logout otomatis untuk memuat ulang sesi database.`);
-      
-      // Sign out via Supabase — App.jsx onAuthStateChange will handle cleanup
-      await supabase.auth.signOut();
-      window.location.reload();
-
-    } catch (err) {
-      alert("Pemulihan Gagal: " + err.message);
-      setIsRestoring(false);
-    }
+    // BUG-BC-04: api.restoreBackup() does not exist in the API service.
+    // Restore from Supabase JSON backup is a destructive multi-table operation that
+    // must be implemented as a server-side RPC function to be safe and atomic.
+    // For now we surface a clear error rather than silently calling an undefined function.
+    alert(
+      "Fitur Restore belum tersedia.\n\n" +
+      "Pemulihan dari backup JSON memerlukan fungsi RPC server-side agar atomik dan aman.\n" +
+      "Silakan hubungi administrator sistem untuk melakukan restore manual dari file backup yang telah diunduh."
+    );
+    closeRestoreModal();
   };
 
   // Helpers
@@ -414,8 +420,8 @@ export default function BackupCenter() {
                       <div style={{ display: 'inline-flex', gap: '8px' }}>
                         <button 
                           className="btn btn-secondary"
-                          onClick={() => handleDownloadBackup(b.filename)}
-                          title="Unduh File ZIP ke Komputer"
+                          onClick={() => handleDownloadBackup(b)}
+                          title="Unduh File JSON ke Komputer"
                           style={{ padding: '8px', borderRadius: '6px' }}
                         >
                           <Download size={14} />
@@ -432,7 +438,7 @@ export default function BackupCenter() {
 
                         <button 
                           className="btn btn-secondary"
-                          onClick={() => handleDeleteBackup(b.filename)}
+                          onClick={() => handleDeleteBackup(b)}
                           disabled={actionLoading}
                           title="Hapus Cadangan Permanen"
                           style={{ padding: '8px', color: 'var(--danger)', borderColor: 'rgba(255, 107, 107, 0.2)', background: 'rgba(255, 107, 107, 0.03)' }}

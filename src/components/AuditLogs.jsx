@@ -23,7 +23,9 @@ export default function AuditLogs({ activeUser }) {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.getAuditLogs();
+      // BUG-AL-01: Pass limit=500 so we get meaningful history, not just 100.
+      // The api.getAuditLogs(filters) already supports this filter object.
+      const data = await api.getAuditLogs({ limit: 500 });
       setLogs(data);
     } catch (err) {
       console.error("Error fetching audit logs:", err);
@@ -395,7 +397,7 @@ export default function AuditLogs({ activeUser }) {
                         {renderIpAddress(log.ip_address)}
                       </td>
                       <td style={{ padding: '16px 20px', textAlign: 'right' }}>
-                        <button className="btn" style={{ padding: '4px 8px', fontSize: '0.75rem', background: 'transparent', border: 'none', color: 'var(--accent)' }}>
+                        <button className="btn" onClick={() => setSelectedLog(log)} style={{ padding: '4px 8px', fontSize: '0.75rem', background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer' }}>
                           Detail <ArrowRight size={12} style={{ marginLeft: '4px', display: 'inline' }} />
                         </button>
                       </td>

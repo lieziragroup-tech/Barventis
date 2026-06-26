@@ -124,36 +124,49 @@ export default function StockOpname({ stock, onCompleteOpname }) {
   };
 
   // 5. Complete and Commit Opname
-  const handleCommitOpname = () => {
-    // Capture the signature synchronously. setSignatureData is async, so reading the
-    // signatureData state in the same tick would send the STALE previous value
-    // (null on first submit) — C-2. Use the returned dataURL directly instead.
-    const currentSignature = saveSignature();
+  // BUG-SO-02: was synchronous — errors from onCompleteOpname were silently swallowed,
+  // and confetti fired before the DB write completed. Now properly async with error guard.
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Calculate total variance and value adjustment
-    const reconciliation = opnameItems.map(item => {
-      const pQty = item.physical_qty === '' ? item.book_qty : item.physical_qty;
-      const variance = pQty - item.book_qty;
-      return {
-        ...item,
-        physical_qty: pQty,
-        variance: variance,
-        valAdjustment: variance * item.price
-      };
-    });
+  const handleCommitOpname = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      // Capture the signature synchronously. setSignatureData is async, so reading the
+      // signatureData state in the same tick would return the STALE (null) value — use
+      // the returned dataURL directly instead.
+      const currentSignature = saveSignature();
 
-    onCompleteOpname(location, reconciliation, currentSignature);
-    
-    confetti({
-      particleCount: 150,
-      spread: 80,
-      origin: { y: 0.6 }
-    });
-    
-    // Back to step 1
-    setStep(1);
-    setOpnameItems([]);
-    setSignatureData(null);
+      // BUG-SO-01: physical_qty can be '' when user skips a row. Arithmetic on ''
+      // produces NaN which then crashes .toFixed() in the reconciliation table.
+      // Coerce to a proper number with fallback to book_qty (i.e. no change counted).
+      const reconciliation = opnameItems.map(item => {
+        const pQty = item.physical_qty === '' || item.physical_qty === null || item.physical_qty === undefined
+          ? item.book_qty
+          : parseFloat(item.physical_qty);
+        const variance = pQty - item.book_qty;
+        return {
+          ...item,
+          physical_qty: pQty,
+          variance,
+          valAdjustment: variance * (item.price || 0)
+        };
+      });
+
+      await onCompleteOpname(location, reconciliation, currentSignature);
+
+      confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+
+      // Reset wizard back to step 1 only on success
+      setStep(1);
+      setOpnameItems([]);
+      setSignatureData(null);
+    } catch (err) {
+      console.error('[StockOpname] Commit failed:', err);
+      alert('Gagal menyimpan opname: ' + (err?.message || 'Terjadi kesalahan.'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Format currency
@@ -164,10 +177,12 @@ export default function StockOpname({ stock, onCompleteOpname }) {
   // Categorize items
   const filteredOpnameItems = opnameItems.filter(item => item.category === activeCategory);
   
-  // Calculate total differences for Step 3
+  // BUG-SO-03: physical_qty='' compared with !== to book_qty number always returns true,
+  // showing every un-entered row as a discrepancy. Treat '' as "not counted yet" (no variance).
   const itemsWithVariance = opnameItems.filter(item => {
-    const pQty = item.physical_qty === '' ? item.book_qty : item.physical_qty;
-    return pQty !== item.book_qty;
+    if (item.physical_qty === '' || item.physical_qty === null || item.physical_qty === undefined) return false;
+    const pQty = parseFloat(item.physical_qty);
+    return !isNaN(pQty) && pQty !== item.book_qty;
   });
 
   return (
@@ -320,9 +335,10 @@ export default function StockOpname({ stock, onCompleteOpname }) {
               </thead>
               <tbody>
                 {itemsWithVariance.map(item => {
-                  const pQty = item.physical_qty;
+                  // BUG-SO-01 (display): Guard against '' before calling .toFixed
+                  const pQty = parseFloat(item.physical_qty);
                   const variance = pQty - item.book_qty;
-                  const valAdjustment = variance * item.price;
+                  const valAdjustment = variance * (item.price || 0);
 
                   return (
                     <tr key={item.name}>
@@ -411,8 +427,8 @@ export default function StockOpname({ stock, onCompleteOpname }) {
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: '12px' }}>
             <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setStep(3)}>Back</button>
-            <button className="btn btn-success" style={{ flex: 2, display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }} onClick={handleCommitOpname}>
-              <ShieldCheck size={18} /> Approve & Reconcile Stock
+            <button className="btn btn-success" style={{ flex: 2, display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }} onClick={handleCommitOpname} disabled={isSubmitting}>
+              <ShieldCheck size={18} /> {isSubmitting ? 'Menyimpan...' : 'Approve & Reconcile Stock'}
             </button>
           </div>
         </div>

@@ -94,6 +94,8 @@ export default function Invoicing({ stock, invoices, onCreateInvoice, onReceiveI
   };
 
   // Print invoice
+  // BUG-INV-01: window.open() returns null when browser blocks popups.
+  // Dereferencing w.document on null throws TypeError. Added null guard with fallback.
   const handlePrintInvoice = (inv) => {
     const printContent = `
       <html><head><title>Invoice ${inv.invoice_no}</title>
@@ -102,9 +104,8 @@ export default function Invoicing({ stock, invoices, onCreateInvoice, onReceiveI
       th,td{border:1px solid #ddd;padding:10px;text-align:left}
       th{background:#f5f5f5}
       .total{font-size:18px;font-weight:bold;text-align:right;margin-top:20px}
-      .header{display:flex;justify-content:space-between}
       </style></head><body>
-      <h1>UMATIS RESTO & VENUE</h1>
+      <h1>BARVENTIS</h1>
       <h2>Purchase Invoice: ${inv.invoice_no}</h2>
       <p><strong>Supplier:</strong> ${inv.supplier}</p>
       <p><strong>Date:</strong> ${inv.date}</p>
@@ -112,15 +113,20 @@ export default function Invoicing({ stock, invoices, onCreateInvoice, onReceiveI
       ${inv.notes ? `<p><strong>Notes:</strong> ${inv.notes}</p>` : ''}
       <table>
         <thead><tr><th>#</th><th>Item Name</th><th>Qty</th><th>Unit</th><th>Price/Unit</th><th>Subtotal</th></tr></thead>
-        <tbody>${inv.items.map((item, i) => `
-          <tr><td>${i + 1}</td><td>${item.item_name}</td><td>${item.qty}</td><td>${item.unit}</td>
+        <tbody>${(inv.items || []).map((item, i) => `
+          <tr><td>${i + 1}</td><td>${item.item_name || '-'}</td><td>${item.qty}</td><td>${item.unit || ''}</td>
           <td>Rp ${(item.unit_price || 0).toLocaleString('id-ID')}</td>
-          <td>Rp ${(item.qty * item.unit_price).toLocaleString('id-ID')}</td></tr>`).join('')}
+          <td>Rp ${((item.qty || 0) * (item.unit_price || 0)).toLocaleString('id-ID')}</td></tr>`).join('')}
         </tbody>
       </table>
-      <div class="total">TOTAL: Rp ${inv.total.toLocaleString('id-ID')}</div>
+      <div class="total">TOTAL: Rp ${(inv.total || 0).toLocaleString('id-ID')}</div>
       </body></html>`;
+
     const w = window.open('', '_blank');
+    if (!w) {
+      alert('Browser memblokir popup. Izinkan popup untuk halaman ini agar bisa mencetak invoice.');
+      return;
+    }
     w.document.write(printContent);
     w.document.close();
     w.print();
@@ -350,7 +356,7 @@ export default function Invoicing({ stock, invoices, onCreateInvoice, onReceiveI
                         </td>
                         <td><input type="number" className="form-control" style={{ padding: '6px 8px', fontSize: '0.8rem', textAlign: 'right' }} value={item.qty} onChange={e => updateLineItem(idx, 'qty', parseInt(e.target.value) || 0)} /></td>
                         <td style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{item.unit}</td>
-                        <td><input type="number" className="form-control" style={{ padding: '6px 8px', fontSize: '0.8rem', textAlign: 'right' }} value={item.unit_price} onChange={e => updateLineItem(idx, 'unit_price', parseInt(e.target.value) || 0)} /></td>
+                        <td><input type="number" className="form-control" style={{ padding: '6px 8px', fontSize: '0.8rem', textAlign: 'right' }} value={item.unit_price} onChange={e => updateLineItem(idx, 'unit_price', parseFloat(e.target.value) || 0)} /></td>
                         <td style={{ textAlign: 'right', fontWeight: 600, fontSize: '0.85rem' }}>{formatIDR(item.qty * item.unit_price)}</td>
                         <td>
                           {invItems.length > 1 && <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: '4px' }} onClick={() => removeLineItem(idx)}><X size={12} /></button>}

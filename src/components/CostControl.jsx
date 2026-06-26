@@ -44,39 +44,31 @@ export default function CostControl({ stock, transactions, invoices }) {
   const beverageCostPct = reportData?.metrics?.beverage_cost_pct ?? 0;
   const statusLabel = reportData?.metrics?.status ?? 'SAFE';
 
-  // BUG-025: Calculate daily breakdown dynamically from actual transaction ledger
+  // BUG-CC-01: POS sync writes transactions with type='OUT' (not 'POS_SALE' or 'POS_DEDUCTION').
+  // The daily breakdown must also count OUT transactions with POS Sync notes as COGS.
   const dailyColumns = useMemo(() => {
     const dailyMap = {};
 
-    // Group POS_SALE transactions by date
+    // Group POS OUT deductions (stock consumed from POS sync) by date
     (transactions || [])
-      .filter(tx => tx.type === 'POS_SALE' && tx.date.startsWith(period))
+      .filter(tx => (tx.type === 'POS_SALE' || (tx.type === 'OUT' && (tx.notes || '').startsWith('POS Sync:'))) && (tx.date || '').startsWith(period))
       .forEach(tx => {
-        const day = tx.date.substring(5).replace('-', '/'); // "05-28" -> "05/28"
-        if (!dailyMap[day]) {
-          dailyMap[day] = { date: day, purchase: 0, sales: 0 };
-        }
+        const day = (tx.date || '').substring(5).replace('-', '/');
+        if (!dailyMap[day]) dailyMap[day] = { date: day, purchase: 0, sales: 0 };
         dailyMap[day].sales += Math.abs(tx.amount || 0);
       });
 
-    // Group PURCHASE_IN transactions by date
+    // Group PURCHASE_IN (stock received from invoices) by date
     (transactions || [])
-      .filter(tx => tx.type === 'PURCHASE_IN' && tx.date.startsWith(period))
+      .filter(tx => tx.type === 'PURCHASE_IN' && (tx.date || '').startsWith(period))
       .forEach(tx => {
-        const day = tx.date.substring(5).replace('-', '/');
-        if (!dailyMap[day]) {
-          dailyMap[day] = { date: day, purchase: 0, sales: 0 };
-        }
+        const day = (tx.date || '').substring(5).replace('-', '/');
+        if (!dailyMap[day]) dailyMap[day] = { date: day, purchase: 0, sales: 0 };
         dailyMap[day].purchase += Math.abs(tx.amount || 0);
       });
 
     const result = Object.values(dailyMap);
-    // Sort chronologically
     result.sort((a, b) => a.date.localeCompare(b.date));
-
-    if (result.length === 0) {
-      return [];
-    }
     return result;
   }, [transactions, period]);
 

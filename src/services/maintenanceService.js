@@ -1,17 +1,4 @@
-// ====================================================================
-// Barventis — Maintenance Service
-// ====================================================================
-// Role-aware system maintenance helpers used by components/Maintenance.jsx.
-//   • getSystemHealth()       — read-only snapshot (all roles)
-//   • runIntegrityCheck()     — detect data corruption (Owner+)
-//   • recalcAllRecipeCosts()  — recompute HPP for every recipe (Owner+)
-//   • listStaff()             — users in the current tenant (Owner+)
-//   • updateUserRole()        — change a staff member's role (Owner only)
-//
-// Data access goes through Supabase (RLS-isolated per tenant). Recipe cost
-// recalculation reuses api.calculateIngredientCost so there is ONE canonical
-// HPP formula across the app (consistent with the C-1 fix).
-// ====================================================================
+
 import { supabase } from '../lib/supabase';
 import { api, calculateIngredientCost } from './api';
 
@@ -192,11 +179,16 @@ export const maintenanceService = {
   },
 
   // ---- STAFF / ROLE MANAGEMENT (Owner) ---------------------------
-  // RLS isolates rows to the current tenant automatically.
+  // RLS isolates rows to the current tenant automatically, but we add an
+  // explicit tenant_id filter as defense-in-depth (BUG-MS-01).
   listStaff: async () => {
+    const { tenantId } = await getSessionContext();
+    if (!tenantId) throw new Error('Sesi tidak valid atau tenant tidak ditemukan.');
+
     const { data, error } = await supabase
       .from('users')
       .select('id, name, email, role, created_at')
+      .eq('tenant_id', tenantId)
       .order('created_at', { ascending: true });
     if (error) throw new Error('Gagal memuat daftar staff: ' + error.message);
     return data || [];
@@ -208,7 +200,8 @@ export const maintenanceService = {
       throw new Error('Role tidak valid. Hanya boleh "Admin / Owner" atau "Staff".');
     }
 
-    // Guard: never allow demoting the last remaining Owner (would lock out the tenant).
+    // Guard: never allow demoting the last remaining Owner — BUG-MS-02 fix:
+    // listStaff() now filters by tenant so this check only counts same-tenant owners.
     if (newRole === 'Staff') {
       const staff = await maintenanceService.listStaff();
       const owners = staff.filter(u => u.role === 'Admin / Owner');

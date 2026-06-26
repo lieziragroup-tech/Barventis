@@ -181,12 +181,24 @@ export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
   };
 
   // Save recipe — persist all calculations to database
+  // BUG-RCP-01: Ingredients from DB already carry material_id. Pass it through so
+  // App.jsx handleSaveRecipe can use it directly without a slow name-based lookup
+  // that fails when stock names have changed since the recipe was created.
   const handleSaveRecipe = () => {
     if (!activeRecipe) return;
-    // Recalculate and store amount for each ingredient
     const savedIngredients = editedIngredients
       .filter(ing => ing.item_name !== '')
-      .map(ing => ({ ...ing, amount: calcRowAmount(ing) }));
+      .map(ing => {
+        // Prefer already-known material_id; fall back to lookup by name for new rows
+        const mat = ing.material_id ? null : stock.find(s => s.name === ing.item_name);
+        return {
+          ...ing,
+          material_id: ing.material_id ?? mat?.id ?? null,
+          amount: calcRowAmount(ing)
+        };
+      })
+      .filter(ing => ing.material_id !== null);
+
     const updatedRecipe = {
       ...activeRecipe,
       category: editedCategory,
@@ -209,7 +221,7 @@ export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
       ingredients: [],
       subtotal: 0, fix_cost: 0, basic_cost: 0,
       food_cost_pct: 0,
-      selling_price: parseInt(newMenuPrice) || 0
+      selling_price: parseFloat(newMenuPrice) || 0
     };
     if (onAddRecipe) onAddRecipe(newRecipe);
     setShowAddModal(false);

@@ -202,8 +202,11 @@ export default function PosUpload({ recipes, onProcessPosSales }) {
               branch: branchVal || branchName,
               salesDate: dateVal ? (() => {
                 if (typeof dateVal === 'number') {
-                  // Handle Excel serial number
-                  return new Date(Math.round((dateVal - 25569) * 86400 * 1000)).toISOString().split('T')[0];
+                  // Excel serial date: days since 1899-12-30 (not 1900-01-01 due to Lotus 1-2-3 bug).
+                  // Use UTC arithmetic to avoid local timezone shifting the date by ±1 day.
+                  const utcMs = Math.round((dateVal - 25569) * 86400 * 1000);
+                  const d = new Date(utcMs);
+                  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
                 }
                 const parsed = new Date(dateVal);
                 return isNaN(parsed.getTime()) ? new Date().toISOString().split('T')[0] : parsed.toISOString().split('T')[0];
@@ -288,22 +291,26 @@ export default function PosUpload({ recipes, onProcessPosSales }) {
   };
 
   // 5. Complete Processing & Deduct Stock
-  const handleCommitSales = () => {
+  const handleCommitSales = async () => {
     setLoading(true);
-    setTimeout(() => {
-      onProcessPosSales(mappedSales, parsedData.filename);
+    try {
+      await onProcessPosSales(mappedSales, parsedData.filename);
       confetti({
         particleCount: 150,
         spread: 80,
         origin: { y: 0.6 }
       });
-      // Clear State
+      // Clear state on success
       setFile(null);
       setParsedData(null);
       setMappedSales([]);
       setUploadStatus(null);
+    } catch (err) {
+      console.error("[PosUpload] handleCommitSales error:", err);
+      // Do NOT clear parsedData/mappedSales on failure so user can retry
+    } finally {
       setLoading(false);
-    }, 1500);
+    }
   };
 
   // Format Currency
@@ -538,7 +545,7 @@ export default function PosUpload({ recipes, onProcessPosSales }) {
                     <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{sale.menuCode || 'NULL'}</td>
                     <td style={{ textAlign: 'right', fontWeight: 600 }}>{sale.qty}</td>
                     <td style={{ textAlign: 'right', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                      {formatIDR(sale.total / sale.qty)}
+                      {sale.qty > 0 ? formatIDR(sale.total / sale.qty) : '-'}
                     </td>
                     <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatIDR(sale.total)}</td>
                     <td>

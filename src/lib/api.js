@@ -1460,5 +1460,143 @@ export const api = {
 
     await logAudit('BULK_IMPORT_OPNAME', `Bulk import ${success} item opname berhasil, ${failed} gagal.`);
     return { success, failed };
+  },
+
+  // --- COST CONTROL REPORT ---
+  // BUG-MISSING-01: This function existed in the original api.js but was omitted
+  // in the previous rewrite, causing CostControl.jsx to crash on mount.
+  getCostControlReport: async (month) => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) throw new Error('Tenant tidak aktif.');
+
+    const parts = month.split('-');
+    const year = parseInt(parts[0]);
+    const m = parseInt(parts[1]);
+    const startDate = `${month}-01`;
+    const lastDay = new Date(year, m, 0).getDate();
+    const endDate = `${month}-${String(lastDay).padStart(2, '0')}`;
+
+    // 1. Closing stock: prefer this-month opname physical count; fallback to live stock
+    const { data: thisOpnames } = await supabase
+      .from('stock_opnames')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('period_month', m)
+      .eq('period_year', year);
+
+    let closingValuation = 0;
+    let categoryValuation = [];
+    let hasThisMonthOpname = false;
+
+    if (thisOpnames && thisOpnames.length > 0) {
+      const opnameIds = thisOpnames.map(o => o.id);
+      const { data: opnameItems } = await supabase
+        .from('stock_opname_items')
+        .select('physical_qty, material_id, materials(new_price, price, category)')
+        .in('opname_id', opnameIds);
+
+      if (opnameItems && opnameItems.length > 0) {
+        hasThisMonthOpname = true;
+        const matMap = {};
+        opnameItems.forEach(item => {
+          const id = item.material_id;
+          const qty = parseFloat(item.physical_qty || 0);
+          const price = parseFloat(item.materials?.new_price ?? item.materials?.price ?? 0);
+          const cat = item.materials?.category || 'Lain-lain';
+          if (!matMap[id]) matMap[id] = { qty: 0, val: 0, price, cat };
+          matMap[id].qty += qty;
+          matMap[id].val += qty * price;
+        });
+        const catGroup = {};
+        for (const v of Object.values(matMap)) {
+          closingValuation += v.val;
+          catGroup[v.cat] = (catGroup[v.cat] || 0) + v.val;
+        }
+        categoryValuation = Object.entries(catGroup).map(([name, value]) => ({ name, value: parseFloat(value.toFixed(2)) }));
+      }
+    }
+
+    if (!hasThisMonthOpname) {
+      const { data: materials } = await supabase
+        .from('materials').select('*').eq('tenant_id', tenantId).eq('is_active', true);
+      const catGroup = {};
+      for (const mat of (materials || [])) {
+        const price = parseFloat(mat.new_price ?? mat.price ?? 0);
+        const val = (parseFloat(mat.qty_resto || 0) + parseFloat(mat.qty_central || 0)) * price;
+        closingValuation += val;
+        const cat = mat.category || 'Lain-lain';
+        catGroup[cat] = (catGroup[cat] || 0) + val;
+      }
+      categoryValuation = Object.entries(catGroup).map(([name, value]) => ({ name, value: parseFloat(value.toFixed(2)) }));
+    }
+
+    // 2. Transactions for the period
+    const { data: txs } = await supabase
+      .from('transactions').select('*')
+      .eq('tenant_id', tenantId)
+      .gte('date', startDate).lte('date', endDate);
+
+    let purchasesValuation = 0;
+    let cogsIngredientsCost = 0;
+    let salesRevenue = 0;
+    for (const tx of (txs || [])) {
+      const amt = parseFloat(tx.amount || 0);
+      if (tx.type === 'PURCHASE_IN') purchasesValuation += amt;
+      else if (tx.type === 'POS_DEDUCTION') cogsIngredientsCost += Math.abs(amt);
+      else if (tx.type === 'POS_SALE') salesRevenue += amt;
+      // Also handle the type 'OUT' from POS sync (written with type='OUT')
+      else if (tx.type === 'OUT' && (tx.notes || '').startsWith('POS Sync:')) cogsIngredientsCost += Math.abs(amt);
+    }
+
+    // 3. Opening stock: last month's opname or formula derivation
+    const prevMonth = m === 1 ? 12 : m - 1;
+    const prevYear = m === 1 ? year - 1 : year;
+    const { data: prevOpnames } = await supabase
+      .from('stock_opnames').select('id')
+      .eq('tenant_id', tenantId)
+      .eq('period_month', prevMonth).eq('period_year', prevYear);
+
+    let openingValuation = 0;
+    if (prevOpnames && prevOpnames.length > 0) {
+      const prevIds = prevOpnames.map(o => o.id);
+      const { data: prevItems } = await supabase
+        .from('stock_opname_items')
+        .select('physical_qty, materials(new_price, price)')
+        .in('opname_id', prevIds);
+      if (prevItems && prevItems.length > 0) {
+        openingValuation = prevItems.reduce((s, item) => {
+          const price = parseFloat(item.materials?.new_price ?? item.materials?.price ?? 0);
+          return s + parseFloat(item.physical_qty || 0) * price;
+        }, 0);
+      }
+    }
+    // Fallback: accounting identity if no prior opname
+    if (openingValuation <= 0) {
+      openingValuation = Math.max(0, cogsIngredientsCost + closingValuation - purchasesValuation);
+    }
+
+    const overheadAdjustment = cogsIngredientsCost * 0.05;
+    const totalCogs = cogsIngredientsCost + overheadAdjustment;
+    const beverageCostPct = salesRevenue > 0 ? (totalCogs / salesRevenue) * 100 : 0;
+
+    try { await logAudit('VIEW_COST_CONTROL', `Membuka laporan Cost Control periode: ${month}.`); } catch { /* best-effort */ }
+
+    return {
+      month,
+      period: { start_date: startDate, end_date: endDate },
+      metrics: {
+        opening_stock: parseFloat(openingValuation.toFixed(2)),
+        purchases: parseFloat(purchasesValuation.toFixed(2)),
+        closing_stock: parseFloat(closingValuation.toFixed(2)),
+        ingredients_cost: parseFloat(cogsIngredientsCost.toFixed(2)),
+        overhead_cost: parseFloat(overheadAdjustment.toFixed(2)),
+        total_cogs: parseFloat(totalCogs.toFixed(2)),
+        sales_revenue: parseFloat(salesRevenue.toFixed(2)),
+        beverage_cost_pct: parseFloat(beverageCostPct.toFixed(2)),
+        target_cost_pct: 27.00,
+        status: beverageCostPct <= 27 ? 'SAFE' : beverageCostPct <= 30 ? 'WARNING' : 'DANGER'
+      },
+      category_valuation: categoryValuation
+    };
   }
 };

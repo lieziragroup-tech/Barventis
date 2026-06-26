@@ -141,11 +141,14 @@ export default function App() {
           if (profile && isMounted) {
             setActiveUser(profile);
             setTenantName(profile.tenant_name || '');
-            // Initialize memory cache in api service
             api.setSessionData(profile.tenant_id, profile.id);
             if (profile.tenant_id) subscribeToLowStockAlerts(profile.tenant_id);
           } else if (isMounted) {
-            console.warn("[Auth Flow] Profile not found, logging out...");
+            // Profile not found — clear state first, THEN sign out to avoid
+            // double-trigger: signOut fires SIGNED_OUT → authSession null →
+            // this effect re-runs with null (the else branch) — which is harmless
+            // but we must not call signOut again from the null branch.
+            console.warn("[Auth Flow] Profile not found after fetch, signing out.");
             setIsAuthenticated(false);
             setActiveUser(null);
             api.setSessionData(null, null);
@@ -157,23 +160,27 @@ export default function App() {
             setIsAuthenticated(false);
             setActiveUser(null);
             api.setSessionData(null, null);
-            await supabase.auth.signOut();
+            // Only sign out if we still have a session (prevents redundant calls)
+            const { data: { session: currentSession } } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+            if (currentSession) await supabase.auth.signOut();
           }
         } finally {
           isFetchingProfileRef.current = false;
         }
       } else {
         console.log("[Auth Flow] No session active, clearing states.");
-        setIsAuthenticated(false);
-        setActiveUser(null);
-        setTenantName('');
-        setStock([]);
-        setRecipes([]);
-        setTransactions([]);
-        setInvoices([]);
-        api.setSessionData(null, null);
-        if (realtimeChannelRef.current) supabase.removeChannel(realtimeChannelRef.current);
-        sessionStorage.removeItem('barventis_onboarding_dismissed');
+        if (isMounted) {
+          setIsAuthenticated(false);
+          setActiveUser(null);
+          setTenantName('');
+          setStock([]);
+          setRecipes([]);
+          setTransactions([]);
+          setInvoices([]);
+          api.setSessionData(null, null);
+          if (realtimeChannelRef.current) supabase.removeChannel(realtimeChannelRef.current);
+          sessionStorage.removeItem('barventis_onboarding_dismissed');
+        }
       }
     };
 
@@ -185,7 +192,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authSession]);
 
-  // 2.5 Parallel Data Fetcher — uses Promise.all (LOW-02 fix)
+  // 2.5 Parallel Data Fetcher — uses Promise.all
   const fetchAllData = async () => {
     if (!isAuthenticated) return;
     setLoading(true);
@@ -205,6 +212,7 @@ export default function App() {
         total_cost: r.basic_cost,
         yield: "1",
         ingredients: (r.ingredients || []).map(ing => ({
+          material_id: ing.material_id,
           item_name: ing.item_name || (ing.material ? ing.material.name : 'Bahan Terhapus'),
           qty_in_use: parseFloat(ing.qty_in_use),
           unit: ing.unit,
@@ -216,10 +224,11 @@ export default function App() {
       setInvoices(invoicesData.map(inv => ({
         ...inv,
         items: (inv.items || []).map(item => ({
-          item_name: item.material ? item.material.name : 'Bahan Terhapus',
+          material_id: item.material_id,
+          item_name: item.item_name || (item.material ? item.material.name : 'Bahan Terhapus'),
           qty: parseFloat(item.qty),
           unit_price: parseFloat(item.unit_price),
-          unit: item.material ? item.material.unit : 'pck'
+          unit: item.unit || (item.material ? item.material.unit : 'pck')
         }))
       })));
 
@@ -234,12 +243,17 @@ export default function App() {
     } catch (e) {
       console.error('fetchAllData error:', e);
       showToast('Gagal memuat data: ' + e.message);
+    } finally {
+      // BUG-APP-03: setLoading was placed after try/catch, not in finally.
+      // If an exception escaped the catch, loading spinner would freeze forever.
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
-  // Trigger data fetch when authenticated, activeUser profile is loaded, or when switching tabs
+  // Trigger data fetch only when authentication state or user profile changes.
+  // Removing `activeTab` from deps prevents a full DB refetch on every navigation —
+  // components that need fresh data on mount (AuditLogs, BackupCenter) fetch their
+  // own data independently. This was BUG-PERF-01: N fetches per session navigation.
   useEffect(() => {
     if (isAuthenticated && activeUser) {
       if (activeUser.role === 'Super Admin' || activeUser.role === 'SuperAdmin') {
@@ -250,7 +264,7 @@ export default function App() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, activeUser, activeTab]);
+  }, [isAuthenticated, activeUser]);
 
   // Legacy auth handler (from AuthScreen)
   const handleAuthSuccess = (user, tenant) => {
@@ -342,19 +356,26 @@ export default function App() {
 
   // 8. Recipe Handlers
   const handleSaveRecipe = async (updatedRecipe) => {
-    const match = recipes.find(r => r.menu_name === updatedRecipe.menu_name);
-    if (!match) return;
+    // BUG-APP-04: Old code looked up recipe by menu_name which fails for duplicates.
+    // Recipes.jsx now passes the full recipe object including its DB id.
+    const recipeId = updatedRecipe.id;
+    if (!recipeId) {
+      showToast("Resep tidak ditemukan (ID kosong). Coba refresh halaman.");
+      return;
+    }
     try {
-      const mappedIngredients = updatedRecipe.ingredients.map(ing => {
-        const mat = stock.find(s => s.name === ing.item_name);
+      const mappedIngredients = (updatedRecipe.ingredients || []).map(ing => {
+        // BUG-APP-04b: ingredients now carry material_id directly from DB state.
+        // Avoid the slow name-based stock lookup when the id is already known.
+        const materialId = ing.material_id ?? stock.find(s => s.name === ing.item_name)?.id ?? null;
         return {
-          material_id: mat ? mat.id : null,
+          material_id: materialId,
           qty_in_use: ing.qty_in_use,
           unit: ing.unit
         };
       }).filter(ing => ing.material_id !== null);
 
-      await api.updateRecipe(match.id, {
+      await api.updateRecipe(recipeId, {
         menu_name: updatedRecipe.menu_name,
         category: updatedRecipe.category,
         selling_price: updatedRecipe.selling_price,
