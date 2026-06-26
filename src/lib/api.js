@@ -277,6 +277,10 @@ export const api = {
 
   // getProfile — reads from Supabase DB using maybeSingle() to safely handle
   // the case where the users row doesn't exist yet (DB trigger race condition).
+  //
+  // IF YOU SEE 406 HERE: The row exists in auth.users but NOT in public.users
+  // (DB trigger not set up), OR RLS policy is blocking the SELECT.
+  // Run SUPABASE_FIX.sql in Supabase Dashboard → SQL Editor to fix this.
   getProfile: async () => {
     console.log("[api.getProfile] getSession starting...");
     const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
@@ -289,17 +293,50 @@ export const api = {
     }
     if (!session?.user) throw new Error('No active session.');
 
+    const userId = session.user.id;
+
     console.log("[api.getProfile] Querying users table...");
     const { data: userProfile, error } = await supabase
       .from('users')
       .select('id, tenant_id, name, email, role')
-      .eq('id', session.user.id)
-      .maybeSingle();                        // ← KEY FIX: was .single() → 406 "Cannot coerce"
+      .eq('id', userId)
+      .maybeSingle();
 
     console.log("[api.getProfile] Querying users table complete. Error:", error ? error.message : "none", "Profile:", userProfile);
 
-    if (error) throw new Error('Error membaca profil: ' + error.message);
-    if (!userProfile) throw new Error('Profil tidak ditemukan.');
+    // 406 from maybeSingle() means PostgREST got an unexpected response format —
+    // almost always caused by an RLS policy blocking the row so PostgREST gets
+    // an empty result it can't serialize, OR the row literally does not exist.
+    if (error) {
+      const is406 = error.code === 'PGRST116' || error.message?.includes('Cannot coerce') || error.message?.includes('406');
+      if (is406) {
+        // Try to determine whether it's an RLS issue or a missing row
+        console.error(
+          "[api.getProfile] 406 detected. This means either:\n" +
+          "  1. Row missing in public.users (DB trigger not set up) → Run SUPABASE_FIX.sql\n" +
+          "  2. RLS policy blocking SELECT on public.users → Check RLS policies in Supabase Dashboard\n" +
+          "  User ID:", userId
+        );
+        throw new Error(
+          'Profil tidak ditemukan di database. ' +
+          'Kemungkinan penyebab: (1) trigger database belum dibuat, atau (2) RLS policy memblokir akses. ' +
+          'Hubungi administrator untuk menjalankan SUPABASE_FIX.sql.'
+        );
+      }
+      throw new Error('Error membaca profil: ' + error.message);
+    }
+
+    if (!userProfile) {
+      // Row genuinely not found (maybeSingle returned null, no error) —
+      // this means the DB trigger didn't fire when this auth user was created.
+      console.error("[api.getProfile] User row missing in public.users for auth user:", userId,
+        "\nFix: Run SUPABASE_FIX.sql → Step 2 (backfill) in Supabase Dashboard.");
+      throw new Error(
+        'Profil tidak ditemukan. ' +
+        'Akun Anda belum terdaftar di tabel pengguna sistem. ' +
+        'Hubungi administrator untuk menjalankan script perbaikan database.'
+      );
+    }
 
     let tenantName = '';
     let companyName = '';
