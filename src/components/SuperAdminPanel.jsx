@@ -24,7 +24,7 @@ export default function SuperAdminPanel({ tab }) {
   // Modals / Editor States
   const [showTenantModal, setShowTenantModal] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState(null);
-  const [tenantForm, setTenantForm] = useState({ name: '', company_name: '', locked_until_month: '', locked_until_year: '' });
+  const [tenantForm, setTenantForm] = useState({ name: '', company_name: '', locked_until_month: '', locked_until_year: '', overhead_pct: 0.05 });
 
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
@@ -133,6 +133,7 @@ export default function SuperAdminPanel({ tab }) {
             company_name: tenantForm.company_name,
             locked_until_month: tenantForm.locked_until_month ? parseInt(tenantForm.locked_until_month) : null,
             locked_until_year: tenantForm.locked_until_year ? parseInt(tenantForm.locked_until_year) : null,
+            overhead_pct: tenantForm.overhead_pct ? parseFloat(tenantForm.overhead_pct) : 0.05,
             updated_at: new Date().toISOString()
           })
           .eq('id', selectedTenant.id);
@@ -149,6 +150,7 @@ export default function SuperAdminPanel({ tab }) {
           .insert({
             name: formattedName,
             company_name: tenantForm.company_name,
+            overhead_pct: tenantForm.overhead_pct ? parseFloat(tenantForm.overhead_pct) : 0.05,
             status: 'active'
           });
 
@@ -168,14 +170,15 @@ export default function SuperAdminPanel({ tab }) {
       name: tenant.name,
       company_name: tenant.company_name,
       locked_until_month: tenant.locked_until_month || '',
-      locked_until_year: tenant.locked_until_year || ''
+      locked_until_year: tenant.locked_until_year || '',
+      overhead_pct: tenant.overhead_pct !== undefined ? tenant.overhead_pct : 0.05
     });
     setShowTenantModal(true);
   };
 
   const openTenantCreate = () => {
     setSelectedTenant(null);
-    setTenantForm({ name: '', company_name: '', locked_until_month: '', locked_until_year: '' });
+    setTenantForm({ name: '', company_name: '', locked_until_month: '', locked_until_year: '', overhead_pct: 0.05 });
     setShowTenantModal(true);
   };
 
@@ -621,6 +624,26 @@ export default function SuperAdminPanel({ tab }) {
                   placeholder="e.g. PT Umatis Resto & Venue"
                   value={tenantForm.company_name}
                   onChange={(e) => setTenantForm({ ...tenantForm, company_name: e.target.value })}
+                  required
+                  style={{
+                    width: '100%', padding: '9px 12px', background: 'rgba(15,23,42,0.6)',
+                    border: '1px solid var(--border)', borderRadius: '6px', color: '#fff', fontSize: '0.875rem', outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  Overhead HPP Rate (Condiment / Waste %)
+                </label>
+                <input
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  max="1"
+                  placeholder="e.g. 0.05 for 5%"
+                  value={tenantForm.overhead_pct}
+                  onChange={(e) => setTenantForm({ ...tenantForm, overhead_pct: e.target.value })}
                   required
                   style={{
                     width: '100%', padding: '9px 12px', background: 'rgba(15,23,42,0.6)',

@@ -44,6 +44,8 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const realtimeChannelRef = useRef(null);
   const isFetchingProfileRef = useRef(false);
+  const lowStockBufferRef = useRef([]);
+  const lowStockTimeoutRef = useRef(null);
 
   const showToast = (message, type = 'error') => {
     setToast({ message, type });
@@ -79,6 +81,36 @@ export default function App() {
     return TAB_ROLES[tab]?.includes(activeUser?.role);
   };
 
+  const sendBufferedLowStockNotification = async () => {
+    const items = lowStockBufferRef.current;
+    if (items.length === 0) return;
+
+    // Clear buffer immediately to prevent double sends
+    lowStockBufferRef.current = [];
+    if (lowStockTimeoutRef.current) {
+      clearTimeout(lowStockTimeoutRef.current);
+      lowStockTimeoutRef.current = null;
+    }
+
+    let message = `⚠️ *PERINGATAN STOK MENIPIS - BARVENTIS*\n\nHalo Owner Resto,\nBeberapa bahan baku berikut telah kritis atau habis di gerai Anda:\n\n`;
+
+    items.forEach((item, index) => {
+      const statusIcon = item.isOut ? '🔴' : '⚠️';
+      const statusText = item.isOut ? 'HABIS' : 'KRITIS';
+      message += `${index + 1}. ${statusIcon} *${item.name}* (${statusText})\n`;
+      message += `   Sisa Stok: *${item.qty.toFixed(1)} ${item.unit}* (Min: ${item.minStock} ${item.unit})\n\n`;
+    });
+
+    message += `Mohon segera lakukan pembelian ulang atau cek gudang Central untuk pemindahan barang.`;
+
+    try {
+      console.log("[WA Alert] Sending consolidated message for", items.length, "items...");
+      await api.sendWhatsappNotification(message);
+    } catch (err) {
+      console.error("[WA Alert] Failed to send consolidated notification:", err);
+    }
+  };
+
   // 1.6 Supabase Realtime — Low-Stock Alert Subscription
   const subscribeToLowStockAlerts = (tenantId) => {
     if (realtimeChannelRef.current) {
@@ -95,10 +127,34 @@ export default function App() {
         const mat = payload.new;
         const total = parseFloat(mat.qty_resto || 0) + parseFloat(mat.qty_central || 0);
         const minStock = parseFloat(mat.min_stock || 15);
+
+        // Show toast notifications immediately in UI
         if (total <= 0) {
           showToast(`🔴 OUT OF STOCK: ${mat.name} habis! Segera lakukan pemesanan.`, 'error');
         } else if (total < minStock) {
           showToast(`⚠️ Low Stock Alert: ${mat.name} tersisa ${total.toFixed(1)} ${mat.unit}`, 'warning');
+        }
+
+        // WhatsApp Buffering and Debouncing
+        if (total < minStock) {
+          // Remove duplicate for this material in current buffer
+          lowStockBufferRef.current = lowStockBufferRef.current.filter(item => item.id !== mat.id);
+          lowStockBufferRef.current.push({
+            id: mat.id,
+            name: mat.name,
+            qty: total,
+            unit: mat.unit,
+            minStock: minStock,
+            isOut: total <= 0
+          });
+
+          // Debounce sending WhatsApp (Wait 8 seconds of silence before firing)
+          if (lowStockTimeoutRef.current) {
+            clearTimeout(lowStockTimeoutRef.current);
+          }
+          lowStockTimeoutRef.current = setTimeout(() => {
+            sendBufferedLowStockNotification();
+          }, 8000);
         }
       })
       .subscribe();
@@ -141,7 +197,7 @@ export default function App() {
           if (profile && isMounted) {
             setActiveUser(profile);
             setTenantName(profile.tenant_name || '');
-            api.setSessionData(profile.tenant_id, profile.id, profile.overhead_pct);
+            api.setSessionData(profile.tenant_id, profile.id, profile.overhead_pct, profile.whatsapp_number, profile.whatsapp_token, profile.whatsapp_enabled);
             if (profile.tenant_id) subscribeToLowStockAlerts(profile.tenant_id);
           } else if (isMounted) {
             // Profile not found — clear state first, THEN sign out to avoid
@@ -151,7 +207,7 @@ export default function App() {
             console.warn("[Auth Flow] Profile not found after fetch, signing out.");
             setIsAuthenticated(false);
             setActiveUser(null);
-            api.setSessionData(null, null, null);
+            api.setSessionData(null, null, null, null, null, false);
             await supabase.auth.signOut();
           }
         } catch (e) {
@@ -159,7 +215,7 @@ export default function App() {
           if (isMounted) {
             setIsAuthenticated(false);
             setActiveUser(null);
-            api.setSessionData(null, null);
+            api.setSessionData(null, null, null, null, null, false);
             // Only sign out if we still have a session (prevents redundant calls)
             const { data: { session: currentSession } } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
             if (currentSession) await supabase.auth.signOut();
@@ -177,7 +233,7 @@ export default function App() {
           setRecipes([]);
           setTransactions([]);
           setInvoices([]);
-          api.setSessionData(null, null, null);
+          api.setSessionData(null, null, null, null, null, false);
           if (realtimeChannelRef.current) supabase.removeChannel(realtimeChannelRef.current);
           sessionStorage.removeItem('barventis_onboarding_dismissed');
         }

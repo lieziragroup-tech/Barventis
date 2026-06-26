@@ -4,6 +4,7 @@ import {
   CheckCircle, Info, Package, ChefHat, FileText, Clock, Database
 } from 'lucide-react';
 import { maintenanceService } from '../services/maintenanceService';
+import { api } from '../services/api';
 
 // Reusable KPI card (module-scope so it isn't recreated on every render).
 function Kpi({ title, value, icon, color, footer, valueColor, loading }) {
@@ -36,6 +37,19 @@ export default function Maintenance({ activeUser }) {
   const [staffLoading, setStaffLoading] = useState(false);
   const [savingUserId, setSavingUserId] = useState(null);
 
+  // Tenant Settings GUI States
+  const [settings, setSettings] = useState({
+    company_name: '',
+    overhead_pct: 0.05,
+    locked_until_month: '',
+    locked_until_year: '',
+    whatsapp_number: '',
+    whatsapp_token: '',
+    whatsapp_enabled: false
+  });
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+
   const [notice, setNotice] = useState(null); // { type, message }
 
   const flash = (type, message) => {
@@ -65,12 +79,57 @@ export default function Maintenance({ activeUser }) {
     }
   };
 
+  const loadSettings = async () => {
+    setSettingsLoading(true);
+    try {
+      const data = await api.getTenantSettings();
+      setSettings({
+        company_name: data.company_name || '',
+        overhead_pct: data.overhead_pct !== undefined ? data.overhead_pct : 0.05,
+        locked_until_month: data.locked_until_month || '',
+        locked_until_year: data.locked_until_year || '',
+        whatsapp_number: data.whatsapp_number || '',
+        whatsapp_token: data.whatsapp_token || '',
+        whatsapp_enabled: !!data.whatsapp_enabled
+      });
+    } catch (e) {
+      flash('error', 'Gagal memuat pengaturan resto: ' + e.message);
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  const handleSaveSettings = async (e) => {
+    e.preventDefault();
+    setSavingSettings(true);
+    try {
+      await api.updateTenantSettings({
+        company_name: settings.company_name,
+        overhead_pct: parseFloat(settings.overhead_pct),
+        locked_until_month: settings.locked_until_month ? parseInt(settings.locked_until_month) : null,
+        locked_until_year: settings.locked_until_year ? parseInt(settings.locked_until_year) : null,
+        whatsapp_number: settings.whatsapp_number || null,
+        whatsapp_token: settings.whatsapp_token || null,
+        whatsapp_enabled: !!settings.whatsapp_enabled
+      });
+      flash('success', 'Pengaturan resto berhasil disimpan.');
+      await loadHealth();
+    } catch (e) {
+      flash('error', 'Gagal menyimpan pengaturan: ' + e.message);
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   // Initial load on mount. Setting loading flags inside the fetch is intentional
   // (standard fetch-on-mount pattern), so the related hooks rules are scoped off here.
   /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
   useEffect(() => {
     loadHealth();
-    if (isOwner) loadStaff();
+    if (isOwner) {
+      loadStaff();
+      loadSettings();
+    }
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
@@ -230,13 +289,124 @@ export default function Maintenance({ activeUser }) {
               <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: '10px',
                 padding: '12px 14px', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '16px', display: 'flex', gap: '10px', alignItems: 'center' }}>
                 <Info size={15} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-                Menggunakan formula HPP kanonik yang sama dengan editor resep (subtotal + 5% fixed cost).
+                Menggunakan formula HPP kanonik yang sama dengan editor resep (subtotal + {(parseFloat(settings?.overhead_pct || 0.05) * 100).toFixed(0)}% fixed cost).
               </div>
               <button className="btn btn-primary" onClick={handleRecalc} disabled={recalcLoading}
                 style={{ marginTop: 'auto', padding: '11px', borderRadius: '10px', fontWeight: 700, display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
                 <Calculator size={16} style={recalcLoading ? spinStyle : undefined} />
                 {recalcLoading ? 'Menghitung ulang…' : 'Recalc Semua Resep'}
               </button>
+            </div>
+
+            {/* Resto Settings */}
+            <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Database size={18} style={{ color: 'var(--accent)' }} /> Pengaturan Resto & Kunci Buku
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '16px' }}>
+                Atur nama bisnis, persentase overhead HPP (condiment), dan batasi edit transaksi bulanan.
+              </p>
+
+              {settingsLoading ? (
+                <div style={{ padding: '20px 0', textTransform: 'uppercase', fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center' }}>Memuat pengaturan…</div>
+              ) : (
+                <form onSubmit={handleSaveSettings} style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.8rem', marginTop: 'auto' }}>
+                  <div>
+                    <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '4px' }}>Nama Restoran / Outlet</label>
+                    <input
+                      type="text"
+                      value={settings.company_name}
+                      onChange={(e) => setSettings({ ...settings, company_name: e.target.value })}
+                      required
+                      style={{ width: '100%', padding: '6px 10px', background: 'rgba(15,23,42,0.6)', border: '1px solid var(--border)', borderRadius: '6px', color: '#fff', outline: 'none' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '4px' }}>Overhead HPP Rate (e.g. 0.05 untuk 5%)</label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      max="1"
+                      value={settings.overhead_pct}
+                      onChange={(e) => setSettings({ ...settings, overhead_pct: e.target.value })}
+                      required
+                      style={{ width: '100%', padding: '6px 10px', background: 'rgba(15,23,42,0.6)', border: '1px solid var(--border)', borderRadius: '6px', color: '#fff', outline: 'none' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '4px' }}>Kunci Bulan (1-12)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="12"
+                        placeholder="e.g. 4"
+                        value={settings.locked_until_month}
+                        onChange={(e) => setSettings({ ...settings, locked_until_month: e.target.value })}
+                        style={{ width: '100%', padding: '6px 10px', background: 'rgba(15,23,42,0.6)', border: '1px solid var(--border)', borderRadius: '6px', color: '#fff', outline: 'none' }}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '4px' }}>Kunci Tahun</label>
+                      <input
+                        type="number"
+                        min="2020"
+                        max="2100"
+                        placeholder="e.g. 2026"
+                        value={settings.locked_until_year}
+                        onChange={(e) => setSettings({ ...settings, locked_until_year: e.target.value })}
+                        style={{ width: '100%', padding: '6px 10px', background: 'rgba(15,23,42,0.6)', border: '1px solid var(--border)', borderRadius: '6px', color: '#fff', outline: 'none' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: '8px', borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <input
+                        type="checkbox"
+                        id="whatsapp_enabled"
+                        checked={settings.whatsapp_enabled}
+                        onChange={(e) => setSettings({ ...settings, whatsapp_enabled: e.target.checked })}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <label htmlFor="whatsapp_enabled" style={{ color: 'white', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>Aktifkan Notifikasi WhatsApp (Fonnte)</label>
+                    </div>
+
+                    {settings.whatsapp_enabled && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div>
+                          <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '2px', fontSize: '0.72rem' }}>No WhatsApp Owner (e.g. 62812xxx)</label>
+                          <input
+                            type="text"
+                            placeholder="628xxx"
+                            value={settings.whatsapp_number}
+                            onChange={(e) => setSettings({ ...settings, whatsapp_number: e.target.value })}
+                            required={settings.whatsapp_enabled}
+                            style={{ width: '100%', padding: '6px 10px', background: 'rgba(15,23,42,0.6)', border: '1px solid var(--border)', borderRadius: '6px', color: '#fff', outline: 'none' }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '2px', fontSize: '0.72rem' }}>Token Fonnte API</label>
+                          <input
+                            type="password"
+                            placeholder="Token Fonnte Anda"
+                            value={settings.whatsapp_token}
+                            onChange={(e) => setSettings({ ...settings, whatsapp_token: e.target.value })}
+                            required={settings.whatsapp_enabled}
+                            style={{ width: '100%', padding: '6px 10px', background: 'rgba(15,23,42,0.6)', border: '1px solid var(--border)', borderRadius: '6px', color: '#fff', outline: 'none' }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <button type="submit" className="btn btn-primary" disabled={savingSettings}
+                    style={{ marginTop: '10px', padding: '9px', borderRadius: '8px', fontWeight: 700, display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
+                    <Database size={14} /> {savingSettings ? 'Menyimpan…' : 'Simpan Pengaturan'}
+                  </button>
+                </form>
+              )}
             </div>
           </div>
 
