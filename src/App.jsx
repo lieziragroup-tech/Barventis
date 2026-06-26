@@ -141,7 +141,7 @@ export default function App() {
           if (profile && isMounted) {
             setActiveUser(profile);
             setTenantName(profile.tenant_name || '');
-            api.setSessionData(profile.tenant_id, profile.id);
+            api.setSessionData(profile.tenant_id, profile.id, profile.overhead_pct);
             if (profile.tenant_id) subscribeToLowStockAlerts(profile.tenant_id);
           } else if (isMounted) {
             // Profile not found — clear state first, THEN sign out to avoid
@@ -151,7 +151,7 @@ export default function App() {
             console.warn("[Auth Flow] Profile not found after fetch, signing out.");
             setIsAuthenticated(false);
             setActiveUser(null);
-            api.setSessionData(null, null);
+            api.setSessionData(null, null, null);
             await supabase.auth.signOut();
           }
         } catch (e) {
@@ -177,7 +177,7 @@ export default function App() {
           setRecipes([]);
           setTransactions([]);
           setInvoices([]);
-          api.setSessionData(null, null);
+          api.setSessionData(null, null, null);
           if (realtimeChannelRef.current) supabase.removeChannel(realtimeChannelRef.current);
           sessionStorage.removeItem('barventis_onboarding_dismissed');
         }

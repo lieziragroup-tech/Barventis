@@ -20,7 +20,7 @@ export default function BackupCenter() {
   const [showRestoreModal, setShowRestoreModal] = useState(false);
   const [selectedRestoreBackup, setSelectedRestoreBackup] = useState(null); // Local backup or uploaded file
   const [restoreConfirmText, setRestoreConfirmText] = useState('');
-  const [isRestoring, setIsRestoring] = useState(false);
+  const [isRestoring] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability
@@ -161,7 +161,6 @@ export default function BackupCenter() {
   };
 
   const closeRestoreModal = () => {
-    if (isRestoring) return;
     setShowRestoreModal(false);
     setSelectedRestoreBackup(null);
     setUploadedFile(null);
