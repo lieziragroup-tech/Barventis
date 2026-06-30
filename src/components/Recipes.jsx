@@ -8,7 +8,7 @@ import { api } from '../services/api';
 const rowUid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `r${Date.now()}${Math.random()}`);
 const ensureUids = (arr = []) => arr.map(x => ({ ...x, _uid: x._uid ?? rowUid() }));
 
-export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
+export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe, onRefreshData }) {
   const [activeRecipe, setActiveRecipe] = useState(recipes[0] || null);
   const [search, setSearch] = useState('');
   const [editedIngredients, setEditedIngredients] = useState(activeRecipe ? ensureUids(activeRecipe.ingredients) : []);
@@ -850,8 +850,8 @@ export default function Recipes({ stock, recipes, onSaveRecipe, onAddRecipe }) {
         description="Upload data menu, harga jual, dan resep sekaligus dari file Excel."
         onCommit={async (rows) => {
           const res = await api.bulkImportRecipes(rows);
-          if (res.success > 0) {
-            window.location.reload();
+          if (res.success > 0 && onRefreshData) {
+            await onRefreshData();
           }
           return res;
         }}

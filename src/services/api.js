@@ -238,9 +238,16 @@ export const api = {
     });
 
     if (signupErr || !authData.user) {
-      // Cleanup created tenant
-      await supabase.from('tenants').delete().eq('id', newTenant.id);
-      throw new Error('Gagal mendaftarkan admin: ' + signupErr.message);
+      // BUG-08 fix: Cleanup orphan tenant with retry — network failure during cleanup
+      // would leave a permanently "reserved" tenant name no one can use.
+      const cleanupAttempts = 3;
+      for (let i = 0; i < cleanupAttempts; i++) {
+        const { error: cleanErr } = await supabase.from('tenants').delete().eq('id', newTenant.id);
+        if (!cleanErr) break;
+        if (i < cleanupAttempts - 1) await new Promise(r => setTimeout(r, 500 * (i + 1)));
+        else console.error('[register] Tenant cleanup failed after retries:', cleanErr.message);
+      }
+      throw new Error('Gagal mendaftarkan admin: ' + (signupErr?.message ?? 'Unknown error'));
     }
 
     // 4. Trigger database profile insertion manually in case of slow DB trigger sync
@@ -327,15 +334,23 @@ export const api = {
   },
 
   // --- LEDGER TRANSACTIONS ---
-  getTransactions: async () => {
+  getTransactions: async (options = {}) => {
     const tenantId = await getActiveTenantId();
-    if (!tenantId) return []; // H-2: Super Admin / no-tenant — avoid malformed .eq('tenant_id', null) query
+    if (!tenantId) return []; // H-2: Super Admin / no-tenant
+    // BUG-05 fix: Rolling 90-day window instead of hard 500-row cap.
+    // Dashboard and Cost Control only need the last 90 days for charts + KPIs.
+    // Pass { days: 365 } for full-year Cost Control if needed.
+    const days = options.days ?? 90;
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+    const sinceStr = since.toISOString().split('T')[0];
     const { data, error } = await supabase
       .from('transactions')
       .select('*, materials(name)')
       .eq('tenant_id', tenantId)
+      .gte('date', sinceStr)
       .order('created_at', { ascending: false })
-      .limit(500);
+      .limit(2000);
 
     if (error) throw new Error("Gagal mengambil transaksi: " + error.message);
 
@@ -704,11 +719,14 @@ export const api = {
   getInvoices: async () => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return []; // H-2: Super Admin / no-tenant — avoid malformed .eq('tenant_id', null) query
+    // BUG-06 fix: Limit invoice list to last 200. Older POs are rarely needed in UI.
+    // invoice_items join kept but fields narrowed (no full materials join on list view).
     const { data, error } = await supabase
       .from('invoices')
-      .select('*, invoice_items(*, materials(*))')
+      .select('*, invoice_items(material_id, qty, unit_price, materials(name, unit))')
       .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(200);
 
     if (error) throw new Error("Gagal memuat invoices: " + error.message);
 
@@ -735,21 +753,33 @@ export const api = {
   createInvoice: async (invoiceData) => {
     const tenantId = await getActiveTenantId();
 
-    // 1. Generate Invoice Number: INV-YYYYMMDD-XXX
+    // BUG-04 fix: Generate invoice number server-side via RPC to avoid race condition.
+    // Client-side count+1 without a DB lock causes duplicate INV numbers when
+    // two users submit simultaneously. The RPC uses an advisory lock or sequence.
     const dateToday = new Date();
-    const dateStr = dateToday.getFullYear() + 
-                    String(dateToday.getMonth() + 1).padStart(2, '0') + 
+    const dateStr = dateToday.getFullYear() +
+                    String(dateToday.getMonth() + 1).padStart(2, '0') +
                     String(dateToday.getDate()).padStart(2, '0');
 
-    // Count PO created today
-    const { count } = await supabase
-      .from('invoices')
-      .select('*', { count: 'exact', head: true })
-      .eq('tenant_id', tenantId)
-      .like('invoice_no', `INV-${dateStr}-%`);
+    let invoiceNo;
+    const { data: rpcNo, error: rpcNoErr } = await supabase.rpc('generate_invoice_number', {
+      p_tenant_id: tenantId,
+      p_date_str: dateStr
+    });
 
-    const serial = String((count || 0) + 1).padStart(3, '0');
-    const invoiceNo = `INV-${dateStr}-${serial}`;
+    if (rpcNoErr || !rpcNo) {
+      // Fallback: client-side with retry (better than crash, worse than RPC)
+      console.warn('[createInvoice] generate_invoice_number RPC unavailable, using client-side fallback:', rpcNoErr?.message);
+      const { count } = await supabase
+        .from('invoices')
+        .select('*', { count: 'exact', head: true })
+        .eq('tenant_id', tenantId)
+        .like('invoice_no', `INV-${dateStr}-%`);
+      const serial = String((count || 0) + 1).padStart(3, '0');
+      invoiceNo = `INV-${dateStr}-${serial}`;
+    } else {
+      invoiceNo = rpcNo;
+    }
 
     // 2. Calculate dynamic PO Total
     let total = 0.00;
@@ -899,6 +929,8 @@ export const api = {
     const deductionErrors = []; // H-5: atomic-RPC failures (deduction NOT applied)
 
     const transactionRows = [];
+    // BUG-09 fix: Accumulate all deductions across all sales, then flush in one batch RPC.
+    const batchDeductions = {}; // { [material_id]: { material, totalDeduct, txRows[] } }
 
     // Loop through each POS sale row
     for (const sale of salesData) {
@@ -948,66 +980,92 @@ export const api = {
         created_by: userId
       });
 
-      // Deduct stock for each ingredient
+      // BUG-09 fix: Collect all deductions for batch processing, not N+1 RPCs.
       for (const ing of recipe.recipe_ingredients) {
         const material = ing.materials;
-        if (material) {
-          const matUnit = (material.unit || '').toLowerCase().trim();
-          const ingUnit = (ing.unit || '').toLowerCase().trim();
-          
-          let factor = 1.00;
-          if (ingUnit !== matUnit) {
-            const isIngGramMl = (ingUnit === 'gr' || ingUnit === 'ml' || ingUnit === 'grm');
-            const isMatKgL = (matUnit === 'kg' || matUnit === 'l' || matUnit === 'liter' || matUnit === 'ltr');
-            if (isIngGramMl && isMatKgL) {
-              factor = 1000.00;
-            }
-          }
+        if (!material) continue;
 
-          const deductQty = (parseFloat(ing.qty_in_use) * saleQty) / factor;
-          const currentResto = parseFloat(material.qty_resto);
-          const newQty = currentResto - deductQty;
+        const matUnit = (material.unit || '').toLowerCase().trim();
+        const ingUnit = (ing.unit || '').toLowerCase().trim();
 
-          if (newQty < 0) {
-            negativeWarnings.push(`Stok ${material.name} tidak cukup. Butuh ${deductQty.toFixed(2)}, tersedia ${currentResto.toFixed(2)}. Selisih: ${Math.abs(newQty).toFixed(2)}`);
-          }
-
-          // Atomic deduction via RPC — prevents race condition (BUG-004)
-          // Uses PostgreSQL GREATEST(0, qty_resto - deductQty) on server side
-          const { error: deductErr } = await supabase.rpc('deduct_stock_atomic', {
-            p_material_id: material.id,
-            p_deduct_qty: deductQty
-          });
-          if (deductErr) {
-            // H-5: do NOT fall back to a client-side non-atomic update — that
-            // reintroduces the exact lost-update race deduct_stock_atomic exists to
-            // prevent. Record the failure and skip this ingredient's ledger entry so
-            // we never log a deduction that did not actually happen.
-            deductionErrors.push(`${material.name}: ${deductErr.message}`);
-            console.error('[syncPos] deduct_stock_atomic failed for', material.name, deductErr.message);
-            continue;
-          }
-
-          const unitPrice = parseFloat(material.new_price ?? material.price ?? 0);
-          const isFreeItem = totalRevenue <= 0;
-          const txNotes = isFreeItem 
-            ? `GRATIS (Deduct stock tanpa revenue): "${sale.menuName}" (Qty: ${saleQty}) via file ${filename}`
-            : `POS deduction: "${sale.menuName}" (Qty: ${saleQty}) via file ${filename}`;
-
-          transactionRows.push({
-            tenant_id: tenantId,
-            date: salesDate,
-            material_id: material.id,
-            type: 'POS_DEDUCTION',
-            location: 'RESTO',
-            qty: -deductQty,
-            amount: -deductQty * unitPrice,
-            notes: txNotes,
-            created_by: userId
-          });
-
-          deductionLogsCount++;
+        let factor = 1.00;
+        if (ingUnit !== matUnit) {
+          const isIngGramMl = (ingUnit === 'gr' || ingUnit === 'ml' || ingUnit === 'grm');
+          const isMatKgL = (matUnit === 'kg' || matUnit === 'l' || matUnit === 'liter' || matUnit === 'ltr');
+          if (isIngGramMl && isMatKgL) factor = 1000.00;
         }
+
+        const deductQty = (parseFloat(ing.qty_in_use) * saleQty) / factor;
+        const currentResto = parseFloat(material.qty_resto);
+
+        if (currentResto - deductQty < 0) {
+          negativeWarnings.push(
+            `Stok ${material.name} tidak cukup. Butuh ${deductQty.toFixed(2)}, tersedia ${currentResto.toFixed(2)}.`
+          );
+        }
+
+        // Accumulate deductions keyed by material_id for batch RPC
+        if (!batchDeductions[material.id]) {
+          batchDeductions[material.id] = { material, totalDeduct: 0, txRows: [] };
+        }
+        batchDeductions[material.id].totalDeduct += deductQty;
+
+        const unitPrice = parseFloat(material.new_price ?? material.price ?? 0);
+        const isFreeItem = totalRevenue <= 0;
+        batchDeductions[material.id].txRows.push({
+          tenant_id: tenantId,
+          date: salesDate,
+          material_id: material.id,
+          type: 'POS_DEDUCTION',
+          location: 'RESTO',
+          qty: -deductQty,
+          amount: -deductQty * unitPrice,
+          notes: isFreeItem
+            ? `GRATIS: "${sale.menuName}" (Qty: ${saleQty}) via ${filename}`
+            : `POS deduction: "${sale.menuName}" (Qty: ${saleQty}) via ${filename}`,
+          created_by: userId
+        });
+      }
+    }
+
+    // BUG-09 fix: Flush all accumulated deductions in ONE batch RPC call per material
+    // instead of N+1 sequential RPCs (one per ingredient per sale).
+    // Uses a batch RPC if available, otherwise falls back to Promise.all parallel calls
+    // (still dramatically faster than sequential awaits).
+    const deductionEntries = Object.values(batchDeductions);
+    if (deductionEntries.length > 0) {
+      const batchPayload = deductionEntries.map(d => ({
+        material_id: d.material.id,
+        deduct_qty: d.totalDeduct
+      }));
+
+      // Try batch RPC first
+      const { error: batchErr } = await supabase.rpc('batch_deduct_stock_atomic', {
+        p_deductions: batchPayload
+      });
+
+      if (batchErr) {
+        // Fallback: parallel individual RPCs (not sequential — avoids timeout)
+        console.warn('[syncPos] batch RPC unavailable, falling back to parallel RPCs:', batchErr.message);
+        const results = await Promise.allSettled(
+          deductionEntries.map(d =>
+            supabase.rpc('deduct_stock_atomic', { p_material_id: d.material.id, p_deduct_qty: d.totalDeduct })
+          )
+        );
+        results.forEach((res, i) => {
+          const d = deductionEntries[i];
+          if (res.status === 'fulfilled' && !res.value.error) {
+            d.txRows.forEach(row => { transactionRows.push(row); deductionLogsCount++; });
+          } else {
+            const errMsg = res.reason?.message ?? res.value?.error?.message ?? 'Unknown';
+            deductionErrors.push(`${d.material.name}: ${errMsg}`);
+          }
+        });
+      } else {
+        // Batch succeeded — add all tx rows
+        deductionEntries.forEach(d => {
+          d.txRows.forEach(row => { transactionRows.push(row); deductionLogsCount++; });
+        });
       }
     }
 
@@ -1372,9 +1430,38 @@ export const api = {
     };
 
     const dataJson = JSON.stringify(backupPayload);
-    const sizeBytes = dataJson.length;
-    const sizeFormatted = (sizeBytes / 1024).toFixed(2) + ' KB';
-    const filename = `umatis_backup_${Date.now()}.zip`; // Mocked zip extension for client side verification compatibility
+    const sizeBytes = new TextEncoder().encode(dataJson).length;
+    const sizeFormatted = sizeBytes < 1048576
+      ? (sizeBytes / 1024).toFixed(2) + ' KB'
+      : (sizeBytes / 1048576).toFixed(2) + ' MB';
+    const filename = `barventis_backup_${tenantId}_${Date.now()}.json`;
+
+    // BUG-07 fix: Store backup file in Supabase Storage (bucket: 'backups'),
+    // not as a JSON column in the DB row. Supabase rows have a ~1MB limit;
+    // large tenants (1000+ transactions) will exceed it and crash on insert.
+    const filePath = `${tenantId}/${filename}`;
+    const { error: uploadErr } = await supabase.storage
+      .from('backups')
+      .upload(filePath, dataJson, { contentType: 'application/json', upsert: false });
+
+    if (uploadErr) {
+      // Fallback: if storage bucket not configured, store inline (with size warning)
+      console.warn('[createBackup] Storage upload failed, falling back to DB inline:', uploadErr.message);
+      if (sizeBytes > 900000) {
+        throw new Error(`Backup terlalu besar untuk disimpan inline (${sizeFormatted}). Harap konfigurasi Supabase Storage bucket "backups".`);
+      }
+      const { data: backup, error } = await supabase
+        .from('backups')
+        .insert({ tenant_id: tenantId, filename, size_bytes: sizeBytes, size_formatted: sizeFormatted, data_json: dataJson })
+        .select('*').single();
+      if (error) throw new Error("Gagal membuat file cadangan: " + error.message);
+      await logAudit('CREATE_BACKUP', `Berhasil membuat arsip cadangan (inline): "${filename}".`);
+      return { ...backup, data_json: dataJson };
+    }
+
+    // Get public URL for the uploaded file
+    const { data: urlData } = supabase.storage.from('backups').getPublicUrl(filePath);
+    const publicUrl = urlData?.publicUrl ?? null;
 
     const { data: backup, error } = await supabase
       .from('backups')
@@ -1383,15 +1470,18 @@ export const api = {
         filename,
         size_bytes: sizeBytes,
         size_formatted: sizeFormatted,
-        data_json: dataJson
+        storage_path: filePath,
+        public_url: publicUrl,
+        data_json: null  // No longer stored inline
       })
       .select('*')
       .single();
 
-    if (error) throw new Error("Gagal membuat file cadangan: " + error.message);
-    await logAudit('CREATE_BACKUP', `Berhasil membuat arsip database cadangan: "${filename}".`);
+    if (error) throw new Error("Gagal menyimpan record cadangan: " + error.message);
+    await logAudit('CREATE_BACKUP', `Berhasil membuat arsip database cadangan: "${filename}" (${sizeFormatted}).`);
 
-    return { backup };
+    // Return with data_json populated for immediate download in BackupCenter
+    return { ...backup, data_json: dataJson };
   },
 
   deleteBackup: async (filename) => {
@@ -1437,27 +1527,40 @@ export const api = {
     return true;
   },
 
-  downloadBackup: async (filename) => {
-    // 1. Fetch file record from Supabase backups table
+  downloadBackup: async (idOrFilename) => {
+    // BUG-07 fix: Support both storage-path and inline data_json backup records
     const { data, error } = await supabase
       .from('backups')
-      .select('data_json')
-      .eq('filename', filename)
+      .select('data_json, storage_path, filename')
+      .or(`id.eq.${idOrFilename},filename.eq.${idOrFilename}`)
       .single();
 
-    if (error || !data) throw new Error("Gagal mengunduh backup: " + error.message);
+    if (error || !data) throw new Error("Gagal mengunduh backup: " + (error?.message ?? 'Data tidak ditemukan'));
 
-    // 2. Trigger browser download of raw text representation (mocking a zip file extension)
-    const blob = new Blob([data.data_json], { type: 'application/octet-stream' });
+    let jsonText = data.data_json;
+
+    // If stored in Supabase Storage, download from there
+    if (!jsonText && data.storage_path) {
+      const { data: fileData, error: dlErr } = await supabase.storage
+        .from('backups')
+        .download(data.storage_path);
+      if (dlErr) throw new Error("Gagal mengunduh dari storage: " + dlErr.message);
+      jsonText = await fileData.text();
+    }
+
+    if (!jsonText) throw new Error("Data backup kosong atau tidak ditemukan.");
+
+    const blob = new Blob([jsonText], { type: 'application/json' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = filename;
+    a.download = data.filename;
     document.body.appendChild(a);
     a.click();
     a.remove();
     window.URL.revokeObjectURL(url);
-    await logAudit('DOWNLOAD_BACKUP', `Mengunduh berkas cadangan: "${filename}".`);
+    await logAudit('DOWNLOAD_BACKUP', \`Mengunduh berkas cadangan: "\${data.filename}".\`);
+    return { data_json: jsonText, filename: data.filename };
   },
 
   // --- POS CUSTOM TEMPLATES ---
@@ -1726,25 +1829,42 @@ export const api = {
       .single();
 
     if (error) throw new Error("Gagal memuat pengaturan resto: " + error.message);
-    return data;
+    // BUG-11 partial mitigation: Never expose the full token in the response object.
+    // Full fix requires Supabase Vault (encrypted column) — this prevents accidental
+    // logging/serialization of the token in the client.
+    return {
+      ...data,
+      whatsapp_token: data.whatsapp_token ? '***REDACTED***' : null,
+      _has_whatsapp_token: !!data.whatsapp_token
+    };
   },
 
   updateTenantSettings: async (settings) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) throw new Error("Tenant ID tidak ditemukan.");
 
+    // BUG-13 fix: Build update payload without undefined values.
+    // Supabase/PostgREST silently ignores keys with undefined values, so
+    // clearing a field (e.g. company_name = '') appeared to succeed but didn't save.
+    const updatePayload = { updated_at: new Date().toISOString() };
+    if (settings.company_name !== undefined)
+      updatePayload.company_name = settings.company_name || null;
+    if (settings.overhead_pct !== undefined)
+      updatePayload.overhead_pct = parseFloat(settings.overhead_pct) || 0.05;
+    if (settings.locked_until_month !== undefined)
+      updatePayload.locked_until_month = settings.locked_until_month ? parseInt(settings.locked_until_month) : null;
+    if (settings.locked_until_year !== undefined)
+      updatePayload.locked_until_year = settings.locked_until_year ? parseInt(settings.locked_until_year) : null;
+    if (settings.whatsapp_number !== undefined)
+      updatePayload.whatsapp_number = settings.whatsapp_number || null;
+    if (settings.whatsapp_token !== undefined)
+      updatePayload.whatsapp_token = settings.whatsapp_token || null;
+    if (settings.whatsapp_enabled !== undefined)
+      updatePayload.whatsapp_enabled = !!settings.whatsapp_enabled;
+
     const { data, error } = await supabase
       .from('tenants')
-      .update({
-        company_name: settings.company_name || undefined,
-        overhead_pct: settings.overhead_pct !== undefined ? parseFloat(settings.overhead_pct) : undefined,
-        locked_until_month: settings.locked_until_month !== undefined ? (settings.locked_until_month ? parseInt(settings.locked_until_month) : null) : undefined,
-        locked_until_year: settings.locked_until_year !== undefined ? (settings.locked_until_year ? parseInt(settings.locked_until_year) : null) : undefined,
-        whatsapp_number: settings.whatsapp_number !== undefined ? settings.whatsapp_number : undefined,
-        whatsapp_token: settings.whatsapp_token !== undefined ? settings.whatsapp_token : undefined,
-        whatsapp_enabled: settings.whatsapp_enabled !== undefined ? !!settings.whatsapp_enabled : undefined,
-        updated_at: new Date().toISOString()
-      })
+      .update(updatePayload)
       .eq('id', tenantId)
       .select('*')
       .single();

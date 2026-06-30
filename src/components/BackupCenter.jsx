@@ -6,7 +6,7 @@ import {
 import { api } from '../services/api';
 import confetti from 'canvas-confetti';
 
-export default function BackupCenter() {
+export default function BackupCenter({ onConfirm }) {
   const [backups, setBackups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -20,7 +20,7 @@ export default function BackupCenter() {
   const [showRestoreModal, setShowRestoreModal] = useState(false);
   const [selectedRestoreBackup, setSelectedRestoreBackup] = useState(null); // Local backup or uploaded file
   const [restoreConfirmText, setRestoreConfirmText] = useState('');
-  const [isRestoring] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/immutability
@@ -72,7 +72,7 @@ export default function BackupCenter() {
       });
 
     } catch (err) {
-      alert("Gagal membuat backup: " + err.message);
+      setError("Gagal membuat backup: " + err.message);
     } finally {
       setActionLoading(false);
     }
@@ -94,24 +94,28 @@ export default function BackupCenter() {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (err) {
-      alert("Gagal mengunduh file backup: " + err.message);
+      setError("Gagal mengunduh file backup: " + err.message);
     }
   };
 
   // BUG-BC-03: api.deleteBackup(id) expects a backup UUID, not a filename.
-  const handleDeleteBackup = async (backup) => {
-    if (!window.confirm(`Apakah Anda yakin ingin menghapus file cadangan "${backup.filename}"? Tindakan ini tidak dapat dibatalkan.`)) {
-      return;
-    }
-
-    setActionLoading(true);
-    try {
-      await api.deleteBackup(backup.id);
-      setBackups(prev => prev.filter(b => b.id !== backup.id));
-    } catch (err) {
-      alert("Gagal menghapus backup: " + err.message);
-    } finally {
-      setActionLoading(false);
+  const handleDeleteBackup = (backup) => {
+    // BUG-10 fix: use onConfirm prop instead of window.confirm
+    const doDelete = async () => {
+      setActionLoading(true);
+      try {
+        await api.deleteBackup(backup.id);
+        setBackups(prev => prev.filter(b => b.id !== backup.id));
+      } catch (err) {
+        setError("Gagal menghapus backup: " + err.message);
+      } finally {
+        setActionLoading(false);
+      }
+    };
+    if (onConfirm) {
+      onConfirm(`Hapus file cadangan "${backup.filename}"? Tindakan ini tidak dapat dibatalkan.`, doDelete);
+    } else {
+      doDelete();
     }
   };
 
@@ -169,20 +173,28 @@ export default function BackupCenter() {
 
   const handleExecuteRestore = async () => {
     if (restoreConfirmText !== 'PULIHKAN') {
-      alert("Konfirmasi tidak cocok. Harap ketik 'PULIHKAN' untuk melanjutkan.");
+      setError("Konfirmasi tidak cocok. Harap ketik 'PULIHKAN' untuk melanjutkan.");
       return;
     }
 
-    // BUG-BC-04: api.restoreBackup() does not exist in the API service.
-    // Restore from Supabase JSON backup is a destructive multi-table operation that
-    // must be implemented as a server-side RPC function to be safe and atomic.
-    // For now we surface a clear error rather than silently calling an undefined function.
-    alert(
-      "Fitur Restore belum tersedia.\n\n" +
-      "Pemulihan dari backup JSON memerlukan fungsi RPC server-side agar atomik dan aman.\n" +
-      "Silakan hubungi administrator sistem untuk melakukan restore manual dari file backup yang telah diunduh."
-    );
-    closeRestoreModal();
+    setIsRestoring(true);
+    setError(null);
+
+    try {
+      if (selectedRestoreBackup instanceof File) {
+        const formData = new FormData();
+        formData.append('backup_file', selectedRestoreBackup);
+        await api.restoreBackup(formData);
+      } else {
+        await api.restoreBackup(selectedRestoreBackup.id || selectedRestoreBackup.filename);
+      }
+      closeRestoreModal();
+      window.location.reload();
+    } catch (err) {
+      setError('Restore gagal: ' + (err.message || 'Terjadi kesalahan sistem.'));
+    } finally {
+      setIsRestoring(false);
+    }
   };
 
   // Helpers

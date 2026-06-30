@@ -103,15 +103,19 @@ export default function Maintenance({ activeUser }) {
     e.preventDefault();
     setSavingSettings(true);
     try {
-      await api.updateTenantSettings({
+      const updatePayload = {
         company_name: settings.company_name,
         overhead_pct: parseFloat(settings.overhead_pct),
         locked_until_month: settings.locked_until_month ? parseInt(settings.locked_until_month) : null,
         locked_until_year: settings.locked_until_year ? parseInt(settings.locked_until_year) : null,
         whatsapp_number: settings.whatsapp_number || null,
-        whatsapp_token: settings.whatsapp_token || null,
         whatsapp_enabled: !!settings.whatsapp_enabled
-      });
+      };
+      // BUG-11 fix: Only send token if user actually typed a new one (not the redacted placeholder)
+      if (settings.whatsapp_token && settings.whatsapp_token !== '***REDACTED***') {
+        updatePayload.whatsapp_token = settings.whatsapp_token;
+      }
+      await api.updateTenantSettings(updatePayload);
       flash('success', 'Pengaturan resto berhasil disimpan.');
       await loadHealth();
     } catch (e) {

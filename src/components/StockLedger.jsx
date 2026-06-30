@@ -7,7 +7,7 @@ import * as XLSX from 'xlsx';
 import BulkImport from './BulkImport';
 import { api } from '../services/api';
 
-export default function StockLedger({ stock, transactions, onAdjustStock, onUpdateItem, onAddItem, onDeleteItem }) {
+export default function StockLedger({ stock, transactions, onAdjustStock, onUpdateItem, onAddItem, onDeleteItem, onRefreshData, onConfirm }) {
   const [activeLoc, setActiveLoc] = useState('ALL');
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('ALL');
@@ -216,7 +216,7 @@ export default function StockLedger({ stock, transactions, onAdjustStock, onUpda
                           <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: '6px' }} title="History" onClick={() => setSelectedItem(item)}>
                             <History size={13} />
                           </button>
-                          <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: '6px', color: 'var(--danger)' }} title="Delete" onClick={() => { if (confirm(`Hapus "${item.name}" dari inventory?`)) onDeleteItem(item.name); }}>
+                          <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: '6px', color: 'var(--danger)' }} title="Delete" onClick={() => onConfirm && onConfirm(`Hapus "${item.name}" dari inventory? Tindakan ini tidak dapat dibatalkan.`, () => onDeleteItem(item.name))}>
                             <Trash2 size={13} />
                           </button>
                         </div>
@@ -444,9 +444,8 @@ export default function StockLedger({ stock, transactions, onAdjustStock, onUpda
         description="Upload data bahan baku sekaligus dari file Excel."
         onCommit={async (rows) => {
           const res = await api.bulkImportMaterials(rows);
-          if (res.success > 0) {
-            // reload to fetch new data
-            window.location.reload();
+          if (res.success > 0 && onRefreshData) {
+            await onRefreshData();
           }
           return res;
         }}

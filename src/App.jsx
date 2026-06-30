@@ -41,6 +41,12 @@ export default function App() {
   };
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
+  // BUG-10 fix: Custom confirm modal replaces native window.confirm() across app.
+  const [confirmModal, setConfirmModal] = useState(null);
+  // showConfirm({ message, onConfirm, danger?: bool }) → returns Promise resolved by user action
+  const showConfirm = (message, onConfirm, danger = true) => {
+    setConfirmModal({ message, onConfirm, danger });
+  };
   const [showOnboarding, setShowOnboarding] = useState(false);
   const realtimeChannelRef = useRef(null);
   const isFetchingProfileRef = useRef(false);
@@ -249,6 +255,42 @@ export default function App() {
   }, [authSession]);
 
   // 2.5 Parallel Data Fetcher — uses Promise.all
+  // BUG-12 fix: Add targeted refetch helpers to avoid full reload on minor mutations.
+  const refetchStock = async () => {
+    try {
+      const data = await api.getMaterials();
+      setStock(data);
+    } catch (e) { console.error('refetchStock:', e); }
+  };
+  const refetchRecipes = async () => {
+    try {
+      const data = await api.getRecipes();
+      setRecipes(data.map(r => ({
+        ...r, total_cost: r.basic_cost, yield: "1",
+        ingredients: (r.ingredients || []).map(ing => ({
+          material_id: ing.material_id,
+          item_name: ing.item_name || (ing.material ? ing.material.name : 'Bahan Terhapus'),
+          qty_in_use: parseFloat(ing.qty_in_use), unit: ing.unit,
+          unit_price: parseFloat(ing.unit_price), amount: parseFloat(ing.amount)
+        }))
+      })));
+    } catch (e) { console.error('refetchRecipes:', e); }
+  };
+  const refetchInvoices = async () => {
+    try {
+      const data = await api.getInvoices();
+      setInvoices(data.map(inv => ({
+        ...inv,
+        items: (inv.items || []).map(item => ({
+          material_id: item.material_id,
+          item_name: item.item_name || 'Bahan Terhapus',
+          qty: parseFloat(item.qty), unit_price: parseFloat(item.unit_price),
+          unit: item.unit || 'pck'
+        }))
+      })));
+    } catch (e) { console.error('refetchInvoices:', e); }
+  };
+
   const fetchAllData = async () => {
     if (!isAuthenticated) return;
     setLoading(true);
@@ -369,7 +411,7 @@ export default function App() {
         min_stock: updatedItem.min_stock
       });
       showToast("Detail bahan baku berhasil diperbarui.", "success");
-      await fetchAllData();
+      await refetchStock(); // BUG-12 fix
     } catch (e) {
       showToast("Update material gagal: " + e.message);
     }
@@ -380,7 +422,7 @@ export default function App() {
     try {
       await api.createMaterial(newItem);
       showToast("Bahan baku baru berhasil ditambahkan.", "success");
-      await fetchAllData();
+      await refetchStock(); // BUG-12 fix: targeted refetch
     } catch (e) {
       showToast("Tambah item gagal: " + e.message);
     }
@@ -393,7 +435,7 @@ export default function App() {
     try {
       await api.deleteMaterial(match.id);
       showToast("Bahan baku berhasil dinonaktifkan.", "success");
-      await fetchAllData();
+      await refetchStock(); // BUG-12 fix
     } catch (e) {
       showToast("Hapus item gagal: " + e.message);
     }
@@ -438,7 +480,7 @@ export default function App() {
         ingredients: mappedIngredients
       });
       showToast("Resep COGS berhasil disimpan.", "success");
-      await fetchAllData();
+      await refetchRecipes(); // BUG-12 fix
     } catch (e) {
       showToast("Simpan resep gagal: " + e.message);
     }
@@ -462,7 +504,7 @@ export default function App() {
         ingredients: mappedIngredients
       });
       showToast("Resep baru berhasil ditambahkan.", "success");
-      await fetchAllData();
+      await refetchRecipes(); // BUG-12 fix
     } catch (e) {
       showToast("Tambah resep gagal: " + e.message);
     }
@@ -512,7 +554,7 @@ export default function App() {
         items: formattedItems
       });
       showToast("Invoice PO berhasil dibuat.", "success");
-      await fetchAllData();
+      await refetchInvoices(); // BUG-12 fix
     } catch (e) {
       showToast("Buat invoice gagal: " + e.message);
     }
@@ -536,7 +578,7 @@ export default function App() {
     try {
       await api.updateInvoiceStatus(match.id, 'CANCELLED');
       showToast("Invoice PO berhasil dibatalkan.", "success");
-      await fetchAllData();
+      await refetchInvoices(); // BUG-12 fix
     } catch (e) {
       showToast("Batal invoice gagal: " + e.message);
     }
@@ -891,14 +933,14 @@ export default function App() {
                 ) : (
                   <>
                     <Route path="/" element={<Dashboard stock={stock} recipes={recipes} transactions={transactions} onNavigate={setActiveTab} />} />
-                    <Route path="/stock" element={<StockLedger stock={stock} transactions={transactions} onAdjustStock={handleAdjustStock} onUpdateItem={handleUpdateItem} onAddItem={handleAddItem} onDeleteItem={handleDeleteItem} />} />
+                    <Route path="/stock" element={<StockLedger stock={stock} transactions={transactions} onAdjustStock={handleAdjustStock} onUpdateItem={handleUpdateItem} onAddItem={handleAddItem} onDeleteItem={handleDeleteItem} onRefreshData={fetchAllData} onConfirm={showConfirm} />} />
                     <Route path="/pos" element={<PosUpload stock={stock} recipes={recipes} transactions={transactions} onProcessPosSales={handleProcessPosSales} />} />
-                    <Route path="/recipes" element={<Recipes stock={stock} recipes={recipes} onSaveRecipe={handleSaveRecipe} onAddRecipe={handleAddRecipe} />} />
+                    <Route path="/recipes" element={<Recipes stock={stock} recipes={recipes} onSaveRecipe={handleSaveRecipe} onAddRecipe={handleAddRecipe} onRefreshData={fetchAllData} />} />
                     <Route path="/invoicing" element={<Invoicing stock={stock} invoices={invoices} onCreateInvoice={handleCreateInvoice} onReceiveInvoice={handleReceiveInvoice} onCancelInvoice={handleCancelInvoice} />} />
                     <Route path="/opname" element={<StockOpname stock={stock} transactions={transactions} onCompleteOpname={handleCompleteOpname} />} />
                     <Route path="/audit" element={<AuditLogs activeUser={activeUser} />} />
                     <Route path="/cost-control" element={<CostControl stock={stock} transactions={transactions} invoices={invoices} />} />
-                    <Route path="/backup" element={<BackupCenter activeUser={activeUser} />} />
+                    <Route path="/backup" element={<BackupCenter activeUser={activeUser} onConfirm={showConfirm} />} />
                     <Route path="/maintenance" element={<Maintenance activeUser={activeUser} />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </>
@@ -956,6 +998,33 @@ export default function App() {
         </div>
       )}
       
+      {/* BUG-10 fix: Custom confirm modal — replaces window.confirm() */}
+      {confirmModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 19999
+        }}>
+          <div className="glass-card" style={{
+            width: '100%', maxWidth: '420px', padding: '28px 28px 24px',
+            border: confirmModal.danger ? '1px solid rgba(239,68,68,0.35)' : '1px solid var(--border-focus)'
+          }}>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', marginBottom: '24px', lineHeight: 1.6 }}>
+              {confirmModal.message}
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button className="btn btn-secondary" onClick={() => setConfirmModal(null)}>Batal</button>
+              <button
+                className="btn btn-primary"
+                style={confirmModal.danger ? { background: 'var(--danger)', borderColor: 'var(--danger)' } : {}}
+                onClick={() => { setConfirmModal(null); confirmModal.onConfirm(); }}
+              >
+                Konfirmasi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Dynamic spinner and animation CSS */}
       <style>{`
         @keyframes spin {
