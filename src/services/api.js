@@ -1559,7 +1559,7 @@ export const api = {
     a.click();
     a.remove();
     window.URL.revokeObjectURL(url);
-    await logAudit('DOWNLOAD_BACKUP', \`Mengunduh berkas cadangan: "\${data.filename}".\`);
+    await logAudit('DOWNLOAD_BACKUP', 'Mengunduh berkas cadangan: "' + data.filename + '".');
     return { data_json: jsonText, filename: data.filename };
   },
 
