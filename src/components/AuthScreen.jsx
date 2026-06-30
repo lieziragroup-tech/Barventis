@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../services/api';
 
-export default function AuthScreen({ onAuthSuccess, isSuperAdminMode = false }) {
+export default function AuthScreen({ onAuthSuccess, onLoginStart, onLoginEnd, isSuperAdminMode = false }) {
   const [tenantName, setTenantName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -16,12 +16,16 @@ export default function AuthScreen({ onAuthSuccess, isSuperAdminMode = false }) 
     try {
       const activeTenant = isSuperAdminMode ? 'superadmin' : tenantName;
 
-      // H-4: Super Admin authority is verified server-side by DB role (api.login +
-      // RLS is_super_admin()), so no hardcoded-email gate is needed in the client.
+      // Signal App.jsx that a login is in progress so it ignores any
+      // SIGNED_OUT events caused by validation-failure signOut() inside api.login()
+      if (onLoginStart) onLoginStart();
+
       const data = await api.login(activeTenant, email, password);
       onAuthSuccess(data.user, data.tenant.name);
     } catch (err) {
       console.error(err);
+      // Login failed — clear the in-progress guard so future logouts work normally
+      if (onLoginEnd) onLoginEnd();
       setError(err.message || 'Terjadi kesalahan sistem. Silakan coba lagi.');
     } finally {
       setLoading(false);

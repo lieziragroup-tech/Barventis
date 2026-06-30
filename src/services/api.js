@@ -115,70 +115,77 @@ export const api = {
 
   // --- AUTHENTICATION ---
   login: async (tenantName, email, password) => {
-    // 1. Perform Supabase authentication first (so RLS policies will be satisfied for profile and tenant queries)
+    // ── AUTH RACE CONDITION FIX ──────────────────────────────────────────────
+    // Problem (original): signInWithPassword → SIGNED_IN fires → loadProfile runs
+    // Then if tenant validation fails → signOut → SIGNED_OUT fires → state cleared.
+    // This causes a SIGNED_IN/SIGNED_OUT double-trigger that corrupts React state.
+    //
+    // Fix strategy:
+    // Step 1: Use signInWithPassword to get credentials (required for RLS queries).
+    // Step 2: Validate tenant/role WHILE session is active.
+    // Step 3: If validation fails, sign out immediately and throw — but App.jsx
+    //         is guarded by isLoginInProgressRef so it IGNORES SIGNED_IN events
+    //         during an active login attempt. SIGNED_OUT clears state correctly.
+    // Step 4: If validation passes, return profile — App.jsx picks up SIGNED_IN.
+
+    // 1. Supabase Auth — establishes session so RLS queries work
     const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
       email,
       password
     });
 
     if (authErr || !authData.user) {
-      throw new Error(authErr.message || 'Email atau password salah.');
+      throw new Error(authErr?.message || 'Email atau password salah.');
     }
 
-    // 2. Fetch user profile
-    const { data: userProfile, error: profileErr } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', authData.user.id)
-      .single();
-
-    if (profileErr || !userProfile) {
-      await supabase.auth.signOut();
-      throw new Error('Profil user tidak ditemukan: ' + (profileErr?.message || 'Data kosong'));
-    }
-
-    let tenant;
-    // H-4: Super Admin status is determined by the DB role on the authenticated
-    // profile — NOT by a hardcoded email. The real boundary is the user's role
-    // (also enforced by RLS is_super_admin()), so no magic email is needed.
-    const isSALogin = userProfile.role === 'Super Admin' || userProfile.role === 'SuperAdmin';
-
-    if (isSALogin) {
-      // Bypass database tenant query for Super Admin (since tenant_id is null in public.users)
-      tenant = { name: 'superadmin', company_name: 'Barventis System Management', id: null, status: 'active' };
-    } else {
-      // 3. Fetch tenant details (now that we're authenticated, RLS allows selecting our own tenant)
-      const { data: tenantData, error: tenantErr } = await supabase
-        .from('tenants')
+    let userProfile, tenant;
+    try {
+      // 2. Fetch user profile (RLS now allows this since session is active)
+      const { data: profileData, error: profileErr } = await supabase
+        .from('users')
         .select('*')
-        .eq('id', userProfile.tenant_id)
+        .eq('id', authData.user.id)
         .single();
 
-      if (tenantErr || !tenantData) {
-        await supabase.auth.signOut();
-        throw new Error('Tenant / ID Resto tidak terdaftar.');
+      if (profileErr || !profileData) {
+        throw new Error('Profil user tidak ditemukan: ' + (profileErr?.message || 'Data kosong'));
       }
-      tenant = tenantData;
-    }
+      userProfile = profileData;
 
-    if (tenant.status !== 'active') {
-      await supabase.auth.signOut();
-      throw new Error('Tenant Resto sedang dinonaktifkan.');
-    }
+      const isSALogin = userProfile.role === 'Super Admin' || userProfile.role === 'SuperAdmin';
 
-    // Verify tenant match for regular users. (Super Admins are validated by role
-    // above and are not bound to a tenant.) A non-SA user attempting to sign in via
-    // the "superadmin" screen is rejected here by the tenant-name mismatch.
-    if (!isSALogin) {
-      if (tenant.name.toLowerCase() !== tenantName.toLowerCase()) {
-        await supabase.auth.signOut();
-        throw new Error('User ini tidak terdaftar di ID Resto ' + tenantName.toUpperCase() + '.');
+      if (isSALogin) {
+        tenant = { name: 'superadmin', company_name: 'Barventis System Management', id: null, status: 'active' };
+      } else {
+        // 3. Fetch and validate tenant
+        const { data: tenantData, error: tenantErr } = await supabase
+          .from('tenants')
+          .select('*')
+          .eq('id', userProfile.tenant_id)
+          .single();
+
+        if (tenantErr || !tenantData) {
+          throw new Error('Tenant / ID Resto tidak terdaftar.');
+        }
+        tenant = tenantData;
+
+        if (tenant.status !== 'active') {
+          throw new Error('Tenant Resto sedang dinonaktifkan.');
+        }
+
+        if (tenant.name.toLowerCase() !== tenantName.toLowerCase()) {
+          throw new Error('User ini tidak terdaftar di ID Resto ' + tenantName.toUpperCase() + '.');
+        }
       }
+    } catch (validationErr) {
+      // Validation failed AFTER sign-in succeeded — must sign out cleanly.
+      // App.jsx guards against SIGNED_OUT race via isLoginInProgressRef.
+      await supabase.auth.signOut().catch(() => {});
+      throw validationErr;
     }
 
-    // 4. Session is managed by Supabase Auth (no localStorage write needed)
-    // Audit log is handled after onAuthStateChange fires in App.jsx
-    try { await logAudit('LOGIN', `User ${userProfile.name} berhasil login ke resto.`); } catch { /* ignore: best-effort */ }
+    // 4. Login successful — audit and return profile for App.jsx handleAuthSuccess
+    try { await logAudit('LOGIN', 'User ' + userProfile.name + ' berhasil login ke resto.'); } catch { /* best-effort */ }
 
     return {
       token: authData.session.access_token,

@@ -50,6 +50,10 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const realtimeChannelRef = useRef(null);
   const isFetchingProfileRef = useRef(false);
+  // Race condition guard: while AuthScreen's handleSubmit is running api.login(),
+  // we must ignore SIGNED_OUT events triggered by a validation-failure signOut()
+  // inside api.login(). Without this, the SIGNED_OUT clears state mid-login.
+  const isLoginInProgressRef = useRef(false);
   const lowStockBufferRef = useRef([]);
   const lowStockTimeoutRef = useRef(null);
 
@@ -230,6 +234,13 @@ export default function App() {
           isFetchingProfileRef.current = false;
         }
       } else {
+        // Guard: if AuthScreen is actively running api.login() and its internal
+        // validation fails → it calls signOut() → SIGNED_OUT fires here.
+        // We must NOT clear state in that case — AuthScreen handles its own error display.
+        if (isLoginInProgressRef.current) {
+          console.log("[Auth Flow] SIGNED_OUT ignored — login in progress (validation failure signOut).");
+          return;
+        }
         console.log("[Auth Flow] No session active, clearing states.");
         if (isMounted) {
           setIsAuthenticated(false);
@@ -364,8 +375,9 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, activeUser]);
 
-  // Legacy auth handler (from AuthScreen)
+  // Called by AuthScreen after api.login() succeeds
   const handleAuthSuccess = (user, tenant) => {
+    isLoginInProgressRef.current = false; // login done — allow SIGNED_OUT to work again
     setActiveUser(user);
     setTenantName(tenant);
     setIsAuthenticated(true);
@@ -587,7 +599,12 @@ export default function App() {
   // If not authenticated, render Login Screen
   if (!isAuthenticated) {
     const isSA = location.pathname === '/superadmin' || location.pathname === '/super-admin';
-    return <AuthScreen onAuthSuccess={handleAuthSuccess} isSuperAdminMode={isSA} />;
+    return <AuthScreen
+        onAuthSuccess={handleAuthSuccess}
+        onLoginStart={() => { isLoginInProgressRef.current = true; }}
+        onLoginEnd={() => { isLoginInProgressRef.current = false; }}
+        isSuperAdminMode={isSA}
+      />;
   }
 
   // Loading profile guard to prevent mounting routes or layouts before role is determined
