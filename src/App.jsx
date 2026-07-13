@@ -86,6 +86,12 @@ export default function App() {
           </AuthRoute>
         } />
 
+        <Route path="/register" element={
+          <AuthRoute>
+            <AuthScreen />
+          </AuthRoute>
+        } />
+
         <Route path="/" element={<RootRedirect />} />
 
         {/* SUPER ADMIN */}
