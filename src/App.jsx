@@ -2,6 +2,7 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import { useData } from './contexts/DataContext';
+import { LanguageProvider } from './contexts/LanguageContext';
 import './App.css';
 
 // Components & Pages
@@ -22,6 +23,7 @@ const Maintenance = React.lazy(() => import('./pages/shared/Maintenance'));
 const SuperAdminPanel = React.lazy(() => import('./pages/superadmin/SuperAdminPanel'));
 const TenantAdminPanel = React.lazy(() => import('./pages/owner/TenantAdminPanel'));
 const PosTerminal = React.lazy(() => import('./pages/pos/PosTerminal'));
+const LandingPage = React.lazy(() => import('./pages/landing/LandingPage'));
 
 const LoadingSpinner = () => (
   <div style={{
@@ -52,11 +54,11 @@ const ProtectedRoute = ({ allowedRoles, children }) => {
   return children;
 };
 
-// Root Redirect Component
+// Root Redirect Component — shows landing page for guests, redirects auth users
 const RootRedirect = () => {
   const { activeUser, loading, isAuthenticated } = useAuth();
   if (loading) return <LoadingSpinner />;
-  if (!isAuthenticated || !activeUser) return <Navigate to="/login" replace />;
+  if (!isAuthenticated || !activeUser) return <LandingPage />;
   
   const role = activeUser.role === 'SuperAdmin' ? 'Super Admin' : activeUser.role;
   if (role === 'Super Admin') return <Navigate to="/superadmin" replace />;
@@ -78,6 +80,7 @@ export default function App() {
   const { activeUser } = useAuth();
 
   return (
+    <LanguageProvider>
     <React.Suspense fallback={<LoadingSpinner />}>
       <Routes>
         <Route path="/login" element={
@@ -155,7 +158,7 @@ export default function App() {
               <div style={{ fontSize: '4.5rem', color: 'var(--danger)', marginBottom: '16px', fontWeight: '800', lineHeight: '1' }}>403</div>
               <h2 style={{ fontSize: '1.4rem', fontWeight: '800', marginBottom: '12px' }}>Akses Dibatasi</h2>
               <p style={{ color: 'var(--text-muted)', marginBottom: '28px' }}>Anda tidak memiliki izin ke halaman ini.</p>
-              <a href="/" style={{ padding: '10px 24px', background: 'var(--accent)', color: '#fff', borderRadius: '8px', textDecoration: 'none' }}>Kembali ke Dashboard</a>
+              <a href="/" style={{ padding: '10px 24px', background: 'var(--accent)', color: 'var(--text-inverse)', borderRadius: '8px', textDecoration: 'none' }}>Kembali ke Dashboard</a>
             </div>
           </div>
         } />
@@ -163,5 +166,6 @@ export default function App() {
         <Route path="*" element={<RootRedirect />} />
       </Routes>
     </React.Suspense>
+    </LanguageProvider>
   );
 }

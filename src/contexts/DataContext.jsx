@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { api } from '../services/api';
 import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
@@ -89,14 +89,14 @@ export const DataProvider = ({ children }) => {
     else toast.showError(message);
   }, [toast]);
 
-  const handleAdjustStock = async (itemName, location, type, qty, notes) => {
+  const handleAdjustStock = useCallback(async (itemName, location, type, qty, notes) => {
     const match = stock.find(item => item.name === itemName);
     if (!match) return;
     await api.adjustStock(match.id, { location, type, qty, notes });
     await fetchAllData();
-  };
+  }, [stock, fetchAllData]);
 
-  const handleUpdateItem = async (updatedItem) => {
+  const handleUpdateItem = useCallback(async (updatedItem) => {
     const match = stock.find(item => item.name === updatedItem.originalName || item.name === updatedItem.name);
     if (!match) return;
     await api.updateMaterial(match.id, {
@@ -110,26 +110,26 @@ export const DataProvider = ({ children }) => {
       min_stock: updatedItem.min_stock
     });
     await fetchAllData();
-  };
+  }, [stock, fetchAllData]);
 
-  const handleAddItem = async (newItem) => {
+  const handleAddItem = useCallback(async (newItem) => {
     await api.createMaterial(newItem);
     await fetchAllData();
-  };
+  }, [fetchAllData]);
 
-  const handleDeleteItem = async (itemName) => {
+  const handleDeleteItem = useCallback(async (itemName) => {
     const match = stock.find(item => item.name === itemName);
     if (!match) return;
     await api.deleteMaterial(match.id);
     await fetchAllData();
-  };
+  }, [stock, fetchAllData]);
 
-  const handleProcessPosSales = async (mappedSales, filename) => {
+  const handleProcessPosSales = useCallback(async (mappedSales, filename) => {
     await api.syncPos(filename, mappedSales);
     await fetchAllData();
-  };
+  }, [fetchAllData]);
 
-  const handleSaveRecipe = async (updatedRecipe) => {
+  const handleSaveRecipe = useCallback(async (updatedRecipe) => {
     const recipeId = updatedRecipe.id;
     if (!recipeId) return;
     const mappedIngredients = (updatedRecipe.ingredients || []).map(ing => {
@@ -148,9 +148,9 @@ export const DataProvider = ({ children }) => {
       ingredients: mappedIngredients
     });
     await fetchAllData();
-  };
+  }, [stock, fetchAllData]);
 
-  const handleAddRecipe = async (newRecipe) => {
+  const handleAddRecipe = useCallback(async (newRecipe) => {
     const mappedIngredients = newRecipe.ingredients.map(ing => {
       const mat = stock.find(s => s.name === ing.item_name);
       return {
@@ -167,14 +167,14 @@ export const DataProvider = ({ children }) => {
       ingredients: mappedIngredients
     });
     await fetchAllData();
-  };
+  }, [stock, fetchAllData]);
 
-  const handleDeleteRecipe = async (recipeId) => {
+  const handleDeleteRecipe = useCallback(async (recipeId) => {
     await api.deleteRecipe(recipeId);
     await fetchAllData();
-  };
+  }, [fetchAllData]);
 
-  const handleCompleteOpname = async (auditLoc, reconciliation, signatureData) => {
+  const handleCompleteOpname = useCallback(async (auditLoc, reconciliation, signatureData) => {
     const formattedItems = reconciliation.map(item => {
       const mat = stock.find(s => s.name === item.name);
       return {
@@ -190,9 +190,9 @@ export const DataProvider = ({ children }) => {
       signature_svg: signatureData || ''
     });
     await fetchAllData();
-  };
+  }, [stock, fetchAllData]);
 
-  const handleCreateInvoice = async (invoice) => {
+  const handleCreateInvoice = useCallback(async (invoice) => {
     const formattedItems = invoice.items.map(item => {
       const mat = stock.find(s => s.name === item.item_name);
       return {
@@ -209,24 +209,23 @@ export const DataProvider = ({ children }) => {
       items: formattedItems
     });
     await fetchAllData();
-  };
+  }, [stock, fetchAllData]);
 
-  const handleReceiveInvoice = async (invoiceId) => {
+  const handleReceiveInvoice = useCallback(async (invoiceId) => {
     const match = invoices.find(inv => inv.id === invoiceId);
     if (!match) return;
     await api.receiveInvoice(match.id);
     await fetchAllData();
-  };
+  }, [invoices, fetchAllData]);
 
-  const handleCancelInvoice = async (invoiceId) => {
+  const handleCancelInvoice = useCallback(async (invoiceId) => {
     const match = invoices.find(inv => inv.id === invoiceId);
     if (!match) return;
     await api.updateInvoiceStatus(match.id, 'CANCELLED');
     await fetchAllData();
-  };
+  }, [invoices, fetchAllData]);
 
-  // Expose the refresh function and the data
-  const value = {
+  const value = useMemo(() => ({
     stock,
     recipes,
     transactions,
@@ -248,7 +247,7 @@ export const DataProvider = ({ children }) => {
     handleCreateInvoice,
     handleReceiveInvoice,
     handleCancelInvoice
-  };
+  }), [stock, recipes, transactions, invoices, loadingData, fetchAllData, showToast, activeUser, handleAdjustStock, handleUpdateItem, handleAddItem, handleDeleteItem, handleProcessPosSales, handleSaveRecipe, handleAddRecipe, handleDeleteRecipe, handleCompleteOpname, handleCreateInvoice, handleReceiveInvoice, handleCancelInvoice]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 };

@@ -174,10 +174,10 @@ export default function AIAssistant() {
           width: '56px',
           height: '56px',
           borderRadius: '50%',
-          background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+          background: 'var(--accent)',
           border: 'none',
           boxShadow: '0 8px 24px rgba(59, 130, 246, 0.45)',
-          color: 'white',
+          color: 'var(--text-inverse)',
           display: isOpen ? 'none' : 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -201,7 +201,7 @@ export default function AIAssistant() {
           height: '560px',
           background: 'rgba(15, 17, 23, 0.97)',
           backdropFilter: 'blur(20px)',
-          border: '1px solid rgba(76, 110, 245, 0.2)',
+          border: '1px solid rgba(59, 130, 246, 0.2)',
           borderRadius: '20px',
           boxShadow: '0 24px 64px rgba(0, 0, 0, 0.6)',
           display: 'flex',
@@ -221,15 +221,15 @@ export default function AIAssistant() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div style={{
-                background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-                padding: '7px', borderRadius: '10px', color: 'white', display: 'flex',
+                background: 'var(--accent)',
+                padding: '7px', borderRadius: '10px', color: 'var(--text-inverse)', display: 'flex',
               }}>
                 <Bot size={16} />
               </div>
               <div>
-                <h4 style={{ margin: 0, fontSize: '0.9rem', color: 'white', fontWeight: 700 }}>Barventis AI</h4>
-                <span style={{ fontSize: '0.68rem', color: '#51cf66', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#51cf66', display: 'inline-block' }} />
+                <h4 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-inverse)', fontWeight: 700 }}>Barventis AI</h4>
+                <span style={{ fontSize: '0.68rem', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--success)', display: 'inline-block' }} />
                   Terkoneksi dengan data Anda
                 </span>
               </div>
@@ -251,9 +251,9 @@ export default function AIAssistant() {
               }}>
                 <div style={{
                   background: msg.role === 'user'
-                    ? 'linear-gradient(135deg, #3b82f6, #2563eb)'
+                    ? 'var(--accent)'
                     : 'rgba(255, 255, 255, 0.05)',
-                  color: 'white',
+                  color: 'var(--text-inverse)',
                   padding: '10px 14px',
                   borderRadius: '14px',
                   borderBottomRightRadius: msg.role === 'user' ? '4px' : '14px',
@@ -279,7 +279,7 @@ export default function AIAssistant() {
               }}>
                 {[0, 1, 2].map(i => (
                   <span key={i} style={{
-                    width: '6px', height: '6px', borderRadius: '50%', background: '#4c6ef5',
+                    width: '6px', height: '6px', borderRadius: '50%', background: 'var(--accent)',
                     animation: `aiDotBounce 1.2s ${i * 0.2}s ease-in-out infinite`,
                     display: 'inline-block',
                   }} />
@@ -297,15 +297,15 @@ export default function AIAssistant() {
                   key={chip}
                   onClick={() => sendMessage(chip)}
                   style={{
-                    background: 'rgba(76,110,245,0.1)', border: '1px solid rgba(76,110,245,0.25)',
+                    background: 'var(--accent-glow)', border: '1px solid rgba(59, 130, 246, 0.25)',
                     borderRadius: '20px', padding: '5px 12px',
-                    color: '#4c6ef5', fontSize: '0.72rem', cursor: 'pointer',
+                    color: 'var(--accent)', fontSize: '0.72rem', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: '4px',
                     fontFamily: "'Outfit', sans-serif", fontWeight: '600',
                     transition: 'background 0.15s',
                   }}
-                  onMouseOver={e => e.currentTarget.style.background = 'rgba(76,110,245,0.2)'}
-                  onMouseOut={e => e.currentTarget.style.background = 'rgba(76,110,245,0.1)'}
+                  onMouseOver={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)'}
+                  onMouseOut={e => e.currentTarget.style.background = 'var(--accent-glow)'}
                 >
                   {chip} <ChevronRight size={11} />
                 </button>
@@ -327,23 +327,23 @@ export default function AIAssistant() {
                   border: '1px solid rgba(255,255,255,0.1)',
                   borderRadius: '20px',
                   padding: '10px 16px',
-                  color: 'white',
+                  color: 'var(--text-inverse)',
                   fontSize: '0.82rem',
                   outline: 'none',
                   fontFamily: "'Outfit', sans-serif",
                 }}
-                onFocus={e => e.target.style.borderColor = 'rgba(76,110,245,0.5)'}
+                onFocus={e => e.target.style.borderColor = 'rgba(59, 130, 246, 0.5)'}
                 onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
               />
               <button
                 type="submit"
                 disabled={!input.trim() || isTyping}
                 style={{
-                  background: input.trim() && !isTyping ? 'linear-gradient(135deg, #3b82f6, #8b5cf6)' : 'rgba(255,255,255,0.08)',
+                  background: input.trim() && !isTyping ? 'var(--accent)' : 'rgba(255,255,255,0.08)',
                   border: 'none',
                   width: '40px', height: '40px',
                   borderRadius: '50%',
-                  color: 'white',
+                  color: 'var(--text-inverse)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   cursor: input.trim() && !isTyping ? 'pointer' : 'not-allowed',
                   transition: 'background 0.2s',

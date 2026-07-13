@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Search, Plus, Edit, History, X, Download, Trash2,
   Package, UploadCloud
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import BulkImport from '../../components/BulkImport';
+
+let _XLSX;
+const getXLSX = async () => { if (!_XLSX) _XLSX = await import('xlsx'); return _XLSX; };
 import { useData } from '../../contexts/DataContext';
+import { formatIDR } from '../../services/costUtils';
 import { api } from '../../services/api';
 
 export default function StockLedger() {
@@ -48,8 +51,8 @@ export default function StockLedger() {
     setSelectedItems([]);
   };
 
-  const categories = ['ALL', ...new Set(stock.map(item => item.category))];
-  const formatIDR = (num) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num);
+  const categories = useMemo(() => ['ALL', ...new Set(stock.map(item => item.category))], [stock]);
+
 
   // Parse full_pack to get conversion
   const parseFullPack = (fullPack) => {
@@ -63,7 +66,7 @@ export default function StockLedger() {
   };
 
   // Filtered stock
-  const filteredStock = stock.filter(item => {
+  const filteredStock = useMemo(() => stock.filter(item => {
     const totalQty = (item.qty_resto || 0) + (item.qty_central || 0);
     const minLevel = item.min_stock || 15;
     const matchesSearch = (item.name || '').toLowerCase().includes(search.toLowerCase()) || (item.supplier || '').toLowerCase().includes(search.toLowerCase());
@@ -73,7 +76,7 @@ export default function StockLedger() {
     else if (alertFilter === 'WARNING') matchesAlert = totalQty > 0 && totalQty < minLevel;
     else if (alertFilter === 'SAFE') matchesAlert = totalQty >= minLevel;
     return matchesSearch && matchesCat && matchesAlert;
-  });
+  }), [stock, search, catFilter, alertFilter]);
 
   // Adjust submit
   const handleAdjustSubmit = (e) => {
@@ -101,7 +104,8 @@ export default function StockLedger() {
   };
 
   // Export to Excel
-  const handleExport = () => {
+  const handleExport = async () => {
+    const XLSX = await getXLSX();
     const data = filteredStock.map(item => {
       const pack = parseFullPack(item.full_pack);
       const rQty = item.qty_resto || 0;
@@ -131,9 +135,9 @@ export default function StockLedger() {
     XLSX.writeFile(wb, `UMATIS_Stock_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const itemHistory = selectedItem
+  const itemHistory = useMemo(() => selectedItem
     ? transactions.filter(tx => tx.item_name === selectedItem.name).sort((a, b) => new Date(b.date) - new Date(a.date))
-    : [];
+    : [], [selectedItem, transactions]);
 
   return (
     <div style={{ display: 'flex', gap: '24px', position: 'relative' }}>
@@ -475,11 +479,6 @@ export default function StockLedger() {
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
-      `}</style>
 
       <BulkImport
         isOpen={showBulkImport}

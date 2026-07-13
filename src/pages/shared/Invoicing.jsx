@@ -3,6 +3,7 @@ import { Plus, X, FileText, CheckCircle, XCircle, Clock, Package, Search, Downlo
 import { useData } from '../../contexts/DataContext';
 import BulkImport from '../../components/BulkImport';
 import { api } from '../../services/api';
+import { formatIDR } from '../../services/costUtils';
 
 // Stable client-side id for editable line-item rows (stable React keys vs array index). (LOW #19)
 const rowUid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `r${Date.now()}${Math.random()}`);
@@ -22,18 +23,18 @@ export default function Invoicing() {
   const [invItems, setInvItems] = useState([blankLineItem()]);
   const [itemDropdown, setItemDropdown] = useState(null);
 
-  const formatIDR = (num) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num);
+
 
   // Unique suppliers from stock
   const suppliers = useMemo(() => [...new Set(stock.map(s => s.supplier).filter(Boolean))].sort(), [stock]);
 
   // Filtered invoices
-  const filteredInvoices = invoices.filter(inv => {
+  const filteredInvoices = useMemo(() => invoices.filter(inv => {
     const matchSearch = inv.invoice_no.toLowerCase().includes(search.toLowerCase()) ||
       inv.supplier.toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === 'ALL' || inv.status === statusFilter;
     return matchSearch && matchStatus;
-  });
+  }), [invoices, search, statusFilter]);
 
   // Add line item
   const addLineItem = () => {
@@ -58,7 +59,7 @@ export default function Invoicing() {
   };
 
   // Calculate total
-  const invTotal = invItems.reduce((acc, item) => acc + (item.qty * item.unit_price), 0);
+  const invTotal = useMemo(() => invItems.reduce((acc, item) => acc + (item.qty * item.unit_price), 0), [invItems]);
 
   // Submit new invoice
   const handleCreateSubmit = (e) => {
@@ -148,6 +149,10 @@ export default function Invoicing() {
     w.print();
   };
 
+  const pendingCount = useMemo(() => invoices.filter(i => i.status === 'DRAFT' || i.status === 'SENT').length, [invoices]);
+  const receivedCount = useMemo(() => invoices.filter(i => i.status === 'RECEIVED').length, [invoices]);
+  const totalValue = useMemo(() => invoices.reduce((a, i) => a + (i.total || 0), 0), [invoices]);
+
   return (
     <div>
       {/* Controls */}
@@ -187,21 +192,21 @@ export default function Invoicing() {
             <span className="kpi-title">Pending (Draft/Sent)</span>
             <div className="kpi-icon-wrap" style={{ background: 'var(--warning-glow)', color: 'var(--warning)' }}><Clock size={18} /></div>
           </div>
-          <div className="kpi-value" style={{ color: 'var(--warning)' }}>{invoices.filter(i => i.status === 'DRAFT' || i.status === 'SENT').length}</div>
+          <div className="kpi-value" style={{ color: 'var(--warning)' }}>{pendingCount}</div>
         </div>
         <div className="glass-card kpi-card">
           <div className="kpi-header">
             <span className="kpi-title">Received (Stocked)</span>
             <div className="kpi-icon-wrap" style={{ background: 'var(--success-glow)', color: 'var(--success)' }}><CheckCircle size={18} /></div>
           </div>
-          <div className="kpi-value" style={{ color: 'var(--success)' }}>{invoices.filter(i => i.status === 'RECEIVED').length}</div>
+          <div className="kpi-value" style={{ color: 'var(--success)' }}>{receivedCount}</div>
         </div>
         <div className="glass-card kpi-card">
           <div className="kpi-header">
             <span className="kpi-title">Total Value</span>
-            <div className="kpi-icon-wrap" style={{ background: 'rgba(132,94,247,0.1)', color: '#845ef7' }}><Package size={18} /></div>
+            <div className="kpi-icon-wrap" style={{ background: 'var(--info-glow)', color: 'var(--info)' }}><Package size={18} /></div>
           </div>
-          <div className="kpi-value" style={{ fontSize: '1.3rem' }}>{formatIDR(invoices.reduce((a, i) => a + (i.total || 0), 0))}</div>
+          <div className="kpi-value" style={{ fontSize: '1.3rem' }}>{formatIDR(totalValue)}</div>
         </div>
       </div>
 
@@ -402,11 +407,6 @@ export default function Invoicing() {
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
-      `}</style>
 
       {/* Bulk Import Modal */}
       <BulkImport

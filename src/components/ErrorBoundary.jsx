@@ -1,6 +1,10 @@
 import React from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
-import * as Sentry from '@sentry/react';
+
+let Sentry;
+if (import.meta.env.VITE_SENTRY_DSN) {
+  import('@sentry/react').then(m => { Sentry = m; });
+}
 
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -14,7 +18,7 @@ export default class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     console.error('ErrorBoundary caught:', error, errorInfo);
-    Sentry.captureException(error, { extra: errorInfo });
+    try { Sentry?.captureException(error, { extra: errorInfo }); } catch {}
     this.setState({ errorInfo });
   }
 
@@ -38,11 +42,11 @@ export default class ErrorBoundary extends React.Component {
             width: '56px', height: '56px', borderRadius: '12px',
             background: 'rgba(239,68,68,0.1)', display: 'flex',
             alignItems: 'center', justifyContent: 'center',
-            color: '#ef4444', marginBottom: '16px'
+            color: 'var(--danger)', marginBottom: '16px'
           }}>
             <AlertTriangle size={28} />
           </div>
-          <h3 style={{ color: 'white', fontSize: '1.1rem', fontWeight: 700, marginBottom: '8px' }}>
+          <h3 style={{ color: 'var(--text-inverse)', fontSize: '1.1rem', fontWeight: 700, marginBottom: '8px' }}>
             Terjadi Kesalahan Sistem
           </h3>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '8px', maxWidth: '400px' }}>
@@ -50,7 +54,7 @@ export default class ErrorBoundary extends React.Component {
           </p>
           {this.state.error && (
             <code style={{
-              fontSize: '0.72rem', color: '#ef4444',
+              fontSize: '0.72rem', color: 'var(--danger-text)',
               background: 'rgba(239,68,68,0.08)', padding: '8px 14px',
               borderRadius: '8px', marginBottom: '20px',
               maxWidth: '500px', wordBreak: 'break-all', display: 'block'

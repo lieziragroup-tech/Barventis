@@ -26,10 +26,10 @@ export const ToastProvider = ({ children }) => {
   const showInfo    = useCallback((msg) => addToast(msg, 'info'), [addToast]);
 
   const typeConfig = {
-    success: { bg: 'rgba(81,207,102,0.12)', border: 'rgba(81,207,102,0.35)', color: '#51cf66', icon: '✓' },
-    error:   { bg: 'rgba(255,107,107,0.12)', border: 'rgba(255,107,107,0.35)', color: '#ff6b6b', icon: '✕' },
-    warning: { bg: 'rgba(252,196,25,0.12)',  border: 'rgba(252,196,25,0.35)',  color: '#fcc419', icon: '⚠' },
-    info:    { bg: 'rgba(76,110,245,0.12)',  border: 'rgba(76,110,245,0.35)',  color: '#4c6ef5', icon: 'ℹ' },
+    success: { bg: 'var(--success-glow)', border: 'rgba(5, 150, 105, 0.35)', color: 'var(--success)', icon: '✓' },
+    error:   { bg: 'var(--danger-glow)', border: 'rgba(220, 38, 38, 0.35)', color: 'var(--danger)', icon: '✕' },
+    warning: { bg: 'var(--warning-glow)',  border: 'rgba(217, 119, 6, 0.35)',  color: 'var(--warning)', icon: '⚠' },
+    info:    { bg: 'var(--accent-glow)',  border: 'rgba(59, 130, 246, 0.35)',  color: 'var(--accent)', icon: 'ℹ' },
   };
 
   return (

@@ -356,7 +356,7 @@ export default function SuperAdminPanel({ tab }) {
       {success && (
         <div className="glass-card" style={{
           position: 'fixed', top: '24px', right: '24px', background: 'rgba(34, 197, 94, 0.95)',
-          color: '#fff', padding: '12px 24px', borderRadius: '8px', zIndex: 9999, border: '1px solid rgba(255,255,255,0.15)',
+          color: 'var(--text-inverse)', padding: '12px 24px', borderRadius: '8px', zIndex: 9999, border: '1px solid rgba(255,255,255,0.15)',
           display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 10px 25px rgba(0,0,0,0.3)'
         }}>
           <CheckCircle size={18} /> <span>{success}</span>
@@ -366,7 +366,7 @@ export default function SuperAdminPanel({ tab }) {
       {error && (
         <div className="glass-card" style={{
           position: 'fixed', top: '24px', right: '24px', background: 'rgba(239, 68, 68, 0.95)',
-          color: '#fff', padding: '12px 24px', borderRadius: '8px', zIndex: 9999, border: '1px solid rgba(255,255,255,0.15)',
+          color: 'var(--text-inverse)', padding: '12px 24px', borderRadius: '8px', zIndex: 9999, border: '1px solid rgba(255,255,255,0.15)',
           display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 10px 25px rgba(0,0,0,0.3)'
         }}>
           <AlertCircle size={18} /> <span>{error}</span>
@@ -381,12 +381,12 @@ export default function SuperAdminPanel({ tab }) {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <div>
-                <h3 style={{ margin: 0, color: '#fbbf24', fontSize: '1.2rem', fontWeight: 800 }}>Daftar Client Resto / Tenant</h3>
+                <h3 style={{ margin: 0, color: 'var(--warning)', fontSize: '1.2rem', fontWeight: 800 }}>Daftar Client Resto / Tenant</h3>
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                   Total terdaftar: {tenants.length} outlet tenant aktif/nonaktif.
                 </p>
               </div>
-              <button className="btn btn-primary" onClick={openTenantCreate} style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', border: 'none', color: '#fff', display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <button className="btn btn-primary" onClick={openTenantCreate} style={{ background: 'var(--warning)', border: 'none', color: 'var(--text-inverse)', display: 'flex', gap: '6px', alignItems: 'center' }}>
                 <Plus size={16} /> Buat Tenant Baru
               </button>
             </div>
@@ -419,7 +419,7 @@ export default function SuperAdminPanel({ tab }) {
                         <td style={{ textAlign: 'center', fontWeight: 600 }}>{t.recipes_count}</td>
                         <td>
                           {t.locked_until_month && t.locked_until_year ? (
-                            <span style={{ color: '#f59e0b', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ color: 'var(--warning)', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                               <Lock size={12} /> {t.locked_until_month}/{t.locked_until_year}
                             </span>
                           ) : (
@@ -428,7 +428,7 @@ export default function SuperAdminPanel({ tab }) {
                         </td>
                         <td>
                           {t.is_pos_enabled ? (
-                            <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700, background: 'rgba(59, 130, 246, 0.12)', color: '#60a5fa' }}>POS ON</span>
+                            <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700, background: 'var(--accent-glow)', color: 'var(--accent)' }}>POS ON</span>
                           ) : (
                             <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700, background: 'rgba(255, 255, 255, 0.06)', color: 'var(--text-muted)' }}>POS OFF</span>
                           )}
@@ -436,8 +436,8 @@ export default function SuperAdminPanel({ tab }) {
                         <td>
                           <span style={{
                             padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700,
-                            background: t.status === 'active' ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                            color: t.status === 'active' ? '#4ade80' : '#f87171'
+                            background: t.status === 'active' ? 'var(--success-glow)' : 'var(--danger-glow)',
+                            color: t.status === 'active' ? 'var(--success)' : 'var(--danger)'
                           }}>
                             {(t.status || '').toUpperCase()}
                           </span>
@@ -452,8 +452,8 @@ export default function SuperAdminPanel({ tab }) {
                               className="btn"
                               style={{
                                 padding: '6px 10px', fontSize: '0.75rem', border: 'none',
-                                background: t.status === 'active' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
-                                color: t.status === 'active' ? '#ef4444' : '#22c55e',
+                                background: t.status === 'active' ? 'var(--danger-glow)' : 'var(--success-glow)',
+                                color: t.status === 'active' ? 'var(--danger)' : 'var(--success)',
                                 cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
                               }}
                             >
@@ -463,7 +463,7 @@ export default function SuperAdminPanel({ tab }) {
                             <button
                               onClick={() => handleGenerateInvite(t)}
                               className="btn btn-secondary"
-                              style={{ padding: '6px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', color: '#60a5fa' }}
+                              style={{ padding: '6px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--accent)' }}
                               title="Buat Link Undangan Owner"
                             >
                               <LinkIcon size={14} /> Undangan
@@ -473,8 +473,8 @@ export default function SuperAdminPanel({ tab }) {
                               className="btn"
                               style={{
                                 padding: '6px 10px', fontSize: '0.75rem', border: 'none',
-                                background: 'rgba(239, 68, 68, 0.1)',
-                                color: '#ef4444',
+                                background: 'var(--danger-glow)',
+                                color: 'var(--danger)',
                                 cursor: t.name === 'superadmin' ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
                                 opacity: t.name === 'superadmin' ? 0.5 : 1
                               }}
@@ -504,12 +504,12 @@ export default function SuperAdminPanel({ tab }) {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <div>
-                <h3 style={{ margin: 0, color: '#fbbf24', fontSize: '1.2rem', fontWeight: 800 }}>Daftar Mapping Kolom Excel POS</h3>
+                <h3 style={{ margin: 0, color: 'var(--warning)', fontSize: '1.2rem', fontWeight: 800 }}>Daftar Mapping Kolom Excel POS</h3>
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                   Manajemen mapping kolom berkas laporan penjualan POS global untuk tenant.
                 </p>
               </div>
-              <button className="btn btn-primary" onClick={openTemplateCreate} style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', border: 'none', color: '#fff', display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <button className="btn btn-primary" onClick={openTemplateCreate} style={{ background: 'var(--warning)', border: 'none', color: 'var(--text-inverse)', display: 'flex', gap: '6px', alignItems: 'center' }}>
                 <Plus size={16} /> Buat Template Baru
               </button>
             </div>
@@ -522,15 +522,15 @@ export default function SuperAdminPanel({ tab }) {
                   <div key={tmpl.id} className="glass-card" style={{ padding: '20px', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                        <FileSpreadsheet size={20} style={{ color: '#fbbf24' }} />
+                        <FileSpreadsheet size={20} style={{ color: 'var(--warning)' }} />
                         <h4 style={{ margin: 0, color: 'var(--text-primary)', fontWeight: 800 }}>{tmpl.display_name}</h4>
                       </div>
-                      <code style={{ fontSize: '0.7rem', color: '#f59e0b', background: 'rgba(245, 158, 11, 0.08)', padding: '2px 6px', borderRadius: '4px', display: 'inline-block', marginBottom: '12px' }}>
+                      <code style={{ fontSize: '0.7rem', color: 'var(--warning)', background: 'var(--warning-glow)', padding: '2px 6px', borderRadius: '4px', display: 'inline-block', marginBottom: '12px' }}>
                         KEY: {tmpl.name}
                       </code>
                       <pre style={{
                         background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px', fontSize: '0.725rem',
-                        overflowX: 'auto', border: '1px solid rgba(255,255,255,0.03)', color: '#94a3b8', maxHeight: '180px'
+                        overflowX: 'auto', border: '1px solid rgba(255,255,255,0.03)', color: 'var(--text-muted)', maxHeight: '180px'
                       }}>
                         {JSON.stringify(tmpl.column_mapping, null, 2)}
                       </pre>
@@ -541,7 +541,7 @@ export default function SuperAdminPanel({ tab }) {
                         <Edit3 size={12} /> Edit
                       </button>
                       {tmpl.name !== 'UMATIS_DEFAULT' && (
-                        <button className="btn" style={{ padding: '6px 12px', fontSize: '0.75rem', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={() => handleDeleteTemplate(tmpl.id, tmpl.display_name)}>
+                        <button className="btn" style={{ padding: '6px 12px', fontSize: '0.75rem', background: 'var(--danger-glow)', color: 'var(--danger)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={() => handleDeleteTemplate(tmpl.id, tmpl.display_name)}>
                           <Trash2 size={12} /> Hapus
                         </button>
                       )}
@@ -557,7 +557,7 @@ export default function SuperAdminPanel({ tab }) {
         {tab === 'logs' && (
           <div>
             <div style={{ marginBottom: '20px' }}>
-              <h3 style={{ margin: 0, color: '#fbbf24', fontSize: '1.2rem', fontWeight: 800 }}>Log Audit Sistem Terpusat</h3>
+              <h3 style={{ margin: 0, color: 'var(--warning)', fontSize: '1.2rem', fontWeight: 800 }}>Log Audit Sistem Terpusat</h3>
               <p style={{ margin: '4px 0 16px 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                 Memantau semua aktivitas pengguna dari seluruh tenant secara real-time.
               </p>
@@ -572,7 +572,7 @@ export default function SuperAdminPanel({ tab }) {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     style={{
-                      width: '100%', padding: '8px 12px 8px 36px', background: '#fff',
+                      width: '100%', padding: '8px 12px 8px 36px', background: 'var(--bg-secondary)',
                       border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.825rem', outline: 'none'
                     }}
                   />
@@ -585,7 +585,7 @@ export default function SuperAdminPanel({ tab }) {
                     value={tenantFilter}
                     onChange={(e) => setTenantFilter(e.target.value)}
                     style={{
-                      width: '100%', padding: '8px 12px', background: '#fff',
+                      width: '100%', padding: '8px 12px', background: 'var(--bg-secondary)',
                       border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.825rem', outline: 'none'
                     }}
                   >
@@ -602,7 +602,7 @@ export default function SuperAdminPanel({ tab }) {
                     value={actionFilter}
                     onChange={(e) => setActionFilter(e.target.value)}
                     style={{
-                      width: '100%', padding: '8px 12px', background: '#fff',
+                      width: '100%', padding: '8px 12px', background: 'var(--bg-secondary)',
                       border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.825rem', outline: 'none'
                     }}
                   >
@@ -642,14 +642,14 @@ export default function SuperAdminPanel({ tab }) {
                         <td style={{ color: 'var(--text-muted)' }}>
                           {new Date(log.created_at).toLocaleString('id-ID', { hour12: false })}
                         </td>
-                        <td style={{ fontWeight: 600, color: '#f59e0b' }}>
+                        <td style={{ fontWeight: 600, color: 'var(--warning)' }}>
                           {log.tenants ? `${log.tenants.company_name} (@${log.tenants.name})` : 'System'}
                         </td>
                         <td>
                           <span style={{
                             padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700,
-                            background: log.action === 'LOGIN' ? 'rgba(59,130,246,0.1)' : log.action === 'RESTORE' ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.06)',
-                            color: log.action === 'LOGIN' ? '#60a5fa' : log.action === 'RESTORE' ? '#f87171' : 'white'
+                            background: log.action === 'LOGIN' ? 'var(--accent-glow)' : log.action === 'RESTORE' ? 'var(--danger-glow)' : 'rgba(255,255,255,0.06)',
+                            color: log.action === 'LOGIN' ? 'var(--accent)' : log.action === 'RESTORE' ? 'var(--danger)' : 'var(--text-inverse)'
                           }}>
                             {log.action}
                           </span>
@@ -686,7 +686,7 @@ export default function SuperAdminPanel({ tab }) {
           ==================================================================== */}
       {showTenantModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
-          <div className="glass-card" style={{ width: '100%', maxWidth: '460px', padding: '28px', border: '1px solid rgba(245,158,11,0.2)' }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: '460px', padding: '28px', border: '1px solid rgba(217, 119, 6, 0.15)' }}>
             <h4 style={{ margin: '0 0 16px 0', color: 'var(--text-primary)', fontWeight: 800, fontSize: '1.1rem' }}>
               {selectedTenant ? 'Edit Konfigurasi Tenant' : 'Daftarkan Tenant Baru'}
             </h4>
@@ -704,7 +704,7 @@ export default function SuperAdminPanel({ tab }) {
                   required
                   disabled={!!selectedTenant} // Tenant ID tidak bisa diganti setelah dibuat
                   style={{
-                    width: '100%', padding: '9px 12px', background: '#fff',
+                    width: '100%', padding: '9px 12px', background: 'var(--bg-secondary)',
                     border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none'
                   }}
                 />
@@ -726,7 +726,7 @@ export default function SuperAdminPanel({ tab }) {
                   onChange={(e) => setTenantForm({ ...tenantForm, company_name: e.target.value })}
                   required
                   style={{
-                    width: '100%', padding: '9px 12px', background: '#fff',
+                    width: '100%', padding: '9px 12px', background: 'var(--bg-secondary)',
                     border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none'
                   }}
                 />
@@ -746,7 +746,7 @@ export default function SuperAdminPanel({ tab }) {
                   onChange={(e) => setTenantForm({ ...tenantForm, overhead_pct: e.target.value })}
                   required
                   style={{
-                    width: '100%', padding: '9px 12px', background: '#fff',
+                    width: '100%', padding: '9px 12px', background: 'var(--bg-secondary)',
                     border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none'
                   }}
                 />
@@ -755,7 +755,7 @@ export default function SuperAdminPanel({ tab }) {
               {selectedTenant && (
                 <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
-                    <Lock size={14} style={{ color: '#f59e0b' }} />
+                    <Lock size={14} style={{ color: 'var(--warning)' }} />
                     <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>Kunci Edit Periode Bulanan</span>
                   </div>
                   <div style={{ display: 'flex', gap: '10px' }}>
@@ -769,7 +769,7 @@ export default function SuperAdminPanel({ tab }) {
                         value={tenantForm.locked_until_month}
                         onChange={(e) => setTenantForm({ ...tenantForm, locked_until_month: e.target.value })}
                         style={{
-                          width: '100%', padding: '6px 10px', background: '#fff',
+                          width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)',
                           border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none'
                         }}
                       />
@@ -784,7 +784,7 @@ export default function SuperAdminPanel({ tab }) {
                         value={tenantForm.locked_until_year}
                         onChange={(e) => setTenantForm({ ...tenantForm, locked_until_year: e.target.value })}
                         style={{
-                          width: '100%', padding: '6px 10px', background: '#fff',
+                          width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)',
                           border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none'
                         }}
                       />
@@ -798,7 +798,7 @@ export default function SuperAdminPanel({ tab }) {
 
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '10px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowTenantModal(false)}>Batal</button>
-                <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', border: 'none' }}>
+                <button type="submit" className="btn btn-primary" style={{ background: 'var(--warning)', border: 'none' }}>
                   Simpan
                 </button>
               </div>
@@ -812,7 +812,7 @@ export default function SuperAdminPanel({ tab }) {
           ==================================================================== */}
       {showTemplateModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
-          <div className="glass-card" style={{ width: '100%', maxWidth: '600px', padding: '28px', border: '1px solid rgba(245,158,11,0.2)' }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: '600px', padding: '28px', border: '1px solid rgba(217, 119, 6, 0.15)' }}>
             <h4 style={{ margin: '0 0 16px 0', color: 'var(--text-primary)', fontWeight: 800, fontSize: '1.1rem' }}>
               {selectedTemplate ? 'Edit Template POS Mapping' : 'Buat Template POS Baru'}
             </h4>
@@ -830,7 +830,7 @@ export default function SuperAdminPanel({ tab }) {
                   required
                   disabled={!!selectedTemplate}
                   style={{
-                    width: '100%', padding: '9px 12px', background: '#fff',
+                    width: '100%', padding: '9px 12px', background: 'var(--bg-secondary)',
                     border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none'
                   }}
                 />
@@ -847,7 +847,7 @@ export default function SuperAdminPanel({ tab }) {
                   onChange={(e) => setTemplateForm({ ...templateForm, display_name: e.target.value })}
                   required
                   style={{
-                    width: '100%', padding: '9px 12px', background: '#fff',
+                    width: '100%', padding: '9px 12px', background: 'var(--bg-secondary)',
                     border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none'
                   }}
                 />
@@ -864,7 +864,7 @@ export default function SuperAdminPanel({ tab }) {
                   required
                   style={{
                     width: '100%', padding: '9px 12px', background: 'rgba(15,23,42,0.6)',
-                    border: '1px solid var(--border)', borderRadius: '6px', color: '#fbbf24', fontSize: '0.8rem',
+                    border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--warning)', fontSize: '0.8rem',
                     fontFamily: 'monospace', outline: 'none', resize: 'vertical'
                   }}
                 />
@@ -875,7 +875,7 @@ export default function SuperAdminPanel({ tab }) {
 
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '10px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowTemplateModal(false)}>Batal</button>
-                <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', border: 'none' }}>
+                <button type="submit" className="btn btn-primary" style={{ background: 'var(--warning)', border: 'none' }}>
                   Simpan
                 </button>
               </div>

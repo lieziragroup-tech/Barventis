@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState, useEffect } from 'react';
 import {
   Activity, ShieldCheck, RefreshCw, Calculator, Users, AlertTriangle,
@@ -8,7 +9,7 @@ import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 
 // Reusable KPI card (module-scope so it isn't recreated on every render).
-function Kpi({ title, value, icon, color, footer, valueColor, loading }) {
+const Kpi = React.memo(function Kpi({ title, value, icon, color, footer, valueColor, loading }) {
   return (
     <div className="glass-card kpi-card">
       <div className="kpi-header">
@@ -21,7 +22,7 @@ function Kpi({ title, value, icon, color, footer, valueColor, loading }) {
       <div className="kpi-footer"><span style={{ color: 'var(--text-secondary)' }}>{footer}</span></div>
     </div>
   );
-}
+});
 
 export default function Maintenance() {
   const { activeUser } = useAuth();
@@ -229,13 +230,13 @@ export default function Maintenance() {
       </div>
 
       <div className="kpi-grid" style={{ marginBottom: '28px' }}>
-        <Kpi loading={healthLoading} title="Bahan Baku Aktif" value={health?.materials ?? 0} icon={<Package size={20} />} color="#4c6ef5" footer="Total material aktif" />
-        <Kpi loading={healthLoading} title="Stok Menipis" value={health?.lowStock ?? 0} icon={<AlertTriangle size={20} />} color="#f59e0b"
+        <Kpi loading={healthLoading} title="Bahan Baku Aktif" value={health?.materials ?? 0} icon={<Package size={20} />} color="var(--accent)" footer="Total material aktif" />
+        <Kpi loading={healthLoading} title="Stok Menipis" value={health?.lowStock ?? 0} icon={<AlertTriangle size={20} />} color="var(--warning)"
           valueColor={health?.lowStock ? 'var(--warning)' : undefined} footer="Di bawah minimum" />
-        <Kpi loading={healthLoading} title="Resep COGS" value={health?.recipes ?? 0} icon={<ChefHat size={20} />} color="#845ef7" footer="Total menu" />
-        <Kpi loading={healthLoading} title="PO Tertunda" value={health?.pendingInvoices ?? 0} icon={<FileText size={20} />} color="#10b981" footer="Draft / Sent" />
-        <Kpi loading={healthLoading} title="Backup Terakhir" value={fmtDateTime(health?.lastBackup)} icon={<Database size={20} />} color="#4c6ef5" footer="Arsip cadangan" />
-        <Kpi loading={healthLoading} title="Opname Terakhir" value={fmtDateTime(health?.lastOpname)} icon={<Clock size={20} />} color="#f59e0b" footer="Audit stok fisik" />
+        <Kpi loading={healthLoading} title="Resep COGS" value={health?.recipes ?? 0} icon={<ChefHat size={20} />} color="var(--info)" footer="Total menu" />
+        <Kpi loading={healthLoading} title="PO Tertunda" value={health?.pendingInvoices ?? 0} icon={<FileText size={20} />} color="var(--success)" footer="Draft / Sent" />
+        <Kpi loading={healthLoading} title="Backup Terakhir" value={fmtDateTime(health?.lastBackup)} icon={<Database size={20} />} color="var(--accent)" footer="Arsip cadangan" />
+        <Kpi loading={healthLoading} title="Opname Terakhir" value={fmtDateTime(health?.lastOpname)} icon={<Clock size={20} />} color="var(--warning)" footer="Audit stok fisik" />
       </div>
 
       {/* OWNER-ONLY MAINTENANCE TOOLS */}
@@ -320,7 +321,7 @@ export default function Maintenance() {
                       value={settings.company_name}
                       onChange={(e) => setSettings({ ...settings, company_name: e.target.value })}
                       required
-                      style={{ width: '100%', padding: '6px 10px', background: '#fff', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', outline: 'none' }}
+                      style={{ width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', outline: 'none' }}
                     />
                   </div>
                   <div>
@@ -333,7 +334,7 @@ export default function Maintenance() {
                       value={settings.overhead_pct}
                       onChange={(e) => setSettings({ ...settings, overhead_pct: e.target.value })}
                       required
-                      style={{ width: '100%', padding: '6px 10px', background: '#fff', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', outline: 'none' }}
+                      style={{ width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', outline: 'none' }}
                     />
                   </div>
                   <div style={{ display: 'flex', gap: '10px' }}>
@@ -346,7 +347,7 @@ export default function Maintenance() {
                         placeholder="e.g. 4"
                         value={settings.locked_until_month}
                         onChange={(e) => setSettings({ ...settings, locked_until_month: e.target.value })}
-                        style={{ width: '100%', padding: '6px 10px', background: '#fff', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', outline: 'none' }}
+                        style={{ width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', outline: 'none' }}
                       />
                     </div>
                     <div style={{ flex: 1 }}>
@@ -358,7 +359,7 @@ export default function Maintenance() {
                         placeholder="e.g. 2026"
                         value={settings.locked_until_year}
                         onChange={(e) => setSettings({ ...settings, locked_until_year: e.target.value })}
-                        style={{ width: '100%', padding: '6px 10px', background: '#fff', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', outline: 'none' }}
+                        style={{ width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', outline: 'none' }}
                       />
                     </div>
                   </div>
@@ -385,7 +386,7 @@ export default function Maintenance() {
                             value={settings.whatsapp_number}
                             onChange={(e) => setSettings({ ...settings, whatsapp_number: e.target.value })}
                             required={settings.whatsapp_enabled}
-                            style={{ width: '100%', padding: '6px 10px', background: '#fff', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', outline: 'none' }}
+                            style={{ width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', outline: 'none' }}
                           />
                         </div>
                         <div>
@@ -396,7 +397,7 @@ export default function Maintenance() {
                             value={settings.whatsapp_token}
                             onChange={(e) => setSettings({ ...settings, whatsapp_token: e.target.value })}
                             required={settings.whatsapp_enabled}
-                            style={{ width: '100%', padding: '6px 10px', background: '#fff', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', outline: 'none' }}
+                            style={{ width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', outline: 'none' }}
                           />
                         </div>
                       </div>
@@ -464,7 +465,7 @@ export default function Maintenance() {
                                 onChange={(e) => handleRoleChange(u, e.target.value)}
                                 title={isSelf ? 'Tidak bisa mengubah role sendiri' : 'Ubah role pengguna'}
                                 style={{ padding: '6px 10px', background: 'rgba(15,23,42,0.8)', border: '1px solid var(--border)',
-                                  borderRadius: '6px', color: '#fff', fontSize: '0.8rem', fontWeight: 600,
+                                  borderRadius: '6px', color: 'var(--text-inverse)', fontSize: '0.8rem', fontWeight: 600,
                                   cursor: (savingUserId === u.id || isSelf) ? 'not-allowed' : 'pointer', opacity: isSelf ? 0.5 : 1 }}
                               >
                                 <option value="Admin / Owner">Admin / Owner</option>

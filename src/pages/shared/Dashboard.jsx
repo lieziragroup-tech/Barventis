@@ -1,20 +1,21 @@
 import { useMemo } from 'react';
 import { 
-  Package, UploadCloud, FileText, ArrowRight, TrendingUp, AlertTriangle, Database
+  Package, UploadCloud, FileText, ArrowRight, TrendingUp, AlertTriangle, Database,
+  TrendingDown, DollarSign, CheckCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
+import { formatIDR } from '../../services/costUtils';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
-import { TrendingDown, DollarSign, CheckCircle } from 'lucide-react';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { stock, transactions } = useData();
-  const formatIDR = (num) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num);
+
 
   // KPI Calculations
-  const stockValuation = stock.reduce((acc, item) => acc + ((item.qty_resto || 0) + (item.qty_central || 0)) * (item.new_price || item.price || 0), 0);
-  const lowStockItems = stock.filter(item => ((item.qty_resto || 0) + (item.qty_central || 0)) < (item.min_stock || 15));
+  const stockValuation = useMemo(() => stock.reduce((acc, item) => acc + ((item.qty_resto || 0) + (item.qty_central || 0)) * (item.new_price || item.price || 0), 0), [stock]);
+  const lowStockItems = useMemo(() => stock.filter(item => ((item.qty_resto || 0) + (item.qty_central || 0)) < (item.min_stock || 15)), [stock]);
 
   // Calculate real metrics from live transaction data
   const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
@@ -31,7 +32,7 @@ export default function Dashboard() {
       .reduce((sum, tx) => sum + Math.abs(parseFloat(tx.amount || 0)), 0);
   }, [transactions, currentMonth]);
 
-  const realCostPct = realSalesRevenue > 0 ? (realCogsCost / realSalesRevenue) * 100 : 0;
+  const realCostPct = useMemo(() => realSalesRevenue > 0 ? (realCogsCost / realSalesRevenue) * 100 : 0, [realSalesRevenue, realCogsCost]);
 
   // Real 30-day trend from transactions
   const realTrendData = useMemo(() => {
@@ -75,13 +76,15 @@ export default function Dashboard() {
   const contributorsData = topContributors;
 
   // Category breakdown
-  const categoryVals = {};
-  stock.forEach(item => {
-    const val = ((item.qty_resto || 0) + (item.qty_central || 0)) * (item.new_price || item.price || 0);
-    categoryVals[item.category] = (categoryVals[item.category] || 0) + val;
-  });
-  const pieData = Object.entries(categoryVals).map(([name, value]) => ({ name, value: Math.round(value) })).sort((a, b) => b.value - a.value).slice(0, 6);
-  const COLORS = ['#4c6ef5', '#51cf66', '#fcc419', '#845ef7', '#ff6b6b', '#20c997'];
+  const pieData = useMemo(() => {
+    const categoryVals = {};
+    stock.forEach(item => {
+      const val = ((item.qty_resto || 0) + (item.qty_central || 0)) * (item.new_price || item.price || 0);
+      categoryVals[item.category] = (categoryVals[item.category] || 0) + val;
+    });
+    return Object.entries(categoryVals).map(([name, value]) => ({ name, value: Math.round(value) })).sort((a, b) => b.value - a.value).slice(0, 6);
+  }, [stock]);
+  const COLORS = ['#3b82f6', '#059669', '#d97706', '#7c3aed', '#dc2626', '#0d9488'];
 
   const tooltipStyle = { background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-primary)', boxShadow: 'var(--card-shadow)' };
 
@@ -92,7 +95,7 @@ export default function Dashboard() {
         <div className="glass-card kpi-card">
           <div className="kpi-header">
             <span className="kpi-title">Beverage Cost %</span>
-            <div className="kpi-icon-wrap" style={{ background: 'rgba(81,207,102,0.1)', color: 'var(--success)' }}>
+            <div className="kpi-icon-wrap" style={{ background: 'var(--success-glow)', color: 'var(--success)' }}>
               <TrendingDown size={20} />
             </div>
           </div>
@@ -114,7 +117,7 @@ export default function Dashboard() {
         <div className="glass-card kpi-card">
           <div className="kpi-header">
             <span className="kpi-title">Stock Valuation</span>
-            <div className="kpi-icon-wrap" style={{ background: 'rgba(132,94,247,0.1)', color: '#845ef7' }}>
+            <div className="kpi-icon-wrap" style={{ background: 'var(--info-glow)', color: 'var(--info)' }}>
               <Package size={20} />
             </div>
           </div>
@@ -125,7 +128,7 @@ export default function Dashboard() {
         <div className="glass-card kpi-card" onClick={() => navigate('./stock')} style={{ cursor: 'pointer' }}>
           <div className="kpi-header">
             <span className="kpi-title">Low Stock Items</span>
-            <div className="kpi-icon-wrap" style={{ background: lowStockItems.length > 0 ? 'rgba(255,107,107,0.1)' : 'rgba(81,207,102,0.1)', color: lowStockItems.length > 0 ? 'var(--danger)' : 'var(--success)' }}>
+            <div className="kpi-icon-wrap" style={{ background: lowStockItems.length > 0 ? 'var(--danger-glow)' : 'var(--success-glow)', color: lowStockItems.length > 0 ? 'var(--danger)' : 'var(--success)' }}>
               <AlertTriangle size={20} />
             </div>
           </div>
@@ -145,33 +148,29 @@ export default function Dashboard() {
             <span>Beverage Cost Trend (30 Days)</span>
             <span className="badge badge-info">Target: 27%</span>
           </div>
-          <div style={{ width: '100%', height: 300 }}>
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-              <LineChart data={trendData} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="name" stroke="var(--text-muted)" tick={{ fontSize: 12 }} />
-                <YAxis domain={[20, 32]} stroke="var(--text-muted)" tick={{ fontSize: 12 }} unit="%" />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Legend verticalAlign="top" height={36} />
-                <Line type="monotone" dataKey="cost" name="Beverage Cost %" stroke="#4c6ef5" strokeWidth={2} dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="target" name="Target" stroke="#ff6b6b" strokeDasharray="5 5" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={trendData} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="name" stroke="var(--text-muted)" tick={{ fontSize: 12 }} />
+              <YAxis domain={[20, 32]} stroke="var(--text-muted)" tick={{ fontSize: 12 }} unit="%" />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Legend verticalAlign="top" height={36} />
+              <Line type="monotone" dataKey="cost" name="Beverage Cost %" stroke="var(--accent)" strokeWidth={2} dot={{ r: 4 }} />
+              <Line type="monotone" dataKey="target" name="Target" stroke="var(--danger)" strokeDasharray="5 5" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
 
         <div className="glass-card" style={{ padding: '24px' }}>
           <div className="chart-title">Stock Value by Category</div>
-          <div style={{ width: '100%', height: 260 }}>
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-              <PieChart>
-                <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3} dataKey="value">
-                  {pieData.map((entry, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip formatter={(v) => formatIDR(v)} contentStyle={tooltipStyle} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3} dataKey="value">
+                {pieData.map((entry, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+              </Pie>
+              <Tooltip formatter={(v) => formatIDR(v)} contentStyle={tooltipStyle} />
+            </PieChart>
+          </ResponsiveContainer>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', marginTop: '8px' }}>
             {pieData.map((entry, i) => (
               <div key={entry.name} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem' }}>
@@ -187,17 +186,15 @@ export default function Dashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px' }}>
         <div className="glass-card" style={{ padding: '24px' }}>
           <div className="chart-title">Top 5 Cost Contributors</div>
-          <div style={{ width: '100%', height: 300 }}>
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-              <BarChart data={contributorsData} layout="vertical" margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis type="number" stroke="var(--text-muted)" tickFormatter={(v) => `${(v / 1000000).toFixed(1)}M`} tick={{ fontSize: 11 }} />
-                <YAxis dataKey="name" type="category" stroke="var(--text-muted)" tick={{ fontSize: 10 }} width={110} />
-                <Tooltip formatter={(v) => formatIDR(v)} contentStyle={tooltipStyle} />
-                <Bar dataKey="cost" fill="#fcc419" radius={[0, 4, 4, 0]} name="Pemakaian (IDR)" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={contributorsData} layout="vertical" margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis type="number" stroke="var(--text-muted)" tickFormatter={(v) => `${(v / 1000000).toFixed(1)}M`} tick={{ fontSize: 11 }} />
+              <YAxis dataKey="name" type="category" stroke="var(--text-muted)" tick={{ fontSize: 10 }} width={110} />
+              <Tooltip formatter={(v) => formatIDR(v)} contentStyle={tooltipStyle} />
+              <Bar dataKey="cost" fill="var(--warning)" radius={[0, 4, 4, 0]} name="Pemakaian (IDR)" />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
 
         <div className="glass-card" style={{ padding: '24px' }}>
@@ -209,7 +206,7 @@ export default function Dashboard() {
             {lowStockItems.length > 0 ? lowStockItems.slice(0, 8).map(item => {
               const total = (item.qty_resto || 0) + (item.qty_central || 0);
               return (
-                <div key={item.id ?? item.name} style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,107,107,0.03)', border: '1px solid rgba(255,107,107,0.1)', padding: '10px 14px', borderRadius: '8px' }}>
+                <div key={item.id ?? item.name} style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(220, 38, 38, 0.03)', border: '1px solid rgba(220, 38, 38, 0.1)', padding: '10px 14px', borderRadius: '8px' }}>
                   <AlertTriangle size={16} style={{ color: 'var(--danger)', flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>

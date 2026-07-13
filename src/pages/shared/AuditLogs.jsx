@@ -1,14 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   History, Search, ShieldAlert, Calendar,
   ArrowRight, Clock, Laptop, RefreshCw, X, AlertTriangle, CheckCircle, Info
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { getPendingLogs, flushLogs } from '../../services/activityLogService';
 
 export default function AuditLogs() {
   const { activeUser } = useAuth();
   const [logs, setLogs] = useState([]);
+  const [pendingCount, setPendingCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -17,7 +19,6 @@ export default function AuditLogs() {
 
   // Fetch logs on mount
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/immutability
     fetchLogs();
   }, []);
 
@@ -25,16 +26,38 @@ export default function AuditLogs() {
     setLoading(true);
     setError(null);
     try {
-      // BUG-AL-01: Pass limit=500 so we get meaningful history, not just 100.
-      // The api.getAuditLogs(filters) already supports this filter object.
-      const data = await api.getAuditLogs({ limit: 500 });
-      setLogs(data);
+      const [syncedData] = await Promise.all([
+        api.getAuditLogs({ limit: 500 }).catch(() => []),
+      ]);
+
+      // Merge pending local logs with synced logs
+      const pending = getPendingLogs().map(e => ({
+        id: e.id,
+        action: e.action,
+        description: e.description,
+        username: activeUser?.name || 'User',
+        role: activeUser?.role || 'Staff',
+        created_at: e.created_at,
+        _pending: true,
+      }));
+
+      setPendingCount(pending.length);
+
+      const merged = [...pending, ...syncedData]
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+      setLogs(merged);
     } catch (err) {
       console.error("Error fetching audit logs:", err);
       setError(err.message || "Gagal memuat jejak audit dari server.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSyncNow = async () => {
+    await flushLogs();
+    await fetchLogs();
   };
 
   const getActionColor = (action) => {
@@ -101,7 +124,7 @@ export default function AuditLogs() {
   };
 
   // Filters logic
-  const filteredLogs = logs.filter(log => {
+  const filteredLogs = useMemo(() => logs.filter(log => {
     const matchesSearch = 
       log.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       log.username?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -109,16 +132,16 @@ export default function AuditLogs() {
 
     if (categoryFilter === 'ALL') return matchesSearch;
     return getActionCategory(log.action) === categoryFilter && matchesSearch;
-  });
+  }), [logs, searchQuery, categoryFilter]);
 
   // Calculate statistics
-  const totalLogsCount = logs.length;
-  const uniqueUsers = new Set(logs.map(l => l.username)).size;
-  const securityAlerts = logs.filter(l => {
+  const totalLogsCount = useMemo(() => logs.length, [logs]);
+  const uniqueUsers = useMemo(() => new Set(logs.map(l => l.username)).size, [logs]);
+  const securityAlerts = useMemo(() => logs.filter(l => {
     const act = (l.action || '').toUpperCase();
     return act.includes('DELETE') || act.includes('CANCEL');
-  }).length;
-  const syncsCount = logs.filter(l => (l.action || '').toUpperCase().includes('SYNC')).length;
+  }).length, [logs]);
+  const syncsCount = useMemo(() => logs.filter(l => (l.action || '').toUpperCase().includes('SYNC')).length, [logs]);
 
   return (
     <div className="audit-logs-container">
@@ -248,7 +271,7 @@ export default function AuditLogs() {
                 style={{
                   padding: '8px 16px',
                   background: categoryFilter === cat.id ? 'var(--accent)' : 'var(--bg-primary)',
-                  color: categoryFilter === cat.id ? '#fff' : 'var(--text-secondary)',
+                  color: categoryFilter === cat.id ? 'var(--text-inverse)' : 'var(--text-secondary)',
                   border: '1px solid',
                   borderColor: categoryFilter === cat.id ? 'var(--accent)' : 'var(--border)',
                   borderRadius: '30px',
@@ -273,6 +296,18 @@ export default function AuditLogs() {
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
             Segarkan
           </button>
+
+          {/* Pending Sync Badge + Sync Now */}
+          {pendingCount > 0 && (
+            <button
+              className="btn btn-primary"
+              onClick={handleSyncNow}
+              style={{ padding: '10px 14px', height: '42px', display: 'flex', gap: '8px', alignItems: 'center', fontSize: '0.8rem' }}
+            >
+              <RefreshCw size={14} />
+              Sync {pendingCount} Logs
+            </button>
+          )}
         </div>
       </div>
 
@@ -447,7 +482,7 @@ export default function AuditLogs() {
                 cursor: 'pointer',
                 transition: 'color 0.2s'
               }}
-              onMouseEnter={(e) => e.target.style.color = '#fff'}
+              onMouseEnter={(e) => e.target.style.color = 'var(--text-inverse)'}
               onMouseLeave={(e) => e.target.style.color = 'var(--text-muted)'}
             >
               <X size={20} />

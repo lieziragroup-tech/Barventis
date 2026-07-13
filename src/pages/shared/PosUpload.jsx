@@ -1,12 +1,17 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Upload, FileSpreadsheet, CheckCircle,
   MapPin, Calendar, Database, ShieldAlert, Sparkles, X, Settings
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
-import confetti from 'canvas-confetti';
+
+let _confetti;
+const getConfetti = async () => { if (!_confetti) _confetti = (await import('canvas-confetti')).default; return _confetti; };
+
+let _XLSX;
+const getXLSX = async () => { if (!_XLSX) _XLSX = await import('xlsx'); return _XLSX; };
 import { api } from '../../services/api';
 import { useData } from '../../contexts/DataContext';
+import { formatIDR } from '../../services/costUtils';
 
 export default function PosUpload() {
   const { recipes, handleProcessPosSales } = useData();
@@ -20,6 +25,7 @@ export default function PosUpload() {
   const [mappingMenuName, setMappingMenuName] = useState('');
   const [selectedRecipeName, setSelectedRecipeName] = useState('');
   const [uploadStatus, setUploadStatus] = useState(null); // 'success', 'warning', 'error'
+  const [duplicateInfo, setDuplicateInfo] = useState(null);
   const fileInputRef = useRef(null);
 
   // POS Custom templates states
@@ -39,6 +45,25 @@ export default function PosUpload() {
     // eslint-disable-next-line react-hooks/immutability
     loadTemplateConfig();
   }, []);
+
+  useEffect(() => {
+    if (!parsedData?.sales) { setMappedSales([]); return; }
+    const recipeMap = {};
+    (recipes || []).forEach(r => { recipeMap[r.menu_name] = r; });
+    setMappedSales(parsedData.sales.map(row => {
+      const recipe = recipeMap[row.menu_name];
+      return {
+        salesDate: row.sales_date,
+        menuName: row.menu_name,
+        menuCode: row.menu_code,
+        qty: row.qty,
+        total: row.total_sales,
+        isMapped: !!recipe,
+        recipeName: recipe?.menu_name || '',
+        totalCost: recipe ? recipe.basic_cost * row.qty : 0
+      };
+    }));
+  }, [parsedData, recipes]);
 
   const loadTemplateConfig = async () => {
     try {
@@ -84,8 +109,14 @@ export default function PosUpload() {
 
   const handleMapSubmit = (e) => {
     e.preventDefault();
-    // This would typically save mapping to backend or local state
-    // For now we just close the modal
+    const recipe = (recipes || []).find(r => r.menu_name === selectedRecipeName);
+    if (recipe) {
+      setMappedSales(prev => prev.map(s =>
+        s.menuName === mappingMenuName
+          ? { ...s, isMapped: true, recipeName: recipe.menu_name, totalCost: recipe.basic_cost * s.qty }
+          : s
+      ));
+    }
     setShowMappingModal(false);
   };
 
@@ -117,6 +148,7 @@ export default function PosUpload() {
 
   // 2. Excel Parsing Engine
   const processExcelFile = async (excelFile) => {
+    const XLSX = await getXLSX();
     setFile(excelFile);
     setLoading(true);
     setUploadStatus(null);
@@ -253,15 +285,16 @@ export default function PosUpload() {
         // --- Check Duplicates ---
         const { isDuplicate, message } = await api.checkPosSalesDuplicate(periodMonth, periodYear);
         if (isDuplicate) {
-          window._duplicateInfoCache = { mappedSales: salesRows, filename: excelFile.name, totalQty, totalRevenue, periodMonth, periodYear };
+          setDuplicateInfo({ sales: salesRows, filename: excelFile.name, branchName: 'RESTO OUTLET', totalQty, totalRevenue, periodMonth, periodYear, periodStr: `${periodMonth}/${periodYear}` });
           setUploadStatus({ type: 'warning', message });
           setLoading(false);
-          return; // Wait for user to confirm in modal
+          return;
         }
 
         setParsedData({
           sales: salesRows,
           filename: excelFile.name,
+          branchName: 'RESTO OUTLET',
           totalQty,
           totalRevenue,
           periodStr: `${periodMonth}/${periodYear}`
@@ -287,6 +320,7 @@ export default function PosUpload() {
   };
 
   const handleCommitSales = async () => {
+    const confetti = await getConfetti();
     setLoading(true);
     try {
       await onProcessPosSales(mappedSales, parsedData.filename);
@@ -308,10 +342,8 @@ export default function PosUpload() {
     }
   };
 
-  // Format Currency
-  const formatIDR = (num) => {
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num);
-  };
+
+
 
   const unmappedItems = mappedSales.filter(s => !s.isMapped);
   const unmappedUniqueNames = [...new Set(unmappedItems.map(s => s.menuName))];
@@ -358,6 +390,53 @@ export default function PosUpload() {
           </select>
         </div>
       </div>
+
+      {/* Upload Status Alert */}
+      {uploadStatus && (
+        <div style={{
+          padding: '14px 20px', borderRadius: '12px', marginBottom: '20px',
+          display: 'flex', alignItems: 'center', gap: '12px',
+          background: uploadStatus.type === 'success' ? 'rgba(16,185,129,0.06)' : uploadStatus.type === 'warning' ? 'rgba(245,158,11,0.06)' : 'rgba(239,68,68,0.06)',
+          border: `1px solid ${uploadStatus.type === 'success' ? 'rgba(16,185,129,0.2)' : uploadStatus.type === 'warning' ? 'rgba(245,158,11,0.2)' : 'rgba(239,68,68,0.2)'}`
+        }}>
+          {uploadStatus.type === 'success' && <CheckCircle size={18} style={{ color: 'var(--success)' }} />}
+          {uploadStatus.type === 'warning' && <ShieldAlert size={18} style={{ color: 'var(--warning)' }} />}
+          {uploadStatus.type === 'error' && <ShieldAlert size={18} style={{ color: 'var(--danger)' }} />}
+          <span style={{ flex: 1, fontSize: '0.875rem', color: 'var(--text-primary)' }}>{uploadStatus.message}</span>
+          <button onClick={() => { setUploadStatus(null); setDuplicateInfo(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={16} /></button>
+        </div>
+      )}
+
+      {/* Duplicate Confirmation */}
+      {duplicateInfo && (
+        <div style={{
+          padding: '20px', borderRadius: '12px', marginBottom: '20px',
+          background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+        }}>
+          <div>
+            <h4 style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--warning)', marginBottom: '4px' }}>Data Duplikat Terdeteksi</h4>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              Data POS untuk periode {duplicateInfo.periodStr} sudah ada di sistem. Tetap upload dan timpa data lama?
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
+            <button className="btn btn-secondary" onClick={() => { setDuplicateInfo(null); setUploadStatus(null); }}>Batal</button>
+            <button className="btn btn-warning" onClick={() => {
+              setParsedData({
+                sales: duplicateInfo.sales,
+                filename: duplicateInfo.filename,
+                branchName: duplicateInfo.branchName,
+                totalQty: duplicateInfo.totalQty,
+                totalRevenue: duplicateInfo.totalRevenue,
+                periodStr: duplicateInfo.periodStr
+              });
+              setDuplicateInfo(null);
+              setUploadStatus(null);
+            }}>Ya, Timpa</button>
+          </div>
+        </div>
+      )}
 
       {/* File Uploader area */}
       {!parsedData ? (
@@ -422,17 +501,17 @@ export default function PosUpload() {
               </div>
               <div>
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Period Span</div>
-                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{parsedData.period}</div>
+                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{parsedData.periodStr}</div>
               </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: '160px' }}>
-              <div className="kpi-icon-wrap" style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6' }}>
+              <div className="kpi-icon-wrap" style={{ background: 'var(--info-glow)', color: 'var(--info)' }}>
                 <Database size={18} />
               </div>
               <div>
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Total POS Records</div>
-                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{parsedData.totalRows} Rows</div>
+                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{parsedData.totalQty} Rows</div>
               </div>
             </div>
           </div>

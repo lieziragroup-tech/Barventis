@@ -1,5 +1,7 @@
 import { useState, useRef } from 'react';
-import * as XLSX from 'xlsx';
+
+let _XLSX;
+const getXLSX = async () => { if (!_XLSX) _XLSX = await import('xlsx'); return _XLSX; };
 import { 
   UploadCloud, FileSpreadsheet, Download, CheckCircle, 
   AlertTriangle, X, ChevronRight, Loader
@@ -45,7 +47,8 @@ export default function BulkImport({
   };
 
   // Generate and download template Excel in browser
-  const handleDownloadTemplate = () => {
+  const handleDownloadTemplate = async () => {
+    const XLSX = await getXLSX();
     const wb = XLSX.utils.book_new();
     
     // Header row
@@ -94,8 +97,9 @@ export default function BulkImport({
   };
 
   // Parse uploaded Excel file
-  const handleFileUpload = (file) => {
+  const handleFileUpload = async (file) => {
     if (!file) return;
+    const XLSX = await getXLSX();
     setLoading(true);
     setErrors([]);
     
@@ -211,7 +215,7 @@ export default function BulkImport({
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
               <FileSpreadsheet size={20} style={{ color: 'var(--accent)' }} />
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'white', margin: 0 }}>{title}</h3>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-inverse)', margin: 0 }}>{title}</h3>
             </div>
             <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0 }}>{description}</p>
           </div>
@@ -233,9 +237,9 @@ export default function BulkImport({
                   background: active ? 'var(--accent)' : 'rgba(255,255,255,0.08)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: '0.7rem', fontWeight: 700,
-                  color: active ? '#fff' : 'var(--text-muted)'
+                  color: active ? 'var(--text-inverse)' : 'var(--text-muted)'
                 }}>{i + 1}</div>
-                <span style={{ fontSize: '0.78rem', color: active ? 'white' : 'var(--text-muted)', fontWeight: active ? 600 : 400 }}>{s}</span>
+                <span style={{ fontSize: '0.78rem', color: active ? 'var(--text-inverse)' : 'var(--text-muted)', fontWeight: active ? 600 : 400 }}>{s}</span>
                 {i < 2 && <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />}
               </div>
             );
@@ -281,7 +285,7 @@ export default function BulkImport({
               ) : (
                 <>
                   <UploadCloud size={32} style={{ color: 'var(--text-muted)', marginBottom: '12px' }} />
-                  <p style={{ color: 'white', fontWeight: 600, marginBottom: '4px' }}>Drop file Excel di sini atau klik untuk browse</p>
+                  <p style={{ color: 'var(--text-inverse)', fontWeight: 600, marginBottom: '4px' }}>Drop file Excel di sini atau klik untuk browse</p>
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Format: .xlsx atau .xls</p>
                 </>
               )}
@@ -291,8 +295,8 @@ export default function BulkImport({
             {errors.length > 0 && (
               <div style={{ marginTop: '16px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '10px', padding: '14px 16px' }}>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
-                  <AlertTriangle size={16} style={{ color: '#ef4444' }} />
-                  <span style={{ color: '#ef4444', fontWeight: 700, fontSize: '0.85rem' }}>Error Validasi</span>
+                  <AlertTriangle size={16} style={{ color: 'var(--danger)' }} />
+                  <span style={{ color: 'var(--danger-text)', fontWeight: 700, fontSize: '0.85rem' }}>Error Validasi</span>
                 </div>
                 {errors.slice(0, 5).map((err, i) => (
                   <p key={i} style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '2px 0' }}>• {err.message}</p>
@@ -309,8 +313,8 @@ export default function BulkImport({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div>
                 <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                  <strong style={{ color: 'white' }}>{parsedRows.length}</strong> baris siap diimport
-                  {errors.length > 0 && <span style={{ color: '#fbbf24', marginLeft: '8px' }}>({errors.length} baris dilewati karena error)</span>}
+                   <strong style={{ color: 'var(--text-inverse)' }}>{parsedRows.length}</strong> baris siap diimport
+                  {errors.length > 0 && <span style={{ color: 'var(--warning-text)', marginLeft: '8px' }}>({errors.length} baris dilewati karena error)</span>}
                 </span>
               </div>
               <button onClick={() => setStep('upload')} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>← Ganti File</button>
@@ -362,7 +366,7 @@ export default function BulkImport({
         {step === 'importing' && (
           <div style={{ textAlign: 'center', padding: '40px 20px' }}>
             <Loader size={40} style={{ color: 'var(--accent)', animation: 'spin 1s linear infinite', marginBottom: '16px' }} />
-            <h4 style={{ color: 'white', marginBottom: '8px' }}>Sedang Mengimport Data...</h4>
+            <h4 style={{ color: 'var(--text-inverse)', marginBottom: '8px' }}>Sedang Mengimport Data...</h4>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Mohon tunggu, jangan tutup halaman ini.</p>
           </div>
         )}
@@ -378,7 +382,7 @@ export default function BulkImport({
             }}>
               <CheckCircle size={32} />
             </div>
-            <h4 style={{ color: 'white', fontSize: '1.1rem', fontWeight: 800, marginBottom: '8px' }}>Import Berhasil!</h4>
+            <h4 style={{ color: 'var(--text-inverse)', fontSize: '1.1rem', fontWeight: 800, marginBottom: '8px' }}>Import Berhasil!</h4>
             {importResult && (
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '24px' }}>
                 {importResult.success} baris berhasil diimport

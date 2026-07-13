@@ -9,7 +9,7 @@ const STEPS = [
     description: 'Bahan baku adalah fondasi sistem ini. Setelah ditambahkan, semua stok, resep, dan laporan HPP akan terhubung ke sini.',
     action: 'stock',
     actionLabel: 'Buka Manajemen Stok →',
-    color: '#4c6ef5'
+    color: 'var(--accent)'
   },
   {
     icon: BookOpen,
@@ -18,7 +18,7 @@ const STEPS = [
     description: 'Sistem akan otomatis menghitung Harga Pokok Produksi (HPP) setiap menu berdasarkan bahan yang Anda input.',
     action: 'recipes',
     actionLabel: 'Buka Recipe Builder →',
-    color: '#51cf66'
+    color: 'var(--success)'
   },
   {
     icon: UploadCloud,
@@ -27,7 +27,7 @@ const STEPS = [
     description: 'Upload file Excel dari Moka, Pawoon, Olsera, atau kasir apapun. Sistem akan mencocokkan menu dan memotong stok bahan secara otomatis.',
     action: 'pos',
     actionLabel: 'Buka POS Sync →',
-    color: '#fcc419'
+    color: 'var(--warning)'
   }
 ];
 
@@ -54,12 +54,12 @@ export default function Onboarding({ onNavigate, onDismiss, tenantName }) {
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
-            <Sparkles size={18} style={{ color: '#fcc419' }} />
+            <Sparkles size={18} style={{ color: 'var(--warning)' }} />
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>
               Setup Awal — {tenantName || 'Tenant Baru'}
             </span>
           </div>
-          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'white', marginBottom: '4px' }}>
+           <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-inverse)', marginBottom: '4px' }}>
             Selamat Datang di Barventis! 🎉
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
@@ -98,7 +98,7 @@ export default function Onboarding({ onNavigate, onDismiss, tenantName }) {
           <span style={{ fontSize: '0.7rem', color: step.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
             Langkah {currentStep + 1} dari 3
           </span>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'white', margin: '6px 0 8px' }}>
+           <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-inverse)', margin: '6px 0 8px' }}>
             {step.title}
           </h3>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.55, marginBottom: '20px' }}>

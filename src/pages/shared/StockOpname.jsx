@@ -1,11 +1,14 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import {
   ClipboardCheck, ArrowRight, ShieldCheck,
   Palette, UploadCloud
 } from 'lucide-react';
 import BulkImport from '../../components/BulkImport';
-import confetti from 'canvas-confetti';
 import { useData } from '../../contexts/DataContext';
+import { formatIDR } from '../../services/costUtils';
+
+let _confetti;
+const getConfetti = async () => { if (!_confetti) _confetti = (await import('canvas-confetti')).default; return _confetti; };
 
 export default function StockOpname() {
   const { stock, showToast, handleCompleteOpname: onCompleteOpname } = useData();
@@ -19,8 +22,7 @@ export default function StockOpname() {
   
   const canvasRef = useRef(null);
 
-  // 1. Unique categories
-  const categories = [...new Set(stock.map(item => item.category))];
+  const categories = useMemo(() => [...new Set(stock.map(item => item.category))], [stock]);
 
   // 2. Initialize Opname
   const handleStartOpname = () => {
@@ -131,6 +133,7 @@ export default function StockOpname() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleCommitOpname = async () => {
+    const confetti = await getConfetti();
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
@@ -171,21 +174,16 @@ export default function StockOpname() {
     }
   };
 
-  // Format currency
-  const formatIDR = (num) => {
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num);
-  };
 
-  // Categorize items
-  const filteredOpnameItems = opnameItems.filter(item => item.category === activeCategory);
+
+
+  const filteredOpnameItems = useMemo(() => opnameItems.filter(item => item.category === activeCategory), [opnameItems, activeCategory]);
   
-  // BUG-SO-03: physical_qty='' compared with !== to book_qty number always returns true,
-  // showing every un-entered row as a discrepancy. Treat '' as "not counted yet" (no variance).
-  const itemsWithVariance = opnameItems.filter(item => {
+  const itemsWithVariance = useMemo(() => opnameItems.filter(item => {
     if (item.physical_qty === '' || item.physical_qty === null || item.physical_qty === undefined) return false;
     const pQty = parseFloat(item.physical_qty);
     return !isNaN(pQty) && pQty !== item.book_qty;
-  });
+  }), [opnameItems]);
 
   return (
     <div>

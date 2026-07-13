@@ -310,7 +310,7 @@ export default function DashboardLayout() {
                   {notifCount > 0 && (
                     <span style={{
                       position: 'absolute', top: '-6px', right: '-6px',
-                      background: 'var(--danger)', color: '#fff',
+                      background: 'var(--danger)',                        color: 'var(--text-inverse)',
                       fontSize: '0.6rem', fontWeight: '800',
                       borderRadius: '10px', minWidth: '16px', height: '16px',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',

@@ -1,6 +1,7 @@
 // UMATIS Serverless API Service Client for Supabase Backend Integration
 import { supabase } from '../lib/supabase';
 import { parsePackSize, calculateIngredientCost } from './costUtils';
+import { storeLog } from './activityLogService';
 
 let activeTenantId = null;
 let activeUserId = null;
@@ -35,19 +36,10 @@ const getActiveUserId = async () => {
   return activeUserId;
 };
 
-// Helper for Audit Logging — uses cached values to prevent lock deadlocks
+// Helper for Audit Logging — stores locally, batch-synced to Supabase
 const logAudit = async (action, description) => {
   try {
-    const tenantId = await getActiveTenantId();
-    const userId = await getActiveUserId();
-    if (!userId) return;
-
-    await supabase.from('audit_logs').insert({
-      tenant_id: tenantId,
-      user_id: userId,
-      action,
-      description
-    });
+    storeLog({ action, description });
   } catch (e) {
     console.error('Failed to log audit event:', e);
   }

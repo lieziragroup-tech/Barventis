@@ -153,7 +153,7 @@ export default function TenantAdminPanel() {
           style={{
             background: tab === 'users' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
             border: tab === 'users' ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255,255,255,0.1)',
-            color: tab === 'users' ? '#60a5fa' : 'var(--text-secondary)',
+            color: tab === 'users' ? 'var(--accent)' : 'var(--text-secondary)',
             padding: '8px 16px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'
           }}
         >
@@ -165,7 +165,7 @@ export default function TenantAdminPanel() {
           style={{
             background: tab === 'invites' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
             border: tab === 'invites' ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255,255,255,0.1)',
-            color: tab === 'invites' ? '#60a5fa' : 'var(--text-secondary)',
+            color: tab === 'invites' ? 'var(--accent)' : 'var(--text-secondary)',
             padding: '8px 16px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'
           }}
         >
@@ -177,7 +177,7 @@ export default function TenantAdminPanel() {
           style={{
             background: tab === 'profile' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
             border: tab === 'profile' ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255,255,255,0.1)',
-            color: tab === 'profile' ? '#60a5fa' : 'var(--text-secondary)',
+            color: tab === 'profile' ? 'var(--accent)' : 'var(--text-secondary)',
             padding: '8px 16px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'
           }}
         >
@@ -228,7 +228,7 @@ export default function TenantAdminPanel() {
                           <span style={{
                             padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700,
                             background: u.role === 'Admin / Owner' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(148, 163, 184, 0.1)',
-                            color: u.role === 'Admin / Owner' ? '#60a5fa' : '#94a3b8'
+                            color: u.role === 'Admin / Owner' ? 'var(--accent)' : 'var(--text-muted)'
                           }}>
                             {u.role.toUpperCase()}
                           </span>
@@ -241,8 +241,8 @@ export default function TenantAdminPanel() {
                             disabled={u.id === sessionUser?.id}
                             style={{
                               padding: '6px 10px', fontSize: '0.75rem', border: 'none',
-                              background: 'rgba(239, 68, 68, 0.1)',
-                              color: '#ef4444',
+                              background: 'var(--danger-glow)',
+                              color: 'var(--danger)',
                               cursor: u.id === sessionUser?.id ? 'not-allowed' : 'pointer',
                               display: 'inline-flex', alignItems: 'center', gap: '4px',
                               opacity: u.id === sessionUser?.id ? 0.3 : 1
@@ -301,7 +301,7 @@ export default function TenantAdminPanel() {
                           <span style={{ 
                             fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', fontWeight: 700,
                             background: inv.is_used ? 'rgba(34, 197, 94, 0.1)' : isExpired ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)',
-                            color: inv.is_used ? '#22c55e' : isExpired ? '#ef4444' : '#60a5fa',
+                            color: inv.is_used ? 'var(--success)' : isExpired ? 'var(--danger)' : 'var(--accent)',
                             display: 'flex', alignItems: 'center', gap: '4px'
                           }}>
                             {inv.is_used ? <CheckCircle size={12} /> : isExpired ? <XCircle size={12} /> : <Clock size={12} />}
@@ -332,7 +332,7 @@ export default function TenantAdminPanel() {
                         )}
                         <button 
                           className="btn" 
-                          style={{ padding: '6px', color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', border: 'none', borderRadius: '6px' }}
+                          style={{ padding: '6px', color: 'var(--danger)', background: 'var(--danger-glow)', border: 'none', borderRadius: '6px' }}
                           onClick={() => handleDeleteInvite(inv.id)}
                           title="Hapus Link"
                         >
@@ -377,13 +377,13 @@ export default function TenantAdminPanel() {
                   required
                   style={{
                     width: '100%', padding: '10px 14px', background: 'rgba(15, 23, 42, 0.6)',
-                    border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white'
+                    border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'var(--text-inverse)'
                   }}
                 />
               </div>
 
               <div style={{ background: 'rgba(245, 158, 11, 0.05)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(245, 158, 11, 0.1)' }}>
-                <h4 style={{ margin: '0 0 8px 0', color: '#fbbf24', fontSize: '0.9rem' }}>Status Kunci Pembukuan</h4>
+                <h4 style={{ margin: '0 0 8px 0', color: 'var(--warning)', fontSize: '0.9rem' }}>Status Kunci Pembukuan</h4>
                 <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                   {currentTenant?.locked_until_month && currentTenant?.locked_until_year 
                     ? `Transaksi sebelum bulan ${currentTenant.locked_until_month}/${currentTenant.locked_until_year} telah dikunci dan tidak dapat diubah.` 

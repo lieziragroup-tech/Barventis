@@ -105,15 +105,15 @@ export default function AuthScreen({ onAuthSuccess }) {
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: '52px',
-            height: '52px',
-            borderRadius: '12px',
-            background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-            color: '#fff',
-            fontSize: '1.75rem',
+            width: '48px',
+            height: '48px',
+            borderRadius: '10px',
+            background: 'var(--accent)',
+            color: 'var(--text-inverse)',
+            fontSize: '1.5rem',
             fontWeight: '800',
             marginBottom: '12px',
-            boxShadow: '0 0 20px rgba(59, 130, 246, 0.4)',
+            boxShadow: '0 4px 12px var(--accent-glow)',
             transition: 'all 0.5s ease'
           }}>B</div>
           
@@ -136,15 +136,15 @@ export default function AuthScreen({ onAuthSuccess }) {
 
         {/* Token Validation Status UI */}
         {inviteToken && tokenStatus === 'checking' && (
-          <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-dim)' }}>
-            <span className="spinner" style={{ display: 'inline-block', width: '24px', height: '24px', border: '3px solid rgba(255,255,255,0.1)', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '10px' }}></span>
+          <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>
+            <span className="spinner" style={{ display: 'inline-block', width: '24px', height: '24px', border: '3px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '10px' }}></span>
             <p style={{ fontSize: '0.9rem' }}>Memvalidasi undangan...</p>
           </div>
         )}
 
         {inviteToken && (tokenStatus === 'invalid' || tokenStatus === 'used' || tokenStatus === 'expired') && (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
-            <div style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', padding: '16px', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.2)' }}>
+            <div style={{ background: 'var(--danger-glow)', color: 'var(--danger-text)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(220, 38, 38, 0.15)' }}>
               <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem' }}>
                 {tokenStatus === 'invalid' && 'Undangan Tidak Ditemukan'}
                 {tokenStatus === 'used' && 'Undangan Sudah Dipakai'}
@@ -160,11 +160,11 @@ export default function AuthScreen({ onAuthSuccess }) {
 
         {error && (
           <div style={{
-            background: 'rgba(239, 68, 68, 0.15)',
-            border: '1px solid rgba(239, 68, 68, 0.3)',
+            background: 'var(--danger-glow)',
+            border: '1px solid rgba(220, 38, 38, 0.15)',
             borderRadius: '8px',
             padding: '12px 16px',
-            color: '#fca5a5',
+            color: 'var(--danger-text)',
             fontSize: '0.825rem',
             marginBottom: '20px',
             lineHeight: '1.4'
@@ -211,8 +211,8 @@ export default function AuthScreen({ onAuthSuccess }) {
                 required
                 disabled={loading}
                 style={{
-                  width: '100%', padding: '10px 14px', background: 'rgba(15, 23, 42, 0.6)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.9rem', outline: 'none'
+                  width: '100%', padding: '10px 14px', background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '0.9rem', outline: 'none'
                 }}
               />
             </div>
@@ -231,8 +231,8 @@ export default function AuthScreen({ onAuthSuccess }) {
                 required
                 disabled={loading}
                 style={{
-                  width: '100%', padding: '10px 14px', background: 'rgba(15, 23, 42, 0.6)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.9rem', outline: 'none'
+                  width: '100%', padding: '10px 14px', background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '0.9rem', outline: 'none'
                 }}
               />
             </div>
@@ -245,14 +245,14 @@ export default function AuthScreen({ onAuthSuccess }) {
               style={{
                 width: '100%', padding: '12px', borderRadius: '8px', fontWeight: '700', fontSize: '0.9rem', marginTop: '10px',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', border: 'none', color: '#fff',
-                boxShadow: '0 4px 12px rgba(59, 130, 246, 0.25)', cursor: 'pointer'
+                background: 'var(--accent)', border: 'none', color: 'var(--text-inverse)',
+                boxShadow: '0 4px 12px var(--accent-glow)', cursor: 'pointer'
               }}
             >
               {loading ? (
                 <span className="spinner" style={{
                   display: 'inline-block', width: '18px', height: '18px', border: '2px solid rgba(255,255,255,0.3)',
-                  borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite'
+                  borderTopColor: 'var(--text-inverse)', borderRadius: '50%', animation: 'spin 0.8s linear infinite'
                 }}></span>
               ) : null}
               {loading ? 'Sedang Memproses...' : (inviteToken ? 'Buat Akun' : 'Masuk ke Sistem')}

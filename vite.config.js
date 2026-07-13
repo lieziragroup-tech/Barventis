@@ -14,9 +14,16 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router')) return 'vendor-react';
+          if (id.includes('node_modules/@supabase')) return 'vendor-supabase';
+          if (id.includes('node_modules/recharts')) return 'vendor-charts';
+          if (id.includes('node_modules/xlsx')) return 'vendor-xlsx';
+          if (id.includes('node_modules/framer-motion')) return 'vendor-motion';
+        },
       },
     },
-    chunkSizeWarningLimit: 600,
+    chunkSizeWarningLimit: 500,
   },
 
   optimizeDeps: {
@@ -26,7 +33,6 @@ export default defineConfig({
       '@supabase/supabase-js',
       'lucide-react',
       'xlsx',
-      'canvas-confetti',
     ],
   },
 

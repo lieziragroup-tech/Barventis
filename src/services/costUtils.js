@@ -49,3 +49,9 @@ export function calculateIngredientCost(material, qtyInUse, recipeUnit) {
   const packSize = parsePackSize(material.full_pack);
   return packSize > 0 ? qtyInUse * (price / packSize) : qtyInUse * price;
 }
+
+export const formatIDR = (value) => {
+  const num = parseFloat(value);
+  if (isNaN(num)) return 'Rp 0';
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num);
+};

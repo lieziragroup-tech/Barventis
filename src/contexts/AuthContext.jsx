@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { api } from '../services/api';
+import { initAutoFlush, stopAutoFlush, flushOnLogout } from '../services/activityLogService';
 
 const AuthContext = createContext();
 
@@ -25,6 +26,7 @@ export const AuthProvider = ({ children }) => {
         setActiveUser(null);
         setTenantName('');
         api.setSessionData(null, null, null, null, null, false);
+        stopAutoFlush();
         setLoading(false);
       }
     });
@@ -52,6 +54,7 @@ export const AuthProvider = ({ children }) => {
             setTenantName(profile.tenant_name || '');
             api.setSessionData(profile.tenant_id, profile.id, profile.overhead_pct, profile.whatsapp_number, profile.whatsapp_token, profile.whatsapp_enabled);
             setIsAuthenticated(true);
+            initAutoFlush();
           }
         } catch (e) {
           console.error('[Auth Flow] Profile fetch failed with error:', e);
@@ -85,6 +88,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
+      await flushOnLogout();
       await api.logout();
     } catch (e) {
       console.warn('Logout error:', e);

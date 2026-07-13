@@ -4,9 +4,11 @@ import {
   AlertTriangle, ShieldAlert, CheckCircle, Clock, FileArchive, X, Info
 } from 'lucide-react';
 import { api } from '../../services/api';
-import confetti from 'canvas-confetti';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+
+let _confetti;
+const getConfetti = async () => { if (!_confetti) _confetti = (await import('canvas-confetti')).default; return _confetti; };
 
 export default function BackupCenter() {
   const { activeUser } = useAuth();
@@ -46,6 +48,7 @@ export default function BackupCenter() {
   };
 
   const handleCreateBackup = async () => {
+    const confetti = await getConfetti();
     setActionLoading(true);
     try {
       // api.createBackup() returns the backup record directly (id, filename, size_formatted, created_at, data_json)
@@ -72,7 +75,7 @@ export default function BackupCenter() {
         particleCount: 150,
         spread: 80,
         origin: { y: 0.6 },
-        colors: ['#4c6ef5', '#51cf66', '#fcc419', '#845ef7']
+        colors: ['#3b82f6', '#059669', '#d97706', '#7c3aed']
       });
 
     } catch (err) {
@@ -229,7 +232,7 @@ export default function BackupCenter() {
         <div className="glass-card kpi-card">
           <div className="kpi-header">
             <span className="kpi-title">Kapasitas Penyimpanan</span>
-            <div className="kpi-icon-wrap" style={{ background: 'rgba(132, 94, 247, 0.1)', color: '#845ef7' }}>
+            <div className="kpi-icon-wrap" style={{ background: 'var(--info-glow)', color: 'var(--info)' }}>
               <FileArchive size={20} />
             </div>
           </div>
@@ -514,7 +517,7 @@ export default function BackupCenter() {
                 <ShieldAlert size={22} />
               </div>
               <div>
-                <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#fff' }}>PERINGATAN PEMULIHAN DATA!</h3>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--text-inverse)' }}>PERINGATAN PEMULIHAN DATA!</h3>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Tindakan Administratif Berisiko Tinggi</span>
               </div>
             </div>
@@ -599,7 +602,7 @@ export default function BackupCenter() {
                       borderRadius: '8px',
                       background: restoreConfirmText === 'PULIHKAN' ? 'var(--danger)' : 'var(--bg-tertiary)',
                       borderColor: restoreConfirmText === 'PULIHKAN' ? 'var(--danger)' : 'var(--border)',
-                      color: restoreConfirmText === 'PULIHKAN' ? '#fff' : 'var(--text-muted)',
+                      color: restoreConfirmText === 'PULIHKAN' ? 'var(--text-inverse)' : 'var(--text-muted)',
                       fontWeight: '700'
                     }}
                   >

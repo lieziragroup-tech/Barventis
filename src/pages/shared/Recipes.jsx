@@ -3,6 +3,7 @@ import { Search, Plus, Trash2, Save, X, UploadCloud, Coins, AlertTriangle, Check
 import BulkImport from '../../components/BulkImport';
 import { useData } from '../../contexts/DataContext';
 import { api } from '../../services/api';
+import { formatIDR } from '../../services/costUtils';
 
 // Stable client-side id for editable ingredient rows so React keys don't rely on the
 // array index (preserves input focus/state across add/remove/reorder). (LOW #19)
@@ -23,7 +24,7 @@ export default function Recipes() {
   const [newMenuPrice, setNewMenuPrice] = useState('');
   const [openDropdown, setOpenDropdown] = useState(null);
 
-  const formatIDR = (num) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num);
+
 
   // Parse full_pack field to extract numeric value and unit
   // Examples: "1000 grm" => { size: 1000, unit: 'gr' }, "500 grm" => { size: 500, unit: 'gr' }
@@ -97,7 +98,7 @@ export default function Recipes() {
   /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
   // Filter recipe list
-  const filteredRecipes = recipes.filter(r => r.menu_name.toLowerCase().includes(search.toLowerCase()));
+  const filteredRecipes = useMemo(() => recipes.filter(r => r.menu_name.toLowerCase().includes(search.toLowerCase())), [recipes, search]);
 
   // Calculate amount for a single ingredient row
   // amount = qty_in_use * pricePerUnit (if using the pack's content unit like gr/ml)
@@ -136,10 +137,10 @@ export default function Recipes() {
     }
   };
 
-  const subtotal = editedIngredients.reduce((acc, ing) => acc + calcRowAmount(ing), 0);
-  const fixCost = subtotal * 0.05;
-  const basicCost = subtotal + fixCost;
-  const foodCostPct = editedSellingPrice > 0 ? (basicCost / editedSellingPrice) : 0;
+  const subtotal = useMemo(() => editedIngredients.reduce((acc, ing) => acc + calcRowAmount(ing), 0), [editedIngredients, stockMap]);
+  const fixCost = useMemo(() => subtotal * 0.05, [subtotal]);
+  const basicCost = useMemo(() => subtotal + fixCost, [subtotal, fixCost]);
+  const foodCostPct = useMemo(() => editedSellingPrice > 0 ? (basicCost / editedSellingPrice) : 0, [basicCost, editedSellingPrice]);
 
   // Ingredient actions
   const handleQtyChange = (idx, val) => {
@@ -261,129 +262,6 @@ export default function Recipes() {
 
   return (
     <div style={{ display: 'flex', gap: '24px', height: 'calc(100vh - 180px)', fontFamily: 'var(--font-sans)', animation: 'fadeIn 0.3s ease' }}>
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(6px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .recipe-nav-item {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 12px 14px;
-          color: var(--text-secondary);
-          border-radius: 10px;
-          cursor: pointer;
-          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-          border-left: 3px solid transparent;
-          background: rgba(255, 255, 255, 0.01);
-          border-bottom: 1px solid rgba(255, 255, 255, 0.02);
-        }
-        .recipe-nav-item:hover {
-          color: var(--text-primary);
-          background: rgba(255, 255, 255, 0.03);
-          transform: translateX(3px);
-          border-bottom-color: rgba(255, 255, 255, 0.05);
-        }
-        .recipe-nav-item.active {
-          color: var(--text-primary);
-          background: linear-gradient(90deg, rgba(76, 110, 245, 0.08) 0%, rgba(76, 110, 245, 0.01) 100%);
-          border-left-color: var(--accent);
-          box-shadow: inset 2px 0 8px rgba(76, 110, 245, 0.05);
-        }
-        .premium-input {
-          background: rgba(15, 23, 42, 0.45) !important;
-          border: 1px solid rgba(255, 255, 255, 0.08) !important;
-          border-radius: 8px !important;
-          color: #fff !important;
-          font-family: var(--font-sans) !important;
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        }
-        .premium-input:focus {
-          border-color: var(--accent) !important;
-          box-shadow: 0 0 0 3px rgba(76, 110, 245, 0.18) !important;
-          background: rgba(15, 23, 42, 0.65) !important;
-        }
-        .premium-btn {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          font-weight: 600;
-          font-family: var(--font-sans);
-          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-          cursor: pointer;
-        }
-        .premium-btn-primary {
-          background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
-          border: none;
-          box-shadow: 0 4px 12px rgba(76, 110, 245, 0.2);
-        }
-        .premium-btn-primary:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 6px 16px rgba(76, 110, 245, 0.35);
-          filter: brightness(1.05);
-        }
-        .premium-btn-secondary {
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid var(--border);
-          color: var(--text-primary);
-        }
-        .premium-btn-secondary:hover {
-          background: rgba(255, 255, 255, 0.07);
-          border-color: rgba(255, 255, 255, 0.15);
-          transform: translateY(-1px);
-        }
-        .premium-table th {
-          font-size: 0.7rem !important;
-          text-transform: uppercase !important;
-          letter-spacing: 0.75px !important;
-          color: var(--text-muted) !important;
-          font-weight: 700 !important;
-          border-bottom: 1px solid var(--border) !important;
-          padding: 8px 10px !important;
-        }
-        .premium-table td {
-          padding: 6px 10px !important;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.03) !important;
-          vertical-align: middle !important;
-        }
-        .table-input {
-          padding: 4px 8px !important;
-          font-size: 0.75rem !important;
-          height: 28px !important;
-          background: rgba(15, 23, 42, 0.45) !important;
-          border: 1px solid rgba(255, 255, 255, 0.08) !important;
-          border-radius: 6px !important;
-          color: #fff !important;
-          width: 100% !important;
-          box-sizing: border-box !important;
-        }
-        .table-input:focus {
-          border-color: var(--accent) !important;
-          box-shadow: 0 0 0 3px rgba(76, 110, 245, 0.18) !important;
-          background: rgba(15, 23, 42, 0.65) !important;
-        }
-        .table-select {
-          appearance: none !important;
-          -webkit-appearance: none !important;
-          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%23868e96' d='M6 8L1 3h10z'/%3E%3C/svg%3E") !important;
-          background-repeat: no-repeat !important;
-          background-position: right 8px center !important;
-          padding-right: 20px !important;
-        }
-        .glass-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-        .glass-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(255,255,255,0.08);
-          border-radius: 3px;
-        }
-        .glass-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: var(--accent);
-        }
-      `}</style>
-
       {/* Left: Recipe List */}
       <div className="glass-card" style={{ width: '310px', display: 'flex', flexDirection: 'column', padding: '20px', flexShrink: 0, border: '1px solid var(--border)' }}>
         {/* Search */}
