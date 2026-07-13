@@ -3,15 +3,14 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Package, UploadCloud, ClipboardCheck, 
   ChefHat, DollarSign, LogOut, Bell, FileText, History, Database,
-  FileSpreadsheet, Wrench, Settings, AlertTriangle, X, RefreshCw, Menu, ShoppingCart
+  FileSpreadsheet, Wrench, Settings, AlertTriangle, X, RefreshCw, Menu
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useData } from '../../contexts/DataContext';
 import Onboarding from '../Onboarding';
 import AIAssistant from '../AIAssistant';
 
-// Custom NavItem to replicate the existing style
-const NavItem = ({ to, exact, icon: Icon, label, iconColor }) => {
+const NavItem = ({ to, exact, label }) => {
   return (
     <NavLink 
       to={to} 
@@ -19,7 +18,7 @@ const NavItem = ({ to, exact, icon: Icon, label, iconColor }) => {
       className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} 
       style={{ textDecoration: 'none' }}
     >
-      <Icon size={18} style={iconColor ? { color: iconColor } : {}} /> {label}
+      {label}
     </NavLink>
   );
 };
@@ -27,33 +26,44 @@ const NavItem = ({ to, exact, icon: Icon, label, iconColor }) => {
 const NavGroup = ({ title, defaultOpen = true, children }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   return (
-    <div className="nav-group" style={{ marginBottom: '8px' }}>
+    <div className="nav-group" style={{ marginBottom: '4px' }}>
       <div 
         onClick={() => setIsOpen(!isOpen)}
         style={{
-          padding: '8px 16px',
-          fontSize: '0.7rem',
+          padding: '6px 12px',
+          fontSize: '0.65rem',
           color: 'var(--text-muted)',
-          fontWeight: '700',
-          letterSpacing: '0.05em',
+          fontWeight: '600',
+          letterSpacing: '0.06em',
           textTransform: 'uppercase',
           cursor: 'pointer',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          userSelect: 'none'
+          userSelect: 'none',
+          borderRadius: '4px',
+          transition: 'color 0.15s ease'
         }}
+        onMouseOver={e => e.currentTarget.style.color = 'var(--text-secondary)'}
+        onMouseOut={e => e.currentTarget.style.color = 'var(--text-muted)'}
       >
         {title}
-        <span style={{ fontSize: '0.6rem', transition: 'transform 0.2s', transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
+        <span style={{ 
+          fontSize: '0.55rem', 
+          transition: 'transform 0.2s ease', 
+          transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
+          display: 'inline-block'
+        }}>▾</span>
       </div>
       <div style={{ 
         overflow: 'hidden', 
-        maxHeight: isOpen ? '1000px' : '0',
+        maxHeight: isOpen ? '500px' : '0',
         opacity: isOpen ? 1 : 0,
-        transition: 'all 0.3s ease-in-out'
+        transition: 'all 0.25s ease-in-out'
       }}>
-        {children}
+        <div style={{ paddingTop: '2px' }}>
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -143,59 +153,52 @@ export default function DashboardLayout() {
         </div>
         
         <div style={{
-          padding: '4px 16px',
-          fontSize: '0.725rem',
-          color: '#3b82f6',
-          fontWeight: '700',
-          letterSpacing: '0.05em',
+          padding: '0 8px',
+          fontSize: '0.65rem',
+          color: 'var(--text-muted)',
+          fontWeight: '500',
+          letterSpacing: '0.04em',
           textTransform: 'uppercase',
-          marginBottom: '10px',
-          opacity: 0.85
+          marginBottom: '16px',
         }}>
-          RESTO ID: {(tenantName || 'SYSTEM').toUpperCase()}
+          {(tenantName || 'SYSTEM').toUpperCase()}
         </div>
 
-        <div className="nav-links" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div className="nav-links" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
           {isSuperAdmin && (
-            <NavGroup title="SUPER ADMIN" defaultOpen={true}>
-              <NavItem to="/superadmin" exact icon={LayoutDashboard} label="Kelola Tenant" iconColor="#fbbf24" />
-              <NavItem to="/superadmin/templates" icon={FileSpreadsheet} label="POS Templates" iconColor="#fbbf24" />
-              <NavItem to="/superadmin/logs" icon={History} label="Log Audit Global" iconColor="#fbbf24" />
+            <NavGroup title="Platform" defaultOpen={true}>
+              <NavItem to="/superadmin" exact label="Kelola Tenant" />
+              <NavItem to="/superadmin/templates" label="POS Templates" />
+              <NavItem to="/superadmin/logs" label="Audit Logs" />
             </NavGroup>
           )}
 
           {(isOwner || isStaff) && (
             <>
-              <NavGroup title="Operasional Harian" defaultOpen={true}>
-                <NavItem to={basePath} exact icon={LayoutDashboard} label="Dashboard" />
-                <NavItem to={`${basePath}/pos-terminal`} icon={ShoppingCart} label="POS Kasir (Baru)" iconColor="#4ade80" />
-                <NavItem to={`${basePath}/pos`} icon={UploadCloud} label="Upload POS Sales" />
-                <NavItem to={`${basePath}/stock`} icon={Package} label="Stock Ledger" />
-              </NavGroup>
-
-              <NavGroup title="Perencanaan & Produksi" defaultOpen={true}>
-                <NavItem to={`${basePath}/recipes`} icon={ChefHat} label="F&B Recipes (COGS)" />
-                {isOwner && (
-                  <NavItem to={`${basePath}/invoicing`} icon={FileText} label="Invoicing / PO" />
-                )}
+              <NavGroup title="Menu Utama" defaultOpen={true}>
+                <NavItem to={basePath} exact label="Dashboard" />
+                <NavItem to={`${basePath}/stock`} label="Stock Ledger" />
+                <NavItem to={`${basePath}/pos`} label="Upload POS Sales" />
+                <NavItem to={`${basePath}/recipes`} label="F&B Recipes" />
               </NavGroup>
 
               {isOwner && (
-                <NavGroup title="Kepatuhan & Laporan" defaultOpen={true}>
-                  <NavItem to={`${basePath}/opname`} icon={ClipboardCheck} label="Stock Opname" />
-                  <NavItem to={`${basePath}/cost-control`} icon={DollarSign} label="Cost Control" />
-                  <NavItem to={`${basePath}/audit`} icon={History} label="Audit Logs" />
+                <NavGroup title="Operasional" defaultOpen={true}>
+                  <NavItem to={`${basePath}/invoicing`} label="Invoicing / PO" />
+                  <NavItem to={`${basePath}/opname`} label="Stock Opname" />
+                  <NavItem to={`${basePath}/cost-control`} label="Cost Control" />
                 </NavGroup>
               )}
 
-              <NavGroup title="Administrasi" defaultOpen={false}>
+              <NavGroup title="System" defaultOpen={false}>
                 {isOwner && (
                   <>
-                    <NavItem to={`${basePath}/settings`} icon={Settings} label="Tenant Settings" />
-                    <NavItem to={`${basePath}/backup`} icon={Database} label="Backup & Restore" />
+                    <NavItem to={`${basePath}/audit`} label="Audit Logs" />
+                    <NavItem to={`${basePath}/settings`} label="Tenant Settings" />
+                    <NavItem to={`${basePath}/backup`} label="Backup & Restore" />
                   </>
                 )}
-                <NavItem to={`${basePath}/maintenance`} icon={Wrench} label="Maintenance" />
+                <NavItem to={`${basePath}/maintenance`} label="Maintenance" />
               </NavGroup>
             </>
           )}
@@ -207,9 +210,9 @@ export default function DashboardLayout() {
             <span className="user-name">{userName}</span>
             <span className="user-role">{userRole}</span>
           </div>
-          <LogOut size={16} style={{ marginLeft: 'auto', cursor: 'pointer', color: 'var(--text-muted)' }}
+          <LogOut size={14} style={{ marginLeft: 'auto', cursor: 'pointer', color: 'var(--text-muted)' }}
             onClick={logout}
-            title="Log Out dari Sistem"
+            title="Log Out"
           />
         </div>
       </nav>

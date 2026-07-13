@@ -146,7 +146,7 @@ export default function Dashboard() {
             <span className="badge badge-info">Target: 27%</span>
           </div>
           <div style={{ width: '100%', height: 300 }}>
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <LineChart data={trendData} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="name" stroke="var(--text-muted)" tick={{ fontSize: 12 }} />
@@ -163,7 +163,7 @@ export default function Dashboard() {
         <div className="glass-card" style={{ padding: '24px' }}>
           <div className="chart-title">Stock Value by Category</div>
           <div style={{ width: '100%', height: 260 }}>
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <PieChart>
                 <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3} dataKey="value">
                   {pieData.map((entry, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
@@ -188,7 +188,7 @@ export default function Dashboard() {
         <div className="glass-card" style={{ padding: '24px' }}>
           <div className="chart-title">Top 5 Cost Contributors</div>
           <div style={{ width: '100%', height: 300 }}>
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <BarChart data={contributorsData} layout="vertical" margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis type="number" stroke="var(--text-muted)" tickFormatter={(v) => `${(v / 1000000).toFixed(1)}M`} tick={{ fontSize: 11 }} />

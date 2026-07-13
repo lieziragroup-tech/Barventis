@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, Trash2, Save, X, UploadCloud, Coins, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Search, Plus, Trash2, Save, X, UploadCloud, Coins, AlertTriangle, CheckCircle, ChefHat } from 'lucide-react';
 import BulkImport from '../../components/BulkImport';
 import { useData } from '../../contexts/DataContext';
 import { api } from '../../services/api';
