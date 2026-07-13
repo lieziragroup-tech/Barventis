@@ -25,7 +25,8 @@ export default function BulkImport({
   type,
   title,
   description,
-  expectedColumns
+  expectedColumns,
+  currentData = [] // New prop for Sync Export
 }) {
   const [step, setStep] = useState('upload'); // 'upload' | 'preview' | 'importing' | 'done'
   const [parsedRows, setParsedRows] = useState([]);
@@ -50,13 +51,20 @@ export default function BulkImport({
     // Header row
     const headers = expectedColumns.map(c => c.label);
     
-    // Sample row
-    const sampleRow = expectedColumns.map(c => {
-      if (c.type === 'number') return c.sample ?? 0;
-      return c.sample ?? `Contoh ${c.label}`;
-    });
+    let dataRows = [];
+    if (currentData && currentData.length > 0) {
+      dataRows = currentData.map(item => {
+        return expectedColumns.map(c => item[c.key] !== undefined ? item[c.key] : '');
+      });
+    } else {
+      // Sample row
+      dataRows = [expectedColumns.map(c => {
+        if (c.type === 'number') return c.sample ?? 0;
+        return c.sample ?? `Contoh ${c.label}`;
+      })];
+    }
     
-    const ws = XLSX.utils.aoa_to_sheet([headers, sampleRow]);
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
     
     // Column widths
     ws['!cols'] = expectedColumns.map(() => ({ wch: 20 }));

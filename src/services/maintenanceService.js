@@ -1,6 +1,7 @@
 
 import { supabase } from '../lib/supabase';
-import { api, calculateIngredientCost } from './api';
+import { api } from './api';
+import { calculateIngredientCost } from './costUtils';
 
 const ROUNDING_TOLERANCE = 0.5; // Rupiah; below this an HPP delta is just rounding noise
 
