@@ -4,7 +4,7 @@ import { api } from '../../services/api';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import {
-  Users, Building, Link as LinkIcon, Trash2, Key, Copy, Clock, CheckCircle, XCircle
+  Users, Building, Link as LinkIcon, Trash2, Key, Copy, Clock, CheckCircle, XCircle, Store
 } from 'lucide-react';
 
 export default function TenantAdminPanel() {

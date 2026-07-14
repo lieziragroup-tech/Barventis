@@ -114,22 +114,22 @@ export default function App() {
             <DashboardLayout />
           </ProtectedRoute>
         }>
-          <Route index element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
-          <Route path="stock" element={<ErrorBoundary><StockLedger /></ErrorBoundary>} />
-          <Route path="pos" element={<ErrorBoundary><PosUpload /></ErrorBoundary>} />
-          <Route path="recipes" element={<ErrorBoundary><Recipes /></ErrorBoundary>} />
-          <Route path="invoicing" element={<ErrorBoundary><Invoicing /></ErrorBoundary>} />
-          <Route path="opname" element={<ErrorBoundary><StockOpname /></ErrorBoundary>} />
-          <Route path="audit" element={<ErrorBoundary><AuditLogs /></ErrorBoundary>} />
-          <Route path="cost-control" element={<ErrorBoundary><CostControl /></ErrorBoundary>} />
-          <Route path="backup" element={<ErrorBoundary><BackupCenter /></ErrorBoundary>} />
-          <Route path="maintenance" element={<ErrorBoundary><Maintenance /></ErrorBoundary>} />
-          <Route path="settings" element={<ErrorBoundary><TenantAdminPanel /></ErrorBoundary>} />
+          <Route index element={<ErrorBoundary key="owner-dashboard" label="Dashboard"><Dashboard /></ErrorBoundary>} />
+          <Route path="stock" element={<ErrorBoundary key="owner-stock" label="Stock Ledger"><StockLedger /></ErrorBoundary>} />
+          <Route path="pos" element={<ErrorBoundary key="owner-pos" label="Upload POS Sales"><PosUpload /></ErrorBoundary>} />
+          <Route path="recipes" element={<ErrorBoundary key="owner-recipes" label="F&B Recipes"><Recipes /></ErrorBoundary>} />
+          <Route path="invoicing" element={<ErrorBoundary key="owner-invoicing" label="Invoicing / PO"><Invoicing /></ErrorBoundary>} />
+          <Route path="opname" element={<ErrorBoundary key="owner-opname" label="Stock Opname"><StockOpname /></ErrorBoundary>} />
+          <Route path="audit" element={<ErrorBoundary key="owner-audit" label="Audit Logs"><AuditLogs /></ErrorBoundary>} />
+          <Route path="cost-control" element={<ErrorBoundary key="owner-cost-control" label="Cost Control"><CostControl /></ErrorBoundary>} />
+          <Route path="backup" element={<ErrorBoundary key="owner-backup" label="Backup & Restore"><BackupCenter /></ErrorBoundary>} />
+          <Route path="maintenance" element={<ErrorBoundary key="owner-maintenance" label="Maintenance"><Maintenance /></ErrorBoundary>} />
+          <Route path="settings" element={<ErrorBoundary key="owner-settings" label="Tenant Settings"><TenantAdminPanel /></ErrorBoundary>} />
         </Route>
 
         <Route path="/owner/pos-terminal" element={
           <ProtectedRoute allowedRoles={['Admin / Owner']}>
-            <ErrorBoundary><PosTerminal /></ErrorBoundary>
+            <ErrorBoundary key="owner-pos-terminal" label="POS Terminal"><PosTerminal /></ErrorBoundary>
           </ProtectedRoute>
         } />
 
@@ -139,16 +139,16 @@ export default function App() {
             <DashboardLayout />
           </ProtectedRoute>
         }>
-          <Route index element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
-          <Route path="stock" element={<ErrorBoundary><StockLedger /></ErrorBoundary>} />
-          <Route path="pos" element={<ErrorBoundary><PosUpload /></ErrorBoundary>} />
-          <Route path="recipes" element={<ErrorBoundary><Recipes /></ErrorBoundary>} />
-          <Route path="maintenance" element={<ErrorBoundary><Maintenance /></ErrorBoundary>} />
+          <Route index element={<ErrorBoundary key="staff-dashboard" label="Dashboard"><Dashboard /></ErrorBoundary>} />
+          <Route path="stock" element={<ErrorBoundary key="staff-stock" label="Stock Ledger"><StockLedger /></ErrorBoundary>} />
+          <Route path="pos" element={<ErrorBoundary key="staff-pos" label="Upload POS Sales"><PosUpload /></ErrorBoundary>} />
+          <Route path="recipes" element={<ErrorBoundary key="staff-recipes" label="F&B Recipes"><Recipes /></ErrorBoundary>} />
+          <Route path="maintenance" element={<ErrorBoundary key="staff-maintenance" label="Maintenance"><Maintenance /></ErrorBoundary>} />
         </Route>
 
         <Route path="/staff/pos-terminal" element={
           <ProtectedRoute allowedRoles={['Staff']}>
-            <ErrorBoundary><PosTerminal /></ErrorBoundary>
+            <ErrorBoundary key="staff-pos-terminal" label="POS Terminal"><PosTerminal /></ErrorBoundary>
           </ProtectedRoute>
         } />
 
