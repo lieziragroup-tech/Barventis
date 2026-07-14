@@ -441,16 +441,28 @@ export default function StockOpname() {
         type="opname"
         title="Bulk Import Hasil Opname"
         description="Upload data perhitungan fisik dari Excel. Data akan langsung mengisi grid di bawah."
+        currentData={opnameItems.map((item, idx) => ({
+          'NO': idx + 1,
+          'NAMA ITEM': item.name,
+          'KUANTITI': item.physical_qty || '',
+          'UNIT': item.unit || '',
+          'Full': '',
+          'Price': item.price || 0,
+          'NEW Price': item.price || 0,
+          'SUPPLIER': item.notes || ''
+        }))}
         onCommit={async (rows) => {
           const updated = [...opnameItems];
           let success = 0;
           let failed = 0;
           
           rows.forEach(row => {
-            const idx = updated.findIndex(u => u.name.toLowerCase() === (row.material_name || '').toLowerCase());
+            const rowName = (row.material_name || row['NAMA ITEM'] || '').toLowerCase();
+            const idx = updated.findIndex(u => u.name.toLowerCase() === rowName);
             if (idx >= 0) {
-              updated[idx].physical_qty = parseFloat(row.physical_qty || 0);
-              updated[idx].notes = row.notes || '';
+              const qty = row.physical_qty !== undefined ? row.physical_qty : row['KUANTITI'];
+              updated[idx].physical_qty = parseFloat(qty || 0);
+              updated[idx].notes = row.notes || row['SUPPLIER'] || '';
               success++;
             } else {
               failed++;
@@ -461,9 +473,14 @@ export default function StockOpname() {
           return { success, failed };
         }}
         expectedColumns={[
-          { key: 'material_name', label: 'material_name', required: true, type: 'string', description: 'Nama bahan baku (sama persis dengan sistem)', sample: 'Espresso Bean' },
-          { key: 'physical_qty', label: 'physical_qty', required: true, type: 'number', description: 'Hasil perhitungan fisik (angka)', sample: 12 },
-          { key: 'notes', label: 'notes', required: false, type: 'string', description: 'Catatan selisih (opsional)', sample: 'Tumpah 2 pack' }
+          { key: 'NO', label: 'NO', required: false, type: 'number', description: 'Nomor Urut', sample: 1 },
+          { key: 'NAMA ITEM', label: 'NAMA ITEM', required: true, type: 'string', description: 'Nama bahan baku (sama persis dengan sistem)', sample: 'Espresso Bean' },
+          { key: 'KUANTITI', label: 'KUANTITI', required: true, type: 'number', description: 'Hasil perhitungan fisik (angka)', sample: 12 },
+          { key: 'UNIT', label: 'UNIT', required: false, type: 'string', description: 'Satuan', sample: 'kg' },
+          { key: 'Full', label: 'Full', required: false, type: 'string', description: 'Isi kemasan utuh', sample: '1000 gr' },
+          { key: 'Price', label: 'Price', required: false, type: 'number', description: 'Harga Beli (opsional)', sample: 120000 },
+          { key: 'NEW Price', label: 'NEW Price', required: false, type: 'number', description: 'Harga Baru (opsional)', sample: 125000 },
+          { key: 'SUPPLIER', label: 'SUPPLIER', required: false, type: 'string', description: 'Nama supplier / Catatan selisih', sample: 'Vendor A' }
         ]}
       />
 

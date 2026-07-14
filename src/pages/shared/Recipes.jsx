@@ -727,9 +727,9 @@ export default function Recipes() {
           return res;
         }}
         expectedColumns={[
-          { key: 'menu_name', label: 'menu_name', required: true, type: 'string', description: 'Nama menu (harus sama persis dengan di POS)', sample: 'Ice Caramel Latte' },
-          { key: 'selling_price', label: 'selling_price', required: true, type: 'number', description: 'Harga Jual (angka tanpa titik)', sample: 45000 },
-          { key: 'ingredients_json', label: 'ingredients_json', required: false, type: 'string', description: 'JSON array bahan baku (kosongkan jika tidak ada resep)', sample: '[{"item_name":"Espresso Shot (Arabica)","qty_in_use":36,"unit":"gr","unit_price":1.7}]' }
+          { key: 'menu_name', label: 'NAMA MENU', required: true, type: 'string', description: 'Nama menu (harus sama persis dengan di POS)', sample: 'Ice Caramel Latte' },
+          { key: 'selling_price', label: 'HARGA JUAL', required: true, type: 'number', description: 'Harga Jual (angka tanpa titik)', sample: 45000 },
+          { key: 'ingredients_json', label: 'RESEP JSON', required: false, type: 'string', description: 'JSON array bahan baku (kosongkan jika tidak ada resep)', sample: '[{"item_name":"Espresso Shot (Arabica)","qty_in_use":36,"unit":"gr","unit_price":1.7}]' }
         ]}
       />
     </div>

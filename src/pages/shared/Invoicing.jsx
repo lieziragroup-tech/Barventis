@@ -422,13 +422,13 @@ export default function Invoicing() {
           return res;
         }}
         expectedColumns={[
-          { key: 'po_ref', label: 'po_ref', required: true, type: 'string', description: 'Referensi PO (Satu referensi akan digabung jadi satu PO)', sample: 'PO-2023-001' },
-          { key: 'supplier', label: 'supplier', required: true, type: 'string', description: 'Nama supplier', sample: 'Vendor B' },
-          { key: 'item_name', label: 'item_name', required: true, type: 'string', description: 'Nama bahan baku (sama di sistem)', sample: 'Gula Pasir' },
-          { key: 'qty', label: 'qty', required: true, type: 'number', description: 'Jumlah yang dipesan', sample: 5 },
-          { key: 'unit_price', label: 'unit_price', required: true, type: 'number', description: 'Harga satuan bahan', sample: 15000 },
-          { key: 'location', label: 'location', required: false, type: 'string', description: 'Gudang tujuan (CENTRAL / RESTO)', sample: 'CENTRAL' },
-          { key: 'notes', label: 'notes', required: false, type: 'string', description: 'Catatan PO', sample: 'Urgent' }
+          { key: 'po_ref', label: 'PO REF', required: true, type: 'string', description: 'Referensi PO (Satu referensi akan digabung jadi satu PO)', sample: 'PO-2023-001' },
+          { key: 'supplier', label: 'SUPPLIER', required: true, type: 'string', description: 'Nama supplier', sample: 'Vendor B' },
+          { key: 'item_name', label: 'NAMA ITEM', required: true, type: 'string', description: 'Nama bahan baku (sama di sistem)', sample: 'Gula Pasir' },
+          { key: 'qty', label: 'KUANTITI', required: true, type: 'number', description: 'Jumlah yang dipesan', sample: 5 },
+          { key: 'unit_price', label: 'HARGA SATUAN', required: true, type: 'number', description: 'Harga satuan bahan', sample: 15000 },
+          { key: 'location', label: 'LOKASI', required: false, type: 'string', description: 'Gudang tujuan (CENTRAL / RESTO)', sample: 'CENTRAL' },
+          { key: 'notes', label: 'CATATAN', required: false, type: 'string', description: 'Catatan PO', sample: 'Urgent' }
         ]}
       />
 

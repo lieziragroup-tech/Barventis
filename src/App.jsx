@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import { useData } from './contexts/DataContext';
 import { LanguageProvider } from './contexts/LanguageContext';
@@ -24,6 +24,11 @@ const SuperAdminPanel = React.lazy(() => import('./pages/superadmin/SuperAdminPa
 const TenantAdminPanel = React.lazy(() => import('./pages/owner/TenantAdminPanel'));
 const PosTerminal = React.lazy(() => import('./pages/pos/PosTerminal'));
 const LandingPage = React.lazy(() => import('./pages/landing/LandingPage'));
+
+const RouteErrorBoundary = ({ children }) => {
+  const location = useLocation();
+  return <ErrorBoundary key={location.pathname}>{children}</ErrorBoundary>;
+};
 
 const LoadingSpinner = () => (
   <div style={{
@@ -103,9 +108,9 @@ export default function App() {
             <DashboardLayout />
           </ProtectedRoute>
         }>
-          <Route index element={<SuperAdminPanel tab="tenants" activeUser={activeUser} />} />
-          <Route path="templates" element={<SuperAdminPanel tab="templates" activeUser={activeUser} />} />
-          <Route path="logs" element={<SuperAdminPanel tab="logs" activeUser={activeUser} />} />
+          <Route index element={<RouteErrorBoundary><SuperAdminPanel tab="tenants" activeUser={activeUser} /></RouteErrorBoundary>} />
+          <Route path="templates" element={<RouteErrorBoundary><SuperAdminPanel tab="templates" activeUser={activeUser} /></RouteErrorBoundary>} />
+          <Route path="logs" element={<RouteErrorBoundary><SuperAdminPanel tab="logs" activeUser={activeUser} /></RouteErrorBoundary>} />
         </Route>
 
         {/* OWNER */}
@@ -114,22 +119,22 @@ export default function App() {
             <DashboardLayout />
           </ProtectedRoute>
         }>
-          <Route index element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
-          <Route path="stock" element={<ErrorBoundary><StockLedger /></ErrorBoundary>} />
-          <Route path="pos" element={<ErrorBoundary><PosUpload /></ErrorBoundary>} />
-          <Route path="recipes" element={<ErrorBoundary><Recipes /></ErrorBoundary>} />
-          <Route path="invoicing" element={<ErrorBoundary><Invoicing /></ErrorBoundary>} />
-          <Route path="opname" element={<ErrorBoundary><StockOpname /></ErrorBoundary>} />
-          <Route path="audit" element={<ErrorBoundary><AuditLogs /></ErrorBoundary>} />
-          <Route path="cost-control" element={<ErrorBoundary><CostControl /></ErrorBoundary>} />
-          <Route path="backup" element={<ErrorBoundary><BackupCenter /></ErrorBoundary>} />
-          <Route path="maintenance" element={<ErrorBoundary><Maintenance /></ErrorBoundary>} />
-          <Route path="settings" element={<ErrorBoundary><TenantAdminPanel /></ErrorBoundary>} />
+          <Route index element={<RouteErrorBoundary><Dashboard /></RouteErrorBoundary>} />
+          <Route path="stock" element={<RouteErrorBoundary><StockLedger /></RouteErrorBoundary>} />
+          <Route path="pos" element={<RouteErrorBoundary><PosUpload /></RouteErrorBoundary>} />
+          <Route path="recipes" element={<RouteErrorBoundary><Recipes /></RouteErrorBoundary>} />
+          <Route path="invoicing" element={<RouteErrorBoundary><Invoicing /></RouteErrorBoundary>} />
+          <Route path="opname" element={<RouteErrorBoundary><StockOpname /></RouteErrorBoundary>} />
+          <Route path="audit" element={<RouteErrorBoundary><AuditLogs /></RouteErrorBoundary>} />
+          <Route path="cost-control" element={<RouteErrorBoundary><CostControl /></RouteErrorBoundary>} />
+          <Route path="backup" element={<RouteErrorBoundary><BackupCenter /></RouteErrorBoundary>} />
+          <Route path="maintenance" element={<RouteErrorBoundary><Maintenance /></RouteErrorBoundary>} />
+          <Route path="settings" element={<RouteErrorBoundary><TenantAdminPanel /></RouteErrorBoundary>} />
         </Route>
 
         <Route path="/owner/pos-terminal" element={
           <ProtectedRoute allowedRoles={['Admin / Owner']}>
-            <ErrorBoundary><PosTerminal /></ErrorBoundary>
+            <RouteErrorBoundary><PosTerminal /></RouteErrorBoundary>
           </ProtectedRoute>
         } />
 
@@ -139,16 +144,16 @@ export default function App() {
             <DashboardLayout />
           </ProtectedRoute>
         }>
-          <Route index element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
-          <Route path="stock" element={<ErrorBoundary><StockLedger /></ErrorBoundary>} />
-          <Route path="pos" element={<ErrorBoundary><PosUpload /></ErrorBoundary>} />
-          <Route path="recipes" element={<ErrorBoundary><Recipes /></ErrorBoundary>} />
-          <Route path="maintenance" element={<ErrorBoundary><Maintenance /></ErrorBoundary>} />
+          <Route index element={<RouteErrorBoundary><Dashboard /></RouteErrorBoundary>} />
+          <Route path="stock" element={<RouteErrorBoundary><StockLedger /></RouteErrorBoundary>} />
+          <Route path="pos" element={<RouteErrorBoundary><PosUpload /></RouteErrorBoundary>} />
+          <Route path="recipes" element={<RouteErrorBoundary><Recipes /></RouteErrorBoundary>} />
+          <Route path="maintenance" element={<RouteErrorBoundary><Maintenance /></RouteErrorBoundary>} />
         </Route>
 
         <Route path="/staff/pos-terminal" element={
           <ProtectedRoute allowedRoles={['Staff']}>
-            <ErrorBoundary><PosTerminal /></ErrorBoundary>
+            <RouteErrorBoundary><PosTerminal /></RouteErrorBoundary>
           </ProtectedRoute>
         } />
 

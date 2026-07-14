@@ -106,33 +106,26 @@ export default function StockLedger() {
   // Export to Excel
   const handleExport = async () => {
     const XLSX = await getXLSX();
+    let rowNum = 1;
     const data = filteredStock.map(item => {
-      const pack = parseFullPack(item.full_pack);
       const rQty = item.qty_resto || 0;
       const cQty = item.qty_central || 0;
       const total = rQty + cQty;
       return {
-        'Material Name': item.name,
-        'Category': item.category,
-        'Supplier': item.supplier,
-        'Unit (Pack)': item.unit,
-        'Pack Size': item.full_pack || '-',
-        'Resto Stock (Pack)': rQty.toFixed(1),
-        'Central Stock (Pack)': cQty.toFixed(1),
-        'Total Stock (Pack)': total.toFixed(1),
-        [`Resto (${pack.unit})`]: (rQty * pack.size).toFixed(0),
-        [`Central (${pack.unit})`]: (cQty * pack.size).toFixed(0),
-        [`Total (${pack.unit})`]: (total * pack.size).toFixed(0),
-        'Price/Pack (IDR)': item.new_price || item.price,
-        'Total Value (IDR)': total * (item.new_price || item.price),
-        'Min Stock': item.min_stock || 15,
-        'Status': total === 0 ? 'OUT' : total < (item.min_stock || 15) ? 'LOW' : 'SAFE'
+        'NO': rowNum++,
+        'NAMA ITEM': item.name,
+        'KUANTITI': total,
+        'UNIT': item.unit,
+        'Full': item.full_pack || '',
+        'Price': item.price || 0,
+        'NEW Price': item.new_price || 0,
+        'SUPPLIER': item.supplier || '',
       };
     });
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Stock Report');
-    XLSX.writeFile(wb, `UMATIS_Stock_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(wb, `SO BARISTA_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const itemHistory = useMemo(() => selectedItem
@@ -499,13 +492,14 @@ export default function StockLedger() {
           return res;
         }}
         expectedColumns={[
-          { key: 'name', label: 'name', required: true, type: 'string', description: 'Nama unik bahan baku', sample: 'Espresso Bean' },
-          { key: 'category', label: 'category', required: true, type: 'string', description: 'Kategori (Coffee, Milk, dll)', sample: 'Coffee & Tea' },
-          { key: 'supplier', label: 'supplier', required: false, type: 'string', description: 'Nama supplier', sample: 'Vendor A' },
-          { key: 'unit', label: 'unit', required: true, type: 'string', description: 'Satuan beli (pck, btl, ltr, dll)', sample: 'kg' },
-          { key: 'full_pack', label: 'full_pack', required: false, type: 'string', description: 'Isi per pack (1000 gr)', sample: '1000 gr' },
-          { key: 'price', label: 'price', required: true, type: 'number', description: 'Harga beli (angka)', sample: 120000 },
-          { key: 'min_stock', label: 'min_stock', required: false, type: 'number', description: 'Batas alert stok minimum', sample: 5 }
+          { key: 'NO', label: 'NO', required: false, type: 'number', description: 'Nomor', sample: 1 },
+          { key: 'name', label: 'NAMA ITEM', required: true, type: 'string', description: 'Nama unik bahan baku', sample: 'Espresso Bean' },
+          { key: 'category', label: 'Kategori', required: true, type: 'string', description: 'Kategori (Coffee, Milk, dll)', sample: 'Coffee & Tea' },
+          { key: 'supplier', label: 'SUPPLIER', required: false, type: 'string', description: 'Nama supplier', sample: 'Vendor A' },
+          { key: 'unit', label: 'UNIT', required: true, type: 'string', description: 'Satuan beli (pck, btl, ltr, dll)', sample: 'kg' },
+          { key: 'full_pack', label: 'Full', required: false, type: 'string', description: 'Isi per pack (1000 gr)', sample: '1000 gr' },
+          { key: 'price', label: 'Price', required: true, type: 'number', description: 'Harga beli (angka)', sample: 120000 },
+          { key: 'min_stock', label: 'Min Stock', required: false, type: 'number', description: 'Batas alert stok minimum', sample: 5 }
         ]}
       />
     </div>
