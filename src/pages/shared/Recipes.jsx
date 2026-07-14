@@ -3,7 +3,7 @@ import { Search, Plus, Trash2, Save, X, UploadCloud, Coins, AlertTriangle, Check
 import BulkImport from '../../components/BulkImport';
 import { useData } from '../../contexts/DataContext';
 import { api } from '../../services/api';
-import { formatIDR } from '../../services/costUtils';
+import { formatIDR, calculateIngredientCost } from '../../services/costUtils';
 
 // Stable client-side id for editable ingredient rows so React keys don't rely on the
 // array index (preserves input focus/state across add/remove/reorder). (LOW #19)
@@ -11,7 +11,7 @@ const rowUid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUU
 const ensureUids = (arr = []) => arr.map(x => ({ ...x, _uid: x._uid ?? rowUid() }));
 
 export default function Recipes() {
-  const { stock, recipes, handleSaveRecipe: onSaveRecipe, handleAddRecipe: onAddRecipe, handleDeleteRecipe: onDeleteRecipe } = useData();
+  const { stock, recipes, handleSaveRecipe: onSaveRecipe, handleAddRecipe: onAddRecipe, handleDeleteRecipe: onDeleteRecipe, fetchAllData } = useData();
   const [activeRecipe, setActiveRecipe] = useState(recipes[0] || null);
   const [search, setSearch] = useState('');
   const [editedIngredients, setEditedIngredients] = useState(activeRecipe ? ensureUids(activeRecipe.ingredients) : []);
@@ -104,37 +104,12 @@ export default function Recipes() {
   // amount = qty_in_use * pricePerUnit (if using the pack's content unit like gr/ml)
   // amount = qty_in_use * full_pack_price (if using per-pack unit like pck/btl)
   const calcRowAmount = (ing) => {
-    // Use stored amount from database if available and qty hasn't changed
-    if (ing.amount && ing.amount > 0) {
-      // If user edited qty, recalculate; otherwise use stored value
-    }
     const info = stockMap[ing.item_name];
     if (!info) {
-      // Fallback: use stored amount or original formula
       if (ing.amount && ing.amount > 0) return ing.amount;
-      const isGramMl = ['gr', 'ml', 'grm'].includes(ing.unit);
-      return (ing.qty_in_use * (ing.unit_price || 0)) / (isGramMl ? 1000 : 1);
+      return 0;
     }
-
-    const usedUnit = (ing.unit || 'gr').toLowerCase().replace('grm', 'gr');
-    const packUnit = (info.unit || 'pck').toLowerCase();
-    const isGrMlPack = ['gr', 'ml'].includes(info.packContentUnit);
-
-    if (usedUnit === packUnit) {
-      // Using whole packs — multiply by pack price
-      return ing.qty_in_use * (info.new_price || info.price);
-    } else if (isGrMlPack && (usedUnit === 'gr' || usedUnit === 'ml')) {
-      // Using gr/ml from a gr/ml pack
-      return ing.qty_in_use * info.pricePerUnit;
-    } else {
-      // Fallback: unit differs from pack unit and pack has no gr/ml decomposition.
-      // Align with backend calculateIngredientCost (api.js): qty * (price / packSize)
-      // when the pack size is known, otherwise qty * price. Previously this divided
-      // by a hardcoded 1000, so the in-editor HPP diverged from the persisted value (C-1).
-      return info.packSize > 0
-        ? ing.qty_in_use * info.pricePerUnit
-        : ing.qty_in_use * (info.new_price || info.price);
-    }
+    return calculateIngredientCost(info, ing.qty_in_use, ing.unit);
   };
 
   const subtotal = useMemo(() => editedIngredients.reduce((acc, ing) => acc + calcRowAmount(ing), 0), [editedIngredients, stockMap]);
@@ -740,11 +715,15 @@ export default function Recipes() {
         type="recipes"
         title="Bulk Import Resep & Harga Jual"
         description="Upload data menu, harga jual, dan resep sekaligus dari file Excel."
+        serverImport={async (file) => {
+          const { nestApi } = await import('../../services/nestApi');
+          const res = await nestApi.importRecipes(file);
+          if (res.success > 0) fetchAllData();
+          return res;
+        }}
         onCommit={async (rows) => {
           const res = await api.bulkImportRecipes(rows);
-          if (res.success > 0) {
-            window.location.reload();
-          }
+          if (res.success > 0) fetchAllData();
           return res;
         }}
         expectedColumns={[

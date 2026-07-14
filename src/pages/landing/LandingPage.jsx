@@ -1,15 +1,16 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import LandingNavbar from './LandingNavbar';
 import LandingHero from './LandingHero';
 import LandingMetrics from './LandingMetrics';
-import LandingFeatures from './LandingFeatures';
-import LandingTransform from './LandingTransform';
-import LandingCalculator from './LandingCalculator';
-import LandingTestimonials from './LandingTestimonials';
-import LandingPricing from './LandingPricing';
-import LandingFAQ from './LandingFAQ';
-import LandingFooter from './LandingFooter';
 import './landing.css';
+
+const LandingFeatures = lazy(() => import('./LandingFeatures'));
+const LandingTransform = lazy(() => import('./LandingTransform'));
+const LandingCalculator = lazy(() => import('./LandingCalculator'));
+const LandingTestimonials = lazy(() => import('./LandingTestimonials'));
+const LandingPricing = lazy(() => import('./LandingPricing'));
+const LandingFAQ = lazy(() => import('./LandingFAQ'));
+const LandingFooter = lazy(() => import('./LandingFooter'));
 
 export default function LandingPage() {
   return (
@@ -17,13 +18,16 @@ export default function LandingPage() {
       <LandingNavbar />
       <LandingHero />
       <LandingMetrics />
-      <LandingFeatures />
-      <LandingTransform />
-      <LandingCalculator />
-      <LandingTestimonials />
-      <LandingPricing />
-      <LandingFAQ />
-      <LandingFooter />
+      
+      <Suspense fallback={<div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading...</div>}>
+        <LandingFeatures />
+        <LandingTransform />
+        <LandingCalculator />
+        <LandingTestimonials />
+        <LandingPricing />
+        <LandingFAQ />
+        <LandingFooter />
+      </Suspense>
     </div>
   );
 }

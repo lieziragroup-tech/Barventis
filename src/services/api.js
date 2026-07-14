@@ -1110,29 +1110,7 @@ export const api = {
       }
     }
 
-    // 2. Insert to pos_orders
-    const { data: order, error: orderErr } = await supabase
-      .from('pos_orders')
-      .insert({
-        tenant_id: tenantId,
-        order_no: orderNo,
-        total_amount: totalAmount,
-        payment_method: paymentMethod,
-        created_by: userId
-      })
-      .select('id')
-      .maybeSingle();
-
-    if (orderErr) {
-      console.warn("Table pos_orders may not exist or error:", orderErr);
-    }
-
-    if (order && orderItems.length > 0) {
-      const mappedOrderItems = orderItems.map(oi => ({ ...oi, order_id: order.id }));
-      await supabase.from('pos_order_items').insert(mappedOrderItems);
-    }
-
-    // 3. Aggregate deductions & revenue
+    // 2. Aggregate deductions & revenue
     const deductionMap = {};
     let totalSalesQty = 0;
     
@@ -1166,21 +1144,20 @@ export const api = {
       }
     }
 
-    // 4. Perform Atomic Deductions & insert Transactions
+    // 3. Prepare payload for Atomic Deductions & Transactions
     const transactionRows = [];
+    const deductionsPayload = [];
     const negativeWarnings = [];
 
     // Revenue transaction
     transactionRows.push({
-      tenant_id: tenantId,
       date: nowStr,
       material_id: null,
       type: 'POS_SALE',
       location: 'RESTO',
       qty: totalSalesQty,
       amount: totalAmount,
-      notes: `POS Kasir (Native) - Order: ${orderNo} (${paymentMethod})`,
-      created_by: userId
+      notes: `POS Kasir (Native) - Order: ${orderNo} (${paymentMethod})`
     });
 
     for (const [matId, data] of Object.entries(deductionMap)) {
@@ -1189,33 +1166,42 @@ export const api = {
       const currentResto = parseFloat(material.qty_resto);
       
       if (currentResto - deductQty < 0) {
-        negativeWarnings.push(`Stok ${material.name} tersisa ${currentResto.toFixed(2)}, tapi order butuh ${deductQty.toFixed(2)}`);
+        negativeWarnings.push(`Stok ${material.name} tersisa ${currentResto.toFixed(2)}, tapi order butuh ${deductQty.toFixed(2)}. Potongan dilewati.`);
+        continue; // Skip deduction if it would be negative
       }
 
-      const { error: deductErr } = await supabase.rpc('deduct_stock_atomic', {
-        p_material_id: material.id,
-        p_deduct_qty: deductQty
+      deductionsPayload.push({
+        material_id: material.id,
+        deduct_qty: deductQty
       });
 
-      if (!deductErr) {
-        const unitPrice = parseFloat(material.new_price ?? material.price ?? 0);
-        transactionRows.push({
-          tenant_id: tenantId,
-          date: nowStr,
-          material_id: material.id,
-          type: 'POS_DEDUCTION',
-          location: 'RESTO',
-          qty: -deductQty,
-          amount: -deductQty * unitPrice,
-          notes: `POS Kasir (Native) Deduction - Order: ${orderNo}`,
-          created_by: userId
-        });
-      }
+      const unitPrice = parseFloat(material.new_price ?? material.price ?? 0);
+      transactionRows.push({
+        date: nowStr,
+        material_id: material.id,
+        type: 'POS_DEDUCTION',
+        location: 'RESTO',
+        qty: -deductQty,
+        amount: -deductQty * unitPrice,
+        notes: `POS Kasir (Native) Deduction - Order: ${orderNo}`
+      });
     }
 
-    // Insert transactions
-    if (transactionRows.length > 0) {
-      await supabase.from('transactions').insert(transactionRows);
+    // 4. Execute atomic checkout
+    const { data: orderId, error: checkoutErr } = await supabase.rpc('checkout_pos_atomic', {
+      p_tenant_id: tenantId,
+      p_user_id: userId,
+      p_order_no: orderNo,
+      p_total_amount: totalAmount,
+      p_payment_method: paymentMethod,
+      p_order_items: orderItems,
+      p_deductions: deductionsPayload,
+      p_transactions: transactionRows
+    });
+
+    if (checkoutErr) {
+      console.error("Checkout failed:", checkoutErr);
+      return { success: false, error: checkoutErr.message };
     }
 
     await logAudit('POS_CHECKOUT', `Transaksi POS Kasir ${orderNo} berhasil (Rp ${totalAmount.toLocaleString('id-ID')}).`);

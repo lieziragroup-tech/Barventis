@@ -24,6 +24,7 @@ export default function BulkImport({
   isOpen,
   onClose,
   onCommit,
+  serverImport, // NEW: (file: File) => Promise<ImportResult> — sends raw file to NestJS
   type,
   title,
   description,
@@ -36,6 +37,7 @@ export default function BulkImport({
   const [importResult, setImportResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef(null);
+  const pendingFileRef = useRef(null); // stores file for serverImport flow
 
   const handleClose = () => {
     setStep('upload');
@@ -43,6 +45,7 @@ export default function BulkImport({
     setErrors([]);
     setImportResult(null);
     setLoading(false);
+    pendingFileRef.current = null;
     onClose();
   };
 
@@ -99,6 +102,7 @@ export default function BulkImport({
   // Parse uploaded Excel file
   const handleFileUpload = async (file) => {
     if (!file) return;
+    pendingFileRef.current = file; // store for serverImport flow
     const XLSX = await getXLSX();
     setLoading(true);
     setErrors([]);
@@ -182,7 +186,12 @@ export default function BulkImport({
     setStep('importing');
     setLoading(true);
     try {
-      const result = await onCommit(parsedRows);
+      let result;
+      if (serverImport && pendingFileRef.current) {
+        result = await serverImport(pendingFileRef.current);
+      } else {
+        result = await onCommit(parsedRows);
+      }
       setImportResult(result || { success: parsedRows.length, failed: 0 });
       setStep('done');
     } catch (err) {

@@ -12,7 +12,7 @@ import { formatIDR } from '../../services/costUtils';
 import { api } from '../../services/api';
 
 export default function StockLedger() {
-  const { stock, transactions, handleAdjustStock, handleUpdateItem, handleAddItem, handleDeleteItem } = useData();
+  const { stock, transactions, handleAdjustStock, handleUpdateItem, handleAddItem, handleDeleteItem, fetchAllData } = useData();
   const onAdjustStock = handleAdjustStock;
   const onUpdateItem = handleUpdateItem;
   const onAddItem = handleAddItem;
@@ -487,12 +487,15 @@ export default function StockLedger() {
         title="Bulk Import / Sync Bahan Baku"
         description="Upload data bahan baku sekaligus dari file Excel. Gunakan Download Template untuk melakukan Export Sync (mengunduh data saat ini, mengubahnya, lalu upload kembali)."
         currentData={stock}
+        serverImport={async (file) => {
+          const { nestApi } = await import('../../services/nestApi');
+          const res = await nestApi.importMaterials(file);
+          if (res.success > 0) fetchAllData();
+          return res;
+        }}
         onCommit={async (rows) => {
           const res = await api.bulkImportMaterials(rows);
-          if (res.success > 0) {
-            // reload to fetch new data
-            window.location.reload();
-          }
+          if (res.success > 0) fetchAllData();
           return res;
         }}
         expectedColumns={[

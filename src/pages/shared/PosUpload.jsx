@@ -17,7 +17,7 @@ export default function PosUpload() {
   const { recipes, handleProcessPosSales } = useData();
   const onProcessPosSales = handleProcessPosSales;
   const [dragActive, setDragActive] = useState(false);
-  const [, setFile] = useState(null);
+  const [rawFile, setRawFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [parsedData, setParsedData] = useState(null);
   const [mappedSales, setMappedSales] = useState([]);
@@ -149,7 +149,7 @@ export default function PosUpload() {
   // 2. Excel Parsing Engine
   const processExcelFile = async (excelFile) => {
     const XLSX = await getXLSX();
-    setFile(excelFile);
+    setRawFile(excelFile);
     setLoading(true);
     setUploadStatus(null);
     const reader = new FileReader();
@@ -323,20 +323,33 @@ export default function PosUpload() {
     const confetti = await getConfetti();
     setLoading(true);
     try {
-      await onProcessPosSales(mappedSales, parsedData.filename);
-      confetti({
-        particleCount: 150,
-        spread: 80,
-        origin: { y: 0.6 }
-      });
-      // Clear state on success
-      setFile(null);
+      if (rawFile) {
+        // Server-side flow: upload raw file to NestJS
+        const { nestApi } = await import('../../services/nestApi');
+        try {
+          const result = await nestApi.syncPos(rawFile, parsedData.filename);
+          if (result.summary?.status === 'COMPLETED_WITH_ERRORS' && result.summary?.deduction_errors?.length > 0) {
+            setUploadStatus({ type: 'warning', message: result.message + '\n' + result.summary.deduction_errors.join('\n') });
+            setLoading(false);
+            return;
+          }
+        } catch (err) {
+          setUploadStatus({ type: 'error', message: err.message || 'Gagal menghubungi server untuk sinkronisasi POS.' });
+          setLoading(false);
+          return;
+        }
+      } else {
+        // Fallback: direct Supabase (legacy)
+        await onProcessPosSales(mappedSales, parsedData.filename);
+      }
+      await confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+      setRawFile(null);
       setParsedData(null);
       setMappedSales([]);
       setUploadStatus(null);
     } catch (err) {
       console.error("[PosUpload] handleCommitSales error:", err);
-      // Do NOT clear parsedData/mappedSales on failure so user can retry
+      setUploadStatus({ type: 'error', message: err.message || 'Terjadi kesalahan saat menyimpan data.' });
     } finally {
       setLoading(false);
     }
@@ -571,7 +584,7 @@ export default function PosUpload() {
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>POS Spreadsheet Rows Preview</h3>
             <div style={{ display: 'flex', gap: '12px' }}>
               <button className="btn btn-secondary" onClick={() => {
-                setFile(null);
+                setRawFile(null);
                 setParsedData(null);
                 setMappedSales([]);
                 setUploadStatus(null);

@@ -10,7 +10,7 @@ const rowUid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUU
 const blankLineItem = () => ({ item_name: '', qty: 1, unit_price: 0, unit: 'pck', _uid: rowUid() });
 
 export default function Invoicing() {
-  const { stock, invoices, showToast: toast, handleCreateInvoice: onCreateInvoice, handleReceiveInvoice: onReceiveInvoice, handleCancelInvoice: onCancelInvoice } = useData();
+  const { stock, invoices, showToast: toast, handleCreateInvoice: onCreateInvoice, handleReceiveInvoice: onReceiveInvoice, handleCancelInvoice: onCancelInvoice, fetchAllData } = useData();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [viewInvoice, setViewInvoice] = useState(null);
@@ -415,11 +415,10 @@ export default function Invoicing() {
         type="invoices"
         title="Bulk Import Purchase Order"
         description="Upload baris Purchase Order sekaligus dari file Excel."
-        onCommit={async (rows) => {
-          const res = await api.bulkImportInvoices(rows);
-          if (res.success > 0) {
-            window.location.reload();
-          }
+        serverImport={async (file) => {
+          const { nestApi } = await import('../../services/nestApi');
+          const res = await nestApi.importInvoices(file);
+          if (res.success > 0) fetchAllData();
           return res;
         }}
         expectedColumns={[
