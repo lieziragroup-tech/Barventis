@@ -478,7 +478,7 @@ export default function StockLedger() {
         onClose={() => setShowBulkImport(false)}
         type="materials"
         title="Bulk Import / Sync Bahan Baku"
-        description="Upload data bahan baku sekaligus dari file Excel. Gunakan Download Template untuk melakukan Export Sync (mengunduh data saat ini, mengubahnya, lalu upload kembali)."
+        description="Upload master data bahan baku sekaligus dari file Excel. PENTING: Kuantiti awal (stok fisik) tidak dimasukkan di sini. Gunakan menu Stock Opname setelah master barang diunggah agar riwayat audit tercatat."
         currentData={stock}
         onCommit={async (rows) => {
           const res = await api.bulkImportMaterials(rows);

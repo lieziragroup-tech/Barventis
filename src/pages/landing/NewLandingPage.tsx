@@ -8,16 +8,7 @@ import {
   ArrowRight,
   X, 
   TrendingDown, 
-  Info,
-  Check,
-  AlertTriangle,
-  BookOpen,
-  Cake,
-  Coffee,
-  Plus,
-  PlusCircle,
-  Sparkles,
-  Utensils
+  Info
 } from "lucide-react";
 import "./NewLanding.css";
 import { DEMO_PRESETS } from "./presets";
@@ -326,7 +317,7 @@ export default function App() {
               onClick={() => setActiveTab("playground")}
               className="bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-full text-xs font-bold tracking-wide shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center gap-1.5"
             >
-              Coba Demo Interaktif
+              <span className="hidden sm:inline">Coba Demo Interaktif</span><span className="sm:hidden">Coba Demo</span>
             </button>
           ) : (
             <button 
@@ -422,12 +413,12 @@ export default function App() {
                       />
                     </div>
                     {/* Floating graphical cards */}
-                    <div className="absolute top-10 -left-6 glass-card p-4 rounded-2xl shadow-xl z-20 flex flex-col gap-0.5 transform -rotate-3 border border-[#bcc9c6]/30">
+                    <div className="absolute top-10 left-0 md:-left-6 glass-card p-4 rounded-2xl shadow-xl z-20 flex flex-col gap-0.5 transform -rotate-3 border border-[#bcc9c6]/30">
                       <span className="text-[10px] text-[#515f74] uppercase tracking-wider font-bold">Kebocoran Bahan</span>
                       <span className="text-sm font-bold text-emerald-700">-37% Less Waste</span>
                     </div>
 
-                    <div className="absolute bottom-8 -right-4 glass-card p-4 rounded-2xl shadow-xl z-20 flex flex-col gap-0.5 transform rotate-3 border border-[#bcc9c6]/30">
+                    <div className="absolute bottom-8 right-0 md:-right-4 glass-card p-4 rounded-2xl shadow-xl z-20 flex flex-col gap-0.5 transform rotate-3 border border-[#bcc9c6]/30">
                       <span className="text-[10px] text-[#515f74] uppercase tracking-wider font-bold">Rekomendasi AI</span>
                       <span className="text-sm font-bold text-primary">Saran HPP Akurat</span>
                     </div>
@@ -513,7 +504,7 @@ export default function App() {
                     <div className="p-8 rounded-[2rem] bg-[#FAFAF8] border border-[#bcc9c6]/20 hover:shadow-xl hover:border-primary/20 transition-all duration-300 flex flex-col gap-5 group">
                       <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-md group-hover:scale-110 transition-transform relative">
                         <span className="material-symbols-outlined text-primary text-[28px]">psychology</span>
-                        <div className="absolute -right-1 -top-1 w-5 h-5 bg-primary-light rounded-full opacity-80 -z-10"></div>
+                        <div className="absolute right-2 top-2 md:-right-1 md:-top-1 w-5 h-5 bg-primary-light rounded-full opacity-80 -z-10"></div>
                       </div>
                       <div className="flex flex-col gap-2">
                         <h3 className="text-xl font-serif font-bold text-[#191C1E]">Rekomendasi & Analis AI</h3>
@@ -548,7 +539,7 @@ export default function App() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
                     {/* Before Card */}
                     <div className="bg-white/5 border border-white/10 p-8 rounded-[2rem] flex flex-col gap-6 relative">
-                      <div className="absolute -top-4 -right-4 text-5xl opacity-15">🌧️</div>
+                      <div className="absolute top-4 right-4 md:-top-4 md:-right-4 text-5xl opacity-15">🌧️</div>
                       <h3 className="text-xl font-serif font-bold text-white/95 border-b border-white/10 pb-3">Hari-hari yang Melelahkan</h3>
                       <ul className="flex flex-col gap-4">
                         <li className="flex gap-3 items-start">
@@ -568,7 +559,7 @@ export default function App() {
 
                     {/* After Card */}
                     <div className="bg-primary/20 border border-primary/30 p-8 rounded-[2rem] flex flex-col gap-6 relative shadow-lg shadow-black/10">
-                      <div className="absolute -top-4 -right-4 text-5xl opacity-20">☀️</div>
+                      <div className="absolute top-4 right-4 md:-top-4 md:-right-4 text-5xl opacity-20">☀️</div>
                       <h3 className="text-xl font-serif font-bold text-[#ffddb8] border-b border-primary/30 pb-3">Bernafas Lebih Lega</h3>
                       <ul className="flex flex-col gap-4">
                         <li className="flex gap-3 items-start">
@@ -634,8 +625,8 @@ export default function App() {
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
                       </div>
-                      <div className="absolute -right-4 top-1/2 text-5xl opacity-25 animate-pulse">✨</div>
-                      <div className="absolute left-6 bottom-4 text-4xl opacity-25">🌿</div>
+                      <div className="absolute right-0 md:-right-4 top-1/2 text-5xl opacity-25 animate-pulse">✨</div>
+                      <div className="absolute left-2 md:left-6 bottom-4 text-4xl opacity-25">🌿</div>
                     </div>
                   </div>
                 </div>
@@ -1490,7 +1481,7 @@ export default function App() {
                         animate={{ opacity: 1, y: 0 }}
                         className="bg-white p-6 rounded-[2.5rem] border-2 border-primary/20 shadow-xl flex flex-col gap-6 relative"
                       >
-                        <div className="absolute -top-3 -left-3 bg-gradient-to-r from-primary to-emerald-600 text-white px-3.5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-md flex items-center gap-1">
+                        <div className="absolute -top-3 left-0 md:-left-3 bg-gradient-to-r from-primary to-emerald-600 text-white px-3.5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-md flex items-center gap-1">
                           <Sparkles className="w-3 h-3 text-accent" />
                           <span>Rekomendasi AI Aktif</span>
                         </div>
@@ -1638,7 +1629,7 @@ export default function App() {
         </div>
 
         <div className="max-w-7xl mx-auto border-t border-[#bcc9c6]/10 mt-10 pt-6 flex flex-col md:flex-row justify-between items-center gap-4 text-[11px] text-gray-400 font-medium">
-          <span>© 2026 Barventis. All Rights Reserved.</span>
+          <span>© 2026 Barventis. Semua hal baik dilindungi undang-undang.</span>
           <div className="flex gap-4">
             <span className="material-symbols-outlined text-[16px] text-primary">favorite</span>
             <span className="material-symbols-outlined text-[16px] text-tertiary">local_cafe</span>

@@ -1773,11 +1773,23 @@ export const api = {
 
     const materialsMap = new Map((allMaterials || []).map(m => [m.name.toLowerCase().trim(), m]));
 
-    // rows format: { menu_name, selling_price, ingredients_json (stringified JSON array) }
+    // rows format: { menu_name, selling_price, bahan_1, qty_1, bahan_2, qty_2, bahan_3, qty_3, ... }
     for (const row of rows) {
       try {
         let ingredients = [];
-        try { ingredients = JSON.parse(row.ingredients_json || '[]'); } catch { /* ignore: best-effort */ }
+        
+        // Extract up to 10 ingredient columns from the flat row
+        for (let i = 1; i <= 10; i++) {
+          const bahanKey = `bahan_${i}`;
+          const qtyKey = `qty_${i}`;
+          
+          if (row[bahanKey] && String(row[bahanKey]).trim() !== '') {
+            ingredients.push({
+              item_name: String(row[bahanKey]).trim(),
+              qty_in_use: parseFloat(row[qtyKey] || 0)
+            });
+          }
+        }
 
         const sellingPrice = parseFloat(row.selling_price || 0);
         let subtotal = 0;
