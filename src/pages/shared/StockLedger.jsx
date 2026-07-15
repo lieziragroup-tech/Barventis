@@ -12,7 +12,7 @@ import { formatIDR } from '../../services/costUtils';
 import { api } from '../../services/api';
 
 export default function StockLedger() {
-  const { stock, transactions, handleAdjustStock, handleUpdateItem, handleAddItem, handleDeleteItem, fetchAllData } = useData();
+  const { stock, transactions, handleAdjustStock, handleUpdateItem, handleAddItem, handleDeleteItem, refreshData } = useData();
   const onAdjustStock = handleAdjustStock;
   const onUpdateItem = handleUpdateItem;
   const onAddItem = handleAddItem;
@@ -482,7 +482,7 @@ export default function StockLedger() {
         currentData={stock}
         onCommit={async (rows) => {
           const res = await api.bulkImportMaterials(rows);
-          if (res.success > 0) fetchAllData();
+          if (res.success > 0) refreshData();
           return res;
         }}
         expectedColumns={[

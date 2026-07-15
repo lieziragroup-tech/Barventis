@@ -10,7 +10,7 @@ const rowUid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUU
 const blankLineItem = () => ({ item_name: '', qty: 1, unit_price: 0, unit: 'pck', _uid: rowUid() });
 
 export default function Invoicing() {
-  const { stock, invoices, showToast: toast, handleCreateInvoice: onCreateInvoice, handleReceiveInvoice: onReceiveInvoice, handleCancelInvoice: onCancelInvoice, fetchAllData } = useData();
+  const { stock, invoices, showToast: toast, handleCreateInvoice: onCreateInvoice, handleReceiveInvoice: onReceiveInvoice, handleCancelInvoice: onCancelInvoice, refreshData } = useData();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [viewInvoice, setViewInvoice] = useState(null);
@@ -455,7 +455,7 @@ export default function Invoicing() {
               failed++;
             }
           }
-          await fetchAllData();
+          await refreshData();
           if (unmatched.length > 0) {
             toast(`${unmatched.length} item tidak ditemukan di database: ${unmatched.slice(0, 3).join(', ')}${unmatched.length > 3 ? '...' : ''}. PO tetap dibuat untuk item yang cocok.`, 'warning');
           }

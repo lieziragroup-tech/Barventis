@@ -11,7 +11,7 @@ const rowUid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUU
 const ensureUids = (arr = []) => arr.map(x => ({ ...x, _uid: x._uid ?? rowUid() }));
 
 export default function Recipes() {
-  const { stock, recipes, handleSaveRecipe: onSaveRecipe, handleAddRecipe: onAddRecipe, handleDeleteRecipe: onDeleteRecipe, fetchAllData } = useData();
+  const { stock, recipes, handleSaveRecipe: onSaveRecipe, handleAddRecipe: onAddRecipe, handleDeleteRecipe: onDeleteRecipe, refreshData } = useData();
   const [activeRecipe, setActiveRecipe] = useState(recipes[0] || null);
   const [search, setSearch] = useState('');
   const [editedIngredients, setEditedIngredients] = useState(activeRecipe ? ensureUids(activeRecipe.ingredients) : []);
@@ -717,7 +717,7 @@ export default function Recipes() {
         description="Upload data menu, harga jual, dan resep sekaligus dari file Excel."
         onCommit={async (rows) => {
           const res = await api.bulkImportRecipes(rows);
-          if (res.success > 0) fetchAllData();
+          if (res.success > 0) refreshData();
           return res;
         }}
         expectedColumns={[
