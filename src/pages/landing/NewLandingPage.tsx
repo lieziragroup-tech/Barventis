@@ -5,6 +5,7 @@ import {
   Trash2, 
   RefreshCw, 
   ArrowLeft, 
+  ArrowRight,
   X, 
   TrendingDown, 
   Info
