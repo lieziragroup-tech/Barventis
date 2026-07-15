@@ -137,7 +137,6 @@ export default function BulkImport({
         }
         
         const parsed = [];
-        const rowErrors = [];
         
         for (let i = 1; i < rawRows.length; i++) {
           const row = rawRows[i];
@@ -145,16 +144,15 @@ export default function BulkImport({
           // legitimate row whose values are all 0 / false is NOT dropped. (LOW #22)
           if (!row || row.every(cell => cell === null || cell === undefined || String(cell).trim() === '')) continue;
           
-          const obj = {};
-          let rowHasError = false;
+          const obj = { _selected: true, _rowIndex: i + 1, _error: null }; // Default selected
+          let rowErrorMsg = null;
           
           expectedColumns.forEach(col => {
             const headerIdx = headers.indexOf(col.label.toLowerCase());
             const rawVal = headerIdx >= 0 ? row[headerIdx] : undefined;
             
             if (col.required && (rawVal === undefined || rawVal === '' || rawVal === null)) {
-              rowErrors.push({ row: i + 1, message: `Baris ${i + 1}: Kolom "${col.label}" wajib diisi.` });
-              rowHasError = true;
+              rowErrorMsg = `Kolom "${col.label}" wajib diisi.`;
               return;
             }
             
@@ -166,10 +164,13 @@ export default function BulkImport({
             }
           });
           
-          if (!rowHasError) parsed.push(obj);
+          if (rowErrorMsg) {
+             obj._selected = false;
+             obj._error = rowErrorMsg;
+          }
+          parsed.push(obj);
         }
         
-        setErrors(rowErrors);
         setParsedRows(parsed);
         if (parsed.length > 0) setStep('preview');
         
@@ -186,13 +187,24 @@ export default function BulkImport({
     setStep('importing');
     setLoading(true);
     try {
+      const selectedRows = parsedRows.filter(r => r._selected && !r._error);
+      
+      // Clean up internal metadata before passing to parent
+      const cleanRows = selectedRows.map(r => {
+        const { _selected, _rowIndex, _error, ...rest } = r;
+        return rest;
+      });
+
       let result;
       if (serverImport && pendingFileRef.current) {
+        // If server flow, we still pass file, but server parses everything. 
+        // This requirement means server parsing might bypass client selections unless we change API.
+        // Assuming client-side onCommit is main flow for now.
         result = await serverImport(pendingFileRef.current);
       } else {
-        result = await onCommit(parsedRows);
+        result = await onCommit(cleanRows);
       }
-      setImportResult(result || { success: parsedRows.length, failed: 0 });
+      setImportResult(result || { success: cleanRows.length, failed: 0 });
       setStep('done');
     } catch (err) {
       setErrors([{ row: 0, message: err.message }]);
@@ -322,8 +334,8 @@ export default function BulkImport({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div>
                 <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                   <strong style={{ color: 'var(--text-inverse)' }}>{parsedRows.length}</strong> baris siap diimport
-                  {errors.length > 0 && <span style={{ color: 'var(--warning-text)', marginLeft: '8px' }}>({errors.length} baris dilewati karena error)</span>}
+                   <strong style={{ color: 'var(--text-inverse)' }}>{parsedRows.filter(r => r._selected).length}</strong> baris dipilih siap diimport
+                   {parsedRows.filter(r => r._error).length > 0 && <span style={{ color: 'var(--warning-text)', marginLeft: '8px' }}>({parsedRows.filter(r => r._error).length} baris error)</span>}
                 </span>
               </div>
               <button onClick={() => setStep('upload')} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>← Ganti File</button>
@@ -334,14 +346,37 @@ export default function BulkImport({
               <table className="custom-table" style={{ fontSize: '0.78rem' }}>
                 <thead>
                   <tr>
+                    <th style={{ width: '40px', textAlign: 'center' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={parsedRows.length > 0 && parsedRows.every(r => r._error || r._selected)}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setParsedRows(prev => prev.map(r => r._error ? r : { ...r, _selected: checked }));
+                        }}
+                      />
+                    </th>
                     <th>#</th>
                     {expectedColumns.map(c => <th key={c.key}>{c.label}</th>)}
                   </tr>
                 </thead>
                 <tbody>
                   {parsedRows.slice(0, 50).map((row, i) => (
-                    <tr key={i}>
-                      <td style={{ color: 'var(--text-muted)' }}>{i + 1}</td>
+                    <tr key={i} style={{ background: row._error ? 'rgba(239,68,68,0.1)' : 'transparent' }}>
+                      <td style={{ textAlign: 'center' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={row._selected}
+                          disabled={!!row._error}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setParsedRows(prev => prev.map((r, idx) => idx === i ? { ...r, _selected: checked } : r));
+                          }}
+                        />
+                      </td>
+                      <td style={{ color: 'var(--text-muted)' }} title={row._error || ''}>
+                        {row._rowIndex} {row._error && <AlertTriangle size={12} style={{ color: 'var(--danger)', display: 'inline' }} />}
+                      </td>
                       {expectedColumns.map(c => (
                         <td key={c.key} style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {row[c.key] ?? '—'}
@@ -350,7 +385,7 @@ export default function BulkImport({
                     </tr>
                   ))}
                   {parsedRows.length > 50 && (
-                    <tr><td colSpan={expectedColumns.length + 1} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '8px' }}>...dan {parsedRows.length - 50} baris lainnya</td></tr>
+                    <tr><td colSpan={expectedColumns.length + 2} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '8px' }}>...dan {parsedRows.length - 50} baris lainnya</td></tr>
                   )}
                 </tbody>
               </table>
@@ -360,12 +395,12 @@ export default function BulkImport({
               <button onClick={handleClose} className="btn btn-secondary">Batal</button>
               <button
                 onClick={handleCommit}
-                disabled={loading || parsedRows.length === 0}
+                disabled={loading || parsedRows.filter(r => r._selected).length === 0}
                 className="btn btn-primary"
                 style={{ display: 'flex', gap: '8px', alignItems: 'center' }}
               >
                 {loading ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <UploadCloud size={14} />}
-                {loading ? 'Mengimport...' : `Import ${parsedRows.length} Baris`}
+                {loading ? 'Mengimport...' : `Import ${parsedRows.filter(r => r._selected).length} Baris`}
               </button>
             </div>
           </div>
