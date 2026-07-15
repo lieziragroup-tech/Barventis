@@ -1734,7 +1734,7 @@ export const api = {
 
     for (const row of rows) {
       try {
-        const { error } = await supabase.from('materials').insert({
+        const { error } = await supabase.from('materials').upsert({
           tenant_id: tenantId,
           name: row.name,
           category: row.category || 'Others',
@@ -1743,11 +1743,9 @@ export const api = {
           full_pack: row.full_pack || '',
           price: parseFloat(row.price || 0),
           new_price: parseFloat(row.price || 0),
-          qty_resto: 0,
-          qty_central: 0,
           min_stock: parseFloat(row.min_stock || 15),
           is_active: true
-        });
+        }, { onConflict: 'tenant_id, name' });
         if (error) { failed++; errors.push({ row: row.name, error: error.message }); }
         else success++;
       } catch (e) {
