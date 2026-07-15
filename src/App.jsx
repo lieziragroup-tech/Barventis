@@ -23,7 +23,7 @@ const Maintenance = React.lazy(() => import('./pages/shared/Maintenance'));
 const SuperAdminPanel = React.lazy(() => import('./pages/superadmin/SuperAdminPanel'));
 const TenantAdminPanel = React.lazy(() => import('./pages/owner/TenantAdminPanel'));
 const PosTerminal = React.lazy(() => import('./pages/pos/PosTerminal'));
-const LandingPage = React.lazy(() => import('./pages/landing/LandingPage'));
+const LandingPage = React.lazy(() => import('./pages/landing/NewLandingPage.tsx'));
 
 const RouteErrorBoundary = ({ children }) => {
   const location = useLocation();
