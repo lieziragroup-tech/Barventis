@@ -236,16 +236,16 @@ export default function Invoicing() {
                   <td style={{ textAlign: 'center' }}>{statusBadge(inv.status)}</td>
                   <td style={{ textAlign: 'center' }}>
                     <div style={{ display: 'inline-flex', gap: '4px' }}>
-                      <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: '6px' }} title="View Detail" onClick={() => setViewInvoice(inv)}>
+                      <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)' }} title="View Detail" onClick={() => setViewInvoice(inv)}>
                         <Eye size={13} />
                       </button>
                       {(inv.status === 'DRAFT' || inv.status === 'SENT') && (
-                        <button className="btn btn-success" style={{ padding: '5px 8px', borderRadius: '6px', fontSize: '0.7rem' }} title="Mark Received — Stock In" onClick={() => { if (confirm(`Terima invoice ${inv.invoice_no}?\nStock akan otomatis bertambah di Central Warehouse.`)) onReceiveInvoice(inv.id); }}>
+                        <button className="btn btn-success" style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.7rem' }} title="Mark Received — Stock In" onClick={() => { if (confirm(`Terima invoice ${inv.invoice_no}?\nStock akan otomatis bertambah di Central Warehouse.`)) onReceiveInvoice(inv.id); }}>
                           <CheckCircle size={13} /> Terima
                         </button>
                       )}
                       {inv.status === 'DRAFT' && (
-                        <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: '6px', color: 'var(--danger)' }} title="Cancel" onClick={() => {
+                        <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)', color: 'var(--danger)' }} title="Cancel" onClick={() => {
                           if (window.confirm(`Batalkan invoice ${inv.invoice_no}?\nInvoice draft ini akan diarsip sebagai CANCELLED dan tidak dapat diubah kembali.`)) {
                             onCancelInvoice(inv.id);
                           }
@@ -253,7 +253,7 @@ export default function Invoicing() {
                           <XCircle size={13} />
                         </button>
                       )}
-                      <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: '6px' }} title="Print" onClick={() => handlePrintInvoice(inv)}>
+                      <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)' }} title="Print" onClick={() => handlePrintInvoice(inv)}>
                         <Download size={13} />
                       </button>
                     </div>
@@ -284,8 +284,8 @@ export default function Invoicing() {
                 <button style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => setViewInvoice(null)}><X size={16} /></button>
               </div>
             </div>
-            {viewInvoice.notes && <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '20px', fontStyle: 'italic', background: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px' }}>"{viewInvoice.notes}"</p>}
-            <table className="custom-table" style={{ border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
+            {viewInvoice.notes && <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '20px', fontStyle: 'italic', background: 'var(--bg-secondary)', padding: '12px', borderRadius: 'var(--radius-md)' }}>"{viewInvoice.notes}"</p>}
+            <table className="custom-table" style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
               <thead>
                 <tr><th style={{ padding: '12px' }}>#</th><th>Item</th><th style={{ textAlign: 'right' }}>Qty</th><th>Unit</th><th style={{ textAlign: 'right' }}>Price</th><th style={{ textAlign: 'right', paddingRight: '12px' }}>Subtotal</th></tr>
               </thead>
@@ -306,7 +306,7 @@ export default function Invoicing() {
               Total: <span style={{ color: 'var(--accent)', marginLeft: '12px' }}>{formatIDR(viewInvoice.total)}</span>
             </div>
             {viewInvoice.received_date && (
-              <div style={{ marginTop: '20px', padding: '12px 16px', background: 'rgba(81,207,102,0.05)', border: '1px solid rgba(81,207,102,0.2)', borderRadius: '8px', fontSize: '0.85rem', color: 'var(--success)' }}>
+              <div style={{ marginTop: '20px', padding: '12px 16px', background: 'rgba(81,207,102,0.05)', border: '1px solid rgba(81,207,102,0.2)', borderRadius: 'var(--radius-md)', fontSize: '0.85rem', color: 'var(--success)' }}>
                 ✓ Received on {viewInvoice.received_date} — Stock updated in Central Warehouse
               </div>
             )}
@@ -338,14 +338,14 @@ export default function Invoicing() {
               </div>
 
               {/* Line Items */}
-              <div style={{ border: '1px solid var(--border)', padding: '16px', borderRadius: '12px', background: 'var(--bg-secondary)' }}>
+              <div style={{ border: '1px solid var(--border)', padding: '16px', borderRadius: 'var(--radius-lg)', background: 'var(--bg-secondary)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <h4 style={{ fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Daftar Item</h4>
                   <button type="button" className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'var(--bg-primary)' }} onClick={addLineItem}>
                     <Plus size={14} style={{ marginRight: '4px' }}/> Tambah Item
                   </button>
                 </div>
-                <table className="custom-table" style={{ background: 'var(--bg-primary)', borderRadius: '8px' }}>
+                <table className="custom-table" style={{ background: 'var(--bg-primary)', borderRadius: 'var(--radius-md)' }}>
                   <thead>
                     <tr>
                       <th style={{ width: '35%' }}>Material</th>
@@ -414,12 +414,52 @@ export default function Invoicing() {
         onClose={() => setShowBulkImport(false)}
         type="invoices"
         title="Bulk Import Purchase Order"
-        description="Upload baris Purchase Order sekaligus dari file Excel."
-        serverImport={async (file) => {
-          const { nestApi } = await import('../../services/nestApi');
-          const res = await nestApi.importInvoices(file);
-          if (res.success > 0) fetchAllData();
-          return res;
+        description="Upload baris Purchase Order sekaligus dari file Excel. Baris dengan PO REF yang sama akan digabung jadi satu PO."
+        onCommit={async (rows) => {
+          const grouped = {};
+          const unmatched = [];
+          for (const row of rows) {
+            const key = row.po_ref || `PO-${Date.now()}`;
+            if (!grouped[key]) {
+              grouped[key] = {
+                supplier: row.supplier || '',
+                notes: row.notes || '',
+                location: row.location || 'CENTRAL',
+                items: []
+              };
+            }
+            const mat = stock.find(s => s.name.toLowerCase() === (row.item_name || '').toLowerCase().trim());
+            if (!mat) {
+              unmatched.push(row.item_name);
+              continue;
+            }
+            grouped[key].items.push({
+              material_id: mat.id,
+              qty: parseFloat(row.qty || 0),
+              unit_price: parseFloat(row.unit_price || 0)
+            });
+          }
+          let success = 0;
+          let failed = 0;
+          for (const po of Object.values(grouped)) {
+            if (po.items.length === 0) { failed++; continue; }
+            try {
+              await api.createInvoice({
+                supplier: po.supplier,
+                notes: po.notes,
+                location: po.location,
+                items: po.items
+              });
+              success++;
+            } catch (e) {
+              failed++;
+            }
+          }
+          await fetchAllData();
+          if (unmatched.length > 0) {
+            toast(`${unmatched.length} item tidak ditemukan di database: ${unmatched.slice(0, 3).join(', ')}${unmatched.length > 3 ? '...' : ''}. PO tetap dibuat untuk item yang cocok.`, 'warning');
+          }
+          return { success, failed: failed + unmatched.length };
         }}
         expectedColumns={[
           { key: 'po_ref', label: 'PO REF', required: true, type: 'string', description: 'Referensi PO (Satu referensi akan digabung jadi satu PO)', sample: 'PO-2023-001' },

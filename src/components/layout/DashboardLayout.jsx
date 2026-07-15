@@ -42,7 +42,7 @@ const NavGroup = ({ title, defaultOpen = true, children }) => {
           alignItems: 'center',
           userSelect: 'none',
           borderRadius: '4px',
-          transition: 'color 0.15s ease'
+          transition: 'color var(--ease)'
         }}
         onMouseOver={e => e.currentTarget.style.color = 'var(--text-secondary)'}
         onMouseOut={e => e.currentTarget.style.color = 'var(--text-muted)'}
@@ -223,7 +223,7 @@ export default function DashboardLayout() {
           <div className="header-title-sec" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <button 
               className="btn btn-secondary mobile-menu-btn" 
-              style={{ padding: '8px', borderRadius: '8px', display: 'none' }}
+              style={{ padding: '8px', borderRadius: 'var(--radius-md)', display: 'none' }}
               onClick={() => setIsSidebarOpen(true)}
             >
               <Menu size={20} />
@@ -280,9 +280,9 @@ export default function DashboardLayout() {
                 disabled={loadingData}
                 title="Sinkronisasi ulang data"
                 style={{
-                  background: 'none', border: '1px solid var(--border)', borderRadius: '8px',
+                  background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
                   padding: '7px 10px', color: 'var(--text-secondary)', cursor: loadingData ? 'not-allowed' : 'pointer',
-                  display: 'flex', alignItems: 'center', transition: 'all 0.2s',
+                  display: 'flex', alignItems: 'center', transition: 'all var(--ease)',
                 }}
                 onMouseOver={e => e.currentTarget.style.color = 'var(--accent)'}
                 onMouseOut={e => e.currentTarget.style.color = 'var(--text-secondary)'}
@@ -300,10 +300,10 @@ export default function DashboardLayout() {
                   style={{
                     background: showNotifications ? 'var(--accent-glow)' : 'none',
                     border: `1px solid ${showNotifications ? 'var(--border-focus)' : 'var(--border)'}`,
-                    borderRadius: '8px', padding: '7px 10px',
+                    borderRadius: 'var(--radius-md)', padding: '7px 10px',
                     color: notifCount > 0 ? 'var(--danger)' : 'var(--text-secondary)',
                     cursor: 'pointer', position: 'relative', display: 'flex', alignItems: 'center',
-                    transition: 'all 0.2s',
+                    transition: 'all var(--ease)',
                   }}
                 >
                   <Bell size={17} />
@@ -312,7 +312,7 @@ export default function DashboardLayout() {
                       position: 'absolute', top: '-6px', right: '-6px',
                       background: 'var(--danger)',                        color: 'var(--text-inverse)',
                       fontSize: '0.6rem', fontWeight: '800',
-                      borderRadius: '10px', minWidth: '16px', height: '16px',
+                      borderRadius: 'var(--radius-lg)', minWidth: '16px', height: '16px',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       padding: '0 4px', boxShadow: '0 0 0 2px var(--bg-primary)',
                     }}>{notifCount > 9 ? '9+' : notifCount}</span>
@@ -324,8 +324,8 @@ export default function DashboardLayout() {
                   <div style={{
                     position: 'absolute', top: 'calc(100% + 10px)', right: 0,
                     width: '340px', background: 'var(--bg-secondary)',
-                    border: '1px solid var(--border)', borderRadius: '12px',
-                    boxShadow: '0 16px 48px rgba(0,0,0,0.4)', zIndex: 1000,
+                    border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',
+                    boxShadow: 'var(--shadow-lg)', zIndex: 1000,
                     overflow: 'hidden',
                   }}>
                     <div style={{
@@ -380,7 +380,7 @@ export default function DashboardLayout() {
                                   fontSize: '0.68rem', fontWeight: '700',
                                   color: isCritical ? 'var(--danger)' : 'var(--warning)',
                                   background: isCritical ? 'rgba(255,107,107,0.1)' : 'rgba(252,196,25,0.1)',
-                                  padding: '2px 7px', borderRadius: '6px', flexShrink: 0,
+                                  padding: '2px 7px', borderRadius: 'var(--radius-sm)', flexShrink: 0,
                                 }}>
                                   {isCritical ? 'HABIS' : 'RENDAH'}
                                 </span>
@@ -418,7 +418,7 @@ export default function DashboardLayout() {
           right: '24px',
           background: 'var(--bg-secondary)',
           border: '1px solid var(--border)',
-          borderRadius: '12px',
+          borderRadius: 'var(--radius-lg)',
           padding: '12px 20px',
           color: 'var(--text-primary)',
           fontSize: '0.8rem',

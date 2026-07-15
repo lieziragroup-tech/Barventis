@@ -47,7 +47,7 @@ export default function Onboarding({ onNavigate, onDismiss, tenantName }) {
       <div className="glass-card" style={{
         width: '100%', maxWidth: '520px',
         padding: '40px 36px',
-        border: '1px solid rgba(255,255,255,0.08)',
+        border: '1px solid var(--border)',
         boxShadow: '0 30px 60px rgba(0,0,0,0.5)',
         position: 'relative'
       }}>
@@ -81,14 +81,14 @@ export default function Onboarding({ onNavigate, onDismiss, tenantName }) {
 
         {/* Step card */}
         <div style={{
-          background: 'rgba(255,255,255,0.02)',
+          background: 'var(--bg-tertiary)',
           border: `1px solid ${step.color}22`,
-          borderRadius: '16px',
+          borderRadius: 'var(--radius-xl)',
           padding: '28px 24px',
           marginBottom: '24px'
         }}>
           <div style={{
-            width: '52px', height: '52px', borderRadius: '12px',
+            width: '52px', height: '52px', borderRadius: 'var(--radius-lg)',
             background: `${step.color}18`, display: 'flex',
             alignItems: 'center', justifyContent: 'center',
             color: step.color, marginBottom: '16px'

@@ -94,7 +94,7 @@ export default function AuthScreen({ onAuthSuccess }) {
         maxWidth: '440px',
         background: 'var(--bg-secondary)',
         border: '1px solid var(--border)',
-        borderRadius: '16px',
+        borderRadius: 'var(--radius-xl)',
         padding: '36px',
         boxShadow: 'var(--card-shadow)',
         transition: 'all 0.5s ease'
@@ -107,13 +107,13 @@ export default function AuthScreen({ onAuthSuccess }) {
             justifyContent: 'center',
             width: '48px',
             height: '48px',
-            borderRadius: '10px',
+            borderRadius: 'var(--radius-lg)',
             background: 'var(--accent)',
             color: 'var(--text-inverse)',
             fontSize: '1.5rem',
             fontWeight: '800',
             marginBottom: '12px',
-            boxShadow: '0 4px 12px var(--accent-glow)',
+            boxShadow: 'var(--shadow-md)',
             transition: 'all 0.5s ease'
           }}>B</div>
           
@@ -144,7 +144,7 @@ export default function AuthScreen({ onAuthSuccess }) {
 
         {inviteToken && (tokenStatus === 'invalid' || tokenStatus === 'used' || tokenStatus === 'expired') && (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
-            <div style={{ background: 'var(--danger-glow)', color: 'var(--danger-text)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(220, 38, 38, 0.15)' }}>
+            <div style={{ background: 'var(--danger-glow)', color: 'var(--danger-text)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(220, 38, 38, 0.15)' }}>
               <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem' }}>
                 {tokenStatus === 'invalid' && 'Undangan Tidak Ditemukan'}
                 {tokenStatus === 'used' && 'Undangan Sudah Dipakai'}
@@ -162,7 +162,7 @@ export default function AuthScreen({ onAuthSuccess }) {
           <div style={{
             background: 'var(--danger-glow)',
             border: '1px solid rgba(220, 38, 38, 0.15)',
-            borderRadius: '8px',
+            borderRadius: 'var(--radius-md)',
             padding: '12px 16px',
             color: 'var(--danger-text)',
             fontSize: '0.825rem',
@@ -191,7 +191,7 @@ export default function AuthScreen({ onAuthSuccess }) {
                   disabled={loading}
                   style={{
                     width: '100%', padding: '10px 14px', background: 'var(--bg-primary)',
-                    border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '0.9rem', outline: 'none'
+                    border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', fontSize: '0.9rem', outline: 'none'
                   }}
                 />
               </div>
@@ -212,7 +212,7 @@ export default function AuthScreen({ onAuthSuccess }) {
                 disabled={loading}
                 style={{
                   width: '100%', padding: '10px 14px', background: 'var(--bg-secondary)',
-                  border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '0.9rem', outline: 'none'
+                  border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', fontSize: '0.9rem', outline: 'none'
                 }}
               />
             </div>
@@ -232,7 +232,7 @@ export default function AuthScreen({ onAuthSuccess }) {
                 disabled={loading}
                 style={{
                   width: '100%', padding: '10px 14px', background: 'var(--bg-secondary)',
-                  border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '0.9rem', outline: 'none'
+                  border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', fontSize: '0.9rem', outline: 'none'
                 }}
               />
             </div>
@@ -243,10 +243,10 @@ export default function AuthScreen({ onAuthSuccess }) {
               className="btn btn-primary"
               disabled={loading}
               style={{
-                width: '100%', padding: '12px', borderRadius: '8px', fontWeight: '700', fontSize: '0.9rem', marginTop: '10px',
+                width: '100%', padding: '12px', borderRadius: 'var(--radius-md)', fontWeight: '700', fontSize: '0.9rem', marginTop: '10px',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                 background: 'var(--accent)', border: 'none', color: 'var(--text-inverse)',
-                boxShadow: '0 4px 12px var(--accent-glow)', cursor: 'pointer'
+                boxShadow: 'var(--shadow-md)', cursor: 'pointer'
               }}
             >
               {loading ? (

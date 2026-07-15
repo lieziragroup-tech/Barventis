@@ -195,7 +195,7 @@ export default function Maintenance() {
     <div className="maintenance-container">
       {notice && (
         <div style={{
-          marginBottom: '20px', padding: '12px 16px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 600,
+          marginBottom: '20px', padding: '12px 16px', borderRadius: 'var(--radius-lg)', fontSize: '0.85rem', fontWeight: 600,
           display: 'flex', alignItems: 'center', gap: '10px',
           background: notice.type === 'success' ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)',
           border: `1px solid ${notice.type === 'success' ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)'}`,
@@ -209,8 +209,8 @@ export default function Maintenance() {
       {/* Read-only role banner for Staff */}
       {!isOwner && (
         <div style={{
-          marginBottom: '20px', padding: '12px 16px', borderRadius: '10px', fontSize: '0.825rem',
-          background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', color: 'var(--text-muted)',
+          marginBottom: '20px', padding: '12px 16px', borderRadius: 'var(--radius-lg)', fontSize: '0.825rem',
+          background: 'var(--bg-tertiary)', border: '1px solid var(--border)', color: 'var(--text-muted)',
           display: 'flex', alignItems: 'center', gap: '10px'
         }}>
           <Info size={16} style={{ color: 'var(--accent)' }} />
@@ -255,13 +255,13 @@ export default function Maintenance() {
               {issues !== null && (
                 <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {issues.length === 0 ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: '8px',
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', borderRadius: 'var(--radius-md)',
                       background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)', color: 'var(--success)', fontSize: '0.85rem', fontWeight: 600 }}>
                       <CheckCircle size={16} /> Tidak ada masalah terdeteksi. Data sehat.
                     </div>
                   ) : issues.map(issue => (
-                    <div key={issue.key} style={{ display: 'flex', gap: '10px', padding: '12px 14px', borderRadius: '8px',
-                      background: 'rgba(255,255,255,0.02)', border: `1px solid ${sevColor(issue.severity)}33` }}>
+                    <div key={issue.key} style={{ display: 'flex', gap: '10px', padding: '12px 14px', borderRadius: 'var(--radius-md)',
+                      background: 'var(--bg-tertiary)', border: `1px solid ${sevColor(issue.severity)}33` }}>
                       {sevIcon(issue.severity)}
                       <div>
                         <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -275,7 +275,7 @@ export default function Maintenance() {
               )}
 
               <button className="btn btn-primary" onClick={handleRunCheck} disabled={checkLoading}
-                style={{ marginTop: 'auto', padding: '11px', borderRadius: '10px', fontWeight: 700, display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
+                style={{ marginTop: 'auto', padding: '11px', borderRadius: 'var(--radius-lg)', fontWeight: 700, display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
                 <ShieldCheck size={16} style={checkLoading ? spinStyle : undefined} />
                 {checkLoading ? 'Memeriksa…' : 'Jalankan Pemeriksaan'}
               </button>
@@ -289,13 +289,13 @@ export default function Maintenance() {
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.5, marginBottom: '16px' }}>
                 Sinkronkan HPP semua resep dengan harga bahan terkini. Berguna setelah update harga material atau penerimaan invoice.
               </p>
-              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: '10px',
+              <div style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',
                 padding: '12px 14px', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '16px', display: 'flex', gap: '10px', alignItems: 'center' }}>
                 <Info size={15} style={{ color: 'var(--accent)', flexShrink: 0 }} />
                 Menggunakan formula HPP kanonik yang sama dengan editor resep (subtotal + {(parseFloat(settings?.overhead_pct || 0.05) * 100).toFixed(0)}% fixed cost).
               </div>
               <button className="btn btn-primary" onClick={handleRecalc} disabled={recalcLoading}
-                style={{ marginTop: 'auto', padding: '11px', borderRadius: '10px', fontWeight: 700, display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
+                style={{ marginTop: 'auto', padding: '11px', borderRadius: 'var(--radius-lg)', fontWeight: 700, display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
                 <Calculator size={16} style={recalcLoading ? spinStyle : undefined} />
                 {recalcLoading ? 'Menghitung ulang…' : 'Recalc Semua Resep'}
               </button>
@@ -321,7 +321,7 @@ export default function Maintenance() {
                       value={settings.company_name}
                       onChange={(e) => setSettings({ ...settings, company_name: e.target.value })}
                       required
-                      style={{ width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', outline: 'none' }}
+                      style={{ width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', outline: 'none' }}
                     />
                   </div>
                   <div>
@@ -334,7 +334,7 @@ export default function Maintenance() {
                       value={settings.overhead_pct}
                       onChange={(e) => setSettings({ ...settings, overhead_pct: e.target.value })}
                       required
-                      style={{ width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', outline: 'none' }}
+                      style={{ width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', outline: 'none' }}
                     />
                   </div>
                   <div style={{ display: 'flex', gap: '10px' }}>
@@ -347,7 +347,7 @@ export default function Maintenance() {
                         placeholder="e.g. 4"
                         value={settings.locked_until_month}
                         onChange={(e) => setSettings({ ...settings, locked_until_month: e.target.value })}
-                        style={{ width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', outline: 'none' }}
+                        style={{ width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', outline: 'none' }}
                       />
                     </div>
                     <div style={{ flex: 1 }}>
@@ -359,7 +359,7 @@ export default function Maintenance() {
                         placeholder="e.g. 2026"
                         value={settings.locked_until_year}
                         onChange={(e) => setSettings({ ...settings, locked_until_year: e.target.value })}
-                        style={{ width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', outline: 'none' }}
+                        style={{ width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', outline: 'none' }}
                       />
                     </div>
                   </div>
@@ -386,7 +386,7 @@ export default function Maintenance() {
                             value={settings.whatsapp_number}
                             onChange={(e) => setSettings({ ...settings, whatsapp_number: e.target.value })}
                             required={settings.whatsapp_enabled}
-                            style={{ width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', outline: 'none' }}
+                            style={{ width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', outline: 'none' }}
                           />
                         </div>
                         <div>
@@ -397,7 +397,7 @@ export default function Maintenance() {
                             value={settings.whatsapp_token}
                             onChange={(e) => setSettings({ ...settings, whatsapp_token: e.target.value })}
                             required={settings.whatsapp_enabled}
-                            style={{ width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', outline: 'none' }}
+                            style={{ width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', outline: 'none' }}
                           />
                         </div>
                       </div>
@@ -405,7 +405,7 @@ export default function Maintenance() {
                   </div>
 
                   <button type="submit" className="btn btn-primary" disabled={savingSettings}
-                    style={{ marginTop: '10px', padding: '9px', borderRadius: '8px', fontWeight: 700, display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
+                    style={{ marginTop: '10px', padding: '9px', borderRadius: 'var(--radius-md)', fontWeight: 700, display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
                     <Database size={14} /> {savingSettings ? 'Menyimpan…' : 'Simpan Pengaturan'}
                   </button>
                 </form>
@@ -433,7 +433,7 @@ export default function Maintenance() {
               <div style={{ overflowX: 'auto' }}>
                 <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.01)' }}>
+                    <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)', background: 'var(--bg-tertiary)' }}>
                       {['Nama', 'Email', 'Role Saat Ini', 'Ubah Role'].map((h, i) => (
                         <th key={h} style={{ padding: '14px 20px', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', textAlign: i === 3 ? 'right' : 'left' }}>{h}</th>
                       ))}
@@ -465,7 +465,7 @@ export default function Maintenance() {
                                 onChange={(e) => handleRoleChange(u, e.target.value)}
                                 title={isSelf ? 'Tidak bisa mengubah role sendiri' : 'Ubah role pengguna'}
                                 style={{ padding: '6px 10px', background: 'rgba(15,23,42,0.8)', border: '1px solid var(--border)',
-                                  borderRadius: '6px', color: 'var(--text-inverse)', fontSize: '0.8rem', fontWeight: 600,
+                                  borderRadius: 'var(--radius-sm)', color: 'var(--text-inverse)', fontSize: '0.8rem', fontWeight: 600,
                                   cursor: (savingUserId === u.id || isSelf) ? 'not-allowed' : 'pointer', opacity: isSelf ? 0.5 : 1 }}
                               >
                                 <option value="Admin / Owner">Admin / Owner</option>

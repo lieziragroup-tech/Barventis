@@ -61,7 +61,7 @@ export const ToastProvider = ({ children }) => {
                 background: 'var(--glass-bg)',
                 border: `1px solid ${cfg.border}`,
                 borderLeft: `4px solid ${cfg.color}`,
-                borderRadius: '10px',
+                borderRadius: 'var(--radius-lg)',
                 padding: '13px 16px',
                 boxShadow: 'var(--card-shadow)',
                 backdropFilter: 'blur(12px)',

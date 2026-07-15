@@ -219,7 +219,7 @@ export default function BackupCenter() {
         <div className="glass-card kpi-card">
           <div className="kpi-header">
             <span className="kpi-title">Total File Cadangan</span>
-            <div className="kpi-icon-wrap" style={{ background: 'rgba(76, 110, 245, 0.1)', color: 'var(--accent)' }}>
+            <div className="kpi-icon-wrap" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>
               <Database size={20} />
             </div>
           </div>
@@ -281,9 +281,9 @@ export default function BackupCenter() {
               Membuat snapshot instan dari seluruh database Anda saat ini (stok bahan, riwayat transaksi, invoices, resep COGS, dan audit logs). File cadangan akan dikompresi ke dalam arsip ZIP yang aman dan disimpan di server.
             </p>
             <div style={{
-              background: 'rgba(255,255,255,0.02)',
+              background: 'var(--bg-tertiary)',
               border: '1px solid var(--border)',
-              borderRadius: '10px',
+              borderRadius: 'var(--radius-lg)',
               padding: '12px 16px',
               fontSize: '0.8rem',
               color: 'var(--text-muted)',
@@ -300,7 +300,7 @@ export default function BackupCenter() {
             className="btn btn-primary" 
             onClick={handleCreateBackup}
             disabled={actionLoading || loading}
-            style={{ width: '100%', padding: '12px', borderRadius: '10px', fontWeight: '700', display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}
+            style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-lg)', fontWeight: '700', display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}
           >
             <RefreshCw size={16} className={actionLoading ? 'animate-spin' : ''} style={{ animation: actionLoading ? 'spin 1s linear infinite' : 'none' }} />
             {actionLoading ? 'Memproses Arsip ZIP...' : 'Buat Backup Sekarang (ZIP)'}
@@ -322,7 +322,7 @@ export default function BackupCenter() {
             style={{
               border: dragActive ? '2px dashed var(--accent)' : '2px dashed var(--border)',
               background: dragActive ? 'var(--accent-glow)' : 'rgba(255,255,255,0.01)',
-              borderRadius: '12px',
+              borderRadius: 'var(--radius-lg)',
               padding: '24px 20px',
               textAlign: 'center',
               cursor: 'pointer',
@@ -390,7 +390,7 @@ export default function BackupCenter() {
           <div style={{ overflowX: 'auto' }}>
             <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.01)' }}>
+                <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)', background: 'var(--bg-tertiary)' }}>
                   <th style={{ padding: '14px 20px', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Nama File Backup</th>
                   <th style={{ padding: '14px 20px', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Ukuran File</th>
                   <th style={{ padding: '14px 20px', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Tanggal Pembuatan</th>
@@ -428,7 +428,7 @@ export default function BackupCenter() {
                           className="btn btn-secondary"
                           onClick={() => handleDownloadBackup(b)}
                           title="Unduh File JSON ke Komputer"
-                          style={{ padding: '8px', borderRadius: '6px' }}
+                          style={{ padding: '8px', borderRadius: 'var(--radius-sm)' }}
                         >
                           <Download size={14} />
                         </button>
@@ -506,7 +506,7 @@ export default function BackupCenter() {
               <div style={{
                 width: '42px',
                 height: '42px',
-                borderRadius: '10px',
+                borderRadius: 'var(--radius-lg)',
                 background: 'rgba(255, 107, 107, 0.1)',
                 display: 'flex',
                 alignItems: 'center',
@@ -542,7 +542,7 @@ export default function BackupCenter() {
                 <div style={{
                   background: 'rgba(255, 107, 107, 0.05)',
                   border: '1px solid rgba(255, 107, 107, 0.15)',
-                  borderRadius: '10px',
+                  borderRadius: 'var(--radius-lg)',
                   padding: '14px',
                   fontSize: '0.85rem',
                   lineHeight: '1.5',
@@ -552,7 +552,7 @@ export default function BackupCenter() {
                   <p style={{ marginBottom: '8px' }}>
                     Anda akan memulihkan database sistem menggunakan cadangan:
                   </p>
-                  <p style={{ fontFamily: 'monospace', fontWeight: '700', color: 'var(--danger)', fontSize: '0.8rem', background: 'rgba(0,0,0,0.2)', padding: '6px 10px', borderRadius: '6px', marginBottom: '8px', wordBreak: 'break-all' }}>
+                  <p style={{ fontFamily: 'monospace', fontWeight: '700', color: 'var(--danger)', fontSize: '0.8rem', background: 'rgba(0,0,0,0.2)', padding: '6px 10px', borderRadius: 'var(--radius-sm)', marginBottom: '8px', wordBreak: 'break-all' }}>
                     {selectedRestoreBackup instanceof File ? selectedRestoreBackup.name : selectedRestoreBackup.filename}
                   </p>
                   <p style={{ fontWeight: '600' }}>
@@ -574,7 +574,7 @@ export default function BackupCenter() {
                       padding: '12px',
                       background: 'var(--bg-primary)',
                       border: '1px solid var(--border)',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       color: 'var(--text-primary)',
                       fontSize: '0.9rem',
                       fontWeight: '700',
@@ -589,7 +589,7 @@ export default function BackupCenter() {
                   <button 
                     className="btn btn-secondary" 
                     onClick={closeRestoreModal}
-                    style={{ padding: '10px 20px', borderRadius: '8px' }}
+                    style={{ padding: '10px 20px', borderRadius: 'var(--radius-md)' }}
                   >
                     Batal
                   </button>
@@ -599,7 +599,7 @@ export default function BackupCenter() {
                     onClick={handleExecuteRestore}
                     style={{
                       padding: '10px 20px',
-                      borderRadius: '8px',
+                      borderRadius: 'var(--radius-md)',
                       background: restoreConfirmText === 'PULIHKAN' ? 'var(--danger)' : 'var(--bg-tertiary)',
                       borderColor: restoreConfirmText === 'PULIHKAN' ? 'var(--danger)' : 'var(--border)',
                       color: restoreConfirmText === 'PULIHKAN' ? 'var(--text-inverse)' : 'var(--text-muted)',

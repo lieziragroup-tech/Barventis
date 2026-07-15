@@ -139,7 +139,7 @@ export default function StockLedger() {
         <div className="glass-card" style={{ marginBottom: '24px', padding: '20px' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
             {selectedItems.length > 0 ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, background: 'var(--bg-secondary)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, background: 'var(--bg-secondary)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 'var(--radius-md)' }}>
                 <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{selectedItems.length} Item Terpilih</span>
                 <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem', color: 'var(--danger)', borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.05)' }} onClick={handleBulkDelete}>
                   <Trash2 size={14} style={{ marginRight: '6px' }}/> Hapus Terpilih
@@ -161,7 +161,7 @@ export default function StockLedger() {
                   <option value="WARNING">Low Stock</option>
                   <option value="CRITICAL">Out of Stock</option>
                 </select>
-                <div style={{ display: 'flex', background: 'rgba(0,0,0,0.03)', border: '1px solid var(--border)', borderRadius: '10px', padding: '3px' }}>
+                <div style={{ display: 'flex', background: 'rgba(0,0,0,0.03)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '3px' }}>
                   {['ALL', 'RESTO', 'CENTRAL'].map(loc => (
                     <button key={loc} className={`btn ${activeLoc === loc ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '6px 12px', fontSize: '0.8rem', boxShadow: 'none' }} onClick={() => setActiveLoc(loc)}>
                       {loc === 'ALL' ? 'All' : loc === 'RESTO' ? 'Resto' : 'Central'}
@@ -247,16 +247,16 @@ export default function StockLedger() {
                       <td style={{ textAlign: 'center' }}>{badge}</td>
                       <td style={{ textAlign: 'center' }}>
                         <div style={{ display: 'inline-flex', gap: '4px' }}>
-                          <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: '6px' }} title="Edit Item" onClick={() => setEditItem({ ...item, originalName: item.name })}>
+                          <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)' }} title="Edit Item" onClick={() => setEditItem({ ...item, originalName: item.name })}>
                             <Edit size={13} />
                           </button>
-                          <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: '6px' }} title="Adjust Stock" onClick={() => { setAdjustItem(item); setAdjustLoc('RESTO'); }}>
+                          <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)' }} title="Adjust Stock" onClick={() => { setAdjustItem(item); setAdjustLoc('RESTO'); }}>
                             <Package size={13} />
                           </button>
-                          <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: '6px' }} title="History" onClick={() => setSelectedItem(item)}>
+                          <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)' }} title="History" onClick={() => setSelectedItem(item)}>
                             <History size={13} />
                           </button>
-                          <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: '6px', color: 'var(--danger)' }} title="Delete" onClick={() => { if (confirm(`Hapus "${item.name}" dari inventory?`)) onDeleteItem(item.name); }}>
+                          <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)', color: 'var(--danger)' }} title="Delete" onClick={() => { if (confirm(`Hapus "${item.name}" dari inventory?`)) onDeleteItem(item.name); }}>
                             <Trash2 size={13} />
                           </button>
                         </div>
@@ -280,7 +280,7 @@ export default function StockLedger() {
             <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>Stock Audit</h3>
             <button className="btn btn-secondary" style={{ padding: '4px', borderRadius: '50%' }} onClick={() => setSelectedItem(null)}><X size={16} /></button>
           </div>
-          <div style={{ padding: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border)', borderRadius: '10px', marginBottom: '16px' }}>
+          <div style={{ padding: '12px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', marginBottom: '16px' }}>
             <h4 style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '4px' }}>{selectedItem.name}</h4>
             <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{selectedItem.category} · {selectedItem.supplier}</div>
             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>Pack: {selectedItem.full_pack || selectedItem.unit}</div>
@@ -294,7 +294,7 @@ export default function StockLedger() {
           </h4>
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {itemHistory.map(tx => (
-              <div key={tx.id} style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border)', padding: '8px 10px', borderRadius: '8px', fontSize: '0.75rem' }}>
+              <div key={tx.id} style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', padding: '8px 10px', borderRadius: 'var(--radius-md)', fontSize: '0.75rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
                   <span style={{ fontWeight: 600 }}>{tx.type}</span>
                   <span style={{ color: tx.qty > 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 700 }}>{tx.qty > 0 ? `+${tx.qty}` : tx.qty}</span>
@@ -316,7 +316,7 @@ export default function StockLedger() {
               <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Adjust Stock</h3>
               <button style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => setAdjustItem(null)}><X size={16} /></button>
             </div>
-            <div style={{ marginBottom: '20px', padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+            <div style={{ marginBottom: '20px', padding: '12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Material</span>
               <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '1rem' }}>{adjustItem.name}</div>
             </div>
@@ -480,12 +480,6 @@ export default function StockLedger() {
         title="Bulk Import / Sync Bahan Baku"
         description="Upload data bahan baku sekaligus dari file Excel. Gunakan Download Template untuk melakukan Export Sync (mengunduh data saat ini, mengubahnya, lalu upload kembali)."
         currentData={stock}
-        serverImport={async (file) => {
-          const { nestApi } = await import('../../services/nestApi');
-          const res = await nestApi.importMaterials(file);
-          if (res.success > 0) fetchAllData();
-          return res;
-        }}
         onCommit={async (rows) => {
           const res = await api.bulkImportMaterials(rows);
           if (res.success > 0) fetchAllData();

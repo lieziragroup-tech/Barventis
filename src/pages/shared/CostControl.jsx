@@ -202,7 +202,7 @@ export default function CostControl() {
           <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 500 }}>Memuat Laporan Cost Control...</span>
         </div>
       ) : errorMsg ? (
-        <div className="glass-card" style={{ padding: '24px', textAlign: 'center', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+        <div className="glass-card" style={{ padding: '24px', textAlign: 'center', border: '1px solid var(--danger)' }}>
           <AlertTriangle size={36} style={{ color: 'var(--danger)', margin: '0 auto 12px' }} />
           <h4 style={{ color: 'white', fontWeight: 700, marginBottom: '8px' }}>Gagal Memuat Laporan</h4>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '16px' }}>{errorMsg}</p>
@@ -214,7 +214,7 @@ export default function CostControl() {
           <div style={{
             background: beverageCostPct <= 27 ? 'rgba(81,207,102,0.04)' : 'rgba(255,107,107,0.04)',
             border: `1px solid ${beverageCostPct <= 27 ? 'rgba(81,207,102,0.15)' : 'rgba(255,107,107,0.15)'}`,
-            borderRadius: '16px', padding: '24px 32px', marginBottom: '24px',
+            borderRadius: 'var(--radius-xl)', padding: '24px 32px', marginBottom: '24px',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '24px'
           }}>
             <div>
@@ -231,7 +231,7 @@ export default function CostControl() {
               </p>
             </div>
             <div className="kpi-icon-wrap" style={{
-              width: '64px', height: '64px', borderRadius: '12px',
+              width: '64px', height: '64px', borderRadius: 'var(--radius-lg)',
               background: beverageCostPct <= 27 ? 'var(--success-glow)' : 'var(--danger-glow)',
               color: beverageCostPct <= 27 ? 'var(--success)' : 'var(--danger)'
             }}>
@@ -290,7 +290,7 @@ export default function CostControl() {
                         </tr>
                       );
                     })}
-                    <tr style={{ background: 'rgba(255,255,255,0.02)', borderTop: '2px solid var(--border)' }}>
+                    <tr style={{ background: 'var(--bg-tertiary)', borderTop: '2px solid var(--border)' }}>
                       <td style={{ fontWeight: 700 }}>TOTAL</td>
                       <td style={{ textAlign: 'right', fontWeight: 800 }}>{formatIDR(totalPembelian)}</td>
                       <td style={{ textAlign: 'right', fontWeight: 800 }}>{formatIDR(totalSalesBeverage)}</td>

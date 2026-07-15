@@ -159,11 +159,11 @@ export default function App() {
 
         <Route path="/unauthorized" element={
           <div className="access-denied-wrapper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
-            <div style={{ textAlign: 'center', padding: '40px', background: 'var(--bg-secondary)', borderRadius: '16px', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
+            <div style={{ textAlign: 'center', padding: '40px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border)', boxShadow: 'var(--card-shadow)' }}>
               <div style={{ fontSize: '4.5rem', color: 'var(--danger)', marginBottom: '16px', fontWeight: '800', lineHeight: '1' }}>403</div>
               <h2 style={{ fontSize: '1.4rem', fontWeight: '800', marginBottom: '12px' }}>Akses Dibatasi</h2>
               <p style={{ color: 'var(--text-muted)', marginBottom: '28px' }}>Anda tidak memiliki izin ke halaman ini.</p>
-              <a href="/" style={{ padding: '10px 24px', background: 'var(--accent)', color: 'var(--text-inverse)', borderRadius: '8px', textDecoration: 'none' }}>Kembali ke Dashboard</a>
+              <a href="/" style={{ padding: '10px 24px', background: 'var(--accent)', color: 'var(--text-inverse)', borderRadius: 'var(--radius-md)', textDecoration: 'none' }}>Kembali ke Dashboard</a>
             </div>
           </div>
         } />

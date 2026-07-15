@@ -150,7 +150,7 @@ export default function AuditLogs() {
         <div className="glass-card kpi-card">
           <div className="kpi-header">
             <span className="kpi-title">Total Aktivitas Sistem</span>
-            <div className="kpi-icon-wrap" style={{ background: 'rgba(76, 110, 245, 0.1)', color: 'var(--accent)' }}>
+            <div className="kpi-icon-wrap" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>
               <History size={20} />
             </div>
           </div>
@@ -230,7 +230,7 @@ export default function AuditLogs() {
                 padding: '12px 16px 12px 42px',
                 background: 'var(--bg-primary)',
                 border: '1px solid var(--border)',
-                borderRadius: '10px',
+                borderRadius: 'var(--radius-lg)',
                 color: 'var(--text-primary)',
                 fontSize: '0.9rem',
                 outline: 'none',
@@ -316,7 +316,7 @@ export default function AuditLogs() {
         <div style={{
           background: 'var(--accent-glow)',
           border: '1px solid rgba(76, 110, 245, 0.2)',
-          borderRadius: '12px',
+          borderRadius: 'var(--radius-lg)',
           padding: '16px',
           marginBottom: '24px',
           display: 'flex',
@@ -370,7 +370,7 @@ export default function AuditLogs() {
           <div style={{ overflowX: 'auto' }}>
             <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
+                <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)', background: 'var(--bg-tertiary)' }}>
                   <th style={{ padding: '16px 20px', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Waktu</th>
                   <th style={{ padding: '16px 20px', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Pelaksana</th>
                   <th style={{ padding: '16px 20px', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Tindakan</th>
@@ -416,7 +416,7 @@ export default function AuditLogs() {
                         <span style={{
                           display: 'inline-flex',
                           padding: '4px 10px',
-                          borderRadius: '6px',
+                          borderRadius: 'var(--radius-sm)',
                           fontSize: '0.725rem',
                           fontWeight: '700',
                           letterSpacing: '0.5px',
@@ -492,7 +492,7 @@ export default function AuditLogs() {
               <div style={{
                 width: '40px',
                 height: '40px',
-                borderRadius: '10px',
+                borderRadius: 'var(--radius-lg)',
                 background: getActionColor(selectedLog.action).badge,
                 display: 'flex',
                 alignItems: 'center',
@@ -514,7 +514,7 @@ export default function AuditLogs() {
                 <span style={{
                   display: 'inline-flex',
                   padding: '4px 10px',
-                  borderRadius: '6px',
+                  borderRadius: 'var(--radius-sm)',
                   fontSize: '0.8rem',
                   fontWeight: '700',
                   background: getActionColor(selectedLog.action).badge,
@@ -530,7 +530,7 @@ export default function AuditLogs() {
                 <div style={{ 
                   background: 'var(--bg-primary)', 
                   padding: '12px 16px', 
-                  borderRadius: '10px', 
+                  borderRadius: 'var(--radius-lg)', 
                   fontSize: '0.9rem', 
                   lineHeight: '1.5',
                   color: 'var(--text-primary)',
@@ -589,7 +589,7 @@ export default function AuditLogs() {
               <button 
                 className="btn btn-primary" 
                 onClick={() => setSelectedLog(null)}
-                style={{ padding: '10px 24px', borderRadius: '8px', fontWeight: '600' }}
+                style={{ padding: '10px 24px', borderRadius: 'var(--radius-md)', fontWeight: '600' }}
               >
                 Tutup Detail
               </button>

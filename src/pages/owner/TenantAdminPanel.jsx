@@ -154,7 +154,7 @@ export default function TenantAdminPanel() {
             background: tab === 'users' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
             border: tab === 'users' ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255,255,255,0.1)',
             color: tab === 'users' ? 'var(--accent)' : 'var(--text-secondary)',
-            padding: '8px 16px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'
+            padding: '8px 16px', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'
           }}
         >
           <Users size={16} /> Manajemen Pengguna
@@ -166,7 +166,7 @@ export default function TenantAdminPanel() {
             background: tab === 'invites' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
             border: tab === 'invites' ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255,255,255,0.1)',
             color: tab === 'invites' ? 'var(--accent)' : 'var(--text-secondary)',
-            padding: '8px 16px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'
+            padding: '8px 16px', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'
           }}
         >
           <LinkIcon size={16} /> Link Undangan
@@ -178,7 +178,7 @@ export default function TenantAdminPanel() {
             background: tab === 'profile' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
             border: tab === 'profile' ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255,255,255,0.1)',
             color: tab === 'profile' ? 'var(--accent)' : 'var(--text-secondary)',
-            padding: '8px 16px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'
+            padding: '8px 16px', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'
           }}
         >
           <Building size={16} /> Profil Resto
@@ -293,7 +293,7 @@ export default function TenantAdminPanel() {
                     <div key={inv.id} style={{
                       background: 'rgba(15, 23, 42, 0.4)',
                       border: `1px solid ${isActive ? 'rgba(59, 130, 246, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`,
-                      borderRadius: '8px', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      borderRadius: 'var(--radius-md)', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                       opacity: isActive ? 1 : 0.6
                     }}>
                       <div>
@@ -332,7 +332,7 @@ export default function TenantAdminPanel() {
                         )}
                         <button 
                           className="btn" 
-                          style={{ padding: '6px', color: 'var(--danger)', background: 'var(--danger-glow)', border: 'none', borderRadius: '6px' }}
+                          style={{ padding: '6px', color: 'var(--danger)', background: 'var(--danger-glow)', border: 'none', borderRadius: 'var(--radius-sm)' }}
                           onClick={() => handleDeleteInvite(inv.id)}
                           title="Hapus Link"
                         >
@@ -360,7 +360,7 @@ export default function TenantAdminPanel() {
                   disabled
                   style={{
                     width: '100%', padding: '10px 14px', background: 'var(--bg-tertiary)',
-                    border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-primary)',
+                    border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)',
                     cursor: 'not-allowed'
                   }}
                 />
@@ -377,12 +377,12 @@ export default function TenantAdminPanel() {
                   required
                   style={{
                     width: '100%', padding: '10px 14px', background: 'rgba(15, 23, 42, 0.6)',
-                    border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'var(--text-inverse)'
+                    border: '1px solid rgba(255,255,255,0.1)', borderRadius: 'var(--radius-md)', color: 'var(--text-inverse)'
                   }}
                 />
               </div>
 
-              <div style={{ background: 'rgba(245, 158, 11, 0.05)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(245, 158, 11, 0.1)' }}>
+              <div style={{ background: 'rgba(245, 158, 11, 0.05)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(245, 158, 11, 0.1)' }}>
                 <h4 style={{ margin: '0 0 8px 0', color: 'var(--warning)', fontSize: '0.9rem' }}>Status Kunci Pembukuan</h4>
                 <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                   {currentTenant?.locked_until_month && currentTenant?.locked_until_year 
@@ -396,7 +396,7 @@ export default function TenantAdminPanel() {
                 className="btn btn-primary"
                 disabled={isSaving}
                 style={{
-                  padding: '12px', borderRadius: '8px', fontWeight: 600,
+                  padding: '12px', borderRadius: 'var(--radius-md)', fontWeight: 600,
                   marginTop: '10px', display: 'flex', justifyContent: 'center'
                 }}
               >

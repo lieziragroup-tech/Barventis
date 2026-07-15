@@ -35,12 +35,12 @@ export default class ErrorBoundary extends React.Component {
           textAlign: 'center',
           background: 'rgba(239, 68, 68, 0.03)',
           border: '1px solid rgba(239, 68, 68, 0.15)',
-          borderRadius: '16px',
+          borderRadius: 'var(--radius-xl)',
           margin: '16px 0'
         }}>
           <div style={{
-            width: '56px', height: '56px', borderRadius: '12px',
-            background: 'rgba(239,68,68,0.1)', display: 'flex',
+            width: '56px', height: '56px', borderRadius: 'var(--radius-lg)',
+            background: 'var(--danger-glow)', display: 'flex',
             alignItems: 'center', justifyContent: 'center',
             color: 'var(--danger)', marginBottom: '16px'
           }}>
@@ -56,7 +56,7 @@ export default class ErrorBoundary extends React.Component {
             <code style={{
               fontSize: '0.72rem', color: 'var(--danger-text)',
               background: 'rgba(239,68,68,0.08)', padding: '8px 14px',
-              borderRadius: '8px', marginBottom: '20px',
+              borderRadius: 'var(--radius-md)', marginBottom: '20px',
               maxWidth: '500px', wordBreak: 'break-all', display: 'block'
             }}>
               {this.state.error.message}

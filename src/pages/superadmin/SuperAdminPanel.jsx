@@ -356,7 +356,7 @@ export default function SuperAdminPanel({ tab }) {
       {success && (
         <div className="glass-card" style={{
           position: 'fixed', top: '24px', right: '24px', background: 'rgba(34, 197, 94, 0.95)',
-          color: 'var(--text-inverse)', padding: '12px 24px', borderRadius: '8px', zIndex: 9999, border: '1px solid rgba(255,255,255,0.15)',
+          color: 'var(--text-inverse)', padding: '12px 24px', borderRadius: 'var(--radius-md)', zIndex: 9999, border: '1px solid var(--border)',
           display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 10px 25px rgba(0,0,0,0.3)'
         }}>
           <CheckCircle size={18} /> <span>{success}</span>
@@ -366,7 +366,7 @@ export default function SuperAdminPanel({ tab }) {
       {error && (
         <div className="glass-card" style={{
           position: 'fixed', top: '24px', right: '24px', background: 'rgba(239, 68, 68, 0.95)',
-          color: 'var(--text-inverse)', padding: '12px 24px', borderRadius: '8px', zIndex: 9999, border: '1px solid rgba(255,255,255,0.15)',
+          color: 'var(--text-inverse)', padding: '12px 24px', borderRadius: 'var(--radius-md)', zIndex: 9999, border: '1px solid var(--border)',
           display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 10px 25px rgba(0,0,0,0.3)'
         }}>
           <AlertCircle size={18} /> <span>{error}</span>
@@ -529,7 +529,7 @@ export default function SuperAdminPanel({ tab }) {
                         KEY: {tmpl.name}
                       </code>
                       <pre style={{
-                        background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px', fontSize: '0.725rem',
+                        background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: 'var(--radius-md)', fontSize: '0.725rem',
                         overflowX: 'auto', border: '1px solid rgba(255,255,255,0.03)', color: 'var(--text-muted)', maxHeight: '180px'
                       }}>
                         {JSON.stringify(tmpl.column_mapping, null, 2)}
@@ -563,7 +563,7 @@ export default function SuperAdminPanel({ tab }) {
               </p>
 
               {/* Filters Bar */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', background: 'rgba(255,255,255,0.02)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', background: 'var(--bg-tertiary)', padding: '14px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)' }}>
                 {/* Search query */}
                 <div style={{ flex: 1, minWidth: '200px', position: 'relative' }}>
                   <input
@@ -573,7 +573,7 @@ export default function SuperAdminPanel({ tab }) {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     style={{
                       width: '100%', padding: '8px 12px 8px 36px', background: 'var(--bg-secondary)',
-                      border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.825rem', outline: 'none'
+                      border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.825rem', outline: 'none'
                     }}
                   />
                   <Search size={16} style={{ position: 'absolute', left: '12px', top: '10px', color: 'var(--text-muted)' }} />
@@ -586,7 +586,7 @@ export default function SuperAdminPanel({ tab }) {
                     onChange={(e) => setTenantFilter(e.target.value)}
                     style={{
                       width: '100%', padding: '8px 12px', background: 'var(--bg-secondary)',
-                      border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.825rem', outline: 'none'
+                      border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.825rem', outline: 'none'
                     }}
                   >
                     <option value="">-- Semua Tenant --</option>
@@ -603,7 +603,7 @@ export default function SuperAdminPanel({ tab }) {
                     onChange={(e) => setActionFilter(e.target.value)}
                     style={{
                       width: '100%', padding: '8px 12px', background: 'var(--bg-secondary)',
-                      border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.825rem', outline: 'none'
+                      border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.825rem', outline: 'none'
                     }}
                   >
                     <option value="">-- Semua Aksi --</option>
@@ -705,7 +705,7 @@ export default function SuperAdminPanel({ tab }) {
                   disabled={!!selectedTenant} // Tenant ID tidak bisa diganti setelah dibuat
                   style={{
                     width: '100%', padding: '9px 12px', background: 'var(--bg-secondary)',
-                    border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none'
+                    border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none'
                   }}
                 />
                 {!selectedTenant && (
@@ -727,7 +727,7 @@ export default function SuperAdminPanel({ tab }) {
                   required
                   style={{
                     width: '100%', padding: '9px 12px', background: 'var(--bg-secondary)',
-                    border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none'
+                    border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none'
                   }}
                 />
               </div>
@@ -747,13 +747,13 @@ export default function SuperAdminPanel({ tab }) {
                   required
                   style={{
                     width: '100%', padding: '9px 12px', background: 'var(--bg-secondary)',
-                    border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none'
+                    border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none'
                   }}
                 />
               </div>
 
               {selectedTenant && (
-                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                <div style={{ background: 'var(--bg-tertiary)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
                     <Lock size={14} style={{ color: 'var(--warning)' }} />
                     <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>Kunci Edit Periode Bulanan</span>
@@ -770,7 +770,7 @@ export default function SuperAdminPanel({ tab }) {
                         onChange={(e) => setTenantForm({ ...tenantForm, locked_until_month: e.target.value })}
                         style={{
                           width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)',
-                          border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none'
+                          border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none'
                         }}
                       />
                     </div>
@@ -785,7 +785,7 @@ export default function SuperAdminPanel({ tab }) {
                         onChange={(e) => setTenantForm({ ...tenantForm, locked_until_year: e.target.value })}
                         style={{
                           width: '100%', padding: '6px 10px', background: 'var(--bg-secondary)',
-                          border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none'
+                          border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none'
                         }}
                       />
                     </div>
@@ -831,7 +831,7 @@ export default function SuperAdminPanel({ tab }) {
                   disabled={!!selectedTemplate}
                   style={{
                     width: '100%', padding: '9px 12px', background: 'var(--bg-secondary)',
-                    border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none'
+                    border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none'
                   }}
                 />
               </div>
@@ -848,7 +848,7 @@ export default function SuperAdminPanel({ tab }) {
                   required
                   style={{
                     width: '100%', padding: '9px 12px', background: 'var(--bg-secondary)',
-                    border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none'
+                    border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none'
                   }}
                 />
               </div>
@@ -864,7 +864,7 @@ export default function SuperAdminPanel({ tab }) {
                   required
                   style={{
                     width: '100%', padding: '9px 12px', background: 'rgba(15,23,42,0.6)',
-                    border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--warning)', fontSize: '0.8rem',
+                    border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--warning)', fontSize: '0.8rem',
                     fontFamily: 'monospace', outline: 'none', resize: 'vertical'
                   }}
                 />

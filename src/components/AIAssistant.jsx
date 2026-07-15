@@ -176,7 +176,7 @@ export default function AIAssistant() {
           borderRadius: '50%',
           background: 'var(--accent)',
           border: 'none',
-          boxShadow: '0 8px 24px rgba(59, 130, 246, 0.45)',
+          boxShadow: 'var(--shadow-lg)',
           color: 'var(--text-inverse)',
           display: isOpen ? 'none' : 'flex',
           alignItems: 'center',
@@ -203,7 +203,7 @@ export default function AIAssistant() {
           backdropFilter: 'blur(20px)',
           border: '1px solid rgba(59, 130, 246, 0.2)',
           borderRadius: '20px',
-          boxShadow: '0 24px 64px rgba(0, 0, 0, 0.6)',
+          boxShadow: 'var(--shadow-lg)',
           display: 'flex',
           flexDirection: 'column',
           zIndex: 9998,
@@ -222,7 +222,7 @@ export default function AIAssistant() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div style={{
                 background: 'var(--accent)',
-                padding: '7px', borderRadius: '10px', color: 'var(--text-inverse)', display: 'flex',
+                padding: '7px', borderRadius: 'var(--radius-lg)', color: 'var(--text-inverse)', display: 'flex',
               }}>
                 <Bot size={16} />
               </div>

@@ -372,7 +372,7 @@ export default function PosUpload() {
         background: 'rgba(30, 41, 59, 0.35)', 
         border: '1px solid var(--border)', 
         padding: '16px 24px', 
-        borderRadius: '12px',
+        borderRadius: 'var(--radius-lg)',
         backdropFilter: 'blur(10px)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -389,7 +389,7 @@ export default function PosUpload() {
               padding: '8px 14px',
               background: 'var(--bg-tertiary)',
               border: '1px solid var(--border)',
-              borderRadius: '8px',
+              borderRadius: 'var(--radius-md)',
               color: 'var(--text-primary)',
               fontSize: '0.825rem',
               fontWeight: '600',
@@ -407,7 +407,7 @@ export default function PosUpload() {
       {/* Upload Status Alert */}
       {uploadStatus && (
         <div style={{
-          padding: '14px 20px', borderRadius: '12px', marginBottom: '20px',
+          padding: '14px 20px', borderRadius: 'var(--radius-lg)', marginBottom: '20px',
           display: 'flex', alignItems: 'center', gap: '12px',
           background: uploadStatus.type === 'success' ? 'rgba(16,185,129,0.06)' : uploadStatus.type === 'warning' ? 'rgba(245,158,11,0.06)' : 'rgba(239,68,68,0.06)',
           border: `1px solid ${uploadStatus.type === 'success' ? 'rgba(16,185,129,0.2)' : uploadStatus.type === 'warning' ? 'rgba(245,158,11,0.2)' : 'rgba(239,68,68,0.2)'}`
@@ -423,7 +423,7 @@ export default function PosUpload() {
       {/* Duplicate Confirmation */}
       {duplicateInfo && (
         <div style={{
-          padding: '20px', borderRadius: '12px', marginBottom: '20px',
+          padding: '20px', borderRadius: 'var(--radius-lg)', marginBottom: '20px',
           background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center'
         }}>
@@ -487,7 +487,7 @@ export default function PosUpload() {
         <div className="glass-card" style={{ padding: '24px' }}>
           
           {/* Metadata Grid */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border)', padding: '20px', borderRadius: '12px', marginBottom: '24px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', padding: '20px', borderRadius: 'var(--radius-lg)', marginBottom: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: '220px' }}>
               <div className="kpi-icon-wrap" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>
                 <FileSpreadsheet size={18} />
@@ -533,7 +533,7 @@ export default function PosUpload() {
           {unmappedUniqueNames.length > 0 && (
             <div style={{ 
               background: 'rgba(239, 68, 68, 0.04)', border: '1px solid rgba(239, 68, 68, 0.15)',
-              padding: '16px 20px', borderRadius: '12px', marginBottom: '24px',
+              padding: '16px 20px', borderRadius: 'var(--radius-lg)', marginBottom: '24px',
               display: 'flex', gap: '16px'
             }}>
               <ShieldAlert size={28} style={{ color: 'var(--danger)', flexShrink: 0 }} />
@@ -544,7 +544,7 @@ export default function PosUpload() {
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '12px' }}>
                   Menu-menu di bawah ini tidak memiliki resep di dalam sistem. Anda dapat memetakan menu tersebut secara manual, atau **melanjutkan proses (klik tombol proses kuning di kanan bawah) untuk memproses pengurangan stok menu yang sudah terpetakan saja dan mengabaikan menu lainnya**.
                 </p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', maxHeight: '120px', overflowY: 'auto', padding: '6px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', maxHeight: '120px', overflowY: 'auto', padding: '6px', background: 'rgba(0,0,0,0.2)', borderRadius: 'var(--radius-md)' }}>
                   {unmappedUniqueNames.map(name => (
                     <button 
                       key={name}
@@ -564,7 +564,7 @@ export default function PosUpload() {
           {unmappedUniqueNames.length === 0 && (
             <div style={{ 
               background: 'rgba(16, 185, 129, 0.04)', border: '1px solid rgba(16, 185, 129, 0.15)',
-              padding: '16px 20px', borderRadius: '12px', marginBottom: '24px',
+              padding: '16px 20px', borderRadius: 'var(--radius-lg)', marginBottom: '24px',
               display: 'flex', alignItems: 'center', gap: '16px'
             }}>
               <CheckCircle size={28} style={{ color: 'var(--success)', flexShrink: 0 }} />

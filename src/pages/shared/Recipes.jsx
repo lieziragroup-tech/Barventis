@@ -256,14 +256,14 @@ export default function Recipes() {
         <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
           <button 
             className="btn premium-btn premium-btn-primary" 
-            style={{ flex: 1, fontSize: '0.825rem', height: '38px', borderRadius: '8px' }} 
+            style={{ flex: 1, fontSize: '0.825rem', height: '38px', borderRadius: 'var(--radius-md)' }} 
             onClick={() => setShowAddModal(true)}
           >
             <Plus size={15} /> Tambah Menu
           </button>
           <button 
             className="btn premium-btn premium-btn-secondary" 
-            style={{ width: '38px', height: '38px', padding: 0, borderRadius: '8px' }} 
+            style={{ width: '38px', height: '38px', padding: 0, borderRadius: 'var(--radius-md)' }} 
             onClick={() => setShowBulkImport(true)} 
             title="Bulk Import Resep"
           >
@@ -322,7 +322,7 @@ export default function Recipes() {
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '18px', marginBottom: '18px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', gap: '16px' }}>
             <div>
-              <span className="badge" style={{ marginBottom: '6px', background: 'rgba(76,110,245,0.1)', color: 'var(--accent)', border: '1px solid rgba(76,110,245,0.15)', fontSize: '0.65rem', padding: '3px 8px' }}>
+              <span className="badge" style={{ marginBottom: '6px', background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid rgba(79,110,247,0.15)', fontSize: '0.65rem', padding: '3px 8px' }}>
                 Resep & Harga Pokok
               </span>
               <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>{activeRecipe.menu_name}</h2>
@@ -335,14 +335,14 @@ export default function Recipes() {
                 background: 'linear-gradient(135deg, rgba(76, 110, 245, 0.06) 0%, rgba(76, 110, 245, 0.01) 100%)', 
                 border: '1px solid rgba(76, 110, 245, 0.2)', 
                 padding: '10px 16px', 
-                borderRadius: '12px',
+                borderRadius: 'var(--radius-lg)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '12px',
                 minWidth: '150px',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
               }}>
-                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(76, 110, 245, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: 'var(--radius-md)', background: 'var(--accent-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>
                   <Coins size={16} />
                 </div>
                 <div>
@@ -364,7 +364,7 @@ export default function Recipes() {
                     ? '1px solid rgba(252, 196, 25, 0.2)' 
                     : '1px solid rgba(255, 107, 107, 0.2)', 
                 padding: '10px 16px', 
-                borderRadius: '12px',
+                borderRadius: 'var(--radius-lg)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '12px',
@@ -372,7 +372,7 @@ export default function Recipes() {
                 boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
               }}>
                 <div style={{ 
-                  width: '32px', height: '32px', borderRadius: '8px', 
+                  width: '32px', height: '32px', borderRadius: 'var(--radius-md)', 
                   background: foodCostPct < 0.27 
                     ? 'rgba(81, 207, 102, 0.1)' 
                     : foodCostPct <= 0.3 
@@ -442,7 +442,7 @@ export default function Recipes() {
             </h3>
             <button 
               className="btn premium-btn premium-btn-secondary" 
-              style={{ padding: '6px 14px', fontSize: '0.8rem', borderRadius: '8px', display: 'flex', gap: '6px' }} 
+              style={{ padding: '6px 14px', fontSize: '0.8rem', borderRadius: 'var(--radius-md)', display: 'flex', gap: '6px' }} 
               onClick={handleAddIngredient}
             >
               <Plus size={14} /> Tambah Bahan
@@ -450,7 +450,7 @@ export default function Recipes() {
           </div>
 
           {/* Ingredients Table */}
-          <div className="glass-scrollbar" style={{ flex: 1, overflowY: 'auto', marginBottom: '16px', border: '1px solid rgba(255,255,255,0.03)', borderRadius: '10px', background: 'rgba(0,0,0,0.1)' }}>
+          <div className="glass-scrollbar" style={{ flex: 1, overflowY: 'auto', marginBottom: '16px', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)', background: 'rgba(0,0,0,0.1)' }}>
             <table className="custom-table premium-table" style={{ tableLayout: 'fixed', width: '100%' }}>
               <thead>
                 <tr>
@@ -492,7 +492,7 @@ export default function Recipes() {
                           <ul className="search-results-list glass-scrollbar" style={{ 
                             background: '#161922', 
                             border: '1px solid rgba(255,255,255,0.1)', 
-                            borderRadius: '10px',
+                            borderRadius: 'var(--radius-lg)',
                             boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
                             backdropFilter: 'blur(10px)',
                             zIndex: 1000,
@@ -506,7 +506,7 @@ export default function Recipes() {
                                 <li
                                   key={item.id ?? item.name}
                                   className="search-results-item"
-                                  style={{ borderRadius: '6px', padding: '8px 12px' }}
+                                  style={{ borderRadius: 'var(--radius-sm)', padding: '8px 12px' }}
                                   onMouseDown={() => handleSelectItem(idx, item)}
                                 >
                                   <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.825rem' }}>{item.name}</div>
@@ -571,7 +571,7 @@ export default function Recipes() {
                       {/* Remove */}
                       <td style={{ textAlign: 'center' }}>
                         <button 
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: '6px', borderRadius: '6px', transition: 'all 0.2s' }} 
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: '6px', borderRadius: 'var(--radius-sm)', transition: 'all 0.2s' }} 
                           className="premium-btn-danger"
                           onClick={() => handleRemoveIngredient(idx)}
                         >
@@ -600,7 +600,7 @@ export default function Recipes() {
             background: 'rgba(30, 41, 59, 0.4)', 
             border: '1px solid var(--border)', 
             padding: '14px 20px', 
-            borderRadius: '12px', 
+            borderRadius: 'var(--radius-lg)', 
             flexShrink: 0,
             boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
             backdropFilter: 'blur(10px)'
@@ -616,7 +616,7 @@ export default function Recipes() {
               {activeRecipe && activeRecipe.id && (
                 <button 
                   className="btn premium-btn premium-btn-danger" 
-                  style={{ padding: '10px 20px', fontSize: '0.85rem', borderRadius: '8px', display: 'flex', gap: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#fca5a5', border: '1px solid rgba(239, 68, 68, 0.2)' }} 
+                  style={{ padding: '10px 20px', fontSize: '0.85rem', borderRadius: 'var(--radius-md)', display: 'flex', gap: '8px', background: 'var(--danger-glow)', color: 'var(--danger-text)', border: '1px solid rgba(220, 38, 38, 0.2)' }} 
                   onClick={() => {
                     if (window.confirm(`Yakin ingin menghapus resep menu "${activeRecipe.menu_name}"?`)) {
                       onDeleteRecipe(activeRecipe.id);
@@ -629,7 +629,7 @@ export default function Recipes() {
               )}
               <button 
                 className="btn premium-btn premium-btn-primary" 
-                style={{ padding: '10px 20px', fontSize: '0.85rem', borderRadius: '8px', display: 'flex', gap: '8px' }} 
+                style={{ padding: '10px 20px', fontSize: '0.85rem', borderRadius: 'var(--radius-md)', display: 'flex', gap: '8px' }} 
                 onClick={handleSaveRecipe}
               >
                 <Save size={15} /> Simpan Resep
@@ -700,8 +700,8 @@ export default function Recipes() {
               </div>
               
               <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-                <button type="button" className="btn btn-secondary" style={{ flex: 1, height: '44px', borderRadius: '8px' }} onClick={() => setShowAddModal(false)}>Batal</button>
-                <button type="submit" className="btn btn-primary" style={{ flex: 2, height: '44px', borderRadius: '8px', fontWeight: 700 }}>Buat Resep</button>
+                <button type="button" className="btn btn-secondary" style={{ flex: 1, height: '44px', borderRadius: 'var(--radius-md)' }} onClick={() => setShowAddModal(false)}>Batal</button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 2, height: '44px', borderRadius: 'var(--radius-md)', fontWeight: 700 }}>Buat Resep</button>
               </div>
             </form>
           </div>
@@ -715,12 +715,6 @@ export default function Recipes() {
         type="recipes"
         title="Bulk Import Resep & Harga Jual"
         description="Upload data menu, harga jual, dan resep sekaligus dari file Excel."
-        serverImport={async (file) => {
-          const { nestApi } = await import('../../services/nestApi');
-          const res = await nestApi.importRecipes(file);
-          if (res.success > 0) fetchAllData();
-          return res;
-        }}
         onCommit={async (rows) => {
           const res = await api.bulkImportRecipes(rows);
           if (res.success > 0) fetchAllData();
