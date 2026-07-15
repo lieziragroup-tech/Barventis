@@ -8,7 +8,16 @@ import {
   ArrowRight,
   X, 
   TrendingDown, 
-  Info
+  Info,
+  Check,
+  AlertTriangle,
+  BookOpen,
+  Cake,
+  Coffee,
+  Plus,
+  PlusCircle,
+  Sparkles,
+  Utensils
 } from "lucide-react";
 import "./NewLanding.css";
 import { DEMO_PRESETS } from "./presets";
@@ -1629,7 +1638,7 @@ export default function App() {
         </div>
 
         <div className="max-w-7xl mx-auto border-t border-[#bcc9c6]/10 mt-10 pt-6 flex flex-col md:flex-row justify-between items-center gap-4 text-[11px] text-gray-400 font-medium">
-          <span>© 2026 Barventis. Semua hal baik dilindungi undang-undang.</span>
+          <span>© 2026 Barventis. All Rights Reserved.</span>
           <div className="flex gap-4">
             <span className="material-symbols-outlined text-[16px] text-primary">favorite</span>
             <span className="material-symbols-outlined text-[16px] text-tertiary">local_cafe</span>
