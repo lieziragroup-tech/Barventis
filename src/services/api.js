@@ -80,16 +80,11 @@ export const api = {
       .from('users')
       .select('*')
       .eq('id', authData.user.id)
-      .maybeSingle();
+      .single();
 
-    if (profileErr) {
+    if (profileErr || !userProfile) {
       await supabase.auth.signOut();
-      throw new Error('Terjadi kesalahan sistem saat memuat profil: ' + profileErr.message);
-    }
-    
-    if (!userProfile) {
-      await supabase.auth.signOut();
-      throw new Error('Profil Anda belum tersinkronisasi di database (Gagal memuat public.users). Solusi: Silakan buat akun baru via Register.');
+      throw new Error('Profil user tidak ditemukan: ' + (profileErr?.message || 'Data kosong'));
     }
 
     let tenant;
@@ -212,22 +207,58 @@ export const api = {
   },
 
   registerWithToken: async (name, email, password, token) => {
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            name: name,
-            invite_token: token,
-          }
-        }
-      });
-      if (error) throw new Error(error.message);
-      return data.user;
-    } catch (e) {
-      throw e;
+    // 1. Re-validate the invitation server-side (client SDK) right before using it,
+    //    and grab tenant_id / role so we can fallback-create the profile below.
+    const { data: invite, error: inviteErr } = await supabase
+      .from('invitations')
+      .select('id, tenant_id, invite_role, is_used, expires_at')
+      .eq('token', token)
+      .single();
+
+    if (inviteErr || !invite) {
+      throw new Error('Undangan tidak ditemukan atau tidak valid.');
     }
+    if (invite.is_used) {
+      throw new Error('Undangan ini sudah pernah dipakai.');
+    }
+    if (new Date(invite.expires_at) < new Date()) {
+      throw new Error('Undangan ini sudah kadaluarsa.');
+    }
+
+    // 2. Create the Supabase Auth user
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name: name,
+          invite_token: token,
+        }
+      }
+    });
+    if (error) throw new Error(error.message);
+    if (!data.user) throw new Error('Gagal membuat akun.');
+
+    // 3. Fallback: insert into public.users in case the DB trigger didn't
+    //    (mirrors the same fallback already used in register() — KRITIS-01 fix pattern)
+    const { data: profileCheck } = await supabase.from('users').select('id').eq('id', data.user.id).maybeSingle();
+    if (!profileCheck) {
+      const { error: insertErr } = await supabase.from('users').insert({
+        id: data.user.id,
+        tenant_id: invite.tenant_id,
+        name: name,
+        email: email,
+        role: invite.invite_role || 'Staff'
+      });
+      if (insertErr) {
+        throw new Error('Akun berhasil dibuat, tapi gagal menyimpan profil: ' + insertErr.message);
+      }
+    }
+
+    // 4. Mark the invitation as used so the same link can't be reused
+    await supabase.from('invitations').update({ is_used: true }).eq('id', invite.id);
+
+    return data.user;
   },
 
   logout: async () => {
@@ -251,13 +282,8 @@ export const api = {
       .eq('id', session.user.id)
       .maybeSingle();
 
-    if (error) {
-      throw new Error('Terjadi kesalahan sistem saat memuat profil.');
-    }
-    if (!userProfile) {
-      // Auto signout to clear invalid session state
-      await supabase.auth.signOut().catch(()=>{});
-      throw new Error('Profil Anda belum tersinkronisasi di database (Gagal memuat public.users). Solusi: Silakan buat akun baru via Register.');
+    if (error || !userProfile) {
+      throw new Error('Profil tidak ditemukan.');
     }
 
     // Also fetch tenant name
@@ -2019,4 +2045,3 @@ export const api = {
     }
   }
 };
-
