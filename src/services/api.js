@@ -80,11 +80,16 @@ export const api = {
       .from('users')
       .select('*')
       .eq('id', authData.user.id)
-      .single();
+      .maybeSingle();
 
-    if (profileErr || !userProfile) {
+    if (profileErr) {
       await supabase.auth.signOut();
-      throw new Error('Profil user tidak ditemukan: ' + (profileErr?.message || 'Data kosong'));
+      throw new Error('Terjadi kesalahan sistem saat memuat profil: ' + profileErr.message);
+    }
+    
+    if (!userProfile) {
+      await supabase.auth.signOut();
+      throw new Error('Profil Anda belum tersinkronisasi di database (Gagal memuat public.users). Solusi: Silakan buat akun baru via Register.');
     }
 
     let tenant;
@@ -246,8 +251,13 @@ export const api = {
       .eq('id', session.user.id)
       .maybeSingle();
 
-    if (error || !userProfile) {
-      throw new Error('Profil tidak ditemukan.');
+    if (error) {
+      throw new Error('Terjadi kesalahan sistem saat memuat profil.');
+    }
+    if (!userProfile) {
+      // Auto signout to clear invalid session state
+      await supabase.auth.signOut().catch(()=>{});
+      throw new Error('Profil Anda belum tersinkronisasi di database (Gagal memuat public.users). Solusi: Silakan buat akun baru via Register.');
     }
 
     // Also fetch tenant name
