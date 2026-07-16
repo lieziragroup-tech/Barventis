@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Upload, FileSpreadsheet, CheckCircle,
   MapPin, Calendar, Database, ShieldAlert, Sparkles, X, Settings
@@ -20,7 +20,25 @@ export default function PosUpload() {
   const [rawFile, setRawFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [parsedData, setParsedData] = useState(null);
-  const [mappedSales, setMappedSales] = useState([]);
+  const [customMappings, setCustomMappings] = useState({});
+  const mappedSales = React.useMemo(() => {
+    if (!parsedData?.sales) return [];
+    const recipeMap = {};
+    (recipes || []).forEach(r => { recipeMap[r.menu_name] = r; });
+    return parsedData.sales.map(row => {
+      const recipe = recipeMap[row.menu_name] || customMappings[row.menu_name];
+      return {
+        salesDate: row.sales_date,
+        menuName: row.menu_name,
+        menuCode: row.menu_code,
+        qty: row.qty,
+        total: row.total_sales,
+        isMapped: !!recipe,
+        recipeName: recipe?.menu_name || '',
+        totalCost: recipe ? recipe.basic_cost * row.qty : 0
+      };
+    });
+  }, [parsedData, recipes, customMappings]);
   const [showMappingModal, setShowMappingModal] = useState(false);
   const [mappingMenuName, setMappingMenuName] = useState('');
   const [selectedRecipeName, setSelectedRecipeName] = useState('');
@@ -30,6 +48,7 @@ export default function PosUpload() {
 
   // POS Custom templates states
   const [templates, setTemplates] = useState([]);
+  // eslint-disable-next-line no-unused-vars
   const [activeTemplate, setActiveTemplate] = useState({
     header_row_index: 12,
     branch_col: "branch",
@@ -46,24 +65,7 @@ export default function PosUpload() {
     loadTemplateConfig();
   }, []);
 
-  useEffect(() => {
-    if (!parsedData?.sales) { setMappedSales([]); return; }
-    const recipeMap = {};
-    (recipes || []).forEach(r => { recipeMap[r.menu_name] = r; });
-    setMappedSales(parsedData.sales.map(row => {
-      const recipe = recipeMap[row.menu_name];
-      return {
-        salesDate: row.sales_date,
-        menuName: row.menu_name,
-        menuCode: row.menu_code,
-        qty: row.qty,
-        total: row.total_sales,
-        isMapped: !!recipe,
-        recipeName: recipe?.menu_name || '',
-        totalCost: recipe ? recipe.basic_cost * row.qty : 0
-      };
-    }));
-  }, [parsedData, recipes]);
+
 
   const loadTemplateConfig = async () => {
     try {
@@ -111,11 +113,10 @@ export default function PosUpload() {
     e.preventDefault();
     const recipe = (recipes || []).find(r => r.menu_name === selectedRecipeName);
     if (recipe) {
-      setMappedSales(prev => prev.map(s =>
-        s.menuName === mappingMenuName
-          ? { ...s, isMapped: true, recipeName: recipe.menu_name, totalCost: recipe.basic_cost * s.qty }
-          : s
-      ));
+      setCustomMappings(prev => ({
+        ...prev,
+        [mappingMenuName]: recipe
+      }));
     }
     setShowMappingModal(false);
   };
@@ -345,7 +346,6 @@ export default function PosUpload() {
       await confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
       setRawFile(null);
       setParsedData(null);
-      setMappedSales([]);
       setUploadStatus(null);
     } catch (err) {
       console.error("[PosUpload] handleCommitSales error:", err);
@@ -586,7 +586,6 @@ export default function PosUpload() {
               <button className="btn btn-secondary" onClick={() => {
                 setRawFile(null);
                 setParsedData(null);
-                setMappedSales([]);
                 setUploadStatus(null);
               }}>
                 Cancel Upload

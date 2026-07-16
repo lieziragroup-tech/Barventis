@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -9,6 +9,7 @@ import './PosTerminal.css';
 
 export default function PosTerminal() {
   const navigate = useNavigate();
+  // eslint-disable-next-line no-unused-vars
   const { recipes, loadingData, refreshData } = useData();
   const { activeUser } = useAuth();
   const { showSuccess, showError, showWarning } = useToast();
@@ -17,7 +18,7 @@ export default function PosTerminal() {
   const [cart, setCart] = useState(() => {
     const saved = localStorage.getItem('barventis_pos_cart');
     if (saved) {
-      try { return JSON.parse(saved); } catch(e) { return []; }
+      try { return JSON.parse(saved); } catch { return []; }
     }
     return [];
   });

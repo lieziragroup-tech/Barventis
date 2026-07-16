@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useContext, useState, useCallback } from 'react';
 
 const LanguageContext = createContext();
 
@@ -11,7 +12,7 @@ export const LanguageProvider = ({ children }) => {
 
   const setLang = useCallback((newLang) => {
     setLangState(newLang);
-    try { localStorage.setItem('barventis_lang', newLang); } catch {}
+    try { localStorage.setItem('barventis_lang', newLang); } catch { /* ignore */ }
   }, []);
 
   const t = useCallback((copyObj) => copyObj?.[lang] || copyObj?.id || '', [lang]);

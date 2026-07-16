@@ -55,7 +55,7 @@ export default function BulkImport({
     // Header row
     const headers = expectedColumns.map(c => c.label);
     
-    let dataRows = [];
+    let dataRows;
     if (currentData && currentData.length > 0) {
       dataRows = currentData.map(item => {
         return expectedColumns.map(c => item[c.key] !== undefined ? item[c.key] : '');
@@ -190,7 +190,10 @@ export default function BulkImport({
       
       // Clean up internal metadata before passing to parent
       const cleanRows = selectedRows.map(r => {
-        const { _selected, _rowIndex, _error, ...rest } = r;
+        const rest = { ...r };
+        delete rest._selected;
+        delete rest._rowIndex;
+        delete rest._error;
         return rest;
       });
 

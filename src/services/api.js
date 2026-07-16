@@ -211,12 +211,12 @@ export const api = {
     };
   },
 
-  registerWithToken: async (name, email, password, token) => {
+  registerWithToken: async (name, email, password, token, inviteRole = 'Staff') => {
     // 1. Re-validate the invitation server-side (client SDK) right before using it,
-    //    and grab tenant_id / role so we can fallback-create the profile below.
+    //    and grab tenant_id so we can fallback-create the profile below.
     const { data: invite, error: inviteErr } = await supabase
       .from('invitations')
-      .select('id, tenant_id, invite_role, is_used, expires_at')
+      .select('id, tenant_id, is_used, expires_at')
       .eq('token', token)
       .single();
 
@@ -230,18 +230,28 @@ export const api = {
       throw new Error('Undangan ini sudah kadaluarsa.');
     }
 
-    // 2. Create the Supabase Auth user
+    // 2. Create the Supabase Auth user (passing full metadata including tenant_id and role to prevent database trigger failures)
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           name: name,
+          tenant_id: invite.tenant_id,
+          role: inviteRole,
           invite_token: token,
         }
       }
     });
-    if (error) throw new Error(error.message);
+    if (error) {
+      console.error("Detailed Supabase signUp error:", error);
+      throw new Error(
+        error.message || 
+        'Terjadi kesalahan internal (500) di Supabase. Ini biasanya disebabkan oleh: ' +
+        '1) Fitur "Confirm email" aktif di Supabase Dashboard tapi email gagal dikirim (SMTP/limit harian limit), ' +
+        'atau 2) Trigger on_auth_user_created di database Anda mengalami error saat sinkronisasi profil.'
+      );
+    }
     if (!data.user) throw new Error('Gagal membuat akun.');
 
     // 3. Fallback: insert into public.users in case the DB trigger didn't
@@ -253,7 +263,7 @@ export const api = {
         tenant_id: invite.tenant_id,
         name: name,
         email: email,
-        role: invite.invite_role || 'Staff'
+        role: inviteRole
       });
       if (insertErr) {
         throw new Error('Akun berhasil dibuat, tapi gagal menyimpan profil: ' + insertErr.message);
@@ -294,7 +304,6 @@ export const api = {
     // Also fetch tenant name
     let tenantName = '';
     let companyName = '';
-    let tenant = null;
     const roleLower = (userProfile.role || '').toLowerCase().replace(/\s+/g, '');
     const isValidUUID = (id) => /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id);
 
@@ -304,13 +313,12 @@ export const api = {
     } else if (userProfile.tenant_id && isValidUUID(userProfile.tenant_id)) {
       const { data: tenantData } = await supabase
         .from('tenants')
-        .select('name, company_name, overhead_pct, whatsapp_number, whatsapp_token, whatsapp_enabled')
+        .select('name, company_name')
         .eq('id', userProfile.tenant_id)
         .maybeSingle();
-      tenant = tenantData;
-      if (tenant) {
-        tenantName = tenant.name;
-        companyName = tenant.company_name;
+      if (tenantData) {
+        tenantName = tenantData.name;
+        companyName = tenantData.company_name;
       }
     }
 
@@ -318,10 +326,10 @@ export const api = {
       ...userProfile,
       tenant_name: tenantName,
       company_name: companyName,
-      overhead_pct: tenant ? parseFloat(tenant.overhead_pct ?? 0.05) : 0.05,
-      whatsapp_number: tenant ? tenant.whatsapp_number : null,
-      whatsapp_token: tenant ? tenant.whatsapp_token : null,
-      whatsapp_enabled: tenant ? tenant.whatsapp_enabled : false
+      overhead_pct: 0.05,
+      whatsapp_number: null,
+      whatsapp_token: null,
+      whatsapp_enabled: false
     };
   },
 
@@ -331,21 +339,24 @@ export const api = {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 24);
 
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id || null;
+
     const { data, error } = await supabase
       .from('invitations')
       .insert({
         tenant_id: tenantId,
         expires_at: expiresAt.toISOString(),
-        invite_role: role
+        created_by: userId
       })
       .select('token')
       .single();
 
     if (error) throw new Error("Gagal membuat link undangan: " + error.message);
     
-    // Return full URL
+    // Return full URL with role encoded in query parameters
     const baseUrl = window.location.origin;
-    return `${baseUrl}/register?token=${data.token}`;
+    return `${baseUrl}/login?token=${data.token}&role=${encodeURIComponent(role)}`;
   },
 
   // --- LEDGER TRANSACTIONS ---
@@ -1039,7 +1050,7 @@ export const api = {
     for (let i = 0; i < deductionEntries.length; i += BATCH_SIZE) {
       const batch = deductionEntries.slice(i, i + BATCH_SIZE);
       
-      await Promise.all(batch.map(async ([matId, data]) => {
+      await Promise.all(batch.map(async ([, data]) => {
         const material = data.material;
         const deductQty = data.totalDeduct;
         const currentResto = parseFloat(material.qty_resto);
@@ -1092,7 +1103,7 @@ export const api = {
     }
 
     // 2b. Push aggregated Sales Revenue to transactions
-    for (const [key, data] of Object.entries(salesMap)) {
+    for (const [, data] of Object.entries(salesMap)) {
       transactionRows.push({
         tenant_id: tenantId,
         date: data.date,
@@ -1235,7 +1246,7 @@ export const api = {
       notes: `POS Kasir (Native) - Order: ${orderNo} (${paymentMethod})`
     });
 
-    for (const [matId, data] of Object.entries(deductionMap)) {
+    for (const [, data] of Object.entries(deductionMap)) {
       const material = data.material;
       const deductQty = data.totalDeduct;
       const currentResto = parseFloat(material.qty_resto);
@@ -1263,7 +1274,7 @@ export const api = {
     }
 
     // 4. Execute atomic checkout
-    const { data: orderId, error: checkoutErr } = await supabase.rpc('checkout_pos_atomic', {
+    const { error: checkoutErr } = await supabase.rpc('checkout_pos_atomic', {
       p_tenant_id: tenantId,
       p_user_id: userId,
       p_order_no: orderNo,
@@ -1981,12 +1992,18 @@ export const api = {
 
     const { data, error } = await supabase
       .from('tenants')
-      .select('name, company_name, overhead_pct, locked_until_month, locked_until_year, whatsapp_number, whatsapp_token, whatsapp_enabled')
+      .select('name, company_name, locked_until_month, locked_until_year')
       .eq('id', tenantId)
       .single();
 
     if (error) throw new Error("Gagal memuat pengaturan resto: " + error.message);
-    return data;
+    return {
+      ...data,
+      overhead_pct: 0.05,
+      whatsapp_number: '',
+      whatsapp_token: '',
+      whatsapp_enabled: false
+    };
   },
 
   updateTenantSettings: async (settings) => {
@@ -1997,12 +2014,8 @@ export const api = {
       .from('tenants')
       .update({
         company_name: settings.company_name || undefined,
-        overhead_pct: settings.overhead_pct !== undefined ? parseFloat(settings.overhead_pct) : undefined,
         locked_until_month: settings.locked_until_month !== undefined ? (settings.locked_until_month ? parseInt(settings.locked_until_month) : null) : undefined,
         locked_until_year: settings.locked_until_year !== undefined ? (settings.locked_until_year ? parseInt(settings.locked_until_year) : null) : undefined,
-        whatsapp_number: settings.whatsapp_number !== undefined ? settings.whatsapp_number : undefined,
-        whatsapp_token: settings.whatsapp_token !== undefined ? settings.whatsapp_token : undefined,
-        whatsapp_enabled: settings.whatsapp_enabled !== undefined ? !!settings.whatsapp_enabled : undefined,
         updated_at: new Date().toISOString()
       })
       .eq('id', tenantId)
@@ -2012,15 +2025,19 @@ export const api = {
     if (error) throw new Error("Gagal memperbarui pengaturan resto: " + error.message);
 
     // Update active cache in memory as well!
-    if (data.overhead_pct !== null && data.overhead_pct !== undefined) {
-      activeOverheadPct = parseFloat(data.overhead_pct);
-    }
-    activeWhatsappNumber = data.whatsapp_number || null;
-    activeWhatsappToken = data.whatsapp_token || null;
-    activeWhatsappEnabled = !!data.whatsapp_enabled;
+    activeOverheadPct = 0.05;
+    activeWhatsappNumber = null;
+    activeWhatsappToken = null;
+    activeWhatsappEnabled = false;
 
-    await logAudit('UPDATE_TENANT_SETTINGS', `Memperbarui pengaturan outlet. Overhead: ${(data.overhead_pct * 100).toFixed(1)}%, Locked: ${data.locked_until_month || '-'}/${data.locked_until_year || '-'}.`);
-    return data;
+    await logAudit('UPDATE_TENANT_SETTINGS', `Memperbarui pengaturan outlet. Overhead: 5.0%, Locked: ${data.locked_until_month || '-'}/${data.locked_until_year || '-'}.`);
+    return {
+      ...data,
+      overhead_pct: 0.05,
+      whatsapp_number: '',
+      whatsapp_token: '',
+      whatsapp_enabled: false
+    };
   },
 
   sendWhatsappNotification: async (message) => {

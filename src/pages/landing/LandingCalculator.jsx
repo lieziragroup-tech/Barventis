@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useLang } from '../../contexts/LanguageContext';
 import { copy } from '../../data/landingCopy';

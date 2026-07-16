@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { RefreshCw, Search, ShieldAlert, CheckCircle, Database } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
@@ -78,6 +78,7 @@ export default function PhysicalCheck() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchExpectedUsage();
   }, []);
 

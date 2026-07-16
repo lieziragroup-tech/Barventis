@@ -451,7 +451,7 @@ export default function Invoicing() {
                 items: po.items
               });
               success++;
-            } catch (e) {
+            } catch {
               failed++;
             }
           }

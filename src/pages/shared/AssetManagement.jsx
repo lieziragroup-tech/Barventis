@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Edit2, CheckCircle, Database, Trash2, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
@@ -35,6 +35,7 @@ export default function AssetManagement() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAssets();
   }, []);
 
@@ -96,7 +97,6 @@ export default function AssetManagement() {
       const userId = await api.getActiveUserId();
 
       const txRows = [];
-      const opnameRecords = [];
       
       // We will perform a simplified stock adjustment for assets
       for (const asset of assets) {

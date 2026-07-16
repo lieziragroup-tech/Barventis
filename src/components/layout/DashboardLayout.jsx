@@ -1,9 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { 
-  LayoutDashboard, Package, UploadCloud, ClipboardCheck, 
-  ChefHat, DollarSign, LogOut, Bell, FileText, History, Database,
-  FileSpreadsheet, Wrench, Settings, AlertTriangle, X, RefreshCw, Menu
+  LogOut, Bell, AlertTriangle, X, RefreshCw, Menu
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useData } from '../../contexts/DataContext';
@@ -77,6 +75,7 @@ export default function DashboardLayout() {
 
   // Close sidebar on route change
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsSidebarOpen(false);
   }, [location.pathname]);
   const navigate = useNavigate();

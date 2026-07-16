@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import { Suspense, lazy } from 'react';
 import LandingNavbar from './LandingNavbar';
 import LandingHero from './LandingHero';
 import LandingMetrics from './LandingMetrics';

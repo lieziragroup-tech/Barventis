@@ -1,4 +1,5 @@
 import { useState, useEffect, FormEvent, MouseEvent } from "react";
+import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   TrendingUp, 
@@ -9,15 +10,15 @@ import {
   X, 
   TrendingDown, 
   Info,
-  Check,           
-  BookOpen,        
-  Coffee,         
-  Utensils,        
-  Cake,            
-  Plus,          
-  AlertTriangle,   
-  PlusCircle,     
-  Sparkles        
+  Check,
+  AlertTriangle,
+  BookOpen,
+  Cake,
+  Coffee,
+  Plus,
+  PlusCircle,
+  Sparkles,
+  Utensils
 } from "lucide-react";
 import "./NewLanding.css";
 import { DEMO_PRESETS } from "./presets";
@@ -321,6 +322,12 @@ export default function App() {
         </nav>
 
         <div className="flex items-center gap-3">
+          <Link 
+            to="/login"
+            className="text-xs md:text-sm font-bold text-[#515f74] hover:text-primary transition-all px-4 py-2.5 rounded-full border border-[#bcc9c6]/40 hover:bg-[#FAFAF8] flex items-center gap-1 shadow-sm"
+          >
+            Masuk
+          </Link>
           {activeTab === "landing" ? (
             <button 
               onClick={() => setActiveTab("playground")}
@@ -331,7 +338,7 @@ export default function App() {
           ) : (
             <button 
               onClick={() => setActiveTab("landing")}
-              className="bg-white border border-[#bcc9c6]/50 hover:bg-[#FAFAF8] text-[#515f74] px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-1"
+              className="bg-white border border-[#bcc9c6]/50 hover:bg-[#FAFAF8] text-[#515f74] px-4 py-2.5 rounded-full text-xs font-bold transition-all flex items-center gap-1"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               Kembali
@@ -1633,6 +1640,7 @@ export default function App() {
             <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab("landing"); }} className="hover:text-primary transition-colors">Beranda Utama</a>
             <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab("playground"); }} className="hover:text-primary transition-colors">AI Sandbox Simulator</a>
             <a href="#roi-calc" className="hover:text-primary transition-colors">Estimasi Tabungan Resto</a>
+            <Link to="/login" className="hover:text-primary transition-colors">Masuk</Link>
             <a href="#" className="hover:text-primary transition-colors">Kebijakan Privasi</a>
           </div>
         </div>

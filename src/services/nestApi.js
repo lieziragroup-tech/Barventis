@@ -48,7 +48,7 @@ async function request(method, path, body, isFormData = false) {
   } catch (err) {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
-      throw new Error('Request timeout. File terlalu besar atau server lambat.');
+      throw new Error('Request timeout. File terlalu besar atau server lambat.', { cause: err });
     }
     throw err;
   }

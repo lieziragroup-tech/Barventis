@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { motion } from 'framer-motion';
 import { TrendingUp, UploadCloud, ChefHat, MapPin, Shield, ClipboardCheck } from 'lucide-react';
 import { useLang } from '../../contexts/LanguageContext';

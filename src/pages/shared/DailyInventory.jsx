@@ -122,7 +122,9 @@ export default function DailyInventory() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchInventory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, location, tab]);
 
   const handleDateChange = (days) => {

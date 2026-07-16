@@ -1,7 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl     = import.meta.env.VITE_SUPABASE_URL;
+let supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+// Sanitize Supabase URL to remove accidental trailing "/rest/v1/" suffix or slashes
+if (supabaseUrl && typeof supabaseUrl === 'string') {
+  supabaseUrl = supabaseUrl.trim().replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
+}
 
 // Fail-fast validation: Cegah inisialisasi jika file .env belum disetup
 if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes('your-supabase-project')) {

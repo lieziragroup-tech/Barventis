@@ -12,6 +12,7 @@ import { formatIDR } from '../../services/costUtils';
 import { api } from '../../services/api';
 
 export default function StockLedger() {
+  "use no memo";
   const { stock, transactions, handleAdjustStock, handleUpdateItem, handleAddItem, handleDeleteItem, refreshData } = useData();
   const onAdjustStock = handleAdjustStock;
   const onUpdateItem = handleUpdateItem;
@@ -66,6 +67,7 @@ export default function StockLedger() {
   };
 
   // Filtered stock
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const filteredStock = useMemo(() => stock.filter(item => {
     const totalQty = (item.qty_resto || 0) + (item.qty_central || 0);
     const minLevel = item.min_stock || 15;

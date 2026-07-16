@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { api } from '../services/api';
 import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';

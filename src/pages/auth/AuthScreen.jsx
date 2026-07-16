@@ -14,8 +14,9 @@ export default function AuthScreen({ onAuthSuccess }) {
   // Invite Token States
   const queryParams = new URLSearchParams(window.location.search);
   const inviteToken = queryParams.get('token');
+  const roleFromUrl = queryParams.get('role') || 'Staff';
   const [tokenStatus, setTokenStatus] = useState(inviteToken ? 'checking' : 'none');
-  const [inviteRole, setInviteRole] = useState('');
+  const [inviteRole, setInviteRole] = useState(roleFromUrl);
 
   useEffect(() => {
     if (!inviteToken) return;
@@ -23,7 +24,7 @@ export default function AuthScreen({ onAuthSuccess }) {
       try {
         const { data, error } = await supabase
           .from('invitations')
-          .select('is_used, expires_at, invite_role')
+          .select('is_used, expires_at')
           .eq('token', inviteToken)
           .single();
           
@@ -40,14 +41,14 @@ export default function AuthScreen({ onAuthSuccess }) {
           return;
         }
         
-        setInviteRole(data.invite_role || 'Owner');
+        setInviteRole(roleFromUrl);
         setTokenStatus('valid');
-      } catch (err) {
+      } catch {
         setTokenStatus('invalid');
       }
     }
     validateToken();
-  }, [inviteToken]);
+  }, [inviteToken, roleFromUrl]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -57,12 +58,12 @@ export default function AuthScreen({ onAuthSuccess }) {
     try {
       if (inviteToken) {
         // Register flow
-        const user = await api.registerWithToken(name, email, password, inviteToken);
+        await api.registerWithToken(name, email, password, inviteToken, inviteRole);
         // Clean URL to remove token so reload doesn't trigger register again
         window.history.replaceState({}, document.title, window.location.pathname);
         // Supabase auto-logins after signup if email verification is off
         // But the profile might not be perfectly fetched immediately. We can just alert success.
-        toast.showSuccess('Registrasi berhasil! Anda sekarang adalah Owner dari Tenant ini.');
+        toast.showSuccess(`Registrasi berhasil! Anda sekarang terdaftar sebagai ${inviteRole}.`);
         setTimeout(() => window.location.reload(), 1500);
       } else {
         // Login flow

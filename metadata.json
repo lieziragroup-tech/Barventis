@@ -1,0 +1,8 @@
+{
+  "name": "Barventis",
+  "description": "Barventis Inventory & Cost Control System (BICS) - Premium F&B ERP providing recipe mappings, POS Excel parser, stock opnames, and cost-variance analysis reports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -11,6 +11,7 @@ let _confetti;
 const getConfetti = async () => { if (!_confetti) _confetti = (await import('canvas-confetti')).default; return _confetti; };
 
 export default function BackupCenter() {
+  // eslint-disable-next-line no-unused-vars
   const { activeUser } = useAuth();
   const toast = useToast();
   const [backups, setBackups] = useState([]);

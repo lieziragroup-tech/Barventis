@@ -20,9 +20,10 @@ export default function AuditLogs() {
   // Fetch logs on mount
   useEffect(() => {
     fetchLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchLogs = async () => {
+  async function fetchLogs() {
     setLoading(true);
     setError(null);
     try {

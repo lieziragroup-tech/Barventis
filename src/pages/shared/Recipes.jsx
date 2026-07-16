@@ -112,6 +112,7 @@ export default function Recipes() {
     return calculateIngredientCost(info, ing.qty_in_use, ing.unit);
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const subtotal = useMemo(() => editedIngredients.reduce((acc, ing) => acc + calcRowAmount(ing), 0), [editedIngredients, stockMap]);
   const fixCost = useMemo(() => subtotal * 0.05, [subtotal]);
   const basicCost = useMemo(() => subtotal + fixCost, [subtotal, fixCost]);

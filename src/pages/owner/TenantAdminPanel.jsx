@@ -2,9 +2,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
 import { useData } from '../../contexts/DataContext';
-import { useAuth } from '../../contexts/AuthContext';
 import {
-  Users, Building, Link as LinkIcon, Trash2, Key, Copy, Clock, CheckCircle, XCircle, Store
+  Users, Building, Link as LinkIcon, Trash2, Copy, Clock, CheckCircle, XCircle, Store
 } from 'lucide-react';
 
 export default function TenantAdminPanel() {
@@ -18,6 +17,7 @@ export default function TenantAdminPanel() {
 
   useEffect(() => {
     if (currentTenant) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCompanyName(currentTenant.company_name || '');
     }
     fetchUsers();
@@ -25,7 +25,7 @@ export default function TenantAdminPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, currentTenant]);
 
-  const fetchUsers = async () => {
+  async function fetchUsers() {
     if (!currentTenant) return;
     try {
       setLoading(true);
@@ -43,9 +43,9 @@ export default function TenantAdminPanel() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const fetchInvitations = async () => {
+  async function fetchInvitations() {
     if (!currentTenant) return;
     try {
       const { data, error } = await supabase
@@ -59,7 +59,7 @@ export default function TenantAdminPanel() {
     } catch (err) {
       console.error(err);
     }
-  };
+  }
 
   const handleGenerateInvite = async (role) => {
     if (!currentTenant) return;
@@ -70,7 +70,7 @@ export default function TenantAdminPanel() {
       try {
         await navigator.clipboard.writeText(inviteUrl);
         displayToast(`Link Undangan untuk ${role} disalin! (Berlaku 24 Jam)`, 'success');
-      } catch (clipErr) {
+      } catch {
         window.prompt(`Link Undangan ${role} (Berlaku 24 Jam). Salin teks di bawah ini:`, inviteUrl);
       }
       fetchInvitations();
@@ -87,7 +87,7 @@ export default function TenantAdminPanel() {
       if (error) throw error;
       displayToast('Link undangan dihapus.', 'success');
       fetchInvitations();
-    } catch (err) {
+    } catch {
       displayToast('Gagal menghapus link', 'error');
     }
   };
@@ -287,7 +287,7 @@ export default function TenantAdminPanel() {
                 {invitations.map(inv => {
                   const isExpired = new Date(inv.expires_at) < new Date();
                   const isActive = !inv.is_used && !isExpired;
-                  const linkUrl = `${window.location.origin}/login?token=${inv.token}`;
+                  const linkUrl = `${window.location.origin}/login?token=${inv.token}&role=Staff`;
                   
                   return (
                     <div key={inv.id} style={{
@@ -307,7 +307,7 @@ export default function TenantAdminPanel() {
                             {inv.is_used ? <CheckCircle size={12} /> : isExpired ? <XCircle size={12} /> : <Clock size={12} />}
                             {inv.is_used ? 'Sudah Dipakai' : isExpired ? 'Kadaluarsa' : 'Aktif'}
                           </span>
-                          <span style={{ fontSize: '0.8rem', color: 'var(--text-primary)', fontWeight: 600 }}>Untuk: {inv.invite_role}</span>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-primary)', fontWeight: 600 }}>Link Undangan Outlet</span>
                         </div>
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'monospace', marginBottom: '4px' }}>
                           {linkUrl}

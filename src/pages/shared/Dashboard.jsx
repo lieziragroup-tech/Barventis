@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { 
-  Package, UploadCloud, FileText, ArrowRight, TrendingUp, AlertTriangle, Database,
+  Package, ArrowRight, AlertTriangle,
   TrendingDown, DollarSign, CheckCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';

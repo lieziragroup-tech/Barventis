@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Search, Database } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Edit2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
 
@@ -45,6 +45,7 @@ export default function Purchasing() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
   }, []);
 
