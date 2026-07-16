@@ -8,7 +8,16 @@ import {
   ArrowRight,
   X, 
   TrendingDown, 
-  Info
+  Info,
+  Check,           
+  BookOpen,        
+  Coffee,         
+  Utensils,        
+  Cake,            
+  Plus,          
+  AlertTriangle,   
+  PlusCircle,     
+  Sparkles        
 } from "lucide-react";
 import "./NewLanding.css";
 import { DEMO_PRESETS } from "./presets";
