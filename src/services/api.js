@@ -187,13 +187,18 @@ export const api = {
     // 4. Trigger database profile insertion manually in case of slow DB trigger sync
     const { data: profileCheck } = await supabase.from('users').select('id').eq('id', authData.user.id).maybeSingle();
     if (!profileCheck) {
-      await supabase.from('users').insert({
+      const { error: profileInsertErr } = await supabase.from('users').insert({
         id: authData.user.id,
         tenant_id: newTenant.id,
         name: adminName,
         email: email,
         role: 'Admin / Owner'
       });
+      if (profileInsertErr) {
+        // Don't silently succeed: without this row the account can authenticate
+        // but will never be able to load a profile (permanent login failure).
+        throw new Error('Akun auth berhasil dibuat, tapi gagal menyimpan profil ke database: ' + profileInsertErr.message + '. Kemungkinan RLS policy INSERT pada tabel users memblokir ini — cek Supabase.');
+      }
     }
 
     // 5. Session managed by Supabase Auth — no localStorage writes
