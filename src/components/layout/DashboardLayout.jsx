@@ -178,14 +178,19 @@ export default function DashboardLayout() {
               <NavGroup title="Menu Utama" defaultOpen={true}>
                 <NavItem to={basePath} exact label="Dashboard" />
                 <NavItem to={`${basePath}/stock`} label="Stock Ledger" />
+                <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" />
                 <NavItem to={`${basePath}/pos`} label="Upload POS Sales" />
                 <NavItem to={`${basePath}/recipes`} label="F&B Recipes" />
+                <NavItem to={`${basePath}/pricing`} label="Menu Pricing" />
               </NavGroup>
 
               {isOwner && (
                 <NavGroup title="Operasional" defaultOpen={true}>
+                  <NavItem to={`${basePath}/purchasing`} label="Pembelian & Supplier" />
                   <NavItem to={`${basePath}/invoicing`} label="Invoicing / PO" />
                   <NavItem to={`${basePath}/opname`} label="Stock Opname" />
+                  <NavItem to={`${basePath}/physical-check`} label="Cek Fisik & Waste" />
+                  <NavItem to={`${basePath}/assets`} label="Asset & Equipment" />
                   <NavItem to={`${basePath}/cost-control`} label="Cost Control" />
                 </NavGroup>
               )}
@@ -238,10 +243,15 @@ export default function DashboardLayout() {
                   <>
                     {location.pathname === basePath && "Cost Control Dashboard"}
                     {location.pathname === `${basePath}/stock` && "Warehouse Stocks & Ledgers"}
+                    {location.pathname === `${basePath}/daily-inventory` && "Pencatatan Stok Harian"}
                     {location.pathname === `${basePath}/pos` && "POS Kasir Integration"}
                     {location.pathname === `${basePath}/recipes` && "Menu COGS & Recipe Builder"}
+                    {location.pathname === `${basePath}/pricing` && "Menu Pricing Simulator"}
+                    {location.pathname === `${basePath}/purchasing` && "Pembelian Harian & Supplier"}
                     {location.pathname === `${basePath}/invoicing` && "Purchase Invoicing"}
                     {location.pathname === `${basePath}/opname` && "Stock Opname & Auditing"}
+                    {location.pathname === `${basePath}/physical-check` && "Pengecekan Fisik Mingguan"}
+                    {location.pathname === `${basePath}/assets` && "Asset & Equipment Tracker"}
                     {location.pathname === `${basePath}/audit` && "Jejak Audit Sistem (Audit Logs)"}
                     {location.pathname === `${basePath}/cost-control` && "Monthly Cost Control Sheet"}
                     {location.pathname === `${basePath}/backup` && "Backup & Restore Center"}
@@ -259,10 +269,15 @@ export default function DashboardLayout() {
                 <>
                   {location.pathname === basePath && "Real-time F&B Beverage HPP analytics, top variance and metrics."}
                   {location.pathname === `${basePath}/stock` && "Manage raw materials — edit supplier, price, stock levels. Dual-unit display."}
+                  {location.pathname === `${basePath}/daily-inventory` && "Daily stock count per shift, waste, and beer grouping."}
                   {location.pathname === `${basePath}/pos` && "Browser-side Excel parser. Drag and drop POS reports to deduct raw stock."}
                   {location.pathname === `${basePath}/recipes` && "Configure ingredients, fixed costs, and selling HPP percentages."}
+                  {location.pathname === `${basePath}/pricing` && "Simulate selling price changes and see margin impact instantly."}
+                  {location.pathname === `${basePath}/purchasing` && "Quick entry daily purchase and manage supplier data."}
                   {location.pathname === `${basePath}/invoicing` && "Create purchase orders, track invoices, auto stock-in on receive."}
                   {location.pathname === `${basePath}/opname` && "Wizard-style month-end counting sheet with digital signature."}
+                  {location.pathname === `${basePath}/physical-check` && "Bandingkan pemakaian bahan di POS dengan stok fisik."}
+                  {location.pathname === `${basePath}/assets` && "Track valuable restaurant assets and record breakages."}
                   {location.pathname === `${basePath}/audit` && "Linimasa riwayat log aktivitas, perubahan operasional dan parameter sistem."}
                   {location.pathname === `${basePath}/cost-control` && "Compare opening, purchasing, and closing opnames to hit <27% target."}
                   {location.pathname === `${basePath}/backup` && "Unduh, unggah, buat, dan kelola file cadangan database SQLite Barventis."}

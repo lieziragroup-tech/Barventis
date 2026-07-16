@@ -442,7 +442,7 @@ export const api = {
     let newQtyResto = parseFloat(material.qty_resto);
     let newQtyCentral = parseFloat(material.qty_central);
 
-    const outTypes = ['OUT', 'SPOILAGE', 'BROKEN', 'STOLEN', 'STAFF_MEAL'];
+    const outTypes = ['OUT', 'WASTE', 'BREAKAGE', 'EXPIRED', 'COMP'];
 
     if (type === 'IN') {
       finalQty = parsedQty;
@@ -905,14 +905,21 @@ export const api = {
     const transactionRows = [];
     const deductionMap = {}; // Memory aggregation for materials
     const salesMap = {}; // Memory aggregation for gross revenue
+    let minDate = '9999-12-31';
+    let maxDate = '0000-01-01';
 
     // 1. Loop through each POS sale row (Pre-Aggregation Phase)
     for (const sale of salesData) {
+      // Basic extraction
       const menuName = sale.menuName.toLowerCase().trim();
       const menuCode = sale.menuCode ? sale.menuCode.toLowerCase().trim() : null;
       const saleQty = parseInt(sale.qty || 1);
       const salesDate = sale.salesDate || nowStr;
       const totalRevenue = parseFloat(sale.total || 0);
+
+      // Track date bounds for expected_usage
+      if (salesDate < minDate) minDate = salesDate;
+      if (salesDate > maxDate) maxDate = salesDate;
 
       processedRecords++;
 
@@ -969,13 +976,20 @@ export const api = {
           const deductQty = (parseFloat(ing.qty_in_use) * saleQty) / factor;
           
           if (!deductionMap[material.id]) {
-            deductionMap[material.id] = { material, totalDeduct: 0, saleDates: new Set() };
+            deductionMap[material.id] = { material, totalDeduct: 0, saleDates: new Set(), totalSold: 0 };
           }
           deductionMap[material.id].totalDeduct += deductQty;
           deductionMap[material.id].saleDates.add(salesDate);
+          deductionMap[material.id].totalSold += saleQty;
         }
       }
     }
+
+    // Prepare expected usage rows
+    const expectedUsageRows = [];
+    // If no valid dates were found, default to today
+    if (minDate === '9999-12-31') minDate = nowStr;
+    if (maxDate === '0000-01-01') maxDate = nowStr;
 
     // 2. Perform Atomic Deductions per UNIQUE material (Parallel Batching API Optimization)
     const deductionEntries = Object.entries(deductionMap);
@@ -1022,6 +1036,17 @@ export const api = {
         });
 
         deductionLogsCount++;
+        
+        expectedUsageRows.push({
+          tenant_id: tenantId,
+          week_start: minDate,
+          week_end: maxDate,
+          material_id: material.id,
+          expected_qty: deductQty,
+          total_sold: data.totalSold,
+          last_pos_filename: filename,
+          created_by: userId
+        });
       }));
     }
 
@@ -1046,6 +1071,15 @@ export const api = {
       const chunk = transactionRows.slice(i, i + INSERT_CHUNK);
       const { error: txsErr } = await supabase.from('transactions').insert(chunk);
       if (txsErr) console.warn("Failed to save POS synced transactions chunk:", txsErr);
+    }
+
+    // 4. Upsert expected usage
+    for (let i = 0; i < expectedUsageRows.length; i += INSERT_CHUNK) {
+      const chunk = expectedUsageRows.slice(i, i + INSERT_CHUNK);
+      const { error: euErr } = await supabase.from('expected_usage').upsert(chunk, {
+        onConflict: 'tenant_id, week_start, material_id'
+      });
+      if (euErr) console.warn("Failed to save expected usage chunk:", euErr);
     }
 
     // Record upload log
@@ -1412,7 +1446,7 @@ export const api = {
     let salesRevenue = 0.00;
     let wasteValuation = 0.00;
 
-    const wasteTypes = ['SPOILAGE', 'BROKEN', 'STOLEN', 'STAFF_MEAL'];
+    const wasteTypes = ['WASTE', 'BREAKAGE', 'EXPIRED', 'COMP'];
 
     for (const tx of (transactions || [])) {
       const amt = parseFloat(tx.amount || 0);

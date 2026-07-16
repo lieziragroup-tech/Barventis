@@ -14,10 +14,15 @@ const Dashboard = React.lazy(() => import('./pages/shared/Dashboard'));
 const StockLedger = React.lazy(() => import('./pages/shared/StockLedger'));
 const PosUpload = React.lazy(() => import('./pages/shared/PosUpload'));
 const Recipes = React.lazy(() => import('./pages/shared/Recipes'));
+const MenuPricing = React.lazy(() => import('./pages/shared/MenuPricing'));
 const StockOpname = React.lazy(() => import('./pages/shared/StockOpname'));
+const PhysicalCheck = React.lazy(() => import('./pages/shared/PhysicalCheck'));
+const DailyInventory = React.lazy(() => import('./pages/shared/DailyInventory'));
 const CostControl = React.lazy(() => import('./pages/shared/CostControl'));
 const Invoicing = React.lazy(() => import('./pages/shared/Invoicing'));
+const Purchasing = React.lazy(() => import('./pages/shared/Purchasing'));
 const AuditLogs = React.lazy(() => import('./pages/shared/AuditLogs'));
+const AssetManagement = React.lazy(() => import('./pages/shared/AssetManagement'));
 const BackupCenter = React.lazy(() => import('./pages/shared/BackupCenter'));
 const Maintenance = React.lazy(() => import('./pages/shared/Maintenance'));
 const SuperAdminPanel = React.lazy(() => import('./pages/superadmin/SuperAdminPanel'));
@@ -121,11 +126,16 @@ export default function App() {
         }>
           <Route index element={<RouteErrorBoundary><Dashboard /></RouteErrorBoundary>} />
           <Route path="stock" element={<RouteErrorBoundary><StockLedger /></RouteErrorBoundary>} />
+          <Route path="daily-inventory" element={<RouteErrorBoundary><DailyInventory /></RouteErrorBoundary>} />
           <Route path="pos" element={<RouteErrorBoundary><PosUpload /></RouteErrorBoundary>} />
           <Route path="recipes" element={<RouteErrorBoundary><Recipes /></RouteErrorBoundary>} />
+          <Route path="pricing" element={<RouteErrorBoundary><MenuPricing /></RouteErrorBoundary>} />
           <Route path="invoicing" element={<RouteErrorBoundary><Invoicing /></RouteErrorBoundary>} />
+          <Route path="purchasing" element={<RouteErrorBoundary><Purchasing /></RouteErrorBoundary>} />
           <Route path="opname" element={<RouteErrorBoundary><StockOpname /></RouteErrorBoundary>} />
+          <Route path="physical-check" element={<RouteErrorBoundary><PhysicalCheck /></RouteErrorBoundary>} />
           <Route path="audit" element={<RouteErrorBoundary><AuditLogs /></RouteErrorBoundary>} />
+          <Route path="assets" element={<RouteErrorBoundary><AssetManagement /></RouteErrorBoundary>} />
           <Route path="cost-control" element={<RouteErrorBoundary><CostControl /></RouteErrorBoundary>} />
           <Route path="backup" element={<RouteErrorBoundary><BackupCenter /></RouteErrorBoundary>} />
           <Route path="maintenance" element={<RouteErrorBoundary><Maintenance /></RouteErrorBoundary>} />
@@ -146,6 +156,7 @@ export default function App() {
         }>
           <Route index element={<RouteErrorBoundary><Dashboard /></RouteErrorBoundary>} />
           <Route path="stock" element={<RouteErrorBoundary><StockLedger /></RouteErrorBoundary>} />
+          <Route path="daily-inventory" element={<RouteErrorBoundary><DailyInventory /></RouteErrorBoundary>} />
           <Route path="pos" element={<RouteErrorBoundary><PosUpload /></RouteErrorBoundary>} />
           <Route path="recipes" element={<RouteErrorBoundary><Recipes /></RouteErrorBoundary>} />
           <Route path="maintenance" element={<RouteErrorBoundary><Maintenance /></RouteErrorBoundary>} />
