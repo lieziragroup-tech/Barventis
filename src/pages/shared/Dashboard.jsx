@@ -142,7 +142,7 @@ export default function Dashboard() {
       </div>
 
       {/* Row 1: Trend + Pie */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', marginBottom: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginBottom: '24px' }}>
         <div className="glass-card" style={{ padding: '24px' }}>
           <div className="chart-title">
             <span>Beverage Cost Trend (30 Days)</span>
@@ -183,7 +183,7 @@ export default function Dashboard() {
       </div>
 
       {/* Row 2: Bar + Alerts */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
         <div className="glass-card" style={{ padding: '24px' }}>
           <div className="chart-title">Top 5 Cost Contributors</div>
           <ResponsiveContainer width="100%" height={300}>

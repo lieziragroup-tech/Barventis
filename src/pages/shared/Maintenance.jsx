@@ -242,7 +242,7 @@ export default function Maintenance() {
       {/* OWNER-ONLY MAINTENANCE TOOLS */}
       {isOwner && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', marginBottom: '28px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginBottom: '28px' }}>
             {/* Integrity check */}
             <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
