@@ -146,9 +146,31 @@ export default function DashboardLayout() {
 
       {/* Sidebar Navigation */}
       <nav className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
-        <div className="logo-container">
-          <div className="logo-icon">B</div>
-          <span className="logo-text">BARVENTIS</span>
+        <div className="logo-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '20px', padding: '0 6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div className="logo-icon">B</div>
+            <span className="logo-text">BARVENTIS</span>
+          </div>
+          <button 
+            className="mobile-close-btn"
+            onClick={() => setIsSidebarOpen(false)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              display: 'none',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '4px',
+              borderRadius: 'var(--radius-sm)',
+              transition: 'all var(--ease)'
+            }}
+            onMouseOver={e => e.currentTarget.style.color = 'var(--text-primary)'}
+            onMouseOut={e => e.currentTarget.style.color = 'var(--text-muted)'}
+          >
+            <X size={16} />
+          </button>
         </div>
         
         <div style={{

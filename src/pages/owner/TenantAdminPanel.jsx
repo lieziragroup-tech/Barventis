@@ -136,79 +136,79 @@ export default function TenantAdminPanel() {
   };
 
   return (
-    <div style={{ paddingBottom: '40px' }}>
-      <div style={{ marginBottom: '24px' }}>
-        <h2 style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Store size={28} style={{ color: 'var(--accent)' }} /> Pengaturan Resto
+    <div style={{ paddingBottom: '30px' }}>
+      <div style={{ marginBottom: '18px' }}>
+        <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Store size={20} style={{ color: 'var(--accent)' }} /> Pengaturan Resto
         </h2>
-        <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '0.9rem' }}>
+        <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '0.8rem' }}>
           Kelola profil resto dan hak akses staf Anda.
         </p>
       </div>
 
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '4px' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', overflowX: 'auto', paddingBottom: '4px' }}>
         <button
           className="btn"
           onClick={() => setTab('users')}
           style={{
-            background: tab === 'users' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-            border: tab === 'users' ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255,255,255,0.1)',
+            background: tab === 'users' ? 'rgba(59, 130, 246, 0.12)' : 'transparent',
+            border: tab === 'users' ? '1px solid rgba(59, 130, 246, 0.25)' : '1px solid rgba(255,255,255,0.08)',
             color: tab === 'users' ? 'var(--accent)' : 'var(--text-secondary)',
-            padding: '8px 16px', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'
+            padding: '6px 12px', fontSize: '0.78rem', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer'
           }}
         >
-          <Users size={16} /> Manajemen Pengguna
+          <Users size={14} /> Manajemen Pengguna
         </button>
         <button
           className="btn"
           onClick={() => setTab('invites')}
           style={{
-            background: tab === 'invites' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-            border: tab === 'invites' ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255,255,255,0.1)',
+            background: tab === 'invites' ? 'rgba(59, 130, 246, 0.12)' : 'transparent',
+            border: tab === 'invites' ? '1px solid rgba(59, 130, 246, 0.25)' : '1px solid rgba(255,255,255,0.08)',
             color: tab === 'invites' ? 'var(--accent)' : 'var(--text-secondary)',
-            padding: '8px 16px', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'
+            padding: '6px 12px', fontSize: '0.78rem', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer'
           }}
         >
-          <LinkIcon size={16} /> Link Undangan
+          <LinkIcon size={14} /> Link Undangan
         </button>
         <button
           className="btn"
           onClick={() => setTab('profile')}
           style={{
-            background: tab === 'profile' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-            border: tab === 'profile' ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255,255,255,0.1)',
+            background: tab === 'profile' ? 'rgba(59, 130, 246, 0.12)' : 'transparent',
+            border: tab === 'profile' ? '1px solid rgba(59, 130, 246, 0.25)' : '1px solid rgba(255,255,255,0.08)',
             color: tab === 'profile' ? 'var(--accent)' : 'var(--text-secondary)',
-            padding: '8px 16px', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'
+            padding: '6px 12px', fontSize: '0.78rem', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer'
           }}
         >
-          <Building size={16} /> Profil Resto
+          <Building size={14} /> Profil Resto
         </button>
       </div>
 
-      <div className="glass-card" style={{ padding: '24px', minHeight: '400px' }}>
+      <div className="glass-card" style={{ padding: '16px 20px', minHeight: '350px' }}>
         {tab === 'users' && (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', gap: '12px', flexWrap: 'wrap' }}>
               <div>
-                <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.2rem', fontWeight: 700 }}>Daftar Pengguna Aktif</h3>
-                <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1rem', fontWeight: 700 }}>Daftar Pengguna Aktif</h3>
+                <p style={{ margin: '2px 0 0 0', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                   Kelola staf yang memiliki akses ke modul restoran Anda.
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button className="btn btn-secondary" onClick={() => handleGenerateInvite('Staff')} disabled={isSaving} style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.85rem' }}>
-                  <LinkIcon size={14} /> Undang Staff
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button className="btn btn-secondary" onClick={() => handleGenerateInvite('Staff')} disabled={isSaving} style={{ display: 'flex', gap: '4px', alignItems: 'center', fontSize: '0.78rem', padding: '6px 10px' }}>
+                  <LinkIcon size={12} /> Undang Staff
                 </button>
-                <button className="btn btn-primary" onClick={() => handleGenerateInvite('Admin / Owner')} disabled={isSaving} style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.85rem' }}>
-                  <LinkIcon size={14} /> Undang Owner
+                <button className="btn btn-primary" onClick={() => handleGenerateInvite('Admin / Owner')} disabled={isSaving} style={{ display: 'flex', gap: '4px', alignItems: 'center', fontSize: '0.78rem', padding: '6px 10px' }}>
+                  <LinkIcon size={12} /> Undang Owner
                 </button>
               </div>
             </div>
 
             {loading ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>Memuat data pengguna...</div>
+              <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>Memuat data pengguna...</div>
             ) : (
-              <div className="table-responsive">
+              <div className="table-container" style={{ margin: 0 }}>
                 <table className="custom-table">
                   <thead>
                     <tr>
@@ -221,13 +221,13 @@ export default function TenantAdminPanel() {
                   </thead>
                   <tbody>
                     {tenantUsers.map(u => (
-                      <tr key={u.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <tr key={u.id}>
                         <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{u.name}</td>
                         <td style={{ color: 'var(--text-secondary)' }}>{u.email}</td>
                         <td>
                           <span style={{
-                            padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700,
-                            background: u.role === 'Admin / Owner' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(148, 163, 184, 0.1)',
+                            padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700,
+                            background: u.role === 'Admin / Owner' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(148, 163, 184, 0.08)',
                             color: u.role === 'Admin / Owner' ? 'var(--accent)' : 'var(--text-muted)'
                           }}>
                             {u.role.toUpperCase()}
@@ -240,16 +240,17 @@ export default function TenantAdminPanel() {
                             className="btn"
                             disabled={u.id === sessionUser?.id}
                             style={{
-                              padding: '6px 10px', fontSize: '0.75rem', border: 'none',
+                              padding: '4px 8px', fontSize: '0.72rem', border: 'none',
                               background: 'var(--danger-glow)',
                               color: 'var(--danger)',
                               cursor: u.id === sessionUser?.id ? 'not-allowed' : 'pointer',
-                              display: 'inline-flex', alignItems: 'center', gap: '4px',
-                              opacity: u.id === sessionUser?.id ? 0.3 : 1
+                              display: 'inline-flex', alignItems: 'center', gap: '3px',
+                              opacity: u.id === sessionUser?.id ? 0.3 : 1,
+                              borderRadius: '4px'
                             }}
                             title="Hapus Akses Pengguna"
                           >
-                            <Trash2 size={14} /> Hapus
+                            <Trash2 size={12} /> Hapus
                           </button>
                         </td>
                       </tr>
@@ -263,27 +264,27 @@ export default function TenantAdminPanel() {
 
         {tab === 'invites' && (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', gap: '12px', flexWrap: 'wrap' }}>
               <div>
-                <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.2rem', fontWeight: 700 }}>Kelola Link Undangan</h3>
-                <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1rem', fontWeight: 700 }}>Kelola Link Undangan</h3>
+                <p style={{ margin: '2px 0 0 0', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                   Buat link undangan untuk merekrut staf baru ke sistem Anda.
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button className="btn btn-secondary" onClick={() => handleGenerateInvite('Staff')} disabled={isSaving} style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.85rem' }}>
-                  <LinkIcon size={14} /> Undang Staff
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button className="btn btn-secondary" onClick={() => handleGenerateInvite('Staff')} disabled={isSaving} style={{ display: 'flex', gap: '4px', alignItems: 'center', fontSize: '0.78rem', padding: '6px 10px' }}>
+                  <LinkIcon size={12} /> Undang Staff
                 </button>
-                <button className="btn btn-primary" onClick={() => handleGenerateInvite('Admin / Owner')} disabled={isSaving} style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.85rem' }}>
-                  <LinkIcon size={14} /> Undang Owner
+                <button className="btn btn-primary" onClick={() => handleGenerateInvite('Admin / Owner')} disabled={isSaving} style={{ display: 'flex', gap: '4px', alignItems: 'center', fontSize: '0.78rem', padding: '6px 10px' }}>
+                  <LinkIcon size={12} /> Undang Owner
                 </button>
               </div>
             </div>
 
             {invitations.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>Belum ada link undangan yang dibuat.</div>
+              <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>Belum ada link undangan yang dibuat.</div>
             ) : (
-              <div style={{ display: 'grid', gap: '12px' }}>
+              <div style={{ display: 'grid', gap: '10px' }}>
                 {invitations.map(inv => {
                   const isExpired = new Date(inv.expires_at) < new Date();
                   const isActive = !inv.is_used && !isExpired;
@@ -292,51 +293,51 @@ export default function TenantAdminPanel() {
                   return (
                     <div key={inv.id} style={{
                       background: 'rgba(15, 23, 42, 0.4)',
-                      border: `1px solid ${isActive ? 'rgba(59, 130, 246, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`,
-                      borderRadius: 'var(--radius-md)', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      opacity: isActive ? 1 : 0.6
+                      border: `1px solid ${isActive ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.08)'}`,
+                      borderRadius: 'var(--radius-md)', padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      opacity: isActive ? 1 : 0.6, gap: '12px', flexWrap: 'wrap'
                     }}>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
                           <span style={{ 
-                            fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', fontWeight: 700,
+                            fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', fontWeight: 700,
                             background: inv.is_used ? 'rgba(34, 197, 94, 0.1)' : isExpired ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)',
                             color: inv.is_used ? 'var(--success)' : isExpired ? 'var(--danger)' : 'var(--accent)',
-                            display: 'flex', alignItems: 'center', gap: '4px'
+                            display: 'flex', alignItems: 'center', gap: '3px'
                           }}>
-                            {inv.is_used ? <CheckCircle size={12} /> : isExpired ? <XCircle size={12} /> : <Clock size={12} />}
+                            {inv.is_used ? <CheckCircle size={10} /> : isExpired ? <XCircle size={10} /> : <Clock size={10} />}
                             {inv.is_used ? 'Sudah Dipakai' : isExpired ? 'Kadaluarsa' : 'Aktif'}
                           </span>
-                          <span style={{ fontSize: '0.8rem', color: 'var(--text-primary)', fontWeight: 600 }}>Link Undangan Outlet</span>
+                          <span style={{ fontSize: '0.78rem', color: 'var(--text-primary)', fontWeight: 600 }}>Link Undangan Outlet</span>
                         </div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'monospace', marginBottom: '4px' }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'monospace', marginBottom: '2px', wordBreak: 'break-all' }}>
                           {linkUrl}
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
                           Dibuat: {new Date(inv.created_at).toLocaleString('id-ID')}
                         </div>
                       </div>
                       
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                      <div style={{ display: 'flex', gap: '6px' }}>
                         {isActive && (
                           <button 
                             className="btn btn-secondary" 
-                            style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                            style={{ padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
                             onClick={() => {
                               navigator.clipboard.writeText(linkUrl);
                               displayToast('Link disalin ke clipboard!', 'success');
                             }}
                           >
-                            <Copy size={14} /> Salin
+                            <Copy size={12} /> Salin
                           </button>
                         )}
                         <button 
                           className="btn" 
-                          style={{ padding: '6px', color: 'var(--danger)', background: 'var(--danger-glow)', border: 'none', borderRadius: 'var(--radius-sm)' }}
+                          style={{ padding: '4px 8px', color: 'var(--danger)', background: 'var(--danger-glow)', border: 'none', borderRadius: 'var(--radius-sm)' }}
                           onClick={() => handleDeleteInvite(inv.id)}
                           title="Hapus Link"
                         >
-                          <Trash2 size={14} />
+                          <Trash2 size={12} />
                         </button>
                       </div>
                     </div>
@@ -348,27 +349,27 @@ export default function TenantAdminPanel() {
         )}
 
         {tab === 'profile' && (
-          <div style={{ maxWidth: '500px' }}>
-            <h3 style={{ margin: '0 0 20px 0', color: 'var(--text-primary)', fontSize: '1.2rem', fontWeight: 700 }}>Profil Restoran</h3>
-            <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ maxWidth: '400px' }}>
+            <h3 style={{ margin: '0 0 16px 0', color: 'var(--text-primary)', fontSize: '1rem', fontWeight: 700 }}>Profil Restoran</h3>
+            <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
-                <label className="form-label" style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>ID Subdomain Resto</label>
+                <label className="form-label" style={{ display: 'block', marginBottom: '4px', color: 'var(--text-secondary)', fontSize: '0.75rem' }}>ID Subdomain Resto</label>
                 <input
                   type="text"
                   className="form-control"
                   value={currentTenant?.name || ''}
                   disabled
                   style={{
-                    width: '100%', padding: '10px 14px', background: 'var(--bg-tertiary)',
-                    border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)',
-                    cursor: 'not-allowed'
+                    width: '100%', padding: '8px 12px', background: 'var(--bg-tertiary)',
+                    border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)',
+                    cursor: 'not-allowed', fontSize: '0.8rem'
                   }}
                 />
-                <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>ID Subdomain tidak dapat diubah.</small>
+                <small style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginTop: '2px', display: 'block' }}>ID Subdomain tidak dapat diubah.</small>
               </div>
 
               <div>
-                <label className="form-label" style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Nama Bisnis / Perusahaan</label>
+                <label className="form-label" style={{ display: 'block', marginBottom: '4px', color: 'var(--text-secondary)', fontSize: '0.75rem' }}>Nama Bisnis / Perusahaan</label>
                 <input
                   type="text"
                   className="form-control"
@@ -376,15 +377,15 @@ export default function TenantAdminPanel() {
                   onChange={(e) => setCompanyName(e.target.value)}
                   required
                   style={{
-                    width: '100%', padding: '10px 14px', background: 'rgba(15, 23, 42, 0.6)',
-                    border: '1px solid rgba(255,255,255,0.1)', borderRadius: 'var(--radius-md)', color: 'var(--text-inverse)'
+                    width: '100%', padding: '8px 12px', background: 'rgba(15, 23, 42, 0.6)',
+                    border: '1px solid rgba(255,255,255,0.1)', borderRadius: 'var(--radius-sm)', color: 'var(--text-inverse)', fontSize: '0.8rem'
                   }}
                 />
               </div>
 
-              <div style={{ background: 'rgba(245, 158, 11, 0.05)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(245, 158, 11, 0.1)' }}>
-                <h4 style={{ margin: '0 0 8px 0', color: 'var(--warning)', fontSize: '0.9rem' }}>Status Kunci Pembukuan</h4>
-                <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              <div style={{ background: 'rgba(245, 158, 11, 0.05)', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(245, 158, 11, 0.1)' }}>
+                <h4 style={{ margin: '0 0 4px 0', color: 'var(--warning)', fontSize: '0.82rem', fontWeight: '700' }}>Status Kunci Pembukuan</h4>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                   {currentTenant?.locked_until_month && currentTenant?.locked_until_year 
                     ? `Transaksi sebelum bulan ${currentTenant.locked_until_month}/${currentTenant.locked_until_year} telah dikunci dan tidak dapat diubah.` 
                     : 'Belum ada periode yang dikunci. Data masih bebas diubah.'}
@@ -396,8 +397,8 @@ export default function TenantAdminPanel() {
                 className="btn btn-primary"
                 disabled={isSaving}
                 style={{
-                  padding: '12px', borderRadius: 'var(--radius-md)', fontWeight: 600,
-                  marginTop: '10px', display: 'flex', justifyContent: 'center'
+                  padding: '8px 12px', borderRadius: 'var(--radius-sm)', fontWeight: 600,
+                  marginTop: '8px', display: 'flex', justifyContent: 'center', fontSize: '0.8rem'
                 }}
               >
                 {isSaving ? 'Menyimpan...' : 'Simpan Perubahan'}

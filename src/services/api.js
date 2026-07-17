@@ -63,6 +63,14 @@ export const api = {
 
   getOverheadPct: () => activeOverheadPct,
 
+  getActiveTenantId: async () => {
+    return await getActiveTenantId();
+  },
+
+  getActiveUserId: async () => {
+    return await getActiveUserId();
+  },
+
   // --- AUTHENTICATION ---
   login: async (email, password) => {
     // 1. Perform Supabase authentication first (so RLS policies will be satisfied for profile and tenant queries)
