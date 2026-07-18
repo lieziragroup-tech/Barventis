@@ -133,7 +133,7 @@ export const api = {
       .from('users')
       .select('*')
       .eq('id', authData.user.id)
-      .single();
+      .maybeSingle();
 
     if (profileErr || !userProfile) {
       await supabase.auth.signOut();
