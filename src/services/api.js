@@ -49,7 +49,52 @@ const logAudit = async (action, description) => {
 export { parsePackSize, calculateIngredientCost };
 
 export const api = {
+  processPOSSync: async (posDataArray) => {
+    try {
+      const { data, error } = await supabase.rpc('process_pos_sync_atomic', {
+        p_tenant_id: activeTenantId,
+        p_pos_data: posDataArray,
+        p_user_id: activeUserId
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+      return data;
+    } catch (err) {
+      console.error('POS Sync error:', err);
+      throw err;
+    }
+  },
+
   // Set memory cache to avoid async locks in browser
+  getPOSOrders: async () => {
+    try {
+      const { data, error } = await supabase
+        .from('pos_orders')
+        .select('*')
+        .eq('tenant_id', activeTenantId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error('getPOSOrders error:', err);
+      throw err;
+    }
+  },
+
+  getPOSOrderItems: async (orderId) => {
+    try {
+      const { data, error } = await supabase
+        .from('pos_order_items')
+        .select('*, recipes(menu_name)')
+        .eq('order_id', orderId);
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error('getPOSOrderItems error:', err);
+      throw err;
+    }
+  },
+
   setSessionData: (tenantId, userId, overheadPct, whatsappNumber, whatsappToken, whatsappEnabled) => {
     activeTenantId = tenantId;
     activeUserId = userId;

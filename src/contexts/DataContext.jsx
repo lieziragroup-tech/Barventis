@@ -126,9 +126,17 @@ export const DataProvider = ({ children }) => {
   }, [stock, fetchAllData]);
 
   const handleProcessPosSales = useCallback(async (mappedSales, filename) => {
-    await api.syncPos(filename, mappedSales);
-    await fetchAllData();
-  }, [fetchAllData]);
+    try {
+      // mappedSales structure dari PosUpload: [{ recipe_id, qty, price }, ...]
+      await api.processPOSSync(mappedSales);
+      await fetchAllData();
+      showToast('POS data synced successfully & stock deducted.', 'success');
+    } catch (error) {
+      console.error('POS sync error:', error);
+      showToast(error.message || 'Failed to sync POS data', 'error');
+      throw error;
+    }
+  }, [fetchAllData, showToast]);
 
   const handleSaveRecipe = useCallback(async (updatedRecipe) => {
     const recipeId = updatedRecipe.id;

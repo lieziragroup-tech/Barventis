@@ -33,7 +33,9 @@ export default function PosUpload() {
         menuCode: row.menu_code,
         qty: row.qty,
         total: row.total_sales,
+        price: row.qty > 0 ? (row.total_sales / row.qty) : 0,
         isMapped: !!recipe,
+        recipe_id: recipe?.id || null,
         recipeName: recipe?.menu_name || '',
         totalCost: recipe ? recipe.basic_cost * row.qty : 0
       };
@@ -323,26 +325,20 @@ export default function PosUpload() {
   const handleCommitSales = async () => {
     const confetti = await getConfetti();
     setLoading(true);
+    setUploadStatus(null);
     try {
-      if (rawFile) {
-        // Server-side flow: upload raw file to NestJS
-        const { nestApi } = await import('../../services/nestApi');
-        try {
-          const result = await nestApi.syncPos(rawFile, parsedData.filename);
-          if (result.summary?.status === 'COMPLETED_WITH_ERRORS' && result.summary?.deduction_errors?.length > 0) {
-            setUploadStatus({ type: 'warning', message: result.message + '\n' + result.summary.deduction_errors.join('\n') });
-            setLoading(false);
-            return;
-          }
-        } catch (err) {
-          setUploadStatus({ type: 'error', message: err.message || 'Gagal menghubungi server untuk sinkronisasi POS.' });
-          setLoading(false);
-          return;
-        }
-      } else {
-        // Fallback: direct Supabase (legacy)
-        await onProcessPosSales(mappedSales, parsedData.filename);
+      const validSales = mappedSales.filter(s => s.isMapped);
+      if (validSales.length === 0) {
+        throw new Error("Tidak ada data POS yang valid untuk diproses (0 mapped items).");
       }
+      
+      const payload = validSales.map(s => ({
+        recipe_id: s.recipe_id,
+        qty: s.qty,
+        price: s.price
+      }));
+
+      await onProcessPosSales(payload, parsedData.filename);
       await confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
       setRawFile(null);
       setParsedData(null);
