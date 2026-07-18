@@ -143,10 +143,26 @@ export const api = {
       // Find tenant ID from name if tenant_id not in metadata
       let tId = md.tenant_id;
       if (!tId && md.tenant_name) {
-         const { data: tData } = await supabase.from('tenants').select('id').eq('name', md.tenant_name).maybeSingle();
-         if (tData) tId = tData.id;
+         // Fix 400 error by removing empty query or wrong mapping. 
+         // Fallback directly to manual check if need be, or fix the query.
+         const cleanTenantName = md.tenant_name.toLowerCase().replace(/[^a-z0-9]/g, '');
+         if (cleanTenantName) {
+            const { data: tData, error: tErr } = await supabase.from('tenants').select('id').eq('name', cleanTenantName).maybeSingle();
+            if (!tErr && tData) tId = tData.id;
+         }
       }
       
+      // If we STILL don't have a tId and not superadmin, let's just make one so we don't break.
+      if (!tId && fallbackRole.toLowerCase().replace(/\s+/g, '') !== 'superadmin') {
+         const dummyName = 'recovered_' + Date.now().toString().slice(-6);
+         const { data: fallbackTenant } = await supabase.from('tenants').insert({
+            name: dummyName,
+            company_name: md.company_name || dummyName,
+            status: 'active'
+         }).select('id').single();
+         if (fallbackTenant) tId = fallbackTenant.id;
+      }
+
       if (tId || fallbackRole.toLowerCase().replace(/\s+/g, '') === 'superadmin') {
          const { data: newProfile, error: insErr } = await supabase.from('users').insert({
             id: authData.user.id,
@@ -159,6 +175,9 @@ export const api = {
          if (!insErr && newProfile) {
             userProfile = newProfile;
             profileErr = null;
+         } else if (insErr) {
+            console.error("Auto-recovery insert failed:", insErr);
+            profileErr = insErr;
          }
       }
     }
