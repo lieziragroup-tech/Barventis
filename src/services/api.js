@@ -129,15 +129,43 @@ export const api = {
     }
 
     // 2. Fetch user profile
-    const { data: userProfile, error: profileErr } = await supabase
+    let { data: userProfile, error: profileErr } = await supabase
       .from('users')
       .select('*')
       .eq('id', authData.user.id)
       .maybeSingle();
 
+    if (!userProfile) {
+      // Auto-recover profile from auth metadata if it was wiped by a migration drop
+      const md = authData.user.user_metadata || {};
+      const fallbackRole = md.role || 'Admin / Owner';
+      
+      // Find tenant ID from name if tenant_id not in metadata
+      let tId = md.tenant_id;
+      if (!tId && md.tenant_name) {
+         const { data: tData } = await supabase.from('tenants').select('id').eq('name', md.tenant_name).maybeSingle();
+         if (tData) tId = tData.id;
+      }
+      
+      if (tId || fallbackRole.toLowerCase().replace(/\s+/g, '') === 'superadmin') {
+         const { data: newProfile, error: insErr } = await supabase.from('users').insert({
+            id: authData.user.id,
+            tenant_id: tId || null,
+            name: md.name || 'Recovered User',
+            email: email,
+            role: fallbackRole
+         }).select('*').single();
+         
+         if (!insErr && newProfile) {
+            userProfile = newProfile;
+            profileErr = null;
+         }
+      }
+    }
+
     if (profileErr || !userProfile) {
       await supabase.auth.signOut();
-      throw new Error('Profil user tidak ditemukan: ' + (profileErr?.message || 'Data kosong'));
+      throw new Error('Profil user tidak ditemukan: ' + (profileErr?.message || 'Data kosong dan gagal dipulihkan otomatis.'));
     }
 
     let tenant;
