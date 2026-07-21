@@ -390,7 +390,7 @@ export default function StockOpname() {
         <div className="glass-card" style={{ maxWidth: '520px', margin: '40px auto', padding: '32px' }}>
           <div style={{ textAlign: 'center', marginBottom: '24px' }}>
             <span className="badge badge-success" style={{ marginBottom: '8px' }}>Step 4: Approval</span>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'white', marginBottom: '4px' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>
               Approve Stocktaking Audit
             </h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
@@ -487,4 +487,3 @@ export default function StockOpname() {
     </div>
   );
 }
-

@@ -199,7 +199,7 @@ export default function AssetManagement() {
       {/* Asset Form Modal */}
       {editingAsset && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="glass-card" style={{ width: '400px', padding: '24px' }}>
+          <div className="glass-card" style={{ width: '400px', maxWidth: 'calc(100vw - 32px)', padding: '24px' }}>
             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '20px' }}>{editingAsset.id ? 'Edit' : 'Tambah'} Aset</h3>
             <form onSubmit={handleSaveAsset} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="form-group"><label className="form-label">Nama Aset / Peralatan</label><input type="text" required className="form-control" value={editingAsset.name} onChange={e => setEditAsset({...editingAsset, name: e.target.value})} /></div>
@@ -221,7 +221,7 @@ export default function AssetManagement() {
       {/* Opname Modal */}
       {showOpnameModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="glass-card" style={{ width: '800px', padding: '24px', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className="glass-card" style={{ width: '800px', maxWidth: 'calc(100vw - 32px)', padding: '24px', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Stock Opname Aset</h3>
               <button className="btn" onClick={() => setShowOpnameModal(false)}><X size={20} /></button>

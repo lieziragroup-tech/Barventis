@@ -193,12 +193,7 @@ export default function AIAssistant() {
 
       {/* Chat Window */}
       {isOpen && (
-        <div style={{
-          position: 'fixed',
-          bottom: '24px',
-          right: '24px',
-          width: '380px',
-          height: '560px',
+        <div className="ai-assistant-panel" style={{
           background: 'rgba(15, 17, 23, 0.97)',
           backdropFilter: 'blur(20px)',
           border: '1px solid rgba(59, 130, 246, 0.2)',
@@ -206,7 +201,6 @@ export default function AIAssistant() {
           boxShadow: 'var(--shadow-lg)',
           display: 'flex',
           flexDirection: 'column',
-          zIndex: 9998,
           overflow: 'hidden',
           fontFamily: "'Outfit', sans-serif",
         }}>

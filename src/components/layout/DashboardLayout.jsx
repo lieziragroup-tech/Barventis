@@ -359,7 +359,7 @@ export default function DashboardLayout() {
                 {showNotifications && (
                   <div style={{
                     position: 'absolute', top: 'calc(100% + 10px)', right: 0,
-                    width: '340px', background: 'var(--bg-secondary)',
+                    width: '340px', maxWidth: 'calc(100vw - 32px)', background: 'var(--bg-secondary)',
                     border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',
                     boxShadow: 'var(--shadow-lg)', zIndex: 1000,
                     overflow: 'hidden',

@@ -1230,3 +1230,47 @@ input[type='number']::-webkit-outer-spin-button {
   background: var(--bg-tertiary);
   border-color: var(--text-muted);
 }
+/* AI Assistant floating chat panel — responsive so it never overflows
+   or overlaps other UI on narrow mobile screens (fixed by Claude) */
+.ai-assistant-panel {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 380px;
+  height: 560px;
+  z-index: 9998;
+}
+
+@media (max-width: 480px) {
+  .ai-assistant-panel {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    width: auto;
+    height: min(560px, calc(100vh - 96px));
+  }
+}
+
+/* Split-view (list + detail) layouts — stack vertically on mobile so
+   fixed-width side panels don't squeeze/overlap the main content
+   (fixed by Claude) */
+@media (max-width: 900px) {
+  .stock-ledger-layout {
+    flex-direction: column;
+  }
+  .stock-ledger-detail-panel {
+    width: 100% !important;
+    position: static !important;
+    height: auto !important;
+    max-height: 60vh;
+  }
+
+  .recipes-layout {
+    flex-direction: column;
+    height: auto !important;
+  }
+  .recipes-list-panel {
+    width: 100% !important;
+    max-height: 45vh;
+  }
+}

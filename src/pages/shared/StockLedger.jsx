@@ -135,7 +135,7 @@ export default function StockLedger() {
     : [], [selectedItem, transactions]);
 
   return (
-    <div style={{ display: 'flex', gap: '24px', position: 'relative' }}>
+    <div className="stock-ledger-layout" style={{ display: 'flex', gap: '24px', position: 'relative' }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         {/* Filters */}
         <div className="glass-card" style={{ marginBottom: '24px', padding: '20px' }}>
@@ -277,7 +277,7 @@ export default function StockLedger() {
 
       {/* History Side Panel */}
       {selectedItem && (
-        <div className="glass-card" style={{ width: '360px', flexShrink: 0, position: 'sticky', top: 0, height: 'calc(100vh - 150px)', display: 'flex', flexDirection: 'column' }}>
+        <div className="glass-card stock-ledger-detail-panel" style={{ width: '360px', flexShrink: 0, position: 'sticky', top: 0, height: 'calc(100vh - 150px)', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>Stock Audit</h3>
             <button className="btn btn-secondary" style={{ padding: '4px', borderRadius: '50%' }} onClick={() => setSelectedItem(null)}><X size={16} /></button>
@@ -501,5 +501,3 @@ export default function StockLedger() {
     </div>
   );
 }
-
-

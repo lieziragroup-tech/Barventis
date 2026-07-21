@@ -237,9 +237,9 @@ export default function Recipes() {
   };
 
   return (
-    <div style={{ display: 'flex', gap: '24px', height: 'calc(100vh - 180px)', fontFamily: 'var(--font-sans)', animation: 'fadeIn 0.3s ease' }}>
+    <div className="recipes-layout" style={{ display: 'flex', gap: '24px', height: 'calc(100vh - 180px)', fontFamily: 'var(--font-sans)', animation: 'fadeIn 0.3s ease' }}>
       {/* Left: Recipe List */}
-      <div className="glass-card" style={{ width: '310px', display: 'flex', flexDirection: 'column', padding: '20px', flexShrink: 0, border: '1px solid var(--border)' }}>
+      <div className="glass-card recipes-list-panel" style={{ width: '310px', display: 'flex', flexDirection: 'column', padding: '20px', flexShrink: 0, border: '1px solid var(--border)' }}>
         {/* Search */}
         <div style={{ position: 'relative', marginBottom: '14px' }}>
           <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
@@ -735,4 +735,3 @@ export default function Recipes() {
     </div>
   );
 }
-

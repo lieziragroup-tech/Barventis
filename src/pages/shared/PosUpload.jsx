@@ -656,7 +656,7 @@ export default function PosUpload() {
           background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
         }}>
-          <div className="glass-card" style={{ width: '450px', padding: '28px', border: '1px solid var(--border-focus)' }}>
+          <div className="glass-card" style={{ width: '450px', maxWidth: 'calc(100vw - 32px)', padding: '28px', border: '1px solid var(--border-focus)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700 }}>Bind POS Menu to Recipe</h3>
               <button className="btn btn-secondary" style={{ padding: '4px', borderRadius: '50%' }} onClick={() => setShowMappingModal(false)}>
@@ -700,4 +700,3 @@ export default function PosUpload() {
     </div>
   );
 }
-

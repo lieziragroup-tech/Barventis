@@ -204,7 +204,7 @@ export default function CostControl() {
       ) : errorMsg ? (
         <div className="glass-card" style={{ padding: '24px', textAlign: 'center', border: '1px solid var(--danger)' }}>
           <AlertTriangle size={36} style={{ color: 'var(--danger)', margin: '0 auto 12px' }} />
-          <h4 style={{ color: 'white', fontWeight: 700, marginBottom: '8px' }}>Gagal Memuat Laporan</h4>
+          <h4 style={{ color: 'var(--text-primary)', fontWeight: 700, marginBottom: '8px' }}>Gagal Memuat Laporan</h4>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '16px' }}>{errorMsg}</p>
           <button className="btn btn-secondary" onClick={() => setPeriod(period)}>Coba Lagi</button>
         </div>
@@ -219,7 +219,7 @@ export default function CostControl() {
           }}>
             <div>
               <span className="badge badge-info" style={{ marginBottom: '8px' }}>Period Beverage Cost</span>
-              <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'white', marginBottom: '6px' }}>
+              <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '6px' }}>
                 HPP: <span style={{ color: beverageCostPct <= 27 ? 'var(--success)' : 'var(--danger)' }}>{beverageCostPct.toFixed(2)}%</span>
               </h2>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -307,4 +307,3 @@ export default function CostControl() {
     </div>
   );
 }
-
