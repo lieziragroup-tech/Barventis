@@ -1,43 +1,66 @@
-import { useState, useEffect } from 'react';
-import { Plus, Edit2 } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Plus, Edit2, Search } from 'lucide-react';
 import { api } from '../../services/api';
+import Pagination from '../../components/shared/Pagination';
+
+const PAGE_SIZE = 15;
 
 export default function Purchasing() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('PURCHASES'); // 'PURCHASES' or 'SUPPLIERS'
-  
-  // Supplier State
+
+  // Supplier State (small list, loaded in full)
   const [suppliers, setSuppliers] = useState([]);
   const [editingSupplier, setEditSupplier] = useState(null);
-  
-  // Purchase Entry State
-  const [purchases, setPurchases] = useState([]);
-  const [materials, setMaterials] = useState([]);
-  const [newPurchase, setNewPurchase] = useState({ date: new Date().toISOString().split('T')[0], material_id: '', supplier_id: '', qty: '', unit: 'pck', unit_price: '', notes: '' });
 
+  // Materials (for the form dropdown, small list, loaded in full)
+  const [materials, setMaterials] = useState([]);
+
+  // Purchase Entry history — paginated + searchable
+  const [purchases, setPurchases] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const debounceRef = useRef(null);
+
+  const [newPurchase, setNewPurchase] = useState({ date: new Date().toISOString().split('T')[0], material_id: '', supplier_id: '', qty: '', unit: 'pck', unit_price: '', notes: '' });
   const [notification, setNotification] = useState(null);
 
-  const fetchData = async () => {
+  // Debounce search input -> actual search query (400ms), reset to page 1
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, 400);
+    return () => clearTimeout(debounceRef.current);
+  }, [searchInput]);
+
+  const fetchHistory = useCallback(async (targetPage, targetSearch) => {
+    setHistoryLoading(true);
+    try {
+      const { data, totalCount: count } = await api.getPurchaseEntriesPaged({ page: targetPage, pageSize: PAGE_SIZE, search: targetSearch });
+      setPurchases(data);
+      setTotalCount(count);
+    } catch (err) {
+      setNotification({ type: 'error', text: err.message });
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  const fetchMasterData = async () => {
     setLoading(true);
     try {
-      const tenantId = await api.getActiveTenantId();
-
-      const [supRes, purRes, matRes] = await Promise.all([
-        supabase.from('suppliers').select('*').eq('tenant_id', tenantId).order('name'),
-        supabase.from('purchase_entries').select('*, materials(name), suppliers(name)').eq('tenant_id', tenantId).order('date', { ascending: false }).limit(100),
-        supabase.from('materials').select('id, name, unit, new_price').eq('tenant_id', tenantId).eq('is_active', true)
+      const [supData, matData] = await Promise.all([
+        api.getSuppliers(),
+        api.getMaterials()
       ]);
-
-      if (supRes.error) throw supRes.error;
-      if (purRes.error) throw purRes.error;
-      if (matRes.error) throw matRes.error;
-
-      setSuppliers(supRes.data || []);
-      setPurchases(purRes.data || []);
-      setMaterials(matRes.data || []);
+      setSuppliers(supData || []);
+      setMaterials((matData || []).map(m => ({ id: m.id, name: m.name, unit: m.unit, new_price: m.new_price })));
     } catch (err) {
-      console.error(err);
       setNotification({ type: 'error', text: err.message });
     } finally {
       setLoading(false);
@@ -46,30 +69,21 @@ export default function Purchasing() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchData();
+    fetchMasterData();
   }, []);
+
+  useEffect(() => {
+    fetchHistory(page, search);
+  }, [page, search, fetchHistory]);
 
   // --- Supplier Handlers ---
   const handleSaveSupplier = async (e) => {
     e.preventDefault();
     try {
-      const tenantId = await api.getActiveTenantId();
-      const payload = {
-        tenant_id: tenantId,
-        name: editingSupplier.name,
-        phone: editingSupplier.phone || null,
-        address: editingSupplier.address || null,
-        contact_person: editingSupplier.contact_person || null
-      };
-
-      if (editingSupplier.id) {
-        await supabase.from('suppliers').update(payload).eq('id', editingSupplier.id);
-      } else {
-        await supabase.from('suppliers').insert(payload);
-      }
+      await api.saveSupplier(editingSupplier);
       setEditSupplier(null);
-      setNotification({ type: 'success', text: 'Supplier saved.' });
-      fetchData();
+      setNotification({ type: 'success', text: 'Supplier tersimpan.' });
+      fetchMasterData();
     } catch (err) {
       setNotification({ type: 'error', text: err.message });
     }
@@ -90,56 +104,19 @@ export default function Purchasing() {
   const handleSavePurchase = async (e) => {
     e.preventDefault();
     try {
-      const tenantId = await api.getActiveTenantId();
-      const userId = await api.getActiveUserId();
-      
-      const payload = {
-        tenant_id: tenantId,
-        material_id: newPurchase.material_id,
-        supplier_id: newPurchase.supplier_id || null,
-        qty: parseFloat(newPurchase.qty),
-        unit: newPurchase.unit,
-        unit_price: parseFloat(newPurchase.unit_price),
-        date: newPurchase.date,
-        input_by: userId,
-        notes: newPurchase.notes
-      };
-
-      // 1. Insert purchase entry
-      const { error: pErr } = await supabase.from('purchase_entries').insert(payload);
-      if (pErr) throw pErr;
-
-      // 2. Adjust stock
-      await supabase.rpc('deduct_stock_atomic', {
-        p_material_id: payload.material_id,
-        p_deduct_qty: -payload.qty // add stock to central
-      });
-
-      // 3. Create transaction log
-      await supabase.from('transactions').insert({
-        tenant_id: tenantId,
-        date: payload.date,
-        material_id: payload.material_id,
-        type: 'PURCHASE_IN',
-        location: 'CENTRAL', // Default purchases to central
-        qty: payload.qty,
-        amount: payload.qty * payload.unit_price,
-        notes: 'Daily Purchase Entry',
-        created_by: userId
-      });
-
+      await api.createPurchaseEntry(newPurchase);
       setNewPurchase({ date: new Date().toISOString().split('T')[0], material_id: '', supplier_id: '', qty: '', unit: 'pck', unit_price: '', notes: '' });
-      setNotification({ type: 'success', text: 'Purchase entry saved and stock updated.' });
-      fetchData();
+      setNotification({ type: 'success', text: 'Pembelian tersimpan dan stok ter-update.' });
+      setPage(1);
+      fetchHistory(1, search);
     } catch (err) {
       setNotification({ type: 'error', text: err.message });
     }
   };
 
-
   return (
     <div className="fade-in">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Purchasing & Suppliers</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Catat pembelian harian dan kelola master data supplier.</p>
@@ -160,36 +137,38 @@ export default function Purchasing() {
 
       {tab === 'SUPPLIERS' && (
         <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Daftar Supplier</h3>
             <button className="btn btn-primary" onClick={() => setEditSupplier({ name: '', phone: '', address: '', contact_person: '' })}><Plus size={16} style={{ marginRight: '8px' }}/> Tambah Supplier</button>
           </div>
-          <table className="custom-table">
-            <thead>
-              <tr><th>Nama</th><th>Kontak</th><th>No HP</th><th>Alamat</th><th style={{ width: '80px' }}>Aksi</th></tr>
-            </thead>
-            <tbody>
-              {suppliers.map(s => (
-                <tr key={s.id}>
-                  <td style={{ fontWeight: 600 }}>{s.name}</td>
-                  <td>{s.contact_person || '-'}</td>
-                  <td>{s.phone || '-'}</td>
-                  <td>{s.address || '-'}</td>
-                  <td>
-                    <button className="btn" style={{ padding: '4px', color: 'var(--accent)' }} onClick={() => setEditSupplier(s)}><Edit2 size={16}/></button>
-                  </td>
-                </tr>
-              ))}
-              {suppliers.length === 0 && <tr><td colSpan="5" style={{ textAlign: 'center' }}>Belum ada data supplier.</td></tr>}
-            </tbody>
-          </table>
+          <div className="table-container">
+            <table className="custom-table">
+              <thead>
+                <tr><th>Nama</th><th>Kontak</th><th>No HP</th><th>Alamat</th><th style={{ width: '80px' }}>Aksi</th></tr>
+              </thead>
+              <tbody>
+                {suppliers.map(s => (
+                  <tr key={s.id}>
+                    <td style={{ fontWeight: 600 }}>{s.name}</td>
+                    <td>{s.contact_person || '-'}</td>
+                    <td>{s.phone || '-'}</td>
+                    <td>{s.address || '-'}</td>
+                    <td>
+                      <button className="btn" style={{ padding: '4px', color: 'var(--accent)' }} onClick={() => setEditSupplier(s)}><Edit2 size={16}/></button>
+                    </td>
+                  </tr>
+                ))}
+                {suppliers.length === 0 && <tr><td colSpan="5" style={{ textAlign: 'center' }}>Belum ada data supplier.</td></tr>}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
       {tab === 'PURCHASES' && (
-        <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
+        <div className="purchasing-layout" style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
           {/* Form */}
-          <div className="glass-card" style={{ flex: '1', padding: '24px' }}>
+          <div className="glass-card purchasing-form-panel" style={{ flex: '1', padding: '24px' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '20px' }}>Input Pembelian Harian</h3>
             <form onSubmit={handleSavePurchase} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="form-group">
@@ -231,9 +210,22 @@ export default function Purchasing() {
           </div>
 
           {/* History */}
-          <div className="glass-card" style={{ flex: '2', padding: '24px' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '20px' }}>Riwayat Pembelian Harian</h3>
-            <div className="table-container" style={{ maxHeight: '600px', overflowY: 'auto' }}>
+          <div className="glass-card purchasing-history-panel" style={{ flex: '2', padding: '24px' }}>
+            <div className="paged-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Riwayat Pembelian Harian</h3>
+              <div style={{ position: 'relative', minWidth: '220px' }}>
+                <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Cari bahan / catatan..."
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
+                  style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
+                />
+              </div>
+            </div>
+            <div className="table-container" style={{ opacity: historyLoading ? 0.5 : 1, transition: 'opacity 0.15s' }}>
               <table className="custom-table">
                 <thead>
                   <tr>
@@ -254,10 +246,18 @@ export default function Purchasing() {
                       <td style={{ textAlign: 'right', fontWeight: 600 }}>Rp {(p.qty * p.unit_price).toLocaleString('id-ID')}</td>
                     </tr>
                   ))}
-                  {purchases.length === 0 && <tr><td colSpan="5" style={{ textAlign: 'center' }}>Belum ada data pembelian harian.</td></tr>}
+                  {purchases.length === 0 && !historyLoading && <tr><td colSpan="5" style={{ textAlign: 'center' }}>{search ? 'Tidak ada hasil untuk pencarian ini.' : 'Belum ada data pembelian harian.'}</td></tr>}
                 </tbody>
               </table>
             </div>
+            <Pagination
+              page={page}
+              pageSize={PAGE_SIZE}
+              totalCount={totalCount}
+              onPageChange={setPage}
+              itemLabel="pembelian"
+              loading={historyLoading}
+            />
           </div>
         </div>
       )}

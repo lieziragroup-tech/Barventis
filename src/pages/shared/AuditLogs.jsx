@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   History, Search, ShieldAlert, Calendar,
   ArrowRight, Clock, Laptop, RefreshCw, X, AlertTriangle, CheckCircle, Info
@@ -6,33 +6,53 @@ import {
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { getPendingLogs, flushLogs } from '../../services/activityLogService';
+import Pagination from '../../components/shared/Pagination';
+
+const PAGE_SIZE = 20;
 
 export default function AuditLogs() {
   const { activeUser } = useAuth();
   const [logs, setLogs] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [stats, setStats] = useState({ total: 0, uniqueUsers: 0, securityAlerts: 0, syncs: 0 });
   const [pendingCount, setPendingCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [page, setPage] = useState(1);
   const [selectedLog, setSelectedLog] = useState(null);
+  const debounceRef = useRef(null);
 
-  // Fetch logs on mount
+  // Debounce the search box -> actual query (400ms), reset to page 1
   useEffect(() => {
-    fetchLogs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setSearchQuery(searchInput);
+      setPage(1);
+    }, 400);
+    return () => clearTimeout(debounceRef.current);
+  }, [searchInput]);
 
-  async function fetchLogs() {
+  // Reset to page 1 whenever category changes
+  useEffect(() => { setPage(1); }, [categoryFilter]);
+
+  const fetchLogs = useCallback(async (targetPage = page, targetSearch = searchQuery, targetCategory = categoryFilter) => {
     setLoading(true);
     setError(null);
     try {
-      const [syncedData] = await Promise.all([
-        api.getAuditLogs({ limit: 500 }).catch(() => []),
+      const [{ data: syncedData, totalCount: count }, freshStats] = await Promise.all([
+        api.getAuditLogsPaged({ page: targetPage, pageSize: PAGE_SIZE, search: targetSearch, category: targetCategory }).catch(() => ({ data: [], totalCount: 0 })),
+        api.getAuditLogsStats().catch(() => ({ total: 0, uniqueUsers: 0, securityAlerts: 0, syncs: 0 })),
       ]);
 
-      // Merge pending local logs with synced logs
-      const pending = getPendingLogs().map(e => ({
+      // Pending (not-yet-synced) local logs are only shown alongside page 1
+      // with no active search/category filter, since they represent the
+      // current user's very latest unsynced actions.
+      const showPending = targetPage === 1 && !targetSearch && targetCategory === 'ALL';
+      const pending = showPending ? getPendingLogs().map(e => ({
         id: e.id,
         action: e.action,
         description: e.description,
@@ -40,25 +60,29 @@ export default function AuditLogs() {
         role: activeUser?.role || 'Staff',
         created_at: e.created_at,
         _pending: true,
-      }));
+      })) : [];
 
-      setPendingCount(pending.length);
-
-      const merged = [...pending, ...syncedData]
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-      setLogs(merged);
+      setPendingCount(getPendingLogs().length);
+      setLogs([...pending, ...syncedData]);
+      setTotalCount(count);
+      setStats(freshStats);
     } catch (err) {
       console.error("Error fetching audit logs:", err);
       setError(err.message || "Gagal memuat jejak audit dari server.");
     } finally {
       setLoading(false);
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeUser]);
+
+  useEffect(() => {
+    fetchLogs(page, searchQuery, categoryFilter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, searchQuery, categoryFilter]);
 
   const handleSyncNow = async () => {
     await flushLogs();
-    await fetchLogs();
+    await fetchLogs(page, searchQuery, categoryFilter);
   };
 
   const getActionColor = (action) => {
@@ -91,16 +115,6 @@ export default function AuditLogs() {
     };
   };
 
-  const getActionCategory = (action) => {
-    const act = (action || '').toUpperCase();
-    if (act.includes('LOGIN') || act.includes('REGISTER')) return 'AUTH';
-    if (act.includes('MATERIAL') || act.includes('PRICE') || act.includes('ADJUST')) return 'MATERIAL';
-    if (act.includes('RECIPE')) return 'RECIPE';
-    if (act.includes('PO') || act.includes('INVOICE')) return 'INVOICING';
-    if (act.includes('POS') || act.includes('SYNC')) return 'POS';
-    return 'OTHER';
-  };
-
   const formatDateTime = (isoString) => {
     if (!isoString) return '-';
     const date = new Date(isoString);
@@ -124,29 +138,13 @@ export default function AuditLogs() {
     return ip;
   };
 
-  // Filters logic
-  const filteredLogs = useMemo(() => logs.filter(log => {
-    const matchesSearch = 
-      log.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.username?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.action?.toLowerCase().includes(searchQuery.toLowerCase());
-
-    if (categoryFilter === 'ALL') return matchesSearch;
-    return getActionCategory(log.action) === categoryFilter && matchesSearch;
-  }), [logs, searchQuery, categoryFilter]);
-
-  // Calculate statistics
-  const totalLogsCount = useMemo(() => logs.length, [logs]);
-  const uniqueUsers = useMemo(() => new Set(logs.map(l => l.username)).size, [logs]);
-  const securityAlerts = useMemo(() => logs.filter(l => {
-    const act = (l.action || '').toUpperCase();
-    return act.includes('DELETE') || act.includes('CANCEL');
-  }).length, [logs]);
-  const syncsCount = useMemo(() => logs.filter(l => (l.action || '').toUpperCase().includes('SYNC')).length, [logs]);
+  // Server already applied search + category filtering + pagination;
+  // `logs` here is just the current page (plus any pending local entries).
+  const displayedLogs = logs;
 
   return (
     <div className="audit-logs-container">
-      {/* Quick Summary KPI */}
+      {/* Quick Summary KPI (from a lightweight stats query — accurate across the whole history, not just this page) */}
       <div className="kpi-grid" style={{ marginBottom: '24px' }}>
         <div className="glass-card kpi-card">
           <div className="kpi-header">
@@ -155,7 +153,7 @@ export default function AuditLogs() {
               <History size={20} />
             </div>
           </div>
-          <div className="kpi-value">{totalLogsCount}</div>
+          <div className="kpi-value">{stats.total}</div>
           <div className="kpi-footer">
             <span style={{ color: 'var(--text-secondary)' }}>Semua jejak terekam otomatis</span>
           </div>
@@ -168,7 +166,7 @@ export default function AuditLogs() {
               <Laptop size={20} />
             </div>
           </div>
-          <div className="kpi-value">{uniqueUsers}</div>
+          <div className="kpi-value">{stats.uniqueUsers}</div>
           <div className="kpi-footer">
             <span style={{ color: 'var(--text-secondary)' }}>Admin & Owner pembuat perubahan</span>
           </div>
@@ -181,8 +179,8 @@ export default function AuditLogs() {
               <ShieldAlert size={20} />
             </div>
           </div>
-          <div className="kpi-value" style={{ color: securityAlerts > 0 ? 'var(--danger)' : 'var(--text-primary)' }}>
-            {securityAlerts}
+          <div className="kpi-value" style={{ color: stats.securityAlerts > 0 ? 'var(--danger)' : 'var(--text-primary)' }}>
+            {stats.securityAlerts}
           </div>
           <div className="kpi-footer">
             <span style={{ color: 'var(--text-secondary)' }}>Log Hapus / Pembatalan PO</span>
@@ -196,7 +194,7 @@ export default function AuditLogs() {
               <RefreshCw size={20} />
             </div>
           </div>
-          <div className="kpi-value">{syncsCount}</div>
+          <div className="kpi-value">{stats.syncs}</div>
           <div className="kpi-footer">
             <span style={{ color: 'var(--text-secondary)' }}>Update data penjualan kasir</span>
           </div>
@@ -223,9 +221,9 @@ export default function AuditLogs() {
             }} />
             <input
               type="text"
-              placeholder="Cari deskripsi, tindakan, atau pelaksana..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cari deskripsi atau tindakan..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               style={{
                 width: '100%',
                 padding: '12px 16px 12px 42px',
@@ -240,10 +238,10 @@ export default function AuditLogs() {
               onFocus={(e) => e.target.style.borderColor = 'var(--accent)'}
               onBlur={(e) => e.target.style.borderColor = 'var(--border)'}
             />
-            {searchQuery && (
-              <X 
-                size={16} 
-                onClick={() => setSearchQuery('')}
+            {searchInput && (
+              <X
+                size={16}
+                onClick={() => setSearchInput('')}
                 style={{
                   position: 'absolute',
                   right: '14px',
@@ -288,9 +286,9 @@ export default function AuditLogs() {
           </div>
 
           {/* Refresh Button */}
-          <button 
-            className="btn btn-secondary" 
-            onClick={fetchLogs} 
+          <button
+            className="btn btn-secondary"
+            onClick={() => fetchLogs(page, searchQuery, categoryFilter)}
             disabled={loading}
             style={{ padding: '10px 14px', height: '42px', display: 'flex', gap: '8px', alignItems: 'center' }}
           >
@@ -337,8 +335,8 @@ export default function AuditLogs() {
       )}
 
       {/* Main Table / Timeline Feed */}
-      <div className="glass-card" style={{ padding: '0px', overflow: 'hidden' }}>
-        {loading ? (
+      <div className="glass-card" style={{ padding: '0px', overflow: 'hidden', opacity: loading ? 0.6 : 1, transition: 'opacity 0.15s' }}>
+        {loading && logs.length === 0 ? (
           <div style={{ padding: '80px', textAlign: 'center' }}>
             <div style={{
               display: 'inline-block',
@@ -357,9 +355,9 @@ export default function AuditLogs() {
             <AlertTriangle size={48} style={{ margin: '0 auto 16px' }} />
             <h3 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '8px' }}>Terjadi Kesalahan</h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '20px' }}>{error}</p>
-            <button className="btn btn-primary" onClick={fetchLogs}>Coba Lagi</button>
+            <button className="btn btn-primary" onClick={() => fetchLogs(page, searchQuery, categoryFilter)}>Coba Lagi</button>
           </div>
-        ) : filteredLogs.length === 0 ? (
+        ) : displayedLogs.length === 0 ? (
           <div style={{ padding: '80px 40px', textAlign: 'center' }}>
             <History size={48} style={{ margin: '0 auto 16px', color: 'var(--text-muted)' }} />
             <h3 style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '8px' }}>Tidak Ada Jejak Audit</h3>
@@ -381,14 +379,14 @@ export default function AuditLogs() {
                 </tr>
               </thead>
               <tbody>
-                {filteredLogs.map((log) => {
+                {displayedLogs.map((log) => {
                   const colors = getActionColor(log.action);
                   return (
-                    <tr 
-                      key={log.id} 
+                    <tr
+                      key={log.id}
                       onClick={() => setSelectedLog(log)}
-                      style={{ 
-                        borderBottom: '1px solid var(--border)', 
+                      style={{
+                        borderBottom: '1px solid var(--border)',
                         cursor: 'pointer',
                         transition: 'background 0.2s'
                       }}
@@ -399,13 +397,14 @@ export default function AuditLogs() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <Calendar size={14} style={{ color: 'var(--text-muted)' }} />
                           {formatDateTime(log.created_at)}
+                          {log._pending && <span className="badge badge-warning" style={{ fontSize: '0.6rem' }}>Belum Sync</span>}
                         </div>
                       </td>
                       <td style={{ padding: '16px 20px' }}>
                         <div>
                           <div style={{ fontSize: '0.9rem', fontWeight: '600' }}>{log.username}</div>
-                          <div style={{ 
-                            fontSize: '0.725rem', 
+                          <div style={{
+                            fontSize: '0.725rem',
                             color: log.role === 'Admin / Owner' ? 'var(--accent)' : 'var(--text-muted)',
                             fontWeight: '500'
                           }}>
@@ -446,6 +445,18 @@ export default function AuditLogs() {
             </table>
           </div>
         )}
+        {!loading && !error && (
+          <div style={{ padding: '4px 20px 16px' }}>
+            <Pagination
+              page={page}
+              pageSize={PAGE_SIZE}
+              totalCount={totalCount}
+              onPageChange={setPage}
+              itemLabel="log"
+              loading={loading}
+            />
+          </div>
+        )}
       </div>
 
       {/* Audit Log Detail Modal */}
@@ -471,7 +482,7 @@ export default function AuditLogs() {
             padding: '30px',
             boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
           }}>
-            <button 
+            <button
               onClick={() => setSelectedLog(null)}
               style={{
                 position: 'absolute',
@@ -528,11 +539,11 @@ export default function AuditLogs() {
 
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Deskripsi Perubahan</div>
-                <div style={{ 
-                  background: 'var(--bg-primary)', 
-                  padding: '12px 16px', 
-                  borderRadius: 'var(--radius-lg)', 
-                  fontSize: '0.9rem', 
+                <div style={{
+                  background: 'var(--bg-primary)',
+                  padding: '12px 16px',
+                  borderRadius: 'var(--radius-lg)',
+                  fontSize: '0.9rem',
                   lineHeight: '1.5',
                   color: 'var(--text-primary)',
                   border: '1px solid var(--border)'
@@ -587,8 +598,8 @@ export default function AuditLogs() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button 
-                className="btn btn-primary" 
+              <button
+                className="btn btn-primary"
                 onClick={() => setSelectedLog(null)}
                 style={{ padding: '10px 24px', borderRadius: 'var(--radius-md)', fontWeight: '600' }}
               >
@@ -601,4 +612,3 @@ export default function AuditLogs() {
     </div>
   );
 }
-

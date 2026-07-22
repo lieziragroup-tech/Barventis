@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Search, Plus, Trash2, Save, X, UploadCloud, Coins, AlertTriangle, CheckCircle, ChefHat } from 'lucide-react';
 import BulkImport from '../../components/BulkImport';
+import Pagination from '../../components/shared/Pagination';
 import { useData } from '../../contexts/DataContext';
 import { api } from '../../services/api';
 import { formatIDR, calculateIngredientCost } from '../../services/costUtils';
@@ -99,6 +100,14 @@ export default function Recipes() {
 
   // Filter recipe list
   const filteredRecipes = useMemo(() => recipes.filter(r => r.menu_name.toLowerCase().includes(search.toLowerCase())), [recipes, search]);
+
+  const RECIPES_PAGE_SIZE = 15;
+  const [recipesPage, setRecipesPage] = useState(1);
+  useEffect(() => { setRecipesPage(1); }, [search]);
+  const paginatedRecipes = useMemo(() => {
+    const start = (recipesPage - 1) * RECIPES_PAGE_SIZE;
+    return filteredRecipes.slice(start, start + RECIPES_PAGE_SIZE);
+  }, [filteredRecipes, recipesPage]);
 
   // Calculate amount for a single ingredient row
   // amount = qty_in_use * pricePerUnit (if using the pack's content unit like gr/ml)
@@ -274,7 +283,7 @@ export default function Recipes() {
 
         {/* Recipe List */}
         <div className="glass-scrollbar" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', paddingRight: '4px' }}>
-          {filteredRecipes.map(r => {
+          {paginatedRecipes.map(r => {
             const isActive = activeRecipe && activeRecipe.menu_name === r.menu_name;
             const pct = r.food_cost_pct || 0;
             const pctDisplay = ((Number(pct) || 0) * 100).toFixed(0); // M-5: pct is always a fraction
@@ -315,6 +324,13 @@ export default function Recipes() {
             </div>
           )}
         </div>
+        <Pagination
+          page={recipesPage}
+          pageSize={RECIPES_PAGE_SIZE}
+          totalCount={filteredRecipes.length}
+          onPageChange={setRecipesPage}
+          itemLabel="resep"
+        />
       </div>
 
       {/* Right: Recipe Editor */}
@@ -735,3 +751,4 @@ export default function Recipes() {
     </div>
   );
 }
+

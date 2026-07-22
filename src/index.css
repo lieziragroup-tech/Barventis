@@ -1274,3 +1274,103 @@ input[type='number']::-webkit-outer-spin-button {
     max-height: 45vh;
   }
 }
+
+/* ==================================================================
+   Pagination bar (reusable, used by Purchasing, Stock Ledger, Recipes,
+   Invoicing, Audit Logs) — compact + centered on mobile so it never
+   feels oversized or cramped (added by Claude)
+   ================================================================== */
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 2px 2px;
+  border-top: 1px solid var(--border);
+  margin-top: 14px;
+}
+.pagination-info {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pagination-page-numbers {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pagination-btn {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--ease);
+}
+.pagination-btn:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  border-color: #d1cdc7;
+}
+.pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.pagination-page-btn.active {
+  background: var(--accent);
+  color: var(--text-inverse);
+  border-color: var(--accent);
+}
+.pagination-ellipsis {
+  padding: 0 2px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+.pagination-mobile-label {
+  display: none;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .pagination-info { display: none; }
+  .pagination-page-numbers { display: none; }
+  .pagination-mobile-label { display: inline-flex; }
+  .pagination-bar { justify-content: center; }
+  .pagination-controls { width: 100%; justify-content: center; }
+  .pagination-btn { min-width: 34px; height: 34px; }
+}
+
+/* Compact search input row used above paginated tables on mobile */
+@media (max-width: 640px) {
+  .paged-toolbar {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+  .paged-toolbar > * {
+    width: 100% !important;
+  }
+}
+
+/* Purchasing page (form + history side-by-side) — stack on mobile */
+@media (max-width: 900px) {
+  .purchasing-layout {
+    flex-direction: column;
+  }
+}

@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Plus, X, FileText, CheckCircle, XCircle, Clock, Package, Search, Download, Eye, UploadCloud } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import BulkImport from '../../components/BulkImport';
+import Pagination from '../../components/shared/Pagination';
 import { api } from '../../services/api';
 import { formatIDR } from '../../services/costUtils';
 
@@ -35,6 +36,14 @@ export default function Invoicing() {
     const matchStatus = statusFilter === 'ALL' || inv.status === statusFilter;
     return matchSearch && matchStatus;
   }), [invoices, search, statusFilter]);
+
+  const INVOICES_PAGE_SIZE = 15;
+  const [invoicesPage, setInvoicesPage] = useState(1);
+  useEffect(() => { setInvoicesPage(1); }, [search, statusFilter]);
+  const paginatedInvoices = useMemo(() => {
+    const start = (invoicesPage - 1) * INVOICES_PAGE_SIZE;
+    return filteredInvoices.slice(start, start + INVOICES_PAGE_SIZE);
+  }, [filteredInvoices, invoicesPage]);
 
   // Add line item
   const addLineItem = () => {
@@ -226,7 +235,7 @@ export default function Invoicing() {
               </tr>
             </thead>
             <tbody>
-              {filteredInvoices.map(inv => (
+              {paginatedInvoices.map(inv => (
                 <tr key={inv.id}>
                   <td style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.85rem' }}>{inv.invoice_no}</td>
                   <td style={{ color: 'var(--text-secondary)' }}>{inv.supplier}</td>
@@ -267,6 +276,15 @@ export default function Invoicing() {
               )}
             </tbody>
           </table>
+        </div>
+        <div style={{ padding: '0 20px 16px' }}>
+          <Pagination
+            page={invoicesPage}
+            pageSize={INVOICES_PAGE_SIZE}
+            totalCount={filteredInvoices.length}
+            onPageChange={setInvoicesPage}
+            itemLabel="invoice"
+          />
         </div>
       </div>
 

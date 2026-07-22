@@ -189,21 +189,28 @@ export const api = {
 
     let tenant;
     // H-4: Super Admin status is determined by the DB role on the authenticated
-    // profile — NOT by a hardcoded email. The real boundary is the user's role
+    // profile - NOT by a hardcoded email. The real boundary is the user's role
     // (also enforced by RLS is_super_admin()), so no magic email is needed.
     const roleLower = (userProfile.role || '').toLowerCase().replace(/\s+/g, '');
     const isSALogin = roleLower === 'superadmin';
+
+    // Explicitly validate UUID to avoid 400 bad request
+    const isValidUUID = (id) => typeof id === 'string' && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id);
 
     if (isSALogin) {
       // Bypass database tenant query for Super Admin (since tenant_id is null in public.users)
       tenant = { name: 'superadmin', company_name: 'Barventis System Management', id: null, status: 'active' };
     } else {
       // 3. Fetch tenant details (now that we're authenticated, RLS allows selecting our own tenant)
+      if (!isValidUUID(userProfile.tenant_id)) {
+        await supabase.auth.signOut();
+        throw new Error('Tenant ID tidak valid atau korup.');
+      }
       const { data: tenantData, error: tenantErr } = await supabase
         .from('tenants')
         .select('*')
         .eq('id', userProfile.tenant_id)
-        .single();
+        .maybeSingle();
 
       if (tenantErr || !tenantData) {
         await supabase.auth.signOut();
@@ -405,20 +412,26 @@ export const api = {
     let tenantName = '';
     let companyName = '';
     const roleLower = (userProfile.role || '').toLowerCase().replace(/\s+/g, '');
-    const isValidUUID = (id) => /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id);
+    
+    // Explicitly validate UUID format to prevent 400 Bad Request from Supabase on malformed UUIDs
+    const isValidUUID = (id) => typeof id === 'string' && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id);
 
     if (roleLower === 'superadmin') {
       tenantName = 'superadmin';
       companyName = 'Barventis System Management';
     } else if (userProfile.tenant_id && isValidUUID(userProfile.tenant_id)) {
-      const { data: tenantData } = await supabase
-        .from('tenants')
-        .select('name, company_name')
-        .eq('id', userProfile.tenant_id)
-        .maybeSingle();
-      if (tenantData) {
-        tenantName = tenantData.name;
-        companyName = tenantData.company_name;
+      try {
+        const { data: tenantData } = await supabase
+          .from('tenants')
+          .select('name, company_name')
+          .eq('id', userProfile.tenant_id)
+          .maybeSingle();
+        if (tenantData) {
+          tenantName = tenantData.name;
+          companyName = tenantData.company_name;
+        }
+      } catch (e) {
+        console.warn("Could not fetch tenant data:", e);
       }
     }
 
@@ -484,6 +497,49 @@ export const api = {
     }));
   },
 
+  // Paginated version for Stock Ledger's transaction history panel.
+  // Uses server-side LIMIT/OFFSET (.range) + optional search so we don't
+  // pull hundreds of rows just to show one page.
+  getTransactionsPaged: async ({ page = 1, pageSize = 20, search = '', materialName = null } = {}) => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return { data: [], totalCount: 0 };
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+      .from('transactions')
+      .select('*, materials(name)', { count: 'exact' })
+      .eq('tenant_id', tenantId);
+
+    if (materialName) {
+      const { data: mat } = await supabase.from('materials').select('id').eq('tenant_id', tenantId).eq('name', materialName).maybeSingle();
+      query = query.eq('material_id', mat ? mat.id : -1);
+    }
+    if (search && search.trim()) {
+      query = query.or(`notes.ilike.%${search.trim()}%,type.ilike.%${search.trim()}%`);
+    }
+
+    const { data, error, count } = await query
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (error) throw new Error("Gagal mengambil transaksi: " + error.message);
+
+    return {
+      data: data.map(tx => ({
+        id: 'tx-' + tx.id,
+        date: tx.date,
+        item_name: tx.materials ? tx.materials.name : 'Bahan Terhapus',
+        type: tx.type,
+        location: tx.location,
+        qty: parseFloat(tx.qty),
+        amount: parseFloat(tx.amount),
+        notes: tx.notes
+      })),
+      totalCount: count || 0
+    };
+  },
+
   // --- STOCK / MATERIALS ---
   getMaterials: async () => {
     const tenantId = await getActiveTenantId();
@@ -498,6 +554,35 @@ export const api = {
 
     if (error) throw new Error("Gagal memuat bahan baku: " + error.message);
     return data;
+  },
+
+  // Paginated + searchable version for the Stock Ledger table. The full
+  // getMaterials() above is kept as-is since other forms (recipe/invoice
+  // ingredient pickers) still need the complete unpaginated list.
+  getMaterialsPaged: async ({ page = 1, pageSize = 20, search = '' } = {}) => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return { data: [], totalCount: 0 };
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+      .from('materials')
+      .select('*', { count: 'exact' })
+      .eq('tenant_id', tenantId)
+      .eq('is_active', true);
+
+    if (search && search.trim()) {
+      const s = search.trim();
+      query = query.or(`name.ilike.%${s}%,category.ilike.%${s}%,supplier.ilike.%${s}%`);
+    }
+
+    const { data, error, count } = await query
+      .order('category')
+      .order('name')
+      .range(from, to);
+
+    if (error) throw new Error("Gagal memuat bahan baku: " + error.message);
+    return { data, totalCount: count || 0 };
   },
   
   createMaterial: async (materialData) => {
@@ -689,6 +774,54 @@ export const api = {
       }))
     }));
   },
+
+  // Paginated + searchable (by menu name / category) version for the
+  // Recipes list panel.
+  getRecipesPaged: async ({ page = 1, pageSize = 15, search = '' } = {}) => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return { data: [], totalCount: 0 };
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+      .from('recipes')
+      .select('*, recipe_ingredients(*, materials(*))', { count: 'exact' })
+      .eq('tenant_id', tenantId);
+
+    if (search && search.trim()) {
+      const s = search.trim();
+      query = query.or(`menu_name.ilike.%${s}%,category.ilike.%${s}%,pos_code.ilike.%${s}%`);
+    }
+
+    const { data, error, count } = await query
+      .order('menu_name')
+      .range(from, to);
+
+    if (error) throw new Error("Gagal memuat resep: " + error.message);
+
+    return {
+      data: data.map(r => ({
+        id: r.id,
+        menu_name: r.menu_name,
+        pos_code: r.pos_code,
+        category: r.category || 'NON-KOPI',
+        selling_price: parseFloat(r.selling_price),
+        basic_cost: parseFloat(r.basic_cost),
+        fix_cost: parseFloat(r.fix_cost),
+        subtotal: parseFloat(r.subtotal),
+        food_cost_pct: parseFloat(r.food_cost_pct),
+        ingredients: (r.recipe_ingredients || []).map(ing => ({
+          material_id: ing.material_id,
+          item_name: ing.materials ? ing.materials.name : 'Bahan Terhapus',
+          qty_in_use: parseFloat(ing.qty_in_use),
+          unit: ing.unit,
+          unit_price: parseFloat(ing.unit_price),
+          amount: parseFloat(ing.amount)
+        }))
+      })),
+      totalCount: count || 0
+    };
+  },
   
   createRecipe: async (recipeData) => {
     const tenantId = await getActiveTenantId();
@@ -865,6 +998,53 @@ export const api = {
         unit: item.materials ? item.materials.unit : 'pck'
       }))
     }));
+  },
+
+  // Paginated + searchable (by invoice no / supplier) version for
+  // the Invoicing list page.
+  getInvoicesPaged: async ({ page = 1, pageSize = 15, search = '' } = {}) => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return { data: [], totalCount: 0 };
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+      .from('invoices')
+      .select('*, invoice_items(*, materials(*))', { count: 'exact' })
+      .eq('tenant_id', tenantId);
+
+    if (search && search.trim()) {
+      const s = search.trim();
+      query = query.or(`invoice_no.ilike.%${s}%,supplier.ilike.%${s}%`);
+    }
+
+    const { data, error, count } = await query
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (error) throw new Error("Gagal memuat invoices: " + error.message);
+
+    return {
+      data: data.map(inv => ({
+        id: inv.id,
+        invoice_no: inv.invoice_no,
+        supplier: inv.supplier,
+        date: inv.date,
+        total: parseFloat(inv.total),
+        status: inv.status,
+        location: inv.location,
+        notes: inv.notes,
+        received_date: inv.received_date,
+        items: (inv.invoice_items || []).map(item => ({
+          material_id: item.material_id,
+          item_name: item.materials ? item.materials.name : 'Bahan Terhapus',
+          qty: parseFloat(item.qty),
+          unit_price: parseFloat(item.unit_price),
+          unit: item.materials ? item.materials.unit : 'pck'
+        }))
+      })),
+      totalCount: count || 0
+    };
   },
   
   createInvoice: async (invoiceData) => {
@@ -1668,6 +1848,145 @@ export const api = {
     };
   },
 
+  // --- SUPPLIERS ---
+  getSuppliers: async () => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return [];
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .order('name');
+    if (error) throw new Error("Gagal memuat supplier: " + error.message);
+    return data;
+  },
+
+  saveSupplier: async (supplierData) => {
+    const tenantId = await getActiveTenantId();
+    const payload = {
+      tenant_id: tenantId,
+      name: supplierData.name,
+      phone: supplierData.phone || null,
+      address: supplierData.address || null,
+      contact_person: supplierData.contact_person || null
+    };
+
+    if (supplierData.id) {
+      const { data, error } = await supabase.from('suppliers').update(payload).eq('id', supplierData.id).select().single();
+      if (error) throw new Error("Gagal menyimpan supplier: " + error.message);
+      await logAudit('UPDATE_SUPPLIER', `Mengubah data supplier "${data.name}".`);
+      return data;
+    }
+    const { data, error } = await supabase.from('suppliers').insert(payload).select().single();
+    if (error) throw new Error("Gagal menyimpan supplier: " + error.message);
+    await logAudit('CREATE_SUPPLIER', `Menambahkan supplier baru "${data.name}".`);
+    return data;
+  },
+
+  // --- PURCHASE ENTRIES (Daily Purchasing) ---
+  // Paginated + searchable (search matches purchase notes or the linked
+  // material's name) so the history table never has to pull hundreds of
+  // rows at once — fixes the previous unbounded 400/embedding issue too,
+  // since this goes through a single well-formed query with FK embeds.
+  getPurchaseEntriesPaged: async ({ page = 1, pageSize = 15, search = '' } = {}) => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return { data: [], totalCount: 0 };
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+      .from('purchase_entries')
+      .select('*, materials(name, unit), suppliers(name)', { count: 'exact' })
+      .eq('tenant_id', tenantId);
+
+    if (search && search.trim()) {
+      const s = search.trim();
+      const { data: matMatches } = await supabase
+        .from('materials')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .ilike('name', `%${s}%`);
+      const matIds = (matMatches || []).map(m => m.id);
+      if (matIds.length > 0) {
+        query = query.or(`notes.ilike.%${s}%,material_id.in.(${matIds.join(',')})`);
+      } else {
+        query = query.ilike('notes', `%${s}%`);
+      }
+    }
+
+    const { data, error, count } = await query
+      .order('date', { ascending: false })
+      .range(from, to);
+
+    if (error) throw new Error("Gagal memuat riwayat pembelian: " + error.message);
+    return { data: data || [], totalCount: count || 0 };
+  },
+
+  createPurchaseEntry: async (purchaseData) => {
+    const tenantId = await getActiveTenantId();
+    const userId = await getActiveUserId();
+
+    const payload = {
+      tenant_id: tenantId,
+      material_id: purchaseData.material_id,
+      supplier_id: purchaseData.supplier_id || null,
+      qty: parseFloat(purchaseData.qty),
+      unit: purchaseData.unit,
+      unit_price: parseFloat(purchaseData.unit_price),
+      date: purchaseData.date,
+      input_by: userId,
+      notes: purchaseData.notes || null
+    };
+
+    const { error: pErr } = await supabase.from('purchase_entries').insert(payload);
+    if (pErr) throw new Error("Gagal menyimpan pembelian: " + pErr.message);
+
+    const { error: rpcErr } = await supabase.rpc('deduct_stock_atomic', {
+      p_material_id: payload.material_id,
+      p_deduct_qty: -payload.qty // negative qty = tambah stok ke central
+    });
+    if (rpcErr) throw new Error("Gagal update stok: " + rpcErr.message);
+
+    const { error: txErr } = await supabase.from('transactions').insert({
+      tenant_id: tenantId,
+      date: payload.date,
+      material_id: payload.material_id,
+      type: 'PURCHASE_IN',
+      location: 'CENTRAL',
+      qty: payload.qty,
+      amount: payload.qty * payload.unit_price,
+      notes: 'Daily Purchase Entry',
+      created_by: userId
+    });
+    if (txErr) throw new Error("Gagal mencatat transaksi: " + txErr.message);
+
+    await logAudit('CREATE_PURCHASE_ENTRY', `Mencatat pembelian ${payload.qty} ${payload.unit} (Rp ${(payload.qty * payload.unit_price).toLocaleString('id-ID')}).`);
+  },
+
+  // Lightweight aggregate stats for the Audit Logs KPI cards — uses
+  // count-only queries (head: true) so these stay accurate across the
+  // whole log history without pulling every row just for a number.
+  getAuditLogsStats: async () => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return { total: 0, uniqueUsers: 0, securityAlerts: 0, syncs: 0 };
+
+    const [totalRes, alertsRes, syncsRes, userIdsRes] = await Promise.all([
+      supabase.from('audit_logs').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId),
+      supabase.from('audit_logs').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).or('action.ilike.%DELETE%,action.ilike.%CANCEL%'),
+      supabase.from('audit_logs').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).ilike('action', '%SYNC%'),
+      supabase.from('audit_logs').select('user_id').eq('tenant_id', tenantId)
+    ]);
+
+    const uniqueUsers = new Set((userIdsRes.data || []).map(r => r.user_id).filter(Boolean)).size;
+
+    return {
+      total: totalRes.count || 0,
+      uniqueUsers,
+      securityAlerts: alertsRes.count || 0,
+      syncs: syncsRes.count || 0
+    };
+  },
+
   // --- AUDIT LOGS ---
   getAuditLogs: async () => {
     const tenantId = await getActiveTenantId();
@@ -1689,6 +2008,67 @@ export const api = {
       role: log.users ? log.users.role : 'System',
       created_at: log.created_at
     }));
+  },
+
+  // Paginated + searchable (by action / description) version for the
+  // Audit Logs page. `category` mirrors the frontend's getActionCategory()
+  // grouping (AUTH/MATERIAL/RECIPE/INVOICING/POS/OTHER) so filtering by
+  // category still happens server-side instead of pulling everything.
+  getAuditLogsPaged: async ({ page = 1, pageSize = 20, search = '', category = 'ALL' } = {}) => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return { data: [], totalCount: 0 };
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    const CATEGORY_KEYWORDS = {
+      AUTH: ['LOGIN', 'REGISTER'],
+      MATERIAL: ['MATERIAL', 'PRICE', 'ADJUST'],
+      RECIPE: ['RECIPE'],
+      INVOICING: ['PO', 'INVOICE'],
+      POS: ['POS', 'SYNC'],
+    };
+
+    let query = supabase
+      .from('audit_logs')
+      .select('*, users(name, role)', { count: 'exact' })
+      .eq('tenant_id', tenantId);
+
+    if (search && search.trim()) {
+      const s = search.trim();
+      query = query.or(`action.ilike.%${s}%,description.ilike.%${s}%`);
+    }
+
+    if (category && category !== 'ALL') {
+      if (category === 'OTHER') {
+        // Doesn't match any known category keyword
+        const allKeywords = Object.values(CATEGORY_KEYWORDS).flat();
+        for (const kw of allKeywords) {
+          query = query.not('action', 'ilike', `%${kw}%`);
+        }
+      } else if (CATEGORY_KEYWORDS[category]) {
+        const orExpr = CATEGORY_KEYWORDS[category].map(kw => `action.ilike.%${kw}%`).join(',');
+        query = query.or(orExpr);
+      }
+    }
+
+    const { data, error, count } = await query
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (error) throw new Error("Gagal mengambil log audit: " + error.message);
+
+    return {
+      data: data.map(log => ({
+        id: log.id,
+        action: log.action,
+        description: log.description,
+        ip_address: log.ip_address,
+        username: log.users ? log.users.name : 'System',
+        role: log.users ? log.users.role : 'System',
+        created_at: log.created_at
+      })),
+      totalCount: count || 0
+    };
   },
 
   // --- BACKUP & RESTORE SERVERLESS SYSTEM ---

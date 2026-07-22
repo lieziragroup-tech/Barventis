@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Search, Plus, Edit, History, X, Download, Trash2,
   Package, UploadCloud
 } from 'lucide-react';
 import BulkImport from '../../components/BulkImport';
+import Pagination from '../../components/shared/Pagination';
 
 let _XLSX;
 const getXLSX = async () => { if (!_XLSX) _XLSX = await import('xlsx'); return _XLSX; };
@@ -34,6 +35,14 @@ export default function StockLedger() {
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [newItem, setNewItem] = useState({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15 });
   const [selectedItems, setSelectedItems] = useState([]);
+
+  const PAGE_SIZE = 20;
+  const [currentPage, setCurrentPage] = useState(1);
+  // Reset to page 1 whenever a filter/search changes, so the user isn't
+  // stranded on an empty page after narrowing results
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, catFilter, alertFilter, activeLoc]);
 
   const toggleSelectAll = (e) => {
     if (e.target.checked) setSelectedItems(filteredStock.map(i => i.name));
@@ -79,6 +88,13 @@ export default function StockLedger() {
     else if (alertFilter === 'SAFE') matchesAlert = totalQty >= minLevel;
     return matchesSearch && matchesCat && matchesAlert;
   }), [stock, search, catFilter, alertFilter]);
+
+  // Slice for the current page (client-side, since the full materials
+  // list is already in memory and bounded in size — see chat explanation)
+  const paginatedStock = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredStock.slice(start, start + PAGE_SIZE);
+  }, [filteredStock, currentPage]);
 
   // Adjust submit
   const handleAdjustSubmit = (e) => {
@@ -204,7 +220,7 @@ export default function StockLedger() {
                 </tr>
               </thead>
               <tbody>
-                {filteredStock.map(item => {
+                {paginatedStock.map(item => {
                   const rQty = item.qty_resto || 0;
                   const cQty = item.qty_central || 0;
                   const total = rQty + cQty;
@@ -271,6 +287,15 @@ export default function StockLedger() {
                 )}
               </tbody>
             </table>
+          </div>
+          <div style={{ padding: '0 20px 16px' }}>
+            <Pagination
+              page={currentPage}
+              pageSize={PAGE_SIZE}
+              totalCount={filteredStock.length}
+              onPageChange={setCurrentPage}
+              itemLabel="bahan"
+            />
           </div>
         </div>
       </div>
@@ -501,3 +526,5 @@ export default function StockLedger() {
     </div>
   );
 }
+
+
