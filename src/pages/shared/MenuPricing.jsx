@@ -92,8 +92,8 @@ export default function MenuPricing() {
 
   return (
     <div className="fade-in">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ minWidth: 0 }}>
           <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Menu Pricing Simulator</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Simulasi dan optimasi harga jual berdasarkan HPP berjalan.</p>
         </div>

@@ -139,12 +139,12 @@ export default function AssetManagement() {
 
   return (
     <div className="fade-in">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ minWidth: 0 }}>
           <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Asset Management</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Kelola aset restoran (mesin, gelas, tools) dan opname kerusakan.</p>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <button className="btn btn-secondary" onClick={openOpnameModal} disabled={loading || assets.length === 0}>
             <Database size={16} style={{ marginRight: '8px' }}/> Stock Opname Aset
           </button>

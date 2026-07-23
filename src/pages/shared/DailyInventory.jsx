@@ -216,8 +216,8 @@ export default function DailyInventory() {
 
   return (
     <div className="fade-in">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ minWidth: 0 }}>
           <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Daily Inventory Sheet</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Pencatatan stok harian (In/Out/Full/Waste).</p>
         </div>
@@ -355,7 +355,7 @@ export default function DailyInventory() {
           </div>
         )}
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
+        <div className="daily-inv-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', borderTop: '1px solid var(--border)', paddingTop: '20px', flexWrap: 'wrap', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
               Checked by: <strong>{activeUser?.name}</strong>

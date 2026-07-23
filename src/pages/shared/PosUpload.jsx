@@ -369,14 +369,16 @@ export default function PosUpload() {
         border: '1px solid var(--border)', 
         padding: '16px 24px', 
         borderRadius: 'var(--radius-lg)',
-        backdropFilter: 'blur(10px)'
+        backdropFilter: 'blur(10px)',
+        flexWrap: 'wrap',
+        gap: '12px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Settings size={18} style={{ color: 'var(--accent)' }} />
-          <span style={{ fontSize: '0.875rem', fontWeight: '700', color: 'var(--text-primary)' }}>Sistem Kasir POS Aktif</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+          <Settings size={18} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+          <span style={{ fontSize: '0.875rem', fontWeight: '700', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>Sistem Kasir POS Aktif</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Pilih format pembacaan kasir:</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', minWidth: 0, width: '100%', maxWidth: '340px' }}>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Pilih format pembacaan kasir:</span>
           <select 
             value={selectedTemplateId} 
             onChange={(e) => handleTemplateChange(e.target.value)}
@@ -390,7 +392,10 @@ export default function PosUpload() {
               fontSize: '0.825rem',
               fontWeight: '600',
               outline: 'none',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              flex: '1',
+              minWidth: 0,
+              maxWidth: '100%'
             }}
           >
             {templates.map(t => (
@@ -700,3 +705,4 @@ export default function PosUpload() {
     </div>
   );
 }
+

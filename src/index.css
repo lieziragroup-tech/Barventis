@@ -1374,3 +1374,16 @@ input[type='number']::-webkit-outer-spin-button {
     flex-direction: column;
   }
 }
+
+/* Daily Inventory save footer — full-width button on small screens
+   so it doesn't compete for space next to the "Checked by" label */
+@media (max-width: 480px) {
+  .daily-inv-footer {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+  .daily-inv-footer button {
+    width: 100%;
+    justify-content: center;
+  }
+}
