@@ -2545,5 +2545,62 @@ export const api = {
       console.error("[Fonnte WA] Error:", e);
       return { success: false, error: e.message };
     }
+  },
+
+  // ── Barista Report: bulk fetch all data for a given month ──
+  getBaristaReportData: async (month, year) => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) throw new Error('Tenant not found');
+
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+    // Parallel fetch all needed data
+    const [
+      materialsRes,
+      recipesRes,
+      purchaseRes,
+      opnameRestoRes,
+      opnameCentralRes,
+      dailyInvRes,
+      transactionsRes
+    ] = await Promise.all([
+      // 1. Materials (marketlist)
+      supabase.from('materials').select('*').eq('tenant_id', tenantId).eq('is_active', true).order('category').order('name'),
+      // 2. Recipes + ingredients + materials
+      supabase.from('recipes').select('*, recipe_ingredients(*, materials(*))').eq('tenant_id', tenantId).order('category').order('menu_name'),
+      // 3. Purchase entries for the month
+      supabase.from('purchase_entries').select('*, materials(name, unit), suppliers(name)').eq('tenant_id', tenantId).gte('date', startDate).lte('date', endDate).order('date'),
+      // 4. Stock Opname RESTO
+      supabase.from('stock_opnames').select('*, stock_opname_items(*, materials(*))').eq('tenant_id', tenantId).eq('period_month', month).eq('period_year', year).eq('location', 'RESTO').maybeSingle(),
+      // 5. Stock Opname CENTRAL
+      supabase.from('stock_opnames').select('*, stock_opname_items(*, materials(*))').eq('tenant_id', tenantId).eq('period_month', month).eq('period_year', year).eq('location', 'CENTRAL').maybeSingle(),
+      // 6. Daily Inventories for the month
+      supabase.from('daily_inventories').select('*, daily_inventory_items(*, materials:material_id(name, unit, category, price))').eq('tenant_id', tenantId).gte('date', startDate).lte('date', endDate).order('date'),
+      // 7. Transactions (for pemakaian/cost control)
+      supabase.from('transactions').select('*, materials(name, category)').eq('tenant_id', tenantId).gte('date', startDate).lte('date', endDate).order('date')
+    ]);
+
+    // Also fetch previous month's opname for opening stock
+    const prevMonth = month === 1 ? 12 : month - 1;
+    const prevYear = month === 1 ? year - 1 : year;
+    const [prevOpnameRestoRes, prevOpnameCentralRes] = await Promise.all([
+      supabase.from('stock_opnames').select('*, stock_opname_items(*, materials(*))').eq('tenant_id', tenantId).eq('period_month', prevMonth).eq('period_year', prevYear).eq('location', 'RESTO').maybeSingle(),
+      supabase.from('stock_opnames').select('*, stock_opname_items(*, materials(*))').eq('tenant_id', tenantId).eq('period_month', prevMonth).eq('period_year', prevYear).eq('location', 'CENTRAL').maybeSingle()
+    ]);
+
+    return {
+      period: { month, year, startDate, endDate, lastDay },
+      materials: materialsRes.data || [],
+      recipes: recipesRes.data || [],
+      purchases: purchaseRes.data || [],
+      opnameResto: opnameRestoRes.data,
+      opnameCentral: opnameCentralRes.data,
+      prevOpnameResto: prevOpnameRestoRes.data,
+      prevOpnameCentral: prevOpnameCentralRes.data,
+      dailyInventories: dailyInvRes.data || [],
+      transactions: transactionsRes.data || []
+    };
   }
 };

@@ -27,6 +27,7 @@ const Maintenance = React.lazy(() => import('./pages/shared/Maintenance'));
 const SuperAdminPanel = React.lazy(() => import('./pages/superadmin/SuperAdminPanel'));
 const TenantAdminPanel = React.lazy(() => import('./pages/owner/TenantAdminPanel'));
 const PosTerminal = React.lazy(() => import('./pages/pos/PosTerminal'));
+const BaristaReport = React.lazy(() => import('./pages/shared/BaristaReport'));
 const LandingPage = React.lazy(() => import('./pages/landing/NewLandingPage.tsx'));
 
 const RouteErrorBoundary = ({ children }) => {
@@ -139,6 +140,7 @@ export default function App() {
           <Route path="backup" element={<RouteErrorBoundary><BackupCenter /></RouteErrorBoundary>} />
           <Route path="maintenance" element={<RouteErrorBoundary><Maintenance /></RouteErrorBoundary>} />
           <Route path="settings" element={<RouteErrorBoundary><TenantAdminPanel /></RouteErrorBoundary>} />
+          <Route path="barista-report" element={<RouteErrorBoundary><BaristaReport /></RouteErrorBoundary>} />
         </Route>
 
         <Route path="/owner/pos-terminal" element={
@@ -159,6 +161,7 @@ export default function App() {
           <Route path="pos" element={<RouteErrorBoundary><PosUpload /></RouteErrorBoundary>} />
           <Route path="recipes" element={<RouteErrorBoundary><Recipes /></RouteErrorBoundary>} />
           <Route path="maintenance" element={<RouteErrorBoundary><Maintenance /></RouteErrorBoundary>} />
+          <Route path="barista-report" element={<RouteErrorBoundary><BaristaReport /></RouteErrorBoundary>} />
         </Route>
 
         <Route path="/staff/pos-terminal" element={
