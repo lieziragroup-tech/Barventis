@@ -219,7 +219,7 @@ export default function Maintenance() {
       )}
 
       {/* SYSTEM HEALTH — all roles */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
         <h3 style={{ fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Activity size={18} style={{ color: 'var(--accent)' }} /> Status Kesehatan Sistem
         </h3>
@@ -415,7 +415,7 @@ export default function Maintenance() {
 
           {/* Staff role management */}
           <div className="glass-card" style={{ padding: '0', overflow: 'hidden' }}>
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
               <h3 style={{ fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Users size={18} style={{ color: 'var(--accent)' }} /> Manajemen Role Staff
               </h3>
@@ -486,5 +486,3 @@ export default function Maintenance() {
     </div>
   );
 }
-
-

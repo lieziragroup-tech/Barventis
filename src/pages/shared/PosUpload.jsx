@@ -426,9 +426,10 @@ export default function PosUpload() {
         <div style={{
           padding: '20px', borderRadius: 'var(--radius-lg)', marginBottom: '20px',
           background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          flexWrap: 'wrap', gap: '14px'
         }}>
-          <div>
+          <div style={{ minWidth: 0, flex: '1 1 240px' }}>
             <h4 style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--warning)', marginBottom: '4px' }}>Data Duplikat Terdeteksi</h4>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
               Data POS untuk periode {duplicateInfo.periodStr} sudah ada di sistem. Tetap upload dan timpa data lama?
@@ -581,9 +582,9 @@ export default function PosUpload() {
           )}
 
           {/* Action Row */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>POS Spreadsheet Rows Preview</h3>
-            <div style={{ display: 'flex', gap: '12px' }}>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
               <button className="btn btn-secondary" onClick={() => {
                 setRawFile(null);
                 setParsedData(null);
@@ -705,4 +706,3 @@ export default function PosUpload() {
     </div>
   );
 }
-

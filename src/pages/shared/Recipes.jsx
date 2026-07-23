@@ -453,7 +453,7 @@ export default function Recipes() {
           </div>
 
           {/* Ingredients Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
             <h3 style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '1px' }}>
               Komposisi Bahan Baku (Recipe List)
             </h3>
@@ -751,4 +751,3 @@ export default function Recipes() {
     </div>
   );
 }
-

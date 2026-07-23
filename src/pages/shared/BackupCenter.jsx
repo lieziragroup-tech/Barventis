@@ -349,8 +349,8 @@ export default function BackupCenter() {
 
       {/* Row 2: List of backups */}
       <div className="glass-card" style={{ padding: '0px', overflow: 'hidden' }}>
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: '700' }}>Riwayat File Cadangan di Server</h3>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: '700', minWidth: 0 }}>Riwayat File Cadangan di Server</h3>
           <button 
             className="btn btn-secondary" 
             onClick={fetchBackups} 
@@ -618,4 +618,3 @@ export default function BackupCenter() {
     </div>
   );
 }
-

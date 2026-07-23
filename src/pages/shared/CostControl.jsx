@@ -161,10 +161,10 @@ export default function CostControl() {
   return (
     <div>
       {/* Period Picker */}
-      <div className="glass-card" style={{ marginBottom: '24px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Calendar size={18} style={{ color: 'var(--accent)' }} />
-          <span style={{ fontWeight: 600 }}>Period:</span>
+      <div className="glass-card" style={{ marginBottom: '24px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <Calendar size={18} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+          <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Period:</span>
           <select 
             className="form-control" 
             style={{ width: '160px', padding: '6px 12px', fontSize: '0.875rem' }} 
@@ -176,7 +176,7 @@ export default function CostControl() {
             ))}
           </select>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <button 
             className="btn btn-secondary" 
             style={{ display: 'flex', gap: '6px', padding: '8px 14px', fontSize: '0.8rem' }} 

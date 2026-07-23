@@ -221,8 +221,8 @@ export default function StockOpname() {
       {/* Step 2: Physical Count Input Grid */}
       {step === 2 && (
         <div className="glass-card" style={{ padding: '28px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '24px' }}>
-            <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ minWidth: 0 }}>
               <span className="badge badge-info" style={{ marginBottom: '6px' }}>Step 2: Counting</span>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>Audit Inventory: {location} Location</h3>
             </div>
