@@ -171,6 +171,7 @@ export default function PosUpload() {
         console.log('AI Analyzing first 30 rows of', excelFile.name);
         for (let i = 0; i < Math.min(30, rawRows.length); i++) {
           const row = rawRows[i] || [];
+          const nonEmptyCells = row.filter(c => c !== null && c !== undefined && c.toString().trim() !== '').length;
           const text = row.join(' ').toLowerCase();
           console.log('Row', i, '=>', text);
           
@@ -178,24 +179,33 @@ export default function PosUpload() {
           const hasQty = /qty|quantity|jumlah|terjual|sold/i.test(text);
           const hasSales = /gross|kotor|net|bersih|total|amount|sales|harga/i.test(text);
           
-          if (hasProduct && (hasQty || hasSales)) {
+          // Require a real tabular header row: several distinct columns filled AND
+          // product + qty + total-like keywords all present. A single-cell title
+          // like "Daily Sales Menu Report" can otherwise false-match (it contains
+          // both "menu" and "sales") and get mistaken for the real header row.
+          if (nonEmptyCells >= 3 && hasProduct && hasQty && hasSales) {
             headerRowIndex = i;
             console.log('AI Header Row Detected at index:', i);
-            // Map columns
+            // Map columns. Check date first and claim the column exclusively so a
+            // header like "Sales Date" isn't also grabbed by the total-keyword
+            // regex (which matches "sales") and stolen from the real total column.
             row.forEach((h, idx) => {
               if (!h) return;
-              const hStr = h.toString().toLowerCase();
-              if (/nama|item|menu|produk|product|barang|desc/i.test(hStr) && colMap.menu_name === undefined) colMap.menu_name = idx;
-              if (/qty|quantity|jumlah|terjual|sold/i.test(hStr) && colMap.qty === undefined) colMap.qty = idx;
-              if (/gross|kotor|net|bersih|total|amount|sales|harga/i.test(hStr) && colMap.total === undefined) colMap.total = idx;
-              if (/tanggal|date|waktu/i.test(hStr) && colMap.date === undefined) colMap.date = idx;
+              const hStr = h.toString().toLowerCase().trim();
+              if (/tanggal|date|waktu/i.test(hStr) && colMap.date === undefined) { colMap.date = idx; return; }
+              if (/nama|item|menu|produk|product|barang|desc/i.test(hStr) && colMap.menu_name === undefined) { colMap.menu_name = idx; return; }
+              if (/qty|quantity|jumlah|terjual|sold/i.test(hStr) && colMap.qty === undefined) { colMap.qty = idx; return; }
+              // NOTE: 'sales' is deliberately excluded here (kept only for the row-level
+              // hasSales check above) because it also matches non-amount columns like
+              // "Sales Type" / "Sales Date", which would otherwise steal this slot.
+              if (/gross|kotor|net|bersih|total|amount|harga/i.test(hStr) && colMap.total === undefined) { colMap.total = idx; return; }
             });
             console.log('AI Column Mapping:', colMap);
             break;
           }
         }
 
-        if (headerRowIndex === -1 || colMap.menu_name === undefined) {
+        if (headerRowIndex === -1 || colMap.menu_name === undefined || colMap.qty === undefined || colMap.total === undefined) {
           throw new Error('AI Gagal mendeteksi format tabel. Pastikan terdapat kolom (Item/Nama), (Qty/Jumlah), dan (Total/Gross). Buka console browser (F12) untuk melihat log pembacaan baris.');
         }
 
