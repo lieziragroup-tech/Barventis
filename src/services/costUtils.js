@@ -29,6 +29,10 @@ export function parsePackSize(fullPack) {
   let kgMatch = fullPack.match(/(\d+(?:\.\d+)?)\s*kg\b/i);
   if (kgMatch) return parseFloat(kgMatch[1]) * 1000.0;
 
+  // Fallback for ANY string that starts with a number (e.g. "1 kaleng", "500 btl/grm")
+  let anyNumMatch = fullPack.match(/^(\d+(?:\.\d+)?)/);
+  if (anyNumMatch) return parseFloat(anyNumMatch[1]);
+
   return 0;
 }
 
@@ -38,15 +42,20 @@ export function parsePackSize(fullPack) {
  * Otherwise converts via full_pack size.
  */
 export function calculateIngredientCost(material, qtyInUse, recipeUnit) {
-  const price = parseFloat(material.new_price ?? material.price ?? 0);
+  const price = parseFloat(material.price ?? 0);
   const packUnit = (material.unit || '').toLowerCase().trim();
   recipeUnit = (recipeUnit || '').toLowerCase().trim();
 
+  // Excel logic fallback: if unit names strictly match, return qty * price
   if (recipeUnit === packUnit) {
     return qtyInUse * price;
   }
 
+  // Parse pack size strictly from full_pack field
   const packSize = parsePackSize(material.full_pack);
+  
+  // Excel formula = Amount = qty_in_use * (unit_price / full_pack_size)
+  // We use this exact logic, ignoring tyops in Excel
   return packSize > 0 ? qtyInUse * (price / packSize) : qtyInUse * price;
 }
 

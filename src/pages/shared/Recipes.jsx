@@ -24,6 +24,7 @@ export default function Recipes() {
   const [newMenuCategory, setNewMenuCategory] = useState('KOPI');
   const [newMenuPrice, setNewMenuPrice] = useState('');
   const [openDropdown, setOpenDropdown] = useState(null);
+  const [selectedItems, setSelectedItems] = useState([]);
 
 
 
@@ -103,11 +104,30 @@ export default function Recipes() {
 
   const RECIPES_PAGE_SIZE = 15;
   const [recipesPage, setRecipesPage] = useState(1);
-  useEffect(() => { setRecipesPage(1); }, [search]);
   const paginatedRecipes = useMemo(() => {
     const start = (recipesPage - 1) * RECIPES_PAGE_SIZE;
     return filteredRecipes.slice(start, start + RECIPES_PAGE_SIZE);
   }, [filteredRecipes, recipesPage]);
+
+  const toggleSelectAll = (e) => {
+    if (e.target.checked) setSelectedItems(filteredRecipes.map(r => r.id));
+    else setSelectedItems([]);
+  };
+
+  const toggleSelectItem = (id) => {
+    setSelectedItems(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Hapus ${selectedItems.length} resep terpilih secara permanen?`)) return;
+    for (const id of selectedItems) {
+      if (id) await onDeleteRecipe(id);
+    }
+    setSelectedItems([]);
+    if (activeRecipe && selectedItems.includes(activeRecipe.id)) {
+      setActiveRecipe(null);
+    }
+  };
 
   // Calculate amount for a single ingredient row
   // amount = qty_in_use * pricePerUnit (if using the pack's content unit like gr/ml)
@@ -174,6 +194,7 @@ export default function Recipes() {
   // that fails when stock names have changed since the recipe was created.
   const handleSaveRecipe = () => {
     if (!activeRecipe) return;
+    if (!window.confirm(`Konfirmasi simpan perubahan resep "${activeRecipe.menu_name}"?`)) return;
     const savedIngredients = editedIngredients
       .filter(ing => ing.item_name !== '')
       .map(ing => {
@@ -258,30 +279,45 @@ export default function Recipes() {
             className="form-control premium-input" 
             style={{ paddingLeft: '38px', height: '40px' }} 
             value={search} 
-            onChange={e => setSearch(e.target.value)} 
+            onChange={e => { setSearch(e.target.value); setRecipesPage(1); }} 
           />
         </div>
 
-        {/* Add New Button */}
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-          <button 
-            className="btn premium-btn premium-btn-primary" 
-            style={{ flex: 1, fontSize: '0.825rem', height: '38px', borderRadius: 'var(--radius-md)' }} 
-            onClick={() => setShowAddModal(true)}
-          >
-            <Plus size={15} /> Tambah Menu
-          </button>
-          <button 
-            className="btn premium-btn premium-btn-secondary" 
-            style={{ width: '38px', height: '38px', padding: 0, borderRadius: 'var(--radius-md)' }} 
-            onClick={() => setShowBulkImport(true)} 
-            title="Bulk Import Resep"
-          >
-            <UploadCloud size={15} />
-          </button>
-        </div>
+        {selectedItems.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', padding: '10px', borderRadius: 'var(--radius-md)' }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', textAlign: 'center' }}>{selectedItems.length} Resep Terpilih</span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button className="btn premium-btn premium-btn-danger" style={{ flex: 1, padding: '6px 0', fontSize: '0.8rem', background: 'var(--danger-glow)', color: 'var(--danger-text)' }} onClick={handleBulkDelete}>
+                <Trash2 size={14} style={{ marginRight: '4px' }}/> Hapus
+              </button>
+              <button className="btn premium-btn premium-btn-secondary" style={{ flex: 1, padding: '6px 0', fontSize: '0.8rem' }} onClick={() => setSelectedItems([])}>Batal</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+            <button 
+              className="btn premium-btn premium-btn-primary" 
+              style={{ flex: 1, fontSize: '0.825rem', height: '38px', borderRadius: 'var(--radius-md)' }} 
+              onClick={() => setShowAddModal(true)}
+            >
+              <Plus size={15} /> Tambah Menu
+            </button>
+            <button 
+              className="btn premium-btn premium-btn-secondary" 
+              style={{ width: '38px', height: '38px', padding: 0, borderRadius: 'var(--radius-md)' }} 
+              onClick={() => setShowBulkImport(true)} 
+              title="Bulk Import Resep"
+            >
+              <UploadCloud size={15} />
+            </button>
+          </div>
+        )}
 
         {/* Recipe List */}
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', paddingLeft: '8px' }}>
+          <input type="checkbox" checked={filteredRecipes.length > 0 && selectedItems.length === filteredRecipes.length} onChange={toggleSelectAll} style={{ cursor: 'pointer', marginRight: '8px' }} />
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Pilih Semua</span>
+        </div>
         <div className="glass-scrollbar" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', paddingRight: '4px' }}>
           {paginatedRecipes.map(r => {
             const isActive = activeRecipe && activeRecipe.menu_name === r.menu_name;
@@ -291,15 +327,18 @@ export default function Recipes() {
               <div
                 key={r.id ?? r.menu_name}
                 className={`recipe-nav-item ${isActive ? 'active' : ''}`}
-                style={{ justifyContent: 'space-between' }} 
+                style={{ justifyContent: 'space-between', display: 'flex', alignItems: 'center', background: selectedItems.includes(r.id) ? 'rgba(59,130,246,0.05)' : '' }}
                 onClick={() => handleSelectRecipe(r)}
               >
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {r.menu_name}
-                  </div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    HPP: {formatIDR(r.basic_cost || 0)}
+                <div style={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: 1 }}>
+                  <input type="checkbox" checked={selectedItems.includes(r.id)} onChange={(e) => { e.stopPropagation(); toggleSelectItem(r.id); }} style={{ cursor: 'pointer', marginRight: '8px' }} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {r.menu_name}
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      HPP: {formatIDR(r.basic_cost || 0)}
+                    </div>
                   </div>
                 </div>
                 <span 
@@ -467,14 +506,14 @@ export default function Recipes() {
           </div>
 
           {/* Ingredients Table */}
-          <div className="glass-scrollbar" style={{ flex: 1, overflowY: 'auto', marginBottom: '16px', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)', background: 'rgba(0,0,0,0.1)' }}>
-            <table className="custom-table premium-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+          <div className="table-container glass-scrollbar" style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', marginBottom: '16px', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)', background: 'rgba(0,0,0,0.1)' }}>
+            <table className="custom-table premium-table" style={{ width: '100%', minWidth: '750px' }}>
               <thead>
                 <tr>
                   <th style={{ width: '28%' }}>Bahan Baku</th>
-                  <th style={{ width: '10%', textAlign: 'right' }}>Qty</th>
+                  <th style={{ width: '12%', textAlign: 'right' }}>Qty</th>
                   <th style={{ width: '12%' }}>Satuan</th>
-                  <th style={{ width: '20%' }}>Pack Info</th>
+                  <th style={{ width: '18%' }}>Pack Info</th>
                   <th style={{ width: '15%', textAlign: 'right' }}>Harga/Pack</th>
                   <th style={{ width: '12%', textAlign: 'right' }}>Amount</th>
                   <th style={{ width: '3%', textAlign: 'center' }}></th>
@@ -739,13 +778,31 @@ export default function Recipes() {
         }}
         expectedColumns={[
           { key: 'menu_name', label: 'NAMA MENU', required: true, type: 'string', description: 'Nama menu (harus sama persis dengan di POS)', sample: 'Ice Caramel Latte' },
+          { key: 'category', label: 'KATEGORI', required: false, type: 'string', description: 'Kategori menu: KOPI/NON-KOPI/TEA/MOCKTAIL/JUICE/BEER', sample: 'KOPI' },
           { key: 'selling_price', label: 'HARGA JUAL', required: true, type: 'number', description: 'Harga Jual (angka tanpa titik)', sample: 45000 },
           { key: 'bahan_1', label: 'BAHAN 1', required: false, type: 'string', description: 'Nama bahan baku 1', sample: 'Espresso Bean' },
           { key: 'qty_1', label: 'QTY 1', required: false, type: 'number', description: 'Jumlah bahan baku 1', sample: 36 },
           { key: 'bahan_2', label: 'BAHAN 2', required: false, type: 'string', description: 'Nama bahan baku 2', sample: 'Fresh Milk' },
           { key: 'qty_2', label: 'QTY 2', required: false, type: 'number', description: 'Jumlah bahan baku 2', sample: 150 },
           { key: 'bahan_3', label: 'BAHAN 3', required: false, type: 'string', description: 'Nama bahan baku 3', sample: 'Caramel Syrup' },
-          { key: 'qty_3', label: 'QTY 3', required: false, type: 'number', description: 'Jumlah bahan baku 3', sample: 20 }
+          { key: 'qty_3', label: 'QTY 3', required: false, type: 'number', description: 'Jumlah bahan baku 3', sample: 20 },
+          // BAHAN 4-10 / QTY 4-10: api.bulkImportRecipes already reads up to 10 ingredient
+          // pairs from the row object, but this list previously stopped at 3, so any
+          // ingredient past slot 3 was silently dropped before it ever reached the API.
+          { key: 'bahan_4', label: 'BAHAN 4', required: false, type: 'string', description: 'Nama bahan baku 4', sample: '' },
+          { key: 'qty_4', label: 'QTY 4', required: false, type: 'number', description: 'Jumlah bahan baku 4', sample: '' },
+          { key: 'bahan_5', label: 'BAHAN 5', required: false, type: 'string', description: 'Nama bahan baku 5', sample: '' },
+          { key: 'qty_5', label: 'QTY 5', required: false, type: 'number', description: 'Jumlah bahan baku 5', sample: '' },
+          { key: 'bahan_6', label: 'BAHAN 6', required: false, type: 'string', description: 'Nama bahan baku 6', sample: '' },
+          { key: 'qty_6', label: 'QTY 6', required: false, type: 'number', description: 'Jumlah bahan baku 6', sample: '' },
+          { key: 'bahan_7', label: 'BAHAN 7', required: false, type: 'string', description: 'Nama bahan baku 7', sample: '' },
+          { key: 'qty_7', label: 'QTY 7', required: false, type: 'number', description: 'Jumlah bahan baku 7', sample: '' },
+          { key: 'bahan_8', label: 'BAHAN 8', required: false, type: 'string', description: 'Nama bahan baku 8', sample: '' },
+          { key: 'qty_8', label: 'QTY 8', required: false, type: 'number', description: 'Jumlah bahan baku 8', sample: '' },
+          { key: 'bahan_9', label: 'BAHAN 9', required: false, type: 'string', description: 'Nama bahan baku 9', sample: '' },
+          { key: 'qty_9', label: 'QTY 9', required: false, type: 'number', description: 'Jumlah bahan baku 9', sample: '' },
+          { key: 'bahan_10', label: 'BAHAN 10', required: false, type: 'string', description: 'Nama bahan baku 10', sample: '' },
+          { key: 'qty_10', label: 'QTY 10', required: false, type: 'number', description: 'Jumlah bahan baku 10', sample: '' }
         ]}
       />
     </div>

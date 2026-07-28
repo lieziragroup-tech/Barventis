@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LogOut, Bell, AlertTriangle, X, RefreshCw, Menu
 } from 'lucide-react';
@@ -7,6 +8,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useData } from '../../contexts/DataContext';
 import Onboarding from '../Onboarding';
 import AIAssistant from '../AIAssistant';
+import GuidebookModal from '../GuidebookModal';
+import { BookOpen } from 'lucide-react';
 
 const NavItem = ({ to, exact, label }) => {
   return (
@@ -71,7 +74,8 @@ export default function DashboardLayout() {
   const { activeUser, tenantName, logout } = useAuth();
   const { loadingData, stock, refreshData } = useData();
   const location = useLocation();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 992);
+  const [showGuidebook, setShowGuidebook] = useState(false);
 
   // Close sidebar on route change
   useEffect(() => {
@@ -309,6 +313,19 @@ export default function DashboardLayout() {
           </div>
           </div>
           <div className="header-actions">
+            <button
+              onClick={() => setShowGuidebook(true)}
+              title="Buku Panduan Sistem"
+              style={{
+                background: 'var(--accent-glow)', border: '1px solid var(--accent)', borderRadius: 'var(--radius-md)',
+                padding: '7px 12px', color: 'var(--accent)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, transition: 'all var(--ease)',
+              }}
+              onMouseOver={e => { e.currentTarget.style.background = 'var(--accent)'; e.currentTarget.style.color = '#fff'; }}
+              onMouseOut={e => { e.currentTarget.style.background = 'var(--accent-glow)'; e.currentTarget.style.color = 'var(--accent)'; }}
+            >
+              <BookOpen size={15} /> <span className="hide-mobile">Buku Panduan</span>
+            </button>
             {/* Refresh Button */}
             {(isOwner || isStaff) && (
               <button
@@ -443,7 +460,17 @@ export default function DashboardLayout() {
         </header>
 
         <section>
-          <Outlet />
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
         </section>
       </main>
 
@@ -497,6 +524,7 @@ export default function DashboardLayout() {
 
       {/* Floating AI Assistant */}
       <AIAssistant />
+      <GuidebookModal isOpen={showGuidebook} onClose={() => setShowGuidebook(false)} />
 
       <style>{`
         @keyframes spin {

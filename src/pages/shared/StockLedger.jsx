@@ -23,6 +23,7 @@ export default function StockLedger() {
   const [activeLoc, setActiveLoc] = useState('ALL');
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('ALL');
+  const [supFilter, setSupFilter] = useState('ALL');
   const [alertFilter, setAlertFilter] = useState('ALL');
   const [selectedItem, setSelectedItem] = useState(null);
   const [adjustItem, setAdjustItem] = useState(null);
@@ -33,16 +34,29 @@ export default function StockLedger() {
   const [editItem, setEditItem] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
+  const [dependencyDeleteModal, setDependencyDeleteModal] = useState(null);
   const [newItem, setNewItem] = useState({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15 });
   const [selectedItems, setSelectedItems] = useState([]);
 
+  // Supplier & Purchase integration states
+  const [suppliers, setSuppliers] = useState([]);
+  const [purchaseHistory, setPurchaseHistory] = useState([]);
+  const [historyTab, setHistoryTab] = useState('LEDGER');
+
+  useEffect(() => {
+    api.getSuppliers().then(setSuppliers).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    if (selectedItem && historyTab === 'PURCHASES') {
+      api.getPurchaseEntriesPaged({ material_id: selectedItem.id, pageSize: 20 })
+        .then(res => setPurchaseHistory(res.data))
+        .catch(console.error);
+    }
+  }, [selectedItem, historyTab]);
+
   const PAGE_SIZE = 20;
   const [currentPage, setCurrentPage] = useState(1);
-  // Reset to page 1 whenever a filter/search changes, so the user isn't
-  // stranded on an empty page after narrowing results
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [search, catFilter, alertFilter, activeLoc]);
 
   const toggleSelectAll = (e) => {
     if (e.target.checked) setSelectedItems(filteredStock.map(i => i.name));
@@ -51,6 +65,29 @@ export default function StockLedger() {
 
   const toggleSelectItem = (name) => {
     setSelectedItems(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
+  };
+
+  const handleAttemptDelete = async (itemName) => {
+    if (!confirm(`Hapus "${itemName}" dari inventory?`)) return;
+    try {
+      await onDeleteItem(itemName);
+    } catch (err) {
+      if (err.hasDependencies) {
+        setDependencyDeleteModal({ name: itemName, count: err.dependencyCount });
+      } else {
+        alert(err.message);
+      }
+    }
+  };
+
+  const confirmForceDelete = async () => {
+    if (!dependencyDeleteModal) return;
+    try {
+      await onDeleteItem(dependencyDeleteModal.name, true);
+      setDependencyDeleteModal(null);
+    } catch (err) {
+      alert(err.message);
+    }
   };
 
   const handleBulkDelete = async () => {
@@ -62,6 +99,7 @@ export default function StockLedger() {
   };
 
   const categories = useMemo(() => ['ALL', ...new Set(stock.map(item => item.category))], [stock]);
+  const uniqueSuppliersInStock = useMemo(() => ['ALL', ...new Set(stock.map(item => item.supplier).filter(Boolean))], [stock]);
 
 
   // Parse full_pack to get conversion
@@ -82,12 +120,13 @@ export default function StockLedger() {
     const minLevel = item.min_stock || 15;
     const matchesSearch = (item.name || '').toLowerCase().includes(search.toLowerCase()) || (item.supplier || '').toLowerCase().includes(search.toLowerCase());
     const matchesCat = catFilter === 'ALL' || item.category === catFilter;
+    const matchesSup = supFilter === 'ALL' || item.supplier === supFilter;
     let matchesAlert = true;
     if (alertFilter === 'CRITICAL') matchesAlert = totalQty === 0;
     else if (alertFilter === 'WARNING') matchesAlert = totalQty > 0 && totalQty < minLevel;
     else if (alertFilter === 'SAFE') matchesAlert = totalQty >= minLevel;
-    return matchesSearch && matchesCat && matchesAlert;
-  }), [stock, search, catFilter, alertFilter]);
+    return matchesSearch && matchesCat && matchesSup && matchesAlert;
+  }), [stock, search, catFilter, supFilter, alertFilter]);
 
   // Slice for the current page (client-side, since the full materials
   // list is already in memory and bounded in size — see chat explanation)
@@ -100,6 +139,7 @@ export default function StockLedger() {
   const handleAdjustSubmit = (e) => {
     e.preventDefault();
     if (!adjustItem || !adjustQty || isNaN(adjustQty)) return;
+    if (!window.confirm(`Konfirmasi penyesuaian stok untuk ${adjustItem.name}?`)) return;
     onAdjustStock(adjustItem.name, adjustLoc, adjustType, parseFloat(adjustQty), adjustNotes);
     setAdjustItem(null); setAdjustQty(''); setAdjustNotes('');
   };
@@ -108,6 +148,7 @@ export default function StockLedger() {
   const handleEditSubmit = (e) => {
     e.preventDefault();
     if (!editItem) return;
+    if (!window.confirm(`Konfirmasi perubahan data untuk ${editItem.name}?`)) return;
     onUpdateItem(editItem);
     setEditItem(null);
   };
@@ -116,6 +157,7 @@ export default function StockLedger() {
   const handleAddSubmit = (e) => {
     e.preventDefault();
     if (!newItem.name.trim()) return;
+    if (!window.confirm(`Konfirmasi penambahan bahan baku baru: ${newItem.name}?`)) return;
     onAddItem({ ...newItem, new_price: newItem.price });
     setShowAddModal(false);
     setNewItem({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15 });
@@ -151,7 +193,7 @@ export default function StockLedger() {
     : [], [selectedItem, transactions]);
 
   return (
-    <div className="stock-ledger-layout" style={{ display: 'flex', gap: '24px', position: 'relative' }}>
+    <div className="stock-ledger-layout fade-in" style={{ display: 'flex', gap: '24px', position: 'relative' }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         {/* Filters */}
         <div className="glass-card" style={{ marginBottom: '24px', padding: '20px' }}>
@@ -168,12 +210,15 @@ export default function StockLedger() {
               <>
                 <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
                   <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                  <input type="text" placeholder="Search materials or suppliers..." className="form-control" style={{ paddingLeft: '44px' }} value={search} onChange={e => setSearch(e.target.value)} />
+                  <input type="text" placeholder="Search materials or suppliers..." className="form-control" style={{ paddingLeft: '44px' }} value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} />
                 </div>
-                <select className="form-control" style={{ width: '170px' }} value={catFilter} onChange={e => setCatFilter(e.target.value)}>
+                <select className="form-control" style={{ width: '170px' }} value={catFilter} onChange={e => { setCatFilter(e.target.value); setCurrentPage(1); }}>
                   {categories.map(cat => <option key={cat} value={cat}>{cat === 'ALL' ? 'All Categories' : cat}</option>)}
                 </select>
-                <select className="form-control" style={{ width: '150px' }} value={alertFilter} onChange={e => setAlertFilter(e.target.value)}>
+                <select className="form-control" style={{ width: '170px' }} value={supFilter} onChange={e => { setSupFilter(e.target.value); setCurrentPage(1); }}>
+                  {uniqueSuppliersInStock.map(sup => <option key={sup} value={sup}>{sup === 'ALL' ? 'All Suppliers' : sup}</option>)}
+                </select>
+                <select className="form-control" style={{ width: '150px' }} value={alertFilter} onChange={e => { setAlertFilter(e.target.value); setCurrentPage(1); }}>
                   <option value="ALL">All Status</option>
                   <option value="SAFE">Safe</option>
                   <option value="WARNING">Low Stock</option>
@@ -181,7 +226,7 @@ export default function StockLedger() {
                 </select>
                 <div style={{ display: 'flex', background: 'rgba(0,0,0,0.03)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '3px' }}>
                   {['ALL', 'RESTO', 'CENTRAL'].map(loc => (
-                    <button key={loc} className={`btn ${activeLoc === loc ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '6px 12px', fontSize: '0.8rem', boxShadow: 'none' }} onClick={() => setActiveLoc(loc)}>
+                    <button key={loc} className={`btn ${activeLoc === loc ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '6px 12px', fontSize: '0.8rem', boxShadow: 'none' }} onClick={() => { setActiveLoc(loc); setCurrentPage(1); }}>
                       {loc === 'ALL' ? 'All' : loc === 'RESTO' ? 'Resto' : 'Central'}
                     </button>
                   ))}
@@ -274,7 +319,7 @@ export default function StockLedger() {
                           <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)' }} title="History" onClick={() => setSelectedItem(item)}>
                             <History size={13} />
                           </button>
-                          <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)', color: 'var(--danger)' }} title="Delete" onClick={() => { if (confirm(`Hapus "${item.name}" dari inventory?`)) onDeleteItem(item.name); }}>
+                          <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)', color: 'var(--danger)' }} title="Delete" onClick={() => handleAttemptDelete(item.name)}>
                             <Trash2 size={13} />
                           </button>
                         </div>
@@ -283,7 +328,7 @@ export default function StockLedger() {
                   );
                 })}
                 {filteredStock.length === 0 && (
-                  <tr><td colSpan="8" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>No materials found.</td></tr>
+                  <tr><td colSpan="9" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>No materials found.</td></tr>
                 )}
               </tbody>
             </table>
@@ -316,11 +361,12 @@ export default function StockLedger() {
               <div><div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Central</div><div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{(selectedItem.qty_central || 0).toFixed(1)} {selectedItem.unit}</div></div>
             </div>
           </div>
-          <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Ledger ({itemHistory.length})
-          </h4>
+          <div style={{ display: 'flex', gap: '4px', marginBottom: '8px' }}>
+            <button className={`btn ${historyTab === 'LEDGER' ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '4px 8px', fontSize: '0.75rem', flex: 1 }} onClick={() => setHistoryTab('LEDGER')}>Mutasi Stok</button>
+            <button className={`btn ${historyTab === 'PURCHASES' ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '4px 8px', fontSize: '0.75rem', flex: 1 }} onClick={() => setHistoryTab('PURCHASES')}>Riwayat Pembelian</button>
+          </div>
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {itemHistory.map(tx => (
+            {historyTab === 'LEDGER' && itemHistory.map(tx => (
               <div key={tx.id} style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', padding: '8px 10px', borderRadius: 'var(--radius-md)', fontSize: '0.75rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
                   <span style={{ fontWeight: 600 }}>{tx.type}</span>
@@ -330,7 +376,22 @@ export default function StockLedger() {
                 {tx.notes && <div style={{ fontSize: '0.65rem', marginTop: '4px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>"{tx.notes}"</div>}
               </div>
             ))}
-            {itemHistory.length === 0 && <div style={{ textAlign: 'center', padding: '16px', color: 'var(--text-muted)', fontSize: '0.75rem' }}>No history.</div>}
+            {historyTab === 'LEDGER' && itemHistory.length === 0 && <div style={{ textAlign: 'center', padding: '16px', color: 'var(--text-muted)', fontSize: '0.75rem' }}>No history.</div>}
+            
+            {historyTab === 'PURCHASES' && purchaseHistory.map(p => (
+              <div key={p.id} style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', padding: '8px 10px', borderRadius: 'var(--radius-md)', fontSize: '0.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+                  <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{p.suppliers?.name || 'Tunai / Tanpa Supplier'}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--success)' }}>+{p.qty} {p.unit}</span>
+                </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>{p.date}</span>
+                  <span style={{ fontWeight: 600 }}>{formatIDR(p.qty * p.unit_price)}</span>
+                </div>
+                {p.notes && <div style={{ fontSize: '0.65rem', marginTop: '4px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>"{p.notes}"</div>}
+              </div>
+            ))}
+            {historyTab === 'PURCHASES' && purchaseHistory.length === 0 && <div style={{ textAlign: 'center', padding: '16px', color: 'var(--text-muted)', fontSize: '0.75rem' }}>Belum ada riwayat pembelian dari supplier.</div>}
           </div>
         </div>
       )}
@@ -408,8 +469,11 @@ export default function StockLedger() {
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Supplier</label>
-                <input type="text" className="form-control" value={editItem.supplier} onChange={e => setEditItem({ ...editItem, supplier: e.target.value })} />
+                <label className="form-label">Supplier (Master Data)</label>
+                <input type="text" list="supplier-list-edit" className="form-control" placeholder="Pilih atau ketik supplier..." value={editItem.supplier} onChange={e => setEditItem({ ...editItem, supplier: e.target.value })} />
+                <datalist id="supplier-list-edit">
+                  {suppliers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                </datalist>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div className="form-group">
@@ -466,8 +530,11 @@ export default function StockLedger() {
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Supplier</label>
-                <input type="text" className="form-control" placeholder="Nama supplier" value={newItem.supplier} onChange={e => setNewItem({ ...newItem, supplier: e.target.value })} />
+                <label className="form-label">Supplier (Master Data)</label>
+                <input type="text" list="supplier-list-add" className="form-control" placeholder="Pilih atau ketik nama supplier" value={newItem.supplier} onChange={e => setNewItem({ ...newItem, supplier: e.target.value })} />
+                <datalist id="supplier-list-add">
+                  {suppliers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                </datalist>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div className="form-group">
@@ -505,7 +572,7 @@ export default function StockLedger() {
         onClose={() => setShowBulkImport(false)}
         type="materials"
         title="Bulk Import / Sync Bahan Baku"
-        description="Upload master data bahan baku sekaligus dari file Excel. PENTING: Kuantiti awal (stok fisik) tidak dimasukkan di sini. Gunakan menu Stock Opname setelah master barang diunggah agar riwayat audit tercatat."
+        description="Upload master data bahan baku sekaligus dari file Excel. Anda juga dapat menambahkan kolom 'qty_resto' di Excel untuk langsung mengatur stok awal (opsional)."
         currentData={stock}
         onCommit={async (rows) => {
           const res = await api.bulkImportMaterials(rows);
@@ -520,9 +587,35 @@ export default function StockLedger() {
           { key: 'unit', label: 'UNIT', required: true, type: 'string', description: 'Satuan beli (pck, btl, ltr, dll)', sample: 'kg' },
           { key: 'full_pack', label: 'Full', required: false, type: 'string', description: 'Isi per pack (1000 gr)', sample: '1000 gr' },
           { key: 'price', label: 'Price', required: true, type: 'number', description: 'Harga beli (angka)', sample: 120000 },
-          { key: 'min_stock', label: 'Min Stock', required: false, type: 'number', description: 'Batas alert stok minimum', sample: 5 }
+          { key: 'min_stock', label: 'Min Stock', required: false, type: 'number', description: 'Batas alert stok minimum', sample: 5 },
+          { key: 'qty_resto', label: 'Stok Awal', required: false, type: 'number', description: 'Stok awal gudang/resto (opsional)', sample: 10 }
         ]}
       />
+
+      {/* Force Delete Dependency Modal */}
+      {dependencyDeleteModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', top: '0', left: '0', right: '0', bottom: '0', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div className="glass-card modal-card" style={{ width: '400px', maxWidth: 'calc(100vw - 32px)', padding: '24px', border: '1px solid var(--danger)' }}>
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+              <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '12px', borderRadius: '50%' }}>
+                <Trash2 size={24} style={{ color: 'var(--danger)' }} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: '0 0 8px 0', color: 'var(--danger)' }}>Hapus Paksa Bahan Baku?</h3>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                  Bahan baku <strong>"{dependencyDeleteModal.name}"</strong> saat ini masih digunakan di <strong>{dependencyDeleteModal.count} resep aktif</strong>.
+                  <br /><br />
+                  Jika Anda melanjutkan, bahan ini akan <strong>dihapus dari semua resep</strong> tersebut secara otomatis. Tindakan ini tidak bisa dibatalkan!
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setDependencyDeleteModal(null)}>Batal</button>
+              <button type="button" className="btn btn-danger" style={{ background: 'var(--danger)', color: 'white' }} onClick={confirmForceDelete}>Ya, Hapus Paksa</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

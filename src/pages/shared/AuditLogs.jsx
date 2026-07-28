@@ -143,7 +143,7 @@ export default function AuditLogs() {
   const displayedLogs = logs;
 
   return (
-    <div className="audit-logs-container">
+    <div className="audit-logs-container fade-in">
       {/* Quick Summary KPI (from a lightweight stats query — accurate across the whole history, not just this page) */}
       <div className="kpi-grid" style={{ marginBottom: '24px' }}>
         <div className="glass-card kpi-card">
@@ -461,7 +461,7 @@ export default function AuditLogs() {
 
       {/* Audit Log Detail Modal */}
       {selectedLog && (
-        <div style={{
+        <div className="modal-overlay" style={{
           position: 'fixed',
           top: 0,
           left: 0,
@@ -475,7 +475,7 @@ export default function AuditLogs() {
           zIndex: 1000,
           padding: '20px'
         }}>
-          <div className="glass-card" style={{
+          <div className="glass-card modal-card" style={{
             width: '100%',
             maxWidth: '560px',
             position: 'relative',

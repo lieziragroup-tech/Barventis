@@ -214,7 +214,7 @@ export default function BackupCenter() {
   const lastBackupTime = backups.length > 0 ? formatDateTime(backups[0].created_at) : 'Belum pernah';
 
   return (
-    <div className="backup-center-container">
+    <div className="backup-center-container fade-in">
       {/* KPI Cards */}
       <div className="kpi-grid" style={{ marginBottom: '24px' }}>
         <div className="glass-card kpi-card">

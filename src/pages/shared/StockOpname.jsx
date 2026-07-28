@@ -186,7 +186,7 @@ export default function StockOpname() {
   }), [opnameItems]);
 
   return (
-    <div>
+    <div className="fade-in">
       {/* Step 1: Initialize Opname */}
       {step === 1 && (
         <div className="glass-card" style={{ maxWidth: '520px', margin: '40px auto', padding: '32px' }}>

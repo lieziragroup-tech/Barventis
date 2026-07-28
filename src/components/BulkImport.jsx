@@ -454,10 +454,27 @@ export default function BulkImport({
             </div>
             <h4 style={{ color: 'var(--text-primary)', fontSize: '1.05rem', fontWeight: 600, marginBottom: '6px' }}>Import Berhasil!</h4>
             {importResult && (
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.84rem', marginBottom: '24px' }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.84rem', marginBottom: importResult.failed > 0 ? '14px' : '24px' }}>
                 <strong style={{ color: 'var(--success)' }}>{importResult.success}</strong> baris berhasil diimport
                 {importResult.failed > 0 && <>, <strong style={{ color: 'var(--danger)' }}>{importResult.failed}</strong> baris gagal</>}.
               </p>
+            )}
+            {importResult && importResult.failed > 0 && Array.isArray(importResult.errors) && importResult.errors.length > 0 && (
+              <div style={{
+                textAlign: 'left', marginBottom: '20px', background: 'var(--danger-glow)',
+                border: '1px solid rgba(220,38,38,0.15)', borderRadius: 'var(--radius-lg)',
+                padding: '12px 14px', maxHeight: '220px', overflowY: 'auto'
+              }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
+                  <AlertTriangle size={15} style={{ color: 'var(--danger)' }} />
+                  <span style={{ color: 'var(--danger-text)', fontWeight: 600, fontSize: '0.82rem' }}>Detail Baris Gagal</span>
+                </div>
+                {importResult.errors.map((err, i) => (
+                  <p key={i} style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', margin: '2px 0 2px 23px', lineHeight: 1.4 }}>
+                    • <strong>{err.row || '(tanpa nama)'}</strong>: {err.error}
+                  </p>
+                ))}
+              </div>
             )}
             <button onClick={handleClose} className="btn btn-primary" style={{ padding: '9px 28px', fontSize: '0.84rem', borderRadius: 'var(--radius-md)' }}>Selesai</button>
           </div>

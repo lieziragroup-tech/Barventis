@@ -201,7 +201,7 @@ export default function BaristaReport() {
   } : null;
 
   return (
-    <div style={{ padding: '20px', maxWidth: 1200, margin: '0 auto' }}>
+    <div className="fade-in" style={{ padding: '20px', maxWidth: 1200, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>

@@ -89,7 +89,7 @@ export default function Dashboard() {
   const tooltipStyle = { background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', boxShadow: 'var(--card-shadow)' };
 
   return (
-    <div>
+    <div className="fade-in">
       {/* KPI Cards */}
       <div className="kpi-grid">
         <div className="glass-card kpi-card">

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import {
   FileSpreadsheet, FileText, CheckCircle, AlertTriangle,
-  TrendingDown, TrendingUp, Info, Calendar, Loader
+  TrendingDown, TrendingUp, Info, Calendar, Loader, ChevronDown
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { formatIDR } from '../../services/costUtils';
@@ -19,6 +19,7 @@ export default function CostControl() {
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
 
 
@@ -91,75 +92,142 @@ export default function CostControl() {
     return opts;
   }, []);
 
-  // Export to Excel
-  const handleExportExcel = async () => {
+  // Export Excel Lengkap (Summary + SO Fisik)
+  const handleExportExcel = async (type = 'ALL') => {
     const XLSX = await getXLSX();
     const summaryData = [
       { 'Item': 'Total Stock Awal (Opening)', 'Value (IDR)': openingStock },
       { 'Item': 'Total Pembelian (PO)', 'Value (IDR)': totalPembelian },
       { 'Item': 'Total Stock Akhir (Closing)', 'Value (IDR)': closingStock },
       { 'Item': 'Total Waste / Kerugian (Spoilage, Broken)', 'Value (IDR)': wasteValuation },
-      { 'Item': 'Total Pemakaian (COGS + 5% Overhead)', 'Value (IDR)': pemakaianBulan },
+      { 'Item': 'Total Pemakaian (COGS Aktual + Overhead)', 'Value (IDR)': pemakaianBulan },
       { 'Item': 'Total Sales Beverage', 'Value (IDR)': totalSalesBeverage },
       { 'Item': 'Beverage Cost %', 'Value (IDR)': `${beverageCostPct.toFixed(2)}%` },
       { 'Item': 'Status', 'Value (IDR)': statusLabel }
     ];
     
-    const dailyData = dailyColumns.map(row => ({
-      'Date': row.date,
-      'Purchases (IDR)': row.purchase,
-      'Sales (IDR)': row.sales,
-      'Purchase/Sales %': row.sales > 0 ? ((row.purchase / row.sales) * 100).toFixed(1) : '0.0'
+    const opnameData = (reportData?.detailed_opname_items || []).map((item, idx) => ({
+      'NO': idx + 1,
+      'NAMA ITEM': item.name,
+      'KATEGORI': item.category,
+      'UNIT': item.unit,
+      'FULL PACK': item.full_pack,
+      'STOK SISTEM': item.systemQty,
+      'STOK FISIK': item.physicalQty,
+      'VARIANCE': item.variance,
+      'HARGA BELI': item.price,
+      'TOTAL VALUASI': item.totalValuation,
+      'SUPPLIER': item.supplier
     }));
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), 'Cost Control Summary');
-    if (dailyData.length > 0) {
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dailyData), 'Daily Breakdown');
+
+    if (type === 'ALL' || type === 'SUMMARY') {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), 'Cost Control Summary');
+      const dailyData = dailyColumns.map(row => ({
+        'Date': row.date,
+        'Purchases (IDR)': row.purchase,
+        'Sales (IDR)': row.sales,
+        'Purchase/Sales %': row.sales > 0 ? ((row.purchase / row.sales) * 100).toFixed(1) : '0.0'
+      }));
+      if (dailyData.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dailyData), 'Daily Breakdown');
     }
-    XLSX.writeFile(wb, `UMATIS_CostControl_${period}.xlsx`);
+
+    if (type === 'ALL' || type === 'SO') {
+      if (opnameData.length > 0) {
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(opnameData), 'Stock Opname Fisik');
+      }
+    }
+
+    const filename = type === 'ALL' ? `Laporan_Lengkap_SO_COGS_${period}.xlsx` : type === 'SUMMARY' ? `CostControl_Summary_${period}.xlsx` : `StockOpname_Fisik_${period}.xlsx`;
+    XLSX.writeFile(wb, filename);
+    setShowExportMenu(false);
   };
 
-  // Print PDF
-  const handlePrintPDF = () => {
+  // Print PDF Lengkap
+  const handlePrintPDF = (type = 'ALL') => {
+    const opnameItems = reportData?.detailed_opname_items || [];
     const printHTML = `
-      <html><head><title>UMATIS Cost Control - ${period}</title>
-      <style>body{font-family:Arial,sans-serif;padding:30px;color:#333;font-size:13px}
-      h1{font-size:20px;margin-bottom:4px}h2{font-size:16px;color:#555;margin:20px 0 10px}
+      <html><head><title>UMATIS Laporan LENGKAP - ${period}</title>
+      <style>body{font-family:Arial,sans-serif;padding:30px;color:#333;font-size:12px}
+      h1{font-size:22px;margin-bottom:4px;color:#111;text-align:center;}
+      h2{font-size:16px;color:#444;margin:30px 0 10px;border-bottom:2px solid #eee;padding-bottom:5px;}
+      p.subtitle{text-align:center;color:#666;font-size:14px;margin-top:0;}
       table{width:100%;border-collapse:collapse;margin:10px 0}
-      th,td{border:1px solid #ddd;padding:8px;text-align:left}
-      th{background:#f5f5f5;font-size:12px}
+      th,td{border:1px solid #ddd;padding:6px 8px;text-align:left}
+      th{background:#f5f5f5;font-size:11px;font-weight:bold;text-transform:uppercase;}
       .highlight{font-weight:bold;font-size:18px;color:${beverageCostPct <= 27 ? '#2ecc71' : '#e74c3c'}}
       .summary-row{background:#f9f9f9;font-weight:bold}
+      .text-right{text-align:right;}
+      .danger{color:#e74c3c;}
+      @media print { @page { size: landscape; margin: 10mm; } }
       </style></head><body>
+      
       <h1>UMATIS RESTO & VENUE</h1>
-      <p>Monthly Cost Control Report — Period: <strong>${period}</strong></p>
-      <h2>HPP Beverage: <span class="highlight">${beverageCostPct.toFixed(2)}%</span> ${beverageCostPct <= 27 ? '✓ Target Aman' : '⚠ Above Target'}</h2>
-      <table>
-        <tr><td>Total Stock Awal (Opening)</td><td style="text-align:right">Rp ${openingStock.toLocaleString('id-ID')}</td></tr>
-        <tr><td>+ Total Pembelian (PO)</td><td style="text-align:right">Rp ${totalPembelian.toLocaleString('id-ID')}</td></tr>
-        <tr><td>- Total Stock Akhir (Closing)</td><td style="text-align:right">Rp ${closingStock.toLocaleString('id-ID')}</td></tr>
-        <tr><td style="color:#e74c3c">⚠ Kerugian Waste (Basi/Rusak/Hilang)</td><td style="text-align:right;color:#e74c3c">Rp ${wasteValuation.toLocaleString('id-ID')}</td></tr>
-        <tr class="summary-row"><td>= Total Pemakaian (COGS + 5% Overhead)</td><td style="text-align:right">Rp ${pemakaianBulan.toLocaleString('id-ID')}</td></tr>
-        <tr><td>Total Sales Beverage</td><td style="text-align:right">Rp ${totalSalesBeverage.toLocaleString('id-ID')}</td></tr>
+      <p class="subtitle">Laporan Bulanan ${type === 'ALL' ? 'Cost Control & Stock Opname' : 'Cost Control'} — Periode: <strong>${period}</strong></p>
+      
+      ${(type === 'ALL' || type === 'SUMMARY') ? `
+      <h2>Ringkasan HPP & COGS</h2>
+      <p style="font-size:14px;">Status HPP Beverage: <span class="highlight">${beverageCostPct.toFixed(2)}%</span> ${beverageCostPct <= 27 ? '✓ Target Aman' : '⚠ Di Atas Target'}</p>
+      <table style="max-width:500px;">
+        <tr><td>Total Stock Awal (Opening)</td><td class="text-right">Rp ${openingStock.toLocaleString('id-ID')}</td></tr>
+        <tr><td>+ Total Pembelian (PO Masuk)</td><td class="text-right">Rp ${totalPembelian.toLocaleString('id-ID')}</td></tr>
+        <tr><td>- Total Stock Akhir Fisik (Closing SO)</td><td class="text-right">Rp ${closingStock.toLocaleString('id-ID')}</td></tr>
+        <tr><td class="danger">⚠ Kerugian / Waste (Basi, Hilang)</td><td class="text-right danger">Rp ${wasteValuation.toLocaleString('id-ID')}</td></tr>
+        <tr class="summary-row"><td>= Total Pemakaian (COGS Aktual + Overhead)</td><td class="text-right">Rp ${pemakaianBulan.toLocaleString('id-ID')}</td></tr>
+        <tr><td>Total Sales Beverage (Pendapatan POS)</td><td class="text-right">Rp ${totalSalesBeverage.toLocaleString('id-ID')}</td></tr>
       </table>
-      ${dailyColumns.length > 0 ? `
-      <h2>Daily Breakdown</h2>
+      ` : ''}
+
+      ${(type === 'ALL' && opnameItems.length > 0) ? `
+      <div style="page-break-before: always;"></div>
+      <h2>Detail Fisik Stock Opname (SO)</h2>
       <table>
-        <thead><tr><th>Date</th><th style="text-align:right">Purchases</th><th style="text-align:right">Sales</th><th style="text-align:right">Beli/Jual %</th></tr></thead>
-        <tbody>${dailyColumns.map(r => `<tr><td>${r.date}</td><td style="text-align:right">Rp ${r.purchase.toLocaleString('id-ID')}</td><td style="text-align:right">Rp ${r.sales.toLocaleString('id-ID')}</td><td style="text-align:right">${r.sales > 0 ? ((r.purchase / r.sales) * 100).toFixed(1) : '0.0'}%</td></tr>`).join('')}</tbody>
-      </table>` : ''}
-      <p style="margin-top:30px;font-size:11px;color:#999">Generated by UMATIS Inventory System — ${new Date().toLocaleString('id-ID')}</p>
+        <thead>
+          <tr>
+            <th>No</th>
+            <th>Nama Item</th>
+            <th>Kategori</th>
+            <th>Sistem</th>
+            <th>Fisik</th>
+            <th>Selisih</th>
+            <th>Unit</th>
+            <th class="text-right">Harga Beli</th>
+            <th class="text-right">Total Valuasi Fisik</th>
+            <th>Supplier</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${opnameItems.map((r, i) => `
+            <tr>
+              <td>${i + 1}</td>
+              <td>${r.name}</td>
+              <td>${r.category}</td>
+              <td>${r.systemQty}</td>
+              <td style="font-weight:bold;">${r.physicalQty}</td>
+              <td class="${r.variance < 0 ? 'danger' : ''}">${r.variance}</td>
+              <td>${r.unit}</td>
+              <td class="text-right">Rp ${r.price.toLocaleString('id-ID')}</td>
+              <td class="text-right">Rp ${r.totalValuation.toLocaleString('id-ID')}</td>
+              <td>${r.supplier}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      ` : ''}
+      
+      <p style="margin-top:40px;font-size:10px;color:#999;text-align:right;">Dicetak oleh Sistem Barventis pada ${new Date().toLocaleString('id-ID')}</p>
       </body></html>`;
     const w = window.open('', '_blank');
     if (!w) return;
     w.document.write(printHTML);
     w.document.close();
     w.print();
+    setShowExportMenu(false);
   };
 
   return (
-    <div>
+    <div className="fade-in">
       {/* Period Picker */}
       <div className="glass-card" style={{ marginBottom: '24px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
@@ -176,23 +244,37 @@ export default function CostControl() {
             ))}
           </select>
         </div>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative' }}>
           <button 
-            className="btn btn-secondary" 
-            style={{ display: 'flex', gap: '6px', padding: '8px 14px', fontSize: '0.8rem' }} 
-            onClick={handleExportExcel}
+            className="btn btn-primary" 
+            style={{ display: 'flex', gap: '8px', padding: '10px 18px', fontSize: '0.85rem', fontWeight: 600, alignItems: 'center' }} 
+            onClick={() => setShowExportMenu(!showExportMenu)}
             disabled={loading || !reportData}
           >
-            <FileSpreadsheet size={14} /> Export Excel
+            Export & Cetak Laporan <ChevronDown size={14} />
           </button>
-          <button 
-            className="btn btn-secondary" 
-            style={{ display: 'flex', gap: '6px', padding: '8px 14px', fontSize: '0.8rem' }} 
-            onClick={handlePrintPDF}
-            disabled={loading || !reportData}
-          >
-            <FileText size={14} /> Print PDF
-          </button>
+          
+          {showExportMenu && (
+            <div className="glass-card" style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', minWidth: '280px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', zIndex: 10, boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', paddingLeft: '8px' }}>All-In-One (Lengkap)</div>
+              <button className="btn btn-secondary" style={{ textAlign: 'left', justifyContent: 'flex-start', border: 'none', background: 'transparent' }} onClick={() => handlePrintPDF('ALL')}>
+                <FileText size={14} style={{ color: 'var(--danger)' }} /> Cetak PDF Lengkap (COGS + Opname Fisik)
+              </button>
+              <button className="btn btn-secondary" style={{ textAlign: 'left', justifyContent: 'flex-start', border: 'none', background: 'transparent' }} onClick={() => handleExportExcel('ALL')}>
+                <FileSpreadsheet size={14} style={{ color: '#2ecc71' }} /> Export Excel Lengkap (2 Sheets)
+              </button>
+              
+              <div style={{ height: '1px', background: 'var(--border)', margin: '4px 0' }}></div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', paddingLeft: '8px' }}>Eksport Terpisah</div>
+              
+              <button className="btn btn-secondary" style={{ textAlign: 'left', justifyContent: 'flex-start', border: 'none', background: 'transparent', fontSize: '0.8rem' }} onClick={() => handlePrintPDF('SUMMARY')}>
+                <FileText size={14} /> Hanya PDF Ringkasan COGS
+              </button>
+              <button className="btn btn-secondary" style={{ textAlign: 'left', justifyContent: 'flex-start', border: 'none', background: 'transparent', fontSize: '0.8rem' }} onClick={() => handleExportExcel('SO')}>
+                <FileSpreadsheet size={14} /> Hanya Excel Stock Opname
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -250,7 +332,7 @@ export default function CostControl() {
             ].map((card, i) => (
               <div key={i} className="glass-card" style={{ padding: '16px 20px', borderLeft: card.accent ? '3px solid var(--accent)' : (card.warning ? '3px solid var(--danger)' : 'none') }}>
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>{card.label}</div>
-                <div style={{ fontWeight: (card.accent || card.warning) ? 800 : 700, fontSize: '1.05rem', color: card.accent ? 'var(--accent)' : (card.warning ? 'var(--danger)' : 'white') }}>{card.value}</div>
+                <div style={{ fontWeight: (card.accent || card.warning) ? 800 : 700, fontSize: '1.05rem', color: card.accent ? 'var(--accent)' : (card.warning ? 'var(--danger)' : 'var(--text-primary)') }}>{card.value}</div>
                 <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '4px' }}>{card.sub}</div>
               </div>
             ))}

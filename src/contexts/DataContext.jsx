@@ -118,17 +118,17 @@ export const DataProvider = ({ children }) => {
     await fetchAllData();
   }, [fetchAllData]);
 
-  const handleDeleteItem = useCallback(async (itemName) => {
+  const handleDeleteItem = useCallback(async (itemName, force = false) => {
     const match = stock.find(item => item.name === itemName);
     if (!match) return;
-    await api.deleteMaterial(match.id);
+    await api.deleteMaterial(match.id, force);
     await fetchAllData();
   }, [stock, fetchAllData]);
 
-  const handleProcessPosSales = useCallback(async (mappedSales, filename) => {
+  const handleProcessPosSales = useCallback(async (mappedSales, options) => {
     try {
       // mappedSales structure dari PosUpload: [{ recipe_id, qty, price }, ...]
-      await api.processPOSSync(mappedSales);
+      await api.processPOSSync(mappedSales, options);
       await fetchAllData();
       showToast('POS data synced successfully & stock deducted.', 'success');
     } catch (error) {

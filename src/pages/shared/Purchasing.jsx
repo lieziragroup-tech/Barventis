@@ -20,24 +20,11 @@ export default function Purchasing() {
   const [purchases, setPurchases] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
-  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [historyLoading, setHistoryLoading] = useState(false);
-  const debounceRef = useRef(null);
 
   const [newPurchase, setNewPurchase] = useState({ date: new Date().toISOString().split('T')[0], material_id: '', supplier_id: '', qty: '', unit: 'pck', unit_price: '', notes: '' });
   const [notification, setNotification] = useState(null);
-
-  // Debounce search input -> actual search query (400ms), reset to page 1
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      setSearch(searchInput);
-      setPage(1);
-    }, 400);
-    return () => clearTimeout(debounceRef.current);
-  }, [searchInput]);
-
   const fetchHistory = useCallback(async (targetPage, targetSearch) => {
     setHistoryLoading(true);
     try {
@@ -79,6 +66,7 @@ export default function Purchasing() {
   // --- Supplier Handlers ---
   const handleSaveSupplier = async (e) => {
     e.preventDefault();
+    if (!window.confirm(`Konfirmasi simpan data supplier ${editingSupplier.name}?`)) return;
     try {
       await api.saveSupplier(editingSupplier);
       setEditSupplier(null);
@@ -103,10 +91,11 @@ export default function Purchasing() {
 
   const handleSavePurchase = async (e) => {
     e.preventDefault();
+    if (!window.confirm(`Konfirmasi penambahan pembelian baru?`)) return;
     try {
-      await api.createPurchaseEntry(newPurchase);
+      await api.createPurchaseEntry({ ...newPurchase, qty: parseFloat(newPurchase.qty), unit_price: parseFloat(newPurchase.unit_price) });
       setNewPurchase({ date: new Date().toISOString().split('T')[0], material_id: '', supplier_id: '', qty: '', unit: 'pck', unit_price: '', notes: '' });
-      setNotification({ type: 'success', text: 'Pembelian tersimpan dan stok ter-update.' });
+      setNotification({ type: 'success', text: 'Pembelian berhasil dicatat.' });
       setPage(1);
       fetchHistory(1, search);
     } catch (err) {
@@ -213,15 +202,15 @@ export default function Purchasing() {
           <div className="glass-card purchasing-history-panel" style={{ flex: '2', padding: '24px' }}>
             <div className="paged-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
               <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Riwayat Pembelian Harian</h3>
-              <div style={{ position: 'relative', minWidth: '220px' }}>
-                <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <div style={{ position: 'relative', width: '250px' }}>
+                <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="Cari bahan / catatan..."
-                  value={searchInput}
-                  onChange={e => setSearchInput(e.target.value)}
-                  style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
+                  placeholder="Cari bahan/supplier..."
+                  style={{ paddingLeft: '36px' }}
+                  value={search}
+                  onChange={e => { setSearch(e.target.value); setPage(1); }}
                 />
               </div>
             </div>
@@ -264,8 +253,8 @@ export default function Purchasing() {
 
       {/* Supplier Modal */}
       {editingSupplier && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="glass-card" style={{ width: '400px', maxWidth: 'calc(100vw - 32px)', padding: '24px' }}>
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="glass-card modal-card" style={{ width: '400px', maxWidth: 'calc(100vw - 32px)', padding: '24px' }}>
             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '20px' }}>{editingSupplier.id ? 'Edit' : 'Tambah'} Supplier</h3>
             <form onSubmit={handleSaveSupplier} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="form-group"><label className="form-label">Nama Supplier</label><input type="text" required className="form-control" value={editingSupplier.name} onChange={e => setEditSupplier({...editingSupplier, name: e.target.value})} /></div>

@@ -39,7 +39,6 @@ export default function Invoicing() {
 
   const INVOICES_PAGE_SIZE = 15;
   const [invoicesPage, setInvoicesPage] = useState(1);
-  useEffect(() => { setInvoicesPage(1); }, [search, statusFilter]);
   const paginatedInvoices = useMemo(() => {
     const start = (invoicesPage - 1) * INVOICES_PAGE_SIZE;
     return filteredInvoices.slice(start, start + INVOICES_PAGE_SIZE);
@@ -76,6 +75,8 @@ export default function Invoicing() {
     if (!invSupplier.trim()) return;
     const validItems = invItems.filter(i => i.item_name && i.qty > 0);
     if (validItems.length === 0) return;
+
+    if (!window.confirm(`Konfirmasi pembuatan invoice untuk supplier ${invSupplier}?`)) return;
 
     // Note: invoice_no, total, status & date are assigned authoritatively by the
     // server (api.createInvoice → INV-YYYYMMDD-XXX with a UNIQUE constraint), so we
@@ -125,27 +126,71 @@ export default function Invoicing() {
   const handlePrintInvoice = (inv) => {
     const printContent = `
       <html><head><title>Invoice ${escapeHTML(inv.invoice_no)}</title>
-      <style>body{font-family:Arial,sans-serif;padding:40px;color:#333}
-      h1{font-size:24px}table{width:100%;border-collapse:collapse;margin:20px 0}
-      th,td{border:1px solid #ddd;padding:10px;text-align:left}
-      th{background:#f5f5f5}
-      .total{font-size:18px;font-weight:bold;text-align:right;margin-top:20px}
+      <style>
+        body { font-family: 'Inter', Arial, sans-serif; padding: 40px; color: #1a1a1a; max-width: 800px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
+        .brand h1 { font-size: 28px; margin: 0; color: #2563eb; letter-spacing: -0.5px; }
+        .brand p { margin: 5px 0 0 0; color: #64748b; font-size: 14px; }
+        .invoice-details { text-align: right; }
+        .invoice-details h2 { margin: 0 0 5px 0; font-size: 20px; color: #0f172a; }
+        .invoice-details p { margin: 2px 0; color: #475569; font-size: 14px; }
+        .supplier-box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px; margin-bottom: 30px; }
+        .supplier-box h3 { margin: 0 0 10px 0; font-size: 14px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+        .supplier-box p { margin: 0; font-size: 16px; font-weight: 600; color: #0f172a; }
+        table { width: 100%; border-collapse: separate; border-spacing: 0; margin: 0 0 30px 0; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+        th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+        th { background: #f8fafc; font-weight: 600; color: #475569; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+        td { font-size: 14px; color: #334155; }
+        tr:last-child td { border-bottom: none; }
+        .amount-col { text-align: right; }
+        .total-box { display: flex; justify-content: flex-end; }
+        .total-content { background: #f8fafc; padding: 20px 30px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 250px; }
+        .total-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; color: #64748b; }
+        .total-row.final { border-top: 2px solid #e2e8f0; margin-top: 10px; padding-top: 10px; font-size: 18px; font-weight: 700; color: #0f172a; }
+        .notes { margin-top: 40px; font-size: 13px; color: #64748b; background: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px 16px; }
+        @media print { body { padding: 0; } .supplier-box, .total-content { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
       </style></head><body>
-      <h1>BARVENTIS</h1>
-      <h2>Purchase Invoice: ${escapeHTML(inv.invoice_no)}</h2>
-      <p><strong>Supplier:</strong> ${escapeHTML(inv.supplier)}</p>
-      <p><strong>Date:</strong> ${escapeHTML(inv.date)}</p>
-      <p><strong>Status:</strong> ${escapeHTML(inv.status)}</p>
-      ${inv.notes ? `<p><strong>Notes:</strong> ${escapeHTML(inv.notes)}</p>` : ''}
+      <div class="header">
+        <div class="brand">
+          <h1>BARVENTIS</h1>
+          <p>Sistem Manajemen Gudang & HPP</p>
+        </div>
+        <div class="invoice-details">
+          <h2>Purchase Order</h2>
+          <p><strong>No:</strong> ${escapeHTML(inv.invoice_no)}</p>
+          <p><strong>Date:</strong> ${escapeHTML(inv.date)}</p>
+          <p><strong>Status:</strong> ${escapeHTML(inv.status)}</p>
+        </div>
+      </div>
+      <div class="supplier-box">
+        <h3>Kepada / Supplier</h3>
+        <p>${escapeHTML(inv.supplier)}</p>
+      </div>
       <table>
-        <thead><tr><th>#</th><th>Item Name</th><th>Qty</th><th>Unit</th><th>Price/Unit</th><th>Subtotal</th></tr></thead>
+        <thead><tr>
+          <th style="width: 5%">#</th>
+          <th style="width: 40%">Nama Item</th>
+          <th style="width: 15%">Kuantiti</th>
+          <th style="width: 20%" class="amount-col">Harga Satuan</th>
+          <th style="width: 20%" class="amount-col">Subtotal</th>
+        </tr></thead>
         <tbody>${(inv.items || []).map((item, i) => `
-          <tr><td>${i + 1}</td><td>${escapeHTML(item.item_name || '-')}</td><td>${escapeHTML(item.qty)}</td><td>${escapeHTML(item.unit || '')}</td>
-          <td>Rp ${(item.unit_price || 0).toLocaleString('id-ID')}</td>
-          <td>Rp ${((item.qty || 0) * (item.unit_price || 0)).toLocaleString('id-ID')}</td></tr>`).join('')}
+          <tr>
+            <td>${i + 1}</td>
+            <td style="font-weight: 500">${escapeHTML(item.item_name || '-')}</td>
+            <td>${escapeHTML(item.qty)} ${escapeHTML(item.unit || '')}</td>
+            <td class="amount-col">Rp ${(item.unit_price || 0).toLocaleString('id-ID')}</td>
+            <td class="amount-col" style="font-weight: 600">Rp ${((item.qty || 0) * (item.unit_price || 0)).toLocaleString('id-ID')}</td>
+          </tr>`).join('')}
         </tbody>
       </table>
-      <div class="total">TOTAL: Rp ${(inv.total || 0).toLocaleString('id-ID')}</div>
+      <div class="total-box">
+        <div class="total-content">
+          <div class="total-row"><span>Subtotal:</span> <span>Rp ${(inv.total || 0).toLocaleString('id-ID')}</span></div>
+          <div class="total-row final"><span>TOTAL:</span> <span>Rp ${(inv.total || 0).toLocaleString('id-ID')}</span></div>
+        </div>
+      </div>
+      ${inv.notes ? `<div class="notes"><strong>Catatan:</strong><br/>${escapeHTML(inv.notes)}</div>` : ''}
       </body></html>`;
 
     const w = window.open('', '_blank');
@@ -163,15 +208,15 @@ export default function Invoicing() {
   const totalValue = useMemo(() => invoices.reduce((a, i) => a + (i.total || 0), 0), [invoices]);
 
   return (
-    <div>
+    <div className="fade-in">
       {/* Controls */}
       <div className="glass-card" style={{ marginBottom: '24px', padding: '20px' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
           <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
             <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-            <input type="text" placeholder="Search invoices..." className="form-control" style={{ paddingLeft: '44px' }} value={search} onChange={e => setSearch(e.target.value)} />
+            <input type="text" placeholder="Search invoices..." className="form-control" style={{ paddingLeft: '44px' }} value={search} onChange={e => { setSearch(e.target.value); setInvoicesPage(1); }} />
           </div>
-          <select className="form-control" style={{ width: '160px' }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+          <select className="form-control" style={{ width: '160px' }} value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setInvoicesPage(1); }}>
             <option value="ALL">All Status</option>
             <option value="DRAFT">Draft</option>
             <option value="SENT">Sent</option>
@@ -299,6 +344,9 @@ export default function Invoicing() {
               </div>
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                 {statusBadge(viewInvoice.status)}
+                <button className="btn btn-secondary" style={{ padding: '6px 12px', borderRadius: 'var(--radius-md)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => handlePrintInvoice(viewInvoice)}>
+                  <Download size={14} /> Cetak / PDF
+                </button>
                 <button style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => setViewInvoice(null)}><X size={16} /></button>
               </div>
             </div>

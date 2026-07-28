@@ -47,8 +47,8 @@ describe('calculateIngredientCost', () => {
     expect(calculateIngredientCost(material, 3, 'gr')).toBe(30000);
   });
 
-  it('uses new_price when available', () => {
+  it('uses price for calculation', () => {
     const material = { new_price: 20000, price: 10000, unit: 'pcs' };
-    expect(calculateIngredientCost(material, 2, 'pcs')).toBe(40000);
+    expect(calculateIngredientCost(material, 2, 'pcs')).toBe(20000);
   });
 });

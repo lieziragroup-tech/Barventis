@@ -14,7 +14,7 @@ import { useData } from '../../contexts/DataContext';
 import { formatIDR } from '../../services/costUtils';
 
 export default function PosUpload() {
-  const { recipes, handleProcessPosSales } = useData();
+  const { recipes, handleProcessPosSales, fetchAllData } = useData();
   const onProcessPosSales = handleProcessPosSales;
   const [dragActive, setDragActive] = useState(false);
   const [rawFile, setRawFile] = useState(null);
@@ -23,10 +23,32 @@ export default function PosUpload() {
   const [customMappings, setCustomMappings] = useState({});
   const mappedSales = React.useMemo(() => {
     if (!parsedData?.sales) return [];
-    const recipeMap = {};
-    (recipes || []).forEach(r => { recipeMap[r.menu_name] = r; });
+    
+    const nameMap = new Map();
+    const codeMap = new Map();
+    const customMap = new Map();
+    
+    Object.entries(customMappings).forEach(([k, v]) => {
+      customMap.set(String(k).toLowerCase().trim(), v);
+    });
+    
+    (recipes || []).forEach(r => {
+      if (r.menu_name) nameMap.set(String(r.menu_name).toLowerCase().trim(), r);
+      if (r.pos_code) codeMap.set(String(r.pos_code).toLowerCase().trim(), r);
+    });
+
     return parsedData.sales.map(row => {
-      const recipe = recipeMap[row.menu_name] || customMappings[row.menu_name];
+      const rowName = String(row.menu_name || '').toLowerCase().trim();
+      const rowCode = String(row.menu_code || '').toLowerCase().trim();
+      
+      let recipe = customMap.get(rowName);
+      if (!recipe && rowCode && rowCode !== '-' && codeMap.has(rowCode)) {
+        recipe = codeMap.get(rowCode);
+      }
+      if (!recipe && nameMap.has(rowName)) {
+        recipe = nameMap.get(rowName);
+      }
+      
       return {
         salesDate: row.sales_date,
         menuName: row.menu_name,
@@ -41,6 +63,53 @@ export default function PosUpload() {
       };
     });
   }, [parsedData, recipes, customMappings]);
+
+  // Bulk Auto-Create Modal States
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkSelection, setBulkSelection] = useState({}); // { [menuName]: { selected, price, category, posCode } }
+
+  const openBulkModal = (unmappedItems) => {
+    const initial = {};
+    unmappedItems.forEach(item => {
+      initial[item.menuName] = {
+        selected: true,
+        price: item.price || 0,
+        category: 'NON-KOPI',
+        posCode: item.menuCode !== '-' ? item.menuCode : ''
+      };
+    });
+    setBulkSelection(initial);
+    setShowBulkModal(true);
+  };
+
+  const handleBulkSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const rowsToImport = Object.entries(bulkSelection)
+        .filter(([_, data]) => data.selected)
+        .map(([name, data]) => ({
+          menu_name: name,
+          pos_code: data.posCode || null,
+          category: data.category,
+          selling_price: data.price,
+        }));
+      
+      if (rowsToImport.length === 0) {
+        throw new Error("Pilih minimal satu menu untuk dibuat.");
+      }
+
+      await api.bulkImportRecipes(rowsToImport);
+      if (fetchAllData) await fetchAllData();
+      
+      setUploadStatus({ type: 'success', message: `Berhasil membuat ${rowsToImport.length} resep baru!` });
+      setShowBulkModal(false);
+    } catch (err) {
+      setUploadStatus({ type: 'error', message: err.message || 'Gagal membuat resep massal.' });
+    } finally {
+      setLoading(false);
+    }
+  };
   const [showMappingModal, setShowMappingModal] = useState(false);
   const [mappingMenuName, setMappingMenuName] = useState('');
   const [selectedRecipeName, setSelectedRecipeName] = useState('');
@@ -242,16 +311,17 @@ export default function PosUpload() {
           }
         }
 
-        const todayStr = new Date().toISOString().split('T')[0];
+        const defaultDateStr = `${periodYear}-${periodMonth.toString().padStart(2, '0')}-01`;
+        
         const parseExcelDate = (dVal) => {
-          if (!dVal) return todayStr;
+          if (!dVal) return defaultDateStr;
           if (typeof dVal === 'number') {
             const utcMs = Math.round((dVal - 25569) * 86400 * 1000);
             const d = new Date(utcMs);
             return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
           }
           const parsed = new Date(dVal);
-          return isNaN(parsed.getTime()) ? todayStr : parsed.toISOString().split('T')[0];
+          return isNaN(parsed.getTime()) ? defaultDateStr : parsed.toISOString().split('T')[0];
         };
 
         const salesRows = [];
@@ -273,7 +343,7 @@ export default function PosUpload() {
           const rawTotal = row[colMap.total];
           const total = parseFloat(rawTotal) || 0;
           
-          let dateStr = todayStr;
+          let dateStr = defaultDateStr;
           if (colMap.date !== undefined && row[colMap.date]) {
             dateStr = parseExcelDate(row[colMap.date]);
           }
@@ -343,12 +413,19 @@ export default function PosUpload() {
       }
       
       const payload = validSales.map(s => ({
+        salesDate: s.salesDate,
         recipe_id: s.recipe_id,
         qty: s.qty,
-        price: s.price
+        price: s.price,
+        total: s.total
       }));
 
-      await onProcessPosSales(payload, parsedData.filename);
+      await onProcessPosSales(payload, { 
+        filename: parsedData.filename, 
+        mode: parsedData.uploadMode || 'append',
+        periodMonth: parsedData.periodMonth,
+        periodYear: parsedData.periodYear
+      });
       await confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
       setRawFile(null);
       setParsedData(null);
@@ -368,7 +445,7 @@ export default function PosUpload() {
   const unmappedUniqueNames = [...new Set(unmappedItems.map(s => s.menuName))];
 
   return (
-    <div>
+    <div className="fade-in">
       {/* POS Template Configuration Dropdown */}
       <div style={{ 
         display: 'flex', 
@@ -436,29 +513,32 @@ export default function PosUpload() {
         <div style={{
           padding: '20px', borderRadius: 'var(--radius-lg)', marginBottom: '20px',
           background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          flexWrap: 'wrap', gap: '14px'
+          display: 'flex', flexDirection: 'column', gap: '14px'
         }}>
-          <div style={{ minWidth: 0, flex: '1 1 240px' }}>
-            <h4 style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--warning)', marginBottom: '4px' }}>Data Duplikat Terdeteksi</h4>
+          <div>
+            <h4 style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--warning)', marginBottom: '4px' }}>Data POS Terdeteksi (Periode {duplicateInfo.periodStr})</h4>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              Data POS untuk periode {duplicateInfo.periodStr} sudah ada di sistem. Tetap upload dan timpa data lama?
+              Sistem mendeteksi bahwa sudah ada data POS untuk bulan ini. Jika ini adalah kelanjutan data (misal Upload Mingguan), pilih "Tambahkan". Jika Anda merevisi dan ingin mengulang data dari awal, pilih "Hapus & Timpa Baru".
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <button className="btn btn-secondary" onClick={() => { setDuplicateInfo(null); setUploadStatus(null); }}>Batal</button>
-            <button className="btn btn-warning" onClick={() => {
+            <button className="btn btn-primary" onClick={() => {
               setParsedData({
-                sales: duplicateInfo.sales,
-                filename: duplicateInfo.filename,
-                branchName: duplicateInfo.branchName,
-                totalQty: duplicateInfo.totalQty,
-                totalRevenue: duplicateInfo.totalRevenue,
-                periodStr: duplicateInfo.periodStr
+                ...duplicateInfo,
+                uploadMode: 'append'
               });
               setDuplicateInfo(null);
               setUploadStatus(null);
-            }}>Ya, Timpa</button>
+            }}>Tambahkan (Upload Mingguan)</button>
+            <button className="btn btn-warning" onClick={() => {
+              setParsedData({
+                ...duplicateInfo,
+                uploadMode: 'overwrite'
+              });
+              setDuplicateInfo(null);
+              setUploadStatus(null);
+            }}>Hapus & Timpa Baru</button>
           </div>
         </div>
       )}
@@ -568,6 +648,15 @@ export default function PosUpload() {
                     </button>
                   ))}
                 </div>
+                <div style={{ marginTop: '12px' }}>
+                  <button 
+                    className="btn btn-primary"
+                    onClick={() => openBulkModal(unmappedItems.filter((v,i,a)=>a.findIndex(t=>(t.menuName === v.menuName))===i))}
+                    style={{ fontSize: '0.85rem', display: 'flex', gap: '8px', alignItems: 'center' }}
+                  >
+                    <Sparkles size={14} /> Buat Massal Resep Baru (0 HPP)
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -667,12 +756,12 @@ export default function PosUpload() {
 
       {/* Manual Recipe Binding Modal */}
       {showMappingModal && (
-        <div style={{ 
+        <div className="modal-overlay" style={{ 
           position: 'fixed', top: '0', left: '0', right: '0', bottom: '0', 
           background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
         }}>
-          <div className="glass-card" style={{ width: '450px', maxWidth: 'calc(100vw - 32px)', padding: '28px', border: '1px solid var(--border-focus)' }}>
+          <div className="glass-card modal-card" style={{ width: '450px', maxWidth: 'calc(100vw - 32px)', padding: '28px', border: '1px solid var(--border-focus)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700 }}>Bind POS Menu to Recipe</h3>
               <button className="btn btn-secondary" style={{ padding: '4px', borderRadius: '50%' }} onClick={() => setShowMappingModal(false)}>
@@ -707,6 +796,124 @@ export default function PosUpload() {
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowMappingModal(false)}>Cancel</button>
                 <button type="submit" className="btn btn-primary">Bind Menu Item</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Auto-Create Modal */}
+      {showBulkModal && (
+        <div className="modal-overlay" style={{ 
+          position: 'fixed', top: '0', left: '0', right: '0', bottom: '0', 
+          background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
+        }}>
+          <div className="glass-card modal-card" style={{ width: '800px', maxWidth: '90vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: '28px', border: '1px solid var(--border-focus)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexShrink: 0 }}>
+              <div>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 700 }}>Buat Resep Baru secara Massal</h3>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Pilih menu POS yang ingin didaftarkan otomatis sebagai Master Resep (0 HPP).</p>
+              </div>
+              <button className="btn btn-secondary" style={{ padding: '4px', borderRadius: '50%' }} onClick={() => setShowBulkModal(false)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleBulkSubmit} style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
+              <div className="table-container" style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', marginBottom: '20px' }}>
+                <table className="custom-table" style={{ margin: 0 }}>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 2, background: 'var(--bg-tertiary)' }}>
+                    <tr>
+                      <th style={{ width: '40px', textAlign: 'center' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={Object.values(bulkSelection).every(v => v.selected)}
+                          onChange={e => {
+                            const val = e.target.checked;
+                            setBulkSelection(prev => {
+                              const next = { ...prev };
+                              Object.keys(next).forEach(k => next[k].selected = val);
+                              return next;
+                            });
+                          }}
+                        />
+                      </th>
+                      <th>Nama Menu (POS)</th>
+                      <th>Kode POS</th>
+                      <th>Kategori</th>
+                      <th style={{ textAlign: 'right' }}>Harga Jual</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(bulkSelection).map(([name, data]) => (
+                      <tr key={name}>
+                        <td style={{ textAlign: 'center' }}>
+                          <input 
+                            type="checkbox"
+                            checked={data.selected}
+                            onChange={e => setBulkSelection(prev => ({
+                              ...prev, [name]: { ...prev[name], selected: e.target.checked }
+                            }))}
+                          />
+                        </td>
+                        <td style={{ fontWeight: 600 }}>{name}</td>
+                        <td>
+                          <input 
+                            type="text"
+                            className="form-control"
+                            style={{ padding: '4px 8px', fontSize: '0.8rem', background: 'transparent' }}
+                            value={data.posCode}
+                            onChange={e => setBulkSelection(prev => ({
+                              ...prev, [name]: { ...prev[name], posCode: e.target.value }
+                            }))}
+                            placeholder="Kode POS (Opsional)"
+                          />
+                        </td>
+                        <td>
+                          <select 
+                            className="form-control"
+                            style={{ padding: '4px 8px', fontSize: '0.8rem', background: 'transparent' }}
+                            value={data.category}
+                            onChange={e => setBulkSelection(prev => ({
+                              ...prev, [name]: { ...prev[name], category: e.target.value }
+                            }))}
+                          >
+                            <option value="NON-KOPI">NON-KOPI</option>
+                            <option value="KOPI">KOPI</option>
+                            <option value="MOCKTAIL">MOCKTAIL</option>
+                            <option value="JUICE">JUICE</option>
+                            <option value="TEA">TEA</option>
+                            <option value="BEER">BEER</option>
+                          </select>
+                        </td>
+                        <td>
+                          <input 
+                            type="number"
+                            className="form-control"
+                            style={{ padding: '4px 8px', fontSize: '0.8rem', textAlign: 'right', background: 'transparent' }}
+                            value={data.price}
+                            onChange={e => setBulkSelection(prev => ({
+                              ...prev, [name]: { ...prev[name], price: e.target.value }
+                            }))}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                  Total terpilih: <strong style={{ color: 'var(--text-primary)' }}>{Object.values(bulkSelection).filter(v => v.selected).length}</strong> menu.
+                </span>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowBulkModal(false)} disabled={loading}>Batal</button>
+                  <button type="submit" className="btn btn-primary" disabled={loading}>
+                    {loading ? "Memproses..." : "Buat Resep Baru"}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

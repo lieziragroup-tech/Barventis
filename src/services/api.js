@@ -49,16 +49,110 @@ const logAudit = async (action, description) => {
 export { parsePackSize, calculateIngredientCost };
 
 export const api = {
-  processPOSSync: async (posDataArray) => {
+  processPOSSync: async (posDataArray, options = {}) => {
     try {
-      const { data, error } = await supabase.rpc('process_pos_sync_atomic', {
-        p_tenant_id: activeTenantId,
-        p_pos_data: posDataArray,
-        p_user_id: activeUserId
-      });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error);
-      return data;
+      if (!activeTenantId || !activeUserId) throw new Error("Missing active session.");
+      
+      const recipeIds = posDataArray.map(p => p.recipe_id);
+      const { data: recipes, error: recipesErr } = await supabase
+        .from('recipes')
+        .select('id, recipe_ingredients(material_id, qty_in_use, materials(id, qty_resto, price, new_price))')
+        .in('id', recipeIds);
+        
+      if (recipesErr) throw recipesErr;
+      const recipeMap = new Map((recipes || []).map(r => [r.id, r]));
+      const materialDeductions = new Map();
+      const salesByDate = new Map();
+      const today = new Date().toISOString().split('T')[0];
+
+      // Override handling
+      if (options.mode === 'overwrite' && options.periodMonth && options.periodYear) {
+         const m = options.periodMonth.toString().padStart(2, '0');
+         const startDate = `${options.periodYear}-${m}-01`;
+         const lastDay = new Date(parseInt(options.periodYear), parseInt(m), 0).getDate();
+         const endDate = `${options.periodYear}-${m}-${String(lastDay).padStart(2, '0')}`;
+         
+         await supabase.from('transactions')
+           .delete()
+           .eq('tenant_id', activeTenantId)
+           .in('type', ['POS_SALE', 'POS_DEDUCTION'])
+           .gte('date', startDate)
+           .lte('date', endDate);
+      }
+
+      for (const item of posDataArray) {
+        // Collect Sales Revenue
+        const sDate = item.salesDate || today;
+        const sTotal = parseFloat(item.total || 0);
+        if (sTotal > 0) {
+           salesByDate.set(sDate, (salesByDate.get(sDate) || 0) + sTotal);
+        }
+
+        const recipe = recipeMap.get(item.recipe_id);
+        if (!recipe || !recipe.recipe_ingredients) continue;
+        
+        for (const ing of recipe.recipe_ingredients) {
+           const matId = ing.material_id;
+           const qtyToDeduct = parseFloat(ing.qty_in_use) * parseFloat(item.qty);
+           const costPerUnit = parseFloat(ing.materials?.price || 0);
+           const totalCost = qtyToDeduct * costPerUnit;
+           
+           if (materialDeductions.has(matId)) {
+             const m = materialDeductions.get(matId);
+             m.qtyToDeduct += qtyToDeduct;
+             m.totalCost += totalCost;
+           } else {
+             materialDeductions.set(matId, {
+                qtyToDeduct,
+                totalCost,
+                currentQty: parseFloat(ing.materials?.qty_resto || 0)
+             });
+           }
+        }
+      }
+      
+      const transactions = [];
+      for (const [matId, data] of materialDeductions.entries()) {
+        const newQty = Math.max(0, data.currentQty - data.qtyToDeduct);
+        
+        // update material
+        await supabase.from('materials').update({ qty_resto: newQty }).eq('id', matId);
+        
+        const dedupDate = posDataArray.length > 0 ? (posDataArray[0].salesDate || today) : today;
+        
+        // build transaction
+        transactions.push({
+           tenant_id: activeTenantId,
+           date: dedupDate,
+           material_id: matId,
+           type: 'POS_DEDUCTION',
+           location: 'RESTO',
+           qty: -data.qtyToDeduct,
+           amount: data.totalCost,
+           notes: 'POS Sync Deduction',
+           created_by: activeUserId
+        });
+      }
+      
+      for (const [sDate, sTotal] of salesByDate.entries()) {
+        transactions.push({
+           tenant_id: activeTenantId,
+           date: sDate,
+           type: 'POS_SALE',
+           location: 'RESTO',
+           qty: 1,
+           amount: sTotal,
+           notes: 'POS Sync Revenue',
+           created_by: activeUserId
+        });
+      }
+      
+      if (transactions.length > 0) {
+        const { error: txErr } = await supabase.from('transactions').insert(transactions);
+        if (txErr) throw txErr;
+      }
+      
+      return { success: true };
     } catch (err) {
       console.error('POS Sync error:', err);
       throw err;
@@ -643,7 +737,7 @@ export const api = {
     return data;
   },
 
-  deleteMaterial: async (id) => {
+  deleteMaterial: async (id, force = false) => {
     // Check if ingredient is used in recipes
     const { count, error: countErr } = await supabase
       .from('recipe_ingredients')
@@ -651,7 +745,15 @@ export const api = {
       .eq('material_id', id);
 
     if (!countErr && count > 0) {
-      throw new Error(`Tidak bisa menonaktifkan: bahan baku ini masih digunakan di ${count} resep aktif. Hapus dari resep terlebih dahulu.`);
+      if (!force) {
+        const err = new Error(`Tidak bisa menonaktifkan: bahan baku ini masih digunakan di ${count} resep aktif. Hapus dari resep terlebih dahulu.`);
+        err.hasDependencies = true;
+        err.dependencyCount = count;
+        throw err;
+      } else {
+        // Force delete: remove dependencies first
+        await supabase.from('recipe_ingredients').delete().eq('material_id', id);
+      }
     }
 
     const { data, error } = await supabase
@@ -1351,7 +1453,7 @@ export const api = {
           return;
         }
 
-        const unitPrice = parseFloat(material.new_price ?? material.price ?? 0);
+        const unitPrice = parseFloat(material.price ?? 0);
         const datesArray = Array.from(data.saleDates).sort();
         const primaryDate = datesArray[datesArray.length - 1] || nowStr;
 
@@ -1467,11 +1569,12 @@ export const api = {
         const dbPrice = parseFloat(dbRecipe.selling_price || 0);
         totalAmount += (dbPrice * item.qty);
         orderItems.push({
-          // We will assign order_id later
           recipe_id: item.id,
           qty: item.qty,
           unit_price: dbPrice,
-          subtotal: dbPrice * item.qty
+          subtotal: dbPrice * item.qty,
+          salesDate: nowStr,
+          total: dbPrice * item.qty
         });
       }
     }
@@ -1536,12 +1639,12 @@ export const api = {
         continue; // Skip deduction if it would be negative
       }
 
-      deductionsPayload.push({
+        deductionsPayload.push({
         material_id: material.id,
         deduct_qty: deductQty
       });
 
-      const unitPrice = parseFloat(material.new_price ?? material.price ?? 0);
+      const unitPrice = parseFloat(material.price ?? 0);
       transactionRows.push({
         date: nowStr,
         material_id: material.id,
@@ -1709,12 +1812,13 @@ export const api = {
     let closingValuation = 0.00;
     let categoryValuation = [];
     let hasThisMonthOpname = false;
+    let detailedOpnameItems = [];
 
     if (thisOpnames && thisOpnames.length > 0) {
       const opnameIds = thisOpnames.map(o => o.id);
       const { data: opnameItems } = await supabase
         .from('stock_opname_items')
-        .select('physical_qty, material_id, materials(new_price, price, category)')
+        .select('physical_qty, book_qty, material_id, materials(name, new_price, price, category, unit, full_pack, supplier)')
         .in('opname_id', opnameIds);
 
       if (opnameItems && opnameItems.length > 0) {
@@ -1723,17 +1827,45 @@ export const api = {
         
         opnameItems.forEach(item => {
           const matId = item.material_id;
-          const qty = parseFloat(item.physical_qty || 0);
-          const price = parseFloat(item.materials?.new_price ?? item.materials?.price ?? 0);
-          const val = qty * price;
+          const physicalQty = parseFloat(item.physical_qty || 0);
+          const bookQty = parseFloat(item.book_qty || 0);
+          const price = parseFloat(item.materials?.price ?? 0);
+          const val = physicalQty * price;
           const cat = item.materials?.category || 'Lain-lain';
 
           if (!matValuationMap[matId]) {
-            matValuationMap[matId] = { qty: 0, val: 0, price, cat };
+            matValuationMap[matId] = {
+              name: item.materials?.name || 'Unknown',
+              unit: item.materials?.unit || '-',
+              full_pack: item.materials?.full_pack || '-',
+              supplier: item.materials?.supplier || '-',
+              systemQty: 0,
+              physicalQty: 0,
+              val: 0,
+              price,
+              cat
+            };
           }
-          matValuationMap[matId].qty += qty;
+          matValuationMap[matId].systemQty += bookQty;
+          matValuationMap[matId].physicalQty += physicalQty;
           matValuationMap[matId].val += val;
         });
+
+        // Build detailed list
+        detailedOpnameItems = Object.values(matValuationMap).map(m => ({
+          name: m.name,
+          category: m.cat,
+          unit: m.unit,
+          full_pack: m.full_pack,
+          systemQty: m.systemQty,
+          physicalQty: m.physicalQty,
+          variance: m.physicalQty - m.systemQty,
+          price: m.price,
+          totalValuation: m.val,
+          supplier: m.supplier
+        }));
+        // Sort by category then name
+        detailedOpnameItems.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
 
         const categoryGroup = {};
         for (const item of Object.values(matValuationMap)) {
@@ -1752,13 +1884,30 @@ export const api = {
       const { data: materials } = await supabase.from('materials').select('*').eq('tenant_id', tenantId).eq('is_active', true);
       const categoryGroup = {};
       for (const mat of (materials || [])) {
-        const price = parseFloat(mat.new_price ?? mat.price ?? 0);
-        const val = (parseFloat(mat.qty_resto) + parseFloat(mat.qty_central)) * price;
+        const price = parseFloat(mat.price ?? 0);
+        const qtySistem = parseFloat(mat.qty_resto) + parseFloat(mat.qty_central);
+        const val = qtySistem * price;
         closingValuation += val;
 
         const cat = mat.category || 'Lain-lain';
         categoryGroup[cat] = (categoryGroup[cat] || 0) + val;
+        
+        detailedOpnameItems.push({
+          name: mat.name,
+          category: cat,
+          unit: mat.unit,
+          full_pack: mat.full_pack,
+          systemQty: qtySistem,
+          physicalQty: qtySistem, // assuming matched if no opname
+          variance: 0,
+          price: price,
+          totalValuation: val,
+          supplier: mat.supplier || '-'
+        });
       }
+      
+      detailedOpnameItems.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+      
       categoryValuation = Object.entries(categoryGroup).map(([name, value]) => ({
         name,
         value: parseFloat(value.toFixed(2))
@@ -1813,19 +1962,22 @@ export const api = {
       
       if (prevOpnameItems && prevOpnameItems.length > 0) {
         openingValuation = prevOpnameItems.reduce((sum, item) => {
-          const price = parseFloat(item.materials?.new_price ?? item.materials?.price ?? 0);
+          const price = parseFloat(item.materials?.price ?? 0);
           return sum + (parseFloat(item.physical_qty || 0) * price);
         }, 0);
       }
     }
     // Fallback to derivation if no previous opname exists
     if (openingValuation <= 0) {
-      openingValuation = Math.max(0.00, cogsIngredientsCost + closingValuation - purchasesValuation);
+      openingValuation = Math.max(0.00, cogsIngredientsCost + closingValuation - purchasesValuation + wasteValuation);
     }
 
-    // Standard Overhead adjustments
-    const overheadAdjustment = cogsIngredientsCost * activeOverheadPct;
-    const totalCogs = cogsIngredientsCost + overheadAdjustment;
+    // Excel SO_BARISTA_APRIL_2026 COGS Calculation = Opening + Purchases - Closing (NO Waste deducted)
+    let actualCogs = openingValuation + purchasesValuation - closingValuation;
+    if (actualCogs < 0) actualCogs = 0;
+    
+    // No overhead applied at COGS report level (to prevent double counting with recipe HPP)
+    const totalCogs = actualCogs;
     const beverageCostPct = salesRevenue > 0 ? (totalCogs / salesRevenue) * 100 : 0.00;
 
     return {
@@ -1836,7 +1988,7 @@ export const api = {
         purchases: parseFloat(purchasesValuation.toFixed(2)),
         closing_stock: parseFloat(closingValuation.toFixed(2)),
         ingredients_cost: parseFloat(cogsIngredientsCost.toFixed(2)),
-        overhead_cost: parseFloat(overheadAdjustment.toFixed(2)),
+        overhead_cost: 0.00,
         waste_valuation: parseFloat(wasteValuation.toFixed(2)),
         total_cogs: parseFloat(totalCogs.toFixed(2)),
         sales_revenue: parseFloat(salesRevenue.toFixed(2)),
@@ -1888,7 +2040,7 @@ export const api = {
   // material's name) so the history table never has to pull hundreds of
   // rows at once — fixes the previous unbounded 400/embedding issue too,
   // since this goes through a single well-formed query with FK embeds.
-  getPurchaseEntriesPaged: async ({ page = 1, pageSize = 15, search = '' } = {}) => {
+  getPurchaseEntriesPaged: async ({ page = 1, pageSize = 15, search = '', material_id = null } = {}) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { data: [], totalCount: 0 };
     const from = (page - 1) * pageSize;
@@ -1898,6 +2050,10 @@ export const api = {
       .from('purchase_entries')
       .select('*, materials(name, unit), suppliers(name)', { count: 'exact' })
       .eq('tenant_id', tenantId);
+      
+    if (material_id) {
+      query = query.eq('material_id', material_id);
+    }
 
     if (search && search.trim()) {
       const s = search.trim();
@@ -2298,20 +2454,57 @@ export const api = {
     let failed = 0;
     const errors = [];
 
+    // Pre-fetch all existing suppliers to avoid duplicates
+    const { data: allSuppliers } = await supabase
+      .from('suppliers')
+      .select('id, name')
+      .eq('tenant_id', tenantId);
+
+    // Track known suppliers by name (case-insensitive)
+    const suppliersMap = new Map((allSuppliers || []).map(s => [s.name.toLowerCase().trim(), s]));
+
     for (const row of rows) {
       try {
-        const { error } = await supabase.from('materials').upsert({
+        let supplierName = row.supplier ? String(row.supplier).trim() : 'Default Supplier';
+        if (supplierName === '') supplierName = 'Default Supplier';
+        
+        let supplierKey = supplierName.toLowerCase();
+        
+        // Auto-create supplier if it doesn't exist
+        if (!suppliersMap.has(supplierKey)) {
+          const { data: newSupplier, error: suppErr } = await supabase.from('suppliers').insert({
+            tenant_id: tenantId,
+            name: supplierName,
+            status: 'active',
+            address: '',
+            phone: '',
+            contact_person: ''
+          }).select('id, name').single();
+          
+          if (!suppErr && newSupplier) {
+            suppliersMap.set(supplierKey, newSupplier);
+          }
+        }
+
+        const insertData = {
           tenant_id: tenantId,
           name: row.name,
           category: row.category || 'Others',
-          supplier: row.supplier || '',
+          supplier: supplierName,
           unit: row.unit || 'pck',
           full_pack: row.full_pack || '',
           price: parseFloat(row.price || 0),
           new_price: parseFloat(row.price || 0),
           min_stock: parseFloat(row.min_stock || 15),
           is_active: true
-        }, { onConflict: 'tenant_id, name' });
+        };
+        
+        // If they provided initial stock, set it (optional)
+        if (row.qty_resto !== undefined && row.qty_resto !== '') {
+          insertData.qty_resto = parseFloat(row.qty_resto || 0);
+        }
+
+        const { error } = await supabase.from('materials').upsert(insertData, { onConflict: 'tenant_id, name' });
         if (error) { failed++; errors.push({ row: row.name, error: error.message }); }
         else success++;
       } catch (e) {
@@ -2358,6 +2551,9 @@ export const api = {
         }
 
         const sellingPrice = parseFloat(row.selling_price || 0);
+        const VALID_CATEGORIES = ['KOPI', 'NON-KOPI', 'MOCKTAIL', 'JUICE', 'TEA', 'BEER'];
+        const rawCategory = row.category ? row.category.toString().trim().toUpperCase() : '';
+        const category = VALID_CATEGORIES.includes(rawCategory) ? rawCategory : 'NON-KOPI';
         let subtotal = 0;
 
         // Simple subtotal calculation from ingredients if available
@@ -2378,6 +2574,8 @@ export const api = {
           .upsert({
             tenant_id: tenantId,
             menu_name: row.menu_name,
+            pos_code: row.pos_code || row.menu_code || null,
+            category: category,
             selling_price: sellingPrice,
             subtotal: parseFloat(subtotal.toFixed(2)),
             fix_cost: parseFloat(fixCost.toFixed(2)),
@@ -2393,9 +2591,34 @@ export const api = {
         if (ingredients.length > 0 && recipeData?.id) {
           const ingredientsToInsert = [];
           for (const ing of ingredients) {
-            const mat = materialsMap.get((ing.item_name || ing.material_name || '').toLowerCase().trim());
+            let matName = (ing.item_name || ing.material_name || '').trim();
+            if (!matName) continue;
+            
+            let mat = materialsMap.get(matName.toLowerCase());
+            
+            // AUTO-CREATE MATERIAL IF NOT EXIST
+            if (!mat) {
+              const { data: newMat, error: newMatErr } = await supabase.from('materials').insert({
+                tenant_id: tenantId,
+                name: matName,
+                category: 'Others',
+                supplier: 'Default Supplier',
+                unit: 'gr',
+                full_pack: '',
+                price: 0,
+                new_price: 0,
+                min_stock: 15,
+                is_active: true
+              }).select('id, name, unit, price, new_price').single();
+              
+              if (!newMatErr && newMat) {
+                materialsMap.set(matName.toLowerCase(), newMat);
+                mat = newMat;
+              }
+            }
+
             if (mat) {
-              const unit = ing.unit || mat.unit;
+              const unit = ing.unit || mat.unit || 'gr';
               const unitPrice = parseFloat(mat.new_price ?? mat.price ?? 0);
               const amount = calculateIngredientCost(mat, parseFloat(ing.qty_in_use || 0), unit);
               
