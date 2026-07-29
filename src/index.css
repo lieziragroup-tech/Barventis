@@ -129,6 +129,29 @@ body::before {
   z-index: 50;
   padding: 16px 10px;
   overflow-y: auto;
+  overflow-x: hidden;
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar.collapsed {
+  padding: 16px 8px;
+}
+
+.sidebar-collapse-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  transition: all var(--ease);
+}
+.sidebar-collapse-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
 }
 
 .main-content {
@@ -137,6 +160,7 @@ body::before {
   padding: 28px 32px;
   min-height: 100vh;
   max-width: calc(100vw - var(--sidebar-width));
+  transition: margin-left 0.2s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Sidebar Styling */
@@ -252,6 +276,12 @@ body::before {
 .user-role {
   font-size: 0.72rem;
   color: var(--text-muted);
+}
+
+.sidebar.collapsed .user-widget {
+  padding: 8px 4px;
+  flex-direction: column;
+  gap: 8px;
 }
 
 /* Header Component */
@@ -854,6 +884,10 @@ input[type='number']::-webkit-outer-spin-button {
 
   .mobile-menu-btn {
     display: flex !important;
+  }
+
+  .sidebar-collapse-btn {
+    display: none !important;
   }
 }
 

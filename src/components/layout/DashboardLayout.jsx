@@ -2,7 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  LogOut, Bell, AlertTriangle, X, RefreshCw, Menu
+  LogOut, Bell, AlertTriangle, X, RefreshCw, Menu,
+  ChevronLeft, LayoutDashboard, ClipboardList, UploadCloud,
+  Utensils, Tag, ShoppingCart, FileText, Boxes, Trash2, Package,
+  Calculator, History, Settings, Archive, Wrench, Building2, Layout
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useData } from '../../contexts/DataContext';
@@ -11,21 +14,37 @@ import AIAssistant from '../AIAssistant';
 import GuidebookModal from '../GuidebookModal';
 import { BookOpen } from 'lucide-react';
 
-const NavItem = ({ to, exact, label }) => {
+const NavItem = ({ to, exact, label, icon: Icon, collapsed }) => {
   return (
     <NavLink 
       to={to} 
       end={exact}
       className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} 
-      style={{ textDecoration: 'none' }}
+      style={{ textDecoration: 'none', justifyContent: collapsed ? 'center' : 'flex-start' }}
+      title={collapsed ? label : undefined}
     >
-      {label}
+      {Icon && <Icon size={16} style={{ flexShrink: 0 }} />}
+      {!collapsed && (
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+      )}
     </NavLink>
   );
 };
 
-const NavGroup = ({ title, defaultOpen = true, children }) => {
+const NavGroup = ({ title, defaultOpen = true, collapsed, children }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  if (collapsed) {
+    return (
+      <div className="nav-group" style={{ marginBottom: '4px' }}>
+        <div style={{ height: '1px', background: 'var(--border)', margin: '10px 6px' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          {children}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="nav-group" style={{ marginBottom: '4px' }}>
       <div 
@@ -75,7 +94,19 @@ export default function DashboardLayout() {
   const { loadingData, stock, refreshData } = useData();
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 992);
+  const [collapsed, setCollapsed] = useState(false);
   const [showGuidebook, setShowGuidebook] = useState(false);
+
+  // The collapse-to-rail mode is desktop-only; if the window is resized
+  // down to mobile width while collapsed, expand back so the mobile
+  // off-canvas drawer behaves normally.
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth <= 1024) setCollapsed(false);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Close sidebar on route change
   useEffect(() => {
@@ -138,7 +169,7 @@ export default function DashboardLayout() {
   const basePath = getBasePath();
 
   return (
-    <div className="app-container">
+    <div className="app-container" style={{ '--sidebar-width': collapsed ? '64px' : '250px' }}>
       {/* Mobile Overlay */}
       {isSidebarOpen && (
         <div 
@@ -149,98 +180,111 @@ export default function DashboardLayout() {
       )}
 
       {/* Sidebar Navigation */}
-      <nav className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
+      <nav className={`sidebar ${isSidebarOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}>
         <div className="logo-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '20px', padding: '0 6px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div className="logo-icon">B</div>
-            <span className="logo-text">BARVENTIS</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+            <div className="logo-icon" style={{ flexShrink: 0 }}>B</div>
+            {!collapsed && <span className="logo-text">BARVENTIS</span>}
           </div>
-          <button 
-            className="mobile-close-btn"
-            onClick={() => setIsSidebarOpen(false)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              display: 'none',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '4px',
-              borderRadius: 'var(--radius-sm)',
-              transition: 'all var(--ease)'
-            }}
-            onMouseOver={e => e.currentTarget.style.color = 'var(--text-primary)'}
-            onMouseOut={e => e.currentTarget.style.color = 'var(--text-muted)'}
-          >
-            <X size={16} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+            <button
+              className="sidebar-collapse-btn"
+              onClick={() => setCollapsed(!collapsed)}
+              title={collapsed ? 'Perluas sidebar' : 'Ciutkan sidebar'}
+            >
+              <ChevronLeft size={15} style={{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
+            </button>
+            <button 
+              className="mobile-close-btn"
+              onClick={() => setIsSidebarOpen(false)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                display: 'none',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '4px',
+                borderRadius: 'var(--radius-sm)',
+                transition: 'all var(--ease)'
+              }}
+              onMouseOver={e => e.currentTarget.style.color = 'var(--text-primary)'}
+              onMouseOut={e => e.currentTarget.style.color = 'var(--text-muted)'}
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
         
-        <div style={{
-          padding: '0 8px',
-          fontSize: '0.65rem',
-          color: 'var(--text-muted)',
-          fontWeight: '500',
-          letterSpacing: '0.04em',
-          textTransform: 'uppercase',
-          marginBottom: '16px',
-        }}>
-          {(tenantName || 'SYSTEM').toUpperCase()}
-        </div>
+        {!collapsed && (
+          <div style={{
+            padding: '0 8px',
+            fontSize: '0.65rem',
+            color: 'var(--text-muted)',
+            fontWeight: '500',
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            marginBottom: '16px',
+          }}>
+            {(tenantName || 'SYSTEM').toUpperCase()}
+          </div>
+        )}
 
         <div className="nav-links" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
           {isSuperAdmin && (
-            <NavGroup title="Platform" defaultOpen={true}>
-              <NavItem to="/superadmin" exact label="Kelola Tenant" />
-              <NavItem to="/superadmin/templates" label="POS Templates" />
-              <NavItem to="/superadmin/logs" label="Audit Logs" />
+            <NavGroup title="Platform" defaultOpen={true} collapsed={collapsed}>
+              <NavItem to="/superadmin" exact label="Kelola Tenant" icon={Building2} collapsed={collapsed} />
+              <NavItem to="/superadmin/templates" label="POS Templates" icon={Layout} collapsed={collapsed} />
+              <NavItem to="/superadmin/logs" label="Audit Logs" icon={History} collapsed={collapsed} />
             </NavGroup>
           )}
 
           {(isOwner || isStaff) && (
             <>
-              <NavGroup title="Menu Utama" defaultOpen={true}>
-                <NavItem to={basePath} exact label="Dashboard" />
-                <NavItem to={`${basePath}/stock`} label="Stock Ledger" />
-                <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" />
-                <NavItem to={`${basePath}/pos`} label="Upload POS Sales" />
-                <NavItem to={`${basePath}/recipes`} label="F&B Recipes" />
-                <NavItem to={`${basePath}/pricing`} label="Menu Pricing" />
+              <NavGroup title="Menu Utama" defaultOpen={true} collapsed={collapsed}>
+                <NavItem to={basePath} exact label="Dashboard" icon={LayoutDashboard} collapsed={collapsed} />
+                <NavItem to={`${basePath}/stock`} label="Stock Ledger" icon={BookOpen} collapsed={collapsed} />
+                <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" icon={ClipboardList} collapsed={collapsed} />
+                <NavItem to={`${basePath}/pos`} label="Upload POS Sales" icon={UploadCloud} collapsed={collapsed} />
+                <NavItem to={`${basePath}/recipes`} label="F&B Recipes" icon={Utensils} collapsed={collapsed} />
+                <NavItem to={`${basePath}/pricing`} label="Menu Pricing" icon={Tag} collapsed={collapsed} />
               </NavGroup>
 
               {isOwner && (
-                <NavGroup title="Operasional" defaultOpen={true}>
-                  <NavItem to={`${basePath}/purchasing`} label="Pembelian & Supplier" />
-                  <NavItem to={`${basePath}/invoicing`} label="Invoicing / PO" />
-                  <NavItem to={`${basePath}/opname`} label="Stock Opname" />
-                  <NavItem to={`${basePath}/physical-check`} label="Cek Fisik & Waste" />
-                  <NavItem to={`${basePath}/assets`} label="Asset & Equipment" />
-                  <NavItem to={`${basePath}/cost-control`} label="Cost Control" />
+                <NavGroup title="Operasional" defaultOpen={true} collapsed={collapsed}>
+                  <NavItem to={`${basePath}/purchasing`} label="Pembelian & Supplier" icon={ShoppingCart} collapsed={collapsed} />
+                  <NavItem to={`${basePath}/invoicing`} label="Invoicing / PO" icon={FileText} collapsed={collapsed} />
+                  <NavItem to={`${basePath}/opname`} label="Stock Opname" icon={Boxes} collapsed={collapsed} />
+                  <NavItem to={`${basePath}/physical-check`} label="Cek Fisik & Waste" icon={Trash2} collapsed={collapsed} />
+                  <NavItem to={`${basePath}/assets`} label="Asset & Equipment" icon={Package} collapsed={collapsed} />
+                  <NavItem to={`${basePath}/cost-control`} label="Cost Control" icon={Calculator} collapsed={collapsed} />
                 </NavGroup>
               )}
 
-              <NavGroup title="System" defaultOpen={false}>
+              <NavGroup title="System" defaultOpen={false} collapsed={collapsed}>
                 {isOwner && (
                   <>
-                    <NavItem to={`${basePath}/audit`} label="Audit Logs" />
-                    <NavItem to={`${basePath}/settings`} label="Tenant Settings" />
-                    <NavItem to={`${basePath}/backup`} label="Backup & Restore" />
+                    <NavItem to={`${basePath}/audit`} label="Audit Logs" icon={History} collapsed={collapsed} />
+                    <NavItem to={`${basePath}/settings`} label="Tenant Settings" icon={Settings} collapsed={collapsed} />
+                    <NavItem to={`${basePath}/backup`} label="Backup & Restore" icon={Archive} collapsed={collapsed} />
                   </>
                 )}
-                <NavItem to={`${basePath}/maintenance`} label="Maintenance" />
+                <NavItem to={`${basePath}/maintenance`} label="Maintenance" icon={Wrench} collapsed={collapsed} />
               </NavGroup>
             </>
           )}
         </div>
 
-        <div className="user-widget">
-          <div className="user-avatar">{userAvatar}</div>
-          <div className="user-info">
-            <span className="user-name">{userName}</span>
-            <span className="user-role">{userRole}</span>
-          </div>
-          <LogOut size={14} style={{ marginLeft: 'auto', cursor: 'pointer', color: 'var(--text-muted)' }}
+        <div className="user-widget" style={{ justifyContent: collapsed ? 'center' : 'flex-start' }}>
+          <div className="user-avatar" title={collapsed ? `${userName} · ${userRole}` : undefined}>{userAvatar}</div>
+          {!collapsed && (
+            <div className="user-info">
+              <span className="user-name">{userName}</span>
+              <span className="user-role">{userRole}</span>
+            </div>
+          )}
+          <LogOut size={14} style={{ marginLeft: collapsed ? 0 : 'auto', cursor: 'pointer', color: 'var(--text-muted)', flexShrink: 0 }}
             onClick={logout}
             title="Log Out"
           />
