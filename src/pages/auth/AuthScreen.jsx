@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
+import barventisIcon from '../../assets/barventis-icon.png';
 
 export default function AuthScreen({ onAuthSuccess }) {
   const toast = useToast();
@@ -108,15 +109,11 @@ export default function AuthScreen({ onAuthSuccess }) {
             justifyContent: 'center',
             width: '48px',
             height: '48px',
-            borderRadius: 'var(--radius-lg)',
-            background: 'var(--accent)',
-            color: 'var(--text-inverse)',
-            fontSize: '1.5rem',
-            fontWeight: '800',
             marginBottom: '12px',
-            boxShadow: 'var(--shadow-md)',
             transition: 'all 0.5s ease'
-          }}>B</div>
+          }}>
+            <img src={barventisIcon} alt="Barventis" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          </div>
           
           <h2 style={{ 
             fontSize: '1.6rem', 

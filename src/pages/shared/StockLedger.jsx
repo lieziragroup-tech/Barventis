@@ -92,10 +92,25 @@ export default function StockLedger() {
 
   const handleBulkDelete = async () => {
     if (!confirm(`Hapus ${selectedItems.length} bahan terpilih secara permanen?`)) return;
+
+    let failedCount = 0;
+    let failedNames = [];
+
     for (const name of selectedItems) {
-      await onDeleteItem(name);
+      try {
+        await onDeleteItem(name);
+      } catch (err) {
+        failedCount++;
+        failedNames.push(name);
+      }
     }
-    setSelectedItems([]);
+
+    if (failedCount > 0) {
+      alert(`Gagal menghapus ${failedCount} bahan baku:\n${failedNames.join(', ')}\n\nBahan-bahan ini sedang digunakan di resep aktif. Hapus dari resep atau hapus satu-per-satu untuk menggunakan fitur Force Delete.`);
+    }
+
+    // Unselect only successful ones
+    setSelectedItems(prev => prev.filter(name => failedNames.includes(name)));
   };
 
   const categories = useMemo(() => ['ALL', ...new Set(stock.map(item => item.category))], [stock]);

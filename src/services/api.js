@@ -2,6 +2,7 @@
 import { supabase } from '../lib/supabase';
 import { parsePackSize, calculateIngredientCost } from './costUtils';
 import { storeLog } from './activityLogService';
+import { calculateUsageVariance } from './varianceCalculator';
 
 let activeTenantId = null;
 let activeUserId = null;
@@ -49,21 +50,43 @@ const logAudit = async (action, description) => {
 export { parsePackSize, calculateIngredientCost };
 
 export const api = {
+  // ═══════════════════════════════════════════════════════════════════
+  // FIX (root cause hasil reverse-engineering SO BARISTA):
+  // Versi lama fungsi ini LANGSUNG mengurangi `materials.qty_resto` sebesar
+  // usage TEORITIS (qty terjual x qty resep), seolah itu adalah stok fisik
+  // yang sebenarnya. Trace formula di Excel asli ("Daily Iventory Bahan",
+  // "STOCK OPNAME RESTO/CENTRAL") menunjukkan stok sebenarnya SELALU berasal
+  // dari hitungan fisik manual (TERPAKAI = OUT + WASTE, Sisa Stok = hard
+  // value hasil hitung), sedangkan resep (COGS All Beverage) hanya dipakai
+  // sbg BENCHMARK teoritis untuk menghitung food cost % / variance -- bukan
+  // sumber kebenaran stok. Auto-deduct qty_resto pakai angka teoritis inilah
+  // yang membuat stok di sistem lama-lama menyimpang dari hasil stock opname
+  // fisik, dan menjadi penyebab paling mungkin SO Barista sistem tidak match
+  // dengan SO Barista Excel manual.
+  //
+  // Perbaikan: qty_resto TIDAK disentuh oleh fungsi ini sama sekali. Usage
+  // teoritis ditulis ke tabel `expected_usage` (sudah ada di schema, tapi
+  // sebelumnya tidak pernah dipakai oleh kode manapun) untuk dibandingkan
+  // dengan usage AKTUAL (`daily_inventory_items.terpakai_qty`, diisi dari
+  // input fisik harian) lewat VarianceCalculator -- lihat services/varianceCalculator.js.
+  // ═══════════════════════════════════════════════════════════════════
   processPOSSync: async (posDataArray, options = {}) => {
     try {
       if (!activeTenantId || !activeUserId) throw new Error("Missing active session.");
-      
+
       const recipeIds = posDataArray.map(p => p.recipe_id);
       const { data: recipes, error: recipesErr } = await supabase
         .from('recipes')
-        .select('id, recipe_ingredients(material_id, qty_in_use, materials(id, qty_resto, price, new_price))')
+        .select('id, recipe_ingredients(material_id, qty_in_use, materials(id, price, new_price))')
         .in('id', recipeIds);
-        
+
       if (recipesErr) throw recipesErr;
       const recipeMap = new Map((recipes || []).map(r => [r.id, r]));
-      const materialDeductions = new Map();
+      const materialTheoretical = new Map(); // usage TEORITIS saja, bukan deduksi stok riil
       const salesByDate = new Map();
       const today = new Date().toISOString().split('T')[0];
+      let minDate = today;
+      let maxDate = today;
 
       // Override handling
       if (options.mode === 'overwrite' && options.periodMonth && options.periodYear) {
@@ -71,69 +94,75 @@ export const api = {
          const startDate = `${options.periodYear}-${m}-01`;
          const lastDay = new Date(parseInt(options.periodYear), parseInt(m), 0).getDate();
          const endDate = `${options.periodYear}-${m}-${String(lastDay).padStart(2, '0')}`;
-         
+
          await supabase.from('transactions')
            .delete()
            .eq('tenant_id', activeTenantId)
            .in('type', ['POS_SALE', 'POS_DEDUCTION'])
            .gte('date', startDate)
            .lte('date', endDate);
+
+         // FIX: bersihkan juga expected_usage periode ini supaya tidak dobel
+         // dengan re-upload/overwrite bulan yang sama.
+         await supabase.from('expected_usage')
+           .delete()
+           .eq('tenant_id', activeTenantId)
+           .gte('week_start', startDate)
+           .lte('week_end', endDate);
       }
 
       for (const item of posDataArray) {
-        // Collect Sales Revenue
+        // Collect Sales Revenue. FIX: qty/total negatif (void/refund/cancel)
+        // sebelumnya dibuang (`sTotal > 0` saja) — sekarang tetap dihitung
+        // supaya void benar-benar mengurangi revenue & usage teoritis,
+        // bukan menghilang tanpa jejak (lihat edge case "Sales minus/Void").
         const sDate = item.salesDate || today;
+        if (sDate < minDate) minDate = sDate;
+        if (sDate > maxDate) maxDate = sDate;
         const sTotal = parseFloat(item.total || 0);
-        if (sTotal > 0) {
+        if (sTotal !== 0) {
            salesByDate.set(sDate, (salesByDate.get(sDate) || 0) + sTotal);
         }
 
         const recipe = recipeMap.get(item.recipe_id);
         if (!recipe || !recipe.recipe_ingredients) continue;
-        
+
+        const qtySold = parseFloat(item.qty) || 0;
         for (const ing of recipe.recipe_ingredients) {
            const matId = ing.material_id;
-           const qtyToDeduct = parseFloat(ing.qty_in_use) * parseFloat(item.qty);
-           const costPerUnit = parseFloat(ing.materials?.price || 0);
-           const totalCost = qtyToDeduct * costPerUnit;
-           
-           if (materialDeductions.has(matId)) {
-             const m = materialDeductions.get(matId);
-             m.qtyToDeduct += qtyToDeduct;
-             m.totalCost += totalCost;
+           const qtyTheoretical = parseFloat(ing.qty_in_use) * qtySold;
+
+           if (materialTheoretical.has(matId)) {
+             const m = materialTheoretical.get(matId);
+             m.qty += qtyTheoretical;
+             m.totalSold += qtySold;
            } else {
-             materialDeductions.set(matId, {
-                qtyToDeduct,
-                totalCost,
-                currentQty: parseFloat(ing.materials?.qty_resto || 0)
-             });
+             materialTheoretical.set(matId, { qty: qtyTheoretical, totalSold: qtySold });
            }
         }
       }
-      
-      const transactions = [];
-      for (const [matId, data] of materialDeductions.entries()) {
-        const newQty = Math.max(0, data.currentQty - data.qtyToDeduct);
-        
-        // update material
-        await supabase.from('materials').update({ qty_resto: newQty }).eq('id', matId);
-        
-        const dedupDate = posDataArray.length > 0 ? (posDataArray[0].salesDate || today) : today;
-        
-        // build transaction
-        transactions.push({
+
+      // Simpan usage teoritis sbg benchmark (BUKAN mengubah qty_resto)
+      const expectedUsageRows = [];
+      for (const [matId, data] of materialTheoretical.entries()) {
+        expectedUsageRows.push({
            tenant_id: activeTenantId,
-           date: dedupDate,
+           week_start: minDate,
+           week_end: maxDate,
            material_id: matId,
-           type: 'POS_DEDUCTION',
-           location: 'RESTO',
-           qty: -data.qtyToDeduct,
-           amount: data.totalCost,
-           notes: 'POS Sync Deduction',
+           expected_qty: data.qty,
+           total_sold: data.totalSold,
            created_by: activeUserId
         });
       }
-      
+      if (expectedUsageRows.length > 0) {
+        const { error: euErr } = await supabase.from('expected_usage').upsert(expectedUsageRows, {
+          onConflict: 'tenant_id, week_start, material_id'
+        });
+        if (euErr) console.warn('Failed to save expected_usage:', euErr);
+      }
+
+      const transactions = [];
       for (const [sDate, sTotal] of salesByDate.entries()) {
         transactions.push({
            tenant_id: activeTenantId,
@@ -146,17 +175,72 @@ export const api = {
            created_by: activeUserId
         });
       }
-      
+
       if (transactions.length > 0) {
         const { error: txErr } = await supabase.from('transactions').insert(transactions);
         if (txErr) throw txErr;
       }
-      
-      return { success: true };
+
+      // GAP-FIX 2026-07: pos_upload_logs existed in the schema (branch_name,
+      // company_name, category_filter, branch_mismatch, period_start/end) but the
+      // live sync path never wrote to it — only the dead `syncPos` function did.
+      // Log it here so there's an actual audit trail of which branch/category filter
+      // was used per upload (relevant now that "Kasuna by Umatis" uploads are
+      // deliberately merged into this tenant rather than rejected).
+      try {
+        await supabase.from('pos_upload_logs').insert({
+          tenant_id: activeTenantId,
+          filename: options.filename || 'unknown',
+          file_hash: options.filename || String(Date.now()),
+          period: `${options.periodMonth || ''}/${options.periodYear || ''}`,
+          total_rows: options.totalRows ?? posDataArray.length,
+          branch_name: options.branchName || null,
+          company_name: options.companyName || null,
+          period_start: minDate,
+          period_end: maxDate,
+          category_filter: options.categoryFilter || 'MINUMAN',
+          branch_mismatch: !!options.branchMismatch
+        });
+      } catch (logErr) {
+        // Non-critical — don't fail the whole sync just because the audit log failed.
+        console.warn('[processPOSSync] Failed to write pos_upload_logs:', logErr?.message || logErr);
+      }
+
+      return { success: true, theoretical_usage_materials: expectedUsageRows.length };
     } catch (err) {
       console.error('POS Sync error:', err);
       throw err;
     }
+  },
+
+  // FIX/NEW: laporan variance usage teoritis (dari sales x resep, tabel
+  // expected_usage) vs usage aktual (dari input fisik harian, tabel
+  // daily_inventory_items.terpakai_qty). Ini yang sebelumnya tidak ada sama
+  // sekali sbg data tersimpan/queryable -- padahal ini inti dari "Cost
+  // Control" di SO Barista asli. Lihat services/varianceCalculator.js.
+  getUsageVariance: async (month, year) => {
+    const tenantId = await getActiveTenantId();
+    const m = month.toString().padStart(2, '0');
+    const startDate = `${year}-${m}-01`;
+    const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
+    const endDate = `${year}-${m}-${String(lastDay).padStart(2, '0')}`;
+
+    const [{ data: expectedUsageRows, error: euErr }, { data: dailyInventories, error: diErr }, { data: materials, error: matErr }] =
+      await Promise.all([
+        supabase.from('expected_usage').select('*')
+          .eq('tenant_id', tenantId)
+          .gte('week_start', startDate).lte('week_end', endDate),
+        supabase.from('daily_inventories').select('*, daily_inventory_items(*)')
+          .eq('tenant_id', tenantId)
+          .gte('date', startDate).lte('date', endDate),
+        supabase.from('materials').select('id, name, price, unit, full_pack').eq('tenant_id', tenantId),
+      ]);
+
+    if (euErr) throw euErr;
+    if (diErr) throw diErr;
+    if (matErr) throw matErr;
+
+    return calculateUsageVariance(expectedUsageRows || [], dailyInventories || [], materials || []);
   },
 
   // Set memory cache to avoid async locks in browser
@@ -1281,17 +1365,24 @@ export const api = {
     const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
     const endDate = new Date(year, parseInt(month), 0).toISOString().split('T')[0];
     
+    // BUG-FIX 2026-07: this used to check for type='POS_DEDUCTION' — but the live
+    // sync function (processPOSSync) was deliberately redesigned to NEVER create
+    // POS_DEDUCTION transactions (see its header comment: qty_resto must only move
+    // from real physical counts, not theoretical POS usage). That silently made
+    // duplicate-upload detection dead — re-uploading the same file would never be
+    // flagged, double-counting POS_SALE revenue. Check POS_SALE instead, since
+    // that's what processPOSSync actually inserts.
     const { count, error } = await supabase
       .from('transactions')
       .select('*', { count: 'exact', head: true })
       .eq('tenant_id', tenantId)
-      .eq('type', 'POS_DEDUCTION')
+      .eq('type', 'POS_SALE')
       .gte('date', startDate)
       .lte('date', endDate);
       
     if (error) throw error;
     if (count > 0) {
-      return { isDuplicate: true, message: `AI mendeteksi kemungkinan duplikat: Terdapat ${count} transaksi POS (Stock Deduction) pada periode ${month}/${year}. Apakah Anda yakin ingin mengunggah file ini (Data akan di-Append / Ditambahkan)?` };
+      return { isDuplicate: true, message: `AI mendeteksi kemungkinan duplikat: Terdapat ${count} transaksi POS Sale pada periode ${month}/${year}. Apakah Anda yakin ingin mengunggah file ini (Data akan di-Append / Ditambahkan)?` };
     }
     return { isDuplicate: false };
   },
@@ -1453,7 +1544,12 @@ export const api = {
           return;
         }
 
-        const unitPrice = parseFloat(material.price ?? 0);
+        // BUG-FIX 2026-07: `unitPrice = material.price` was being multiplied straight
+        // by deductQty (a base-unit qty, e.g. grams) — but material.price is a per-PACK
+        // price, so this inflated every POS_DEDUCTION amount by the pack-size factor.
+        // deduct_stock_atomic itself is fine (deducts qty_resto in base units correctly);
+        // only the Rupiah valuation here was wrong. Route through the shared calculator.
+        const deductionAmount = calculateIngredientCost(material, deductQty, material.unit);
         const datesArray = Array.from(data.saleDates).sort();
         const primaryDate = datesArray[datesArray.length - 1] || nowStr;
 
@@ -1464,7 +1560,7 @@ export const api = {
           type: 'POS_DEDUCTION',
           location: 'RESTO',
           qty: -deductQty,
-          amount: -deductQty * unitPrice,
+          amount: -deductionAmount,
           notes: `POS Sync Bulk Deduction (Total item terjual via file ${filename})`,
           created_by: userId
         });
@@ -1830,7 +1926,11 @@ export const api = {
           const physicalQty = parseFloat(item.physical_qty || 0);
           const bookQty = parseFloat(item.book_qty || 0);
           const price = parseFloat(item.materials?.price ?? 0);
-          const val = physicalQty * price;
+          // BUG-FIX 2026-07: `physicalQty * price` used price as if it were already a
+          // per-base-unit price — but materials.price is a per-PACK price. This is the
+          // core reason monthly Cost Control HPP was inflated even when Recipe Builder
+          // looked fine. Route through the shared, pack-size-aware calculator.
+          const val = calculateIngredientCost(item.materials, physicalQty, item.materials?.unit);
           const cat = item.materials?.category || 'Lain-lain';
 
           if (!matValuationMap[matId]) {
@@ -1886,7 +1986,8 @@ export const api = {
       for (const mat of (materials || [])) {
         const price = parseFloat(mat.price ?? 0);
         const qtySistem = parseFloat(mat.qty_resto) + parseFloat(mat.qty_central);
-        const val = qtySistem * price;
+        // BUG-FIX 2026-07: same pack-size issue as above — route through the shared calculator.
+        const val = calculateIngredientCost(mat, qtySistem, mat.unit);
         closingValuation += val;
 
         const cat = mat.category || 'Lain-lain';
@@ -1957,13 +2058,13 @@ export const api = {
       const prevOpnameIds = prevOpnames.map(o => o.id);
       const { data: prevOpnameItems } = await supabase
         .from('stock_opname_items')
-        .select('physical_qty, material_id, materials(new_price, price)')
+        .select('physical_qty, material_id, materials(new_price, price, unit, full_pack, name)')
         .in('opname_id', prevOpnameIds);
       
       if (prevOpnameItems && prevOpnameItems.length > 0) {
+        // BUG-FIX 2026-07: same pack-size issue as the closing-stock valuation above.
         openingValuation = prevOpnameItems.reduce((sum, item) => {
-          const price = parseFloat(item.materials?.price ?? 0);
-          return sum + (parseFloat(item.physical_qty || 0) * price);
+          return sum + calculateIngredientCost(item.materials, parseFloat(item.physical_qty || 0), item.materials?.unit);
         }, 0);
       }
     }
@@ -1972,13 +2073,13 @@ export const api = {
       openingValuation = Math.max(0.00, cogsIngredientsCost + closingValuation - purchasesValuation + wasteValuation);
     }
 
-    // Excel SO_BARISTA_APRIL_2026 COGS Calculation = Opening + Purchases - Closing (NO Waste deducted)
+    // COGS = Opening + Purchases - Closing (Excel SO_BARISTA formula, NO waste deducted)
     let actualCogs = openingValuation + purchasesValuation - closingValuation;
     if (actualCogs < 0) actualCogs = 0;
-    
-    // No overhead applied at COGS report level (to prevent double counting with recipe HPP)
     const totalCogs = actualCogs;
     const beverageCostPct = salesRevenue > 0 ? (totalCogs / salesRevenue) * 100 : 0.00;
+
+    // ponytail: swap to supabase.rpc('get_hpp_metrics') once SQL patch is deployed
 
     return {
       month,
@@ -2560,13 +2661,17 @@ export const api = {
         if (ingredients.length > 0) {
           subtotal = ingredients.reduce((sum, ing) => {
             const mat = materialsMap.get((ing.item_name || ing.material_name || '').toLowerCase().trim());
-            const price = mat ? parseFloat(mat.new_price ?? mat.price ?? 0) : parseFloat(ing.unit_price || 0);
-            return sum + (parseFloat(ing.qty_in_use || 0) * price);
+            if (mat) {
+              const unit = ing.unit || mat.unit || 'gr';
+              return sum + calculateIngredientCost(mat, parseFloat(ing.qty_in_use || 0), unit);
+            }
+            return sum;
           }, 0);
         }
         const fixCost = subtotal * activeOverheadPct;
         const basicCost = subtotal + fixCost;
-        const foodCostPct = sellingPrice > 0 ? basicCost / sellingPrice : 0;
+        let foodCostPct = sellingPrice > 0 ? basicCost / sellingPrice : 0;
+        if (foodCostPct > 99.9999) foodCostPct = 99.9999;
 
         // Upsert recipe and retrieve the generated id
         const { data: recipeData, error: recipeErr } = await supabase
@@ -2787,7 +2892,8 @@ export const api = {
       opnameRestoRes,
       opnameCentralRes,
       dailyInvRes,
-      transactionsRes
+      transactionsRes,
+      unitConversionsRes
     ] = await Promise.all([
       // 1. Materials (marketlist)
       supabase.from('materials').select('*').eq('tenant_id', tenantId).eq('is_active', true).order('category').order('name'),
@@ -2800,9 +2906,17 @@ export const api = {
       // 5. Stock Opname CENTRAL
       supabase.from('stock_opnames').select('*, stock_opname_items(*, materials(*))').eq('tenant_id', tenantId).eq('period_month', month).eq('period_year', year).eq('location', 'CENTRAL').maybeSingle(),
       // 6. Daily Inventories for the month
-      supabase.from('daily_inventories').select('*, daily_inventory_items(*, materials:material_id(name, unit, category, price))').eq('tenant_id', tenantId).gte('date', startDate).lte('date', endDate).order('date'),
+      // BUG-FIX 2026-07: added full_pack + id — computeDailyUsage/buildDailyInventorySheet
+      // now need these to compute a correct pack-size-aware valuation (was missing before,
+      // which is part of why usage values were wrong even before the multiplication bug
+      // itself is considered).
+      supabase.from('daily_inventories').select('*, daily_inventory_items(*, materials:material_id(id, name, unit, category, price, full_pack))').eq('tenant_id', tenantId).gte('date', startDate).lte('date', endDate).order('date'),
       // 7. Transactions (for pemakaian/cost control)
-      supabase.from('transactions').select('*, materials(name, category)').eq('tenant_id', tenantId).gte('date', startDate).lte('date', endDate).order('date')
+      supabase.from('transactions').select('*, materials(name, category)').eq('tenant_id', tenantId).gte('date', startDate).lte('date', endDate).order('date'),
+      // 8. GAP-FIX 2026-07: unit_conversions was in the schema but never fetched/used
+      // anywhere — needed by validateUnitConversion() to know which unit mismatches
+      // have an explicit, human-confirmed conversion factor rather than flagging them.
+      supabase.from('unit_conversions').select('*').eq('tenant_id', tenantId)
     ]);
 
     // Also fetch previous month's opname for opening stock
@@ -2823,7 +2937,8 @@ export const api = {
       prevOpnameResto: prevOpnameRestoRes.data,
       prevOpnameCentral: prevOpnameCentralRes.data,
       dailyInventories: dailyInvRes.data || [],
-      transactions: transactionsRes.data || []
+      transactions: transactionsRes.data || [],
+      unitConversions: unitConversionsRes.data || []
     };
   }
 };

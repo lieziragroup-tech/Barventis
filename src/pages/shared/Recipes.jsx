@@ -4,7 +4,7 @@ import BulkImport from '../../components/BulkImport';
 import Pagination from '../../components/shared/Pagination';
 import { useData } from '../../contexts/DataContext';
 import { api } from '../../services/api';
-import { formatIDR, calculateIngredientCost } from '../../services/costUtils';
+import { formatIDR, calculateIngredientCost, parsePackSize, isPackUnitConsistent } from '../../services/costUtils';
 
 // Stable client-side id for editable ingredient rows so React keys don't rely on the
 // array index (preserves input focus/state across add/remove/reorder). (LOW #19)
@@ -28,27 +28,28 @@ export default function Recipes() {
 
 
 
-  // Parse full_pack field to extract numeric value and unit
-  // Examples: "1000 grm" => { size: 1000, unit: 'gr' }, "500 grm" => { size: 500, unit: 'gr' }
-  // "24 pcs" => { size: 24, unit: 'pcs' }
-  const parseFullPack = (fullPack) => {
-    if (!fullPack) return { size: 1, unit: 'pcs' };
-    const match = fullPack.match(/(\d+\.?\d*)\s*(.*)/);
-    if (!match) return { size: 1, unit: 'pcs' };
-    let unit = (match[2] || 'pcs').trim().toLowerCase();
-    let size = parseFloat(match[1]);
-    // Normalize units
+  // Parse full_pack field to extract numeric value and unit.
+  // BUG-FIX 2026-07: this used to be a SECOND, separately-maintained regex parser
+  // (diverged from costUtils.parsePackSize on cases like "2 kg" — this one used to
+  // keep the unit as literal 'kg' instead of normalizing to gr, which could make the
+  // unit dropdown below offer the wrong usage unit). Now delegates the numeric parse
+  // to the shared parsePackSize(), and takes the *content* unit from the material's
+  // own `unit` column (gr/ml/pcs) — a much more reliable signal than trying to guess
+  // it back out of the free-text Full Pack string.
+  const parseFullPack = (fullPack, materialUnit) => {
+    const size = parsePackSize(fullPack);
+    const consistent = isPackUnitConsistent(materialUnit, fullPack);
+    let unit = (materialUnit || 'pcs').toLowerCase().trim();
     if (unit === 'grm' || unit === 'gram' || unit === 'grams') unit = 'gr';
-    // Convert liters to ml (1L = 1000ml)
-    if (unit === 'l' || unit === 'liter' || unit === 'ltr') { size = size * 1000; unit = 'ml'; }
-    return { size, unit };
+    if (unit === 'l' || unit === 'liter' || unit === 'ltr') unit = 'ml';
+    return { size: size > 0 && consistent ? size : 0, unit, consistent };
   };
 
   // Build a mapping of inventory items with their pack size info for smart unit selection
   const stockMap = useMemo(() => {
     const map = {};
     stock.forEach(item => {
-      const packInfo = parseFullPack(item.full_pack);
+      const packInfo = parseFullPack(item.full_pack, item.unit);
       // Determine available usage units for this item
       let usageUnits;
       const packUnit = item.unit?.toLowerCase() || 'pck';
@@ -69,6 +70,7 @@ export default function Recipes() {
         ...item,
         packSize: packInfo.size,
         packContentUnit: packInfo.unit,
+        packDataInconsistent: !packInfo.consistent,
         usageUnits,
         // Price per smallest unit (e.g., per gram, per ml, per pcs)
         pricePerUnit: packInfo.size > 0 ? (item.new_price || item.price) / packInfo.size : 0
@@ -610,7 +612,8 @@ export default function Recipes() {
                       </td>
 
                       {/* Pack Info */}
-                      <td style={{ fontSize: '0.7rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={packLabel}>
+                      <td style={{ fontSize: '0.7rem', color: info?.packDataInconsistent ? 'var(--danger, #e05252)' : 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={info?.packDataInconsistent ? `Full Pack "${info?.full_pack}" tidak cocok dengan Satuan "${info?.unit}" — cek data master bahan ini.` : packLabel}>
+                        {info?.packDataInconsistent && <AlertTriangle size={11} style={{ verticalAlign: '-2px', marginRight: '3px' }} />}
                         {packLabel || '-'}
                       </td>
 

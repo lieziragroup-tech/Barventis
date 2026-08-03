@@ -3,6 +3,7 @@
  * Generates 13 sheets matching "Pendataan yang ingin dicapai" folder structure
  * Output: individual Excel files, combined Excel, and full PDF
  */
+import { calculateIngredientCost } from './costUtils';
 
 const MONTHS_ID = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
@@ -548,13 +549,13 @@ function buildDailyInventorySheet(dbData, daysInMonth, XLSX) {
   Object.values(invByDate).forEach(items => {
     items.forEach(it => {
       const name = it.materials?.name || `Material #${it.material_id}`;
-      if (!allMats[name]) allMats[name] = { unit: it.materials?.unit || '', price: it.materials?.price || 0, category: it.materials?.category || '' };
+      if (!allMats[name]) allMats[name] = { id: it.material_id, unit: it.materials?.unit || '', price: it.materials?.price || 0, full_pack: it.materials?.full_pack || '', category: it.materials?.category || '' };
     });
   });
 
   // Also add materials from DB
   (dbData.materials || []).forEach(m => {
-    if (!allMats[m.name]) allMats[m.name] = { unit: m.unit, price: m.price, category: m.category };
+    if (!allMats[m.name]) allMats[m.name] = { id: m.id, unit: m.unit, price: m.price, full_pack: m.full_pack, category: m.category };
   });
 
   // Group by category
@@ -577,7 +578,9 @@ function buildDailyInventorySheet(dbData, daysInMonth, XLSX) {
         const item = dayItems.find(di => (di.materials?.name || '') === mat.name);
         if (item) {
           const terpakai = item.terpakai_qty || 0;
-          const price = terpakai * mat.price;
+          // BUG-FIX 2026-07: `terpakai * mat.price` used a per-PACK price as if it
+          // were per-base-unit. Same root cause as the other 5 fixes in this pass.
+          const price = calculateIngredientCost(mat, terpakai, mat.unit);
           row.push(item.in_qty || '', item.out_qty || '', item.full_qty || '', item.broken_qty || '', item.waste_qty || '', terpakai, price);
           totalPakai += terpakai;
         } else {
@@ -894,7 +897,11 @@ function buildStockOpnameSheet(dbData, location, period, XLSX) {
       no++;
       const qty = item.physical_qty ?? item.book_qty ?? 0;
       const price = item.materials?.price || 0;
-      const total = qty * price;
+      // BUG-FIX 2026-07: `qty * price` here duplicated the same bug as
+      // computeOpnameValue() above but for the STOCK OPNAME sheet's own "Total Price"
+      // column specifically — fixing computeOpnameValue alone would NOT have fixed
+      // this sheet, since it's a separate inline calculation.
+      const total = calculateIngredientCost(item.materials, qty, item.materials?.unit);
       grandTotal += total;
       rows.push([no, item.materials?.name || '', item.materials?.unit || '', price, qty, total]);
     }
@@ -1065,13 +1072,16 @@ function computeDailyUsage(salesData, dbData) {
     if (!result[dateStr]) result[dateStr] = { bahan: 0, beer: 0 };
     (inv.daily_inventory_items || []).forEach(item => {
       const terpakai = Number(item.terpakai_qty) || 0;
-      const price = Number(item.materials?.price) || 0;
+      // BUG-FIX 2026-07: `terpakai * price` used a per-PACK price directly — same root
+      // cause as the other fixes in this pass. materials.price needs to go through
+      // parsePackSize(full_pack) first.
+      const value = calculateIngredientCost(item.materials, terpakai, item.materials?.unit);
       const cat = (item.materials?.category || '').toLowerCase();
       const isBeer = cat.includes('beer') || cat.includes('bir') || cat.includes('alkohol');
       if (isBeer) {
-        result[dateStr].beer += terpakai * price;
+        result[dateStr].beer += value;
       } else {
-        result[dateStr].bahan += terpakai * price;
+        result[dateStr].bahan += value;
       }
     });
   });
@@ -1101,10 +1111,14 @@ function computeDailyUsage(salesData, dbData) {
 
 function computeOpnameValue(opname) {
   if (!opname?.stock_opname_items) return 0;
+  // BUG-FIX 2026-07: `qty * price` treated materials.price as a per-base-unit price —
+  // it's actually a per-PACK price. This function feeds Opening/Closing stock valuation
+  // for the whole Cost Control sheet (called 4x below), so this was the single biggest
+  // source of the inflated HPP in the generated report. Route through the shared,
+  // pack-size-aware calculator (same one Recipe Builder already used correctly).
   return opname.stock_opname_items.reduce((sum, item) => {
     const qty = item.physical_qty ?? item.book_qty ?? 0;
-    const price = item.materials?.price || 0;
-    return sum + qty * price;
+    return sum + calculateIngredientCost(item.materials, qty, item.materials?.unit);
   }, 0);
 }
 

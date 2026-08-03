@@ -11,6 +11,9 @@ import {
   buildIndividualWorkbooks, generatePDF, downloadAsZip,
   downloadWorkbook, downloadPDF
 } from '../../services/reportGenerator';
+import {
+  validateMenuMapping, validateRecipeCompleteness, validateUnitConversion
+} from '../../services/validationService';
 
 let _XLSX;
 const getXLSX = async () => { if (!_XLSX) _XLSX = await import('xlsx'); return _XLSX; };
@@ -44,6 +47,11 @@ export default function BaristaReport() {
   // Step 3: DB data check
   const [dbData, setDbData] = useState(null);
   const [dataStatus, setDataStatus] = useState(null);
+  // GAP-FIX 2026-07: validationService.js existed with fully-written rules
+  // (menu mapping, recipe completeness, unit conversion) but was never imported
+  // or called from anywhere — this is where those results now surface, right
+  // before the user commits to generating the report.
+  const [validationResults, setValidationResults] = useState(null);
 
   // Step 4: Generated outputs
   const [generatedSheets, setGeneratedSheets] = useState(null);
@@ -113,6 +121,19 @@ export default function BaristaReport() {
         dailyInventories: (data.dailyInventories || []).length,
         transactions: (data.transactions || []).length,
         daysInMonth: data.period.lastDay
+      });
+
+      // Data-quality validation (menu mapping, empty recipes, unit mismatches).
+      // Uses `data.recipes` (raw, with recipe_ingredients+materials nested) rather
+      // than the transformed `recipes` from useData() — that transformed shape
+      // drops the material's own unit, which these checks need.
+      const unitConversionMap = new Map(
+        (data.unitConversions || []).map(uc => [`${uc.material_id}:${uc.from_unit}:${uc.to_unit}`, uc.factor])
+      );
+      setValidationResults({
+        menuMapping: validateMenuMapping(filtered.sales || [], data.recipes || []),
+        recipeCompleteness: validateRecipeCompleteness(data.recipes || []),
+        unitConversion: validateUnitConversion(data.recipes || [], unitConversionMap),
       });
     } catch (e) {
       setError(`Gagal memuat data: ${e.message}`);
@@ -442,6 +463,52 @@ export default function BaristaReport() {
               Data yang belum ada akan menghasilkan sheet kosong/placeholder. Lengkapi melalui halaman terkait (Stock Opname, Invoicing, Daily Inventory).
             </p>
           </div>
+
+          {/* Data Quality Validation — menu mapping, empty recipes, unit mismatches.
+              GAP-FIX 2026-07: these checks existed as fully-written, tested logic in
+              validationService.js but nothing in the app ever called them. */}
+          {validationResults && (() => {
+            const items = [
+              { key: 'menuMapping', title: 'Pemetaan Menu ke Resep', result: validationResults.menuMapping },
+              { key: 'recipeCompleteness', title: 'Kelengkapan Bahan Resep', result: validationResults.recipeCompleteness },
+              { key: 'unitConversion', title: 'Kecocokan Satuan Resep vs Bahan', result: validationResults.unitConversion },
+            ].filter(i => i.result && i.result.level !== 'info');
+            if (items.length === 0) {
+              return (
+                <div className="glass-card" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <CheckCircle size={18} style={{ color: 'var(--success)' }} />
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>Semua menu, resep, dan satuan sudah konsisten — tidak ada yang perlu direview.</span>
+                </div>
+              );
+            }
+            return (
+              <div className="glass-card" style={{ marginBottom: 16 }}>
+                <h3 style={{ margin: '0 0 12px', fontWeight: 600, fontSize: '1rem' }}>
+                  <AlertTriangle size={18} style={{ verticalAlign: 'middle', marginRight: 8, color: 'var(--warning)' }} />
+                  Perlu Direview Sebelum Generate
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {items.map(({ key, title, result }) => (
+                    <div key={key} style={{
+                      display: 'flex', alignItems: 'flex-start', gap: 10,
+                      padding: '10px 14px', borderRadius: 'var(--radius-sm)',
+                      background: result.level === 'error' ? 'rgba(220, 38, 38, 0.06)' : 'rgba(217, 119, 6, 0.06)',
+                      border: `1px solid ${result.level === 'error' ? 'rgba(220, 38, 38, 0.2)' : 'rgba(217, 119, 6, 0.2)'}`
+                    }}>
+                      <AlertTriangle size={16} style={{ color: result.level === 'error' ? 'var(--danger, #dc2626)' : 'var(--warning)', flexShrink: 0, marginTop: 2 }} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>{title}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{result.message}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 12 }}>
+                  Laporan tetap bisa di-generate — item di atas tidak memblokir, tapi kemungkinan membuat sebagian angka kurang akurat sampai diperbaiki.
+                </p>
+              </div>
+            );
+          })()}
 
           {/* Generate Button */}
           <div style={{ display: 'flex', gap: 10 }}>

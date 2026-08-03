@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { useLang } from '../../contexts/LanguageContext';
 import { copy } from '../../data/landingCopy';
+import barventisIcon from '../../assets/barventis-icon.png';
 
 export default function LandingFooter() {
   const { lang } = useLang();
@@ -28,7 +29,9 @@ export default function LandingFooter() {
           <div className="footer-grid">
             <div>
               <a href="/" className="landing-nav-brand">
-                <div className="landing-nav-logo">B</div>
+                <div className="landing-nav-logo-on-dark">
+                  <img src={barventisIcon} alt="Barventis" className="landing-nav-logo" />
+                </div>
                 <span className="landing-nav-name" style={{ color: 'white' }}>Barventis</span>
               </a>
               <p className="footer-brand-desc">{c.tagline}</p>

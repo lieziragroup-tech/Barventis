@@ -130,7 +130,7 @@ export const DataProvider = ({ children }) => {
       // mappedSales structure dari PosUpload: [{ recipe_id, qty, price }, ...]
       await api.processPOSSync(mappedSales, options);
       await fetchAllData();
-      showToast('POS data synced successfully & stock deducted.', 'success');
+      showToast('POS data synced. Usage teoritis tercatat sbg benchmark — stok riil tetap mengikuti input Daily Inventory/Stock Opname fisik.', 'success');
     } catch (error) {
       console.error('POS sync error:', error);
       showToast(error.message || 'Failed to sync POS data', 'error');

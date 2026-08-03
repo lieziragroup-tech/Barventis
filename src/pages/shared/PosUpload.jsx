@@ -12,9 +12,10 @@ const getXLSX = async () => { if (!_XLSX) _XLSX = await import('xlsx'); return _
 import { api } from '../../services/api';
 import { useData } from '../../contexts/DataContext';
 import { formatIDR } from '../../services/costUtils';
+import { validateBranchMatch } from '../../services/validationService';
 
 export default function PosUpload() {
-  const { recipes, handleProcessPosSales, fetchAllData } = useData();
+  const { recipes, currentTenant, handleProcessPosSales, fetchAllData } = useData();
   const onProcessPosSales = handleProcessPosSales;
   const [dragActive, setDragActive] = useState(false);
   const [rawFile, setRawFile] = useState(null);
@@ -116,6 +117,11 @@ export default function PosUpload() {
   const [uploadStatus, setUploadStatus] = useState(null); // 'success', 'warning', 'error'
   const [duplicateInfo, setDuplicateInfo] = useState(null);
   const fileInputRef = useRef(null);
+
+  // GAP-FIX 2026-07: category filter used to be hardcoded to 'minuman' only
+  // (see old `BEVERAGE_CATEGORY` const, now replaced by this selectable state).
+  // 'MINUMAN' | 'MAKANAN' | 'BOTH'
+  const [categoryFilter, setCategoryFilter] = useState('MINUMAN');
 
   // POS Custom templates states
   const [templates, setTemplates] = useState([]);
@@ -268,10 +274,29 @@ export default function PosUpload() {
               // hasSales check above) because it also matches non-amount columns like
               // "Sales Type" / "Sales Date", which would otherwise steal this slot.
               if (/gross|kotor|net|bersih|total|amount|harga/i.test(hStr) && colMap.total === undefined) { colMap.total = idx; return; }
+              // FIX: kategori menu (mis. "Category" -> MINUMAN/MAKANAN/Extra/LAINNYA).
+              // Reverse-engineering menemukan file mentah POS sering berisi SEMUA
+              // kategori, bukan cuma beverage — tanpa filter ini, item makanan ikut
+              // ter-import sebagai "sales beverage".
+              if (/^category$/i.test(hStr) && colMap.category === undefined) { colMap.category = idx; return; }
             });
             console.log('AI Column Mapping:', colMap);
             break;
           }
+        }
+
+        // --- FIX: Baca Branch & Company SUNGGUHAN dari header, jangan hardcode ---
+        // Sebelumnya branchName selalu di-set string statis 'RESTO OUTLET' — file dari
+        // outlet manapun akan lolos tanpa validasi. Sekarang cari baris key-value
+        // "Branch" / "Company" di area metadata (baris sebelum header tabel).
+        let detectedBranch = null;
+        let detectedCompany = null;
+        for (let i = 0; i < headerRowIndex; i++) {
+          const row = rawRows[i] || [];
+          const key = (row[0] || '').toString().trim().toLowerCase();
+          const val = (row[1] || '').toString().trim();
+          if (key === 'branch' && val) detectedBranch = val;
+          if (key === 'company' && val) detectedCompany = val;
         }
 
         if (headerRowIndex === -1 || colMap.menu_name === undefined || colMap.qty === undefined || colMap.total === undefined) {
@@ -327,6 +352,7 @@ export default function PosUpload() {
         const salesRows = [];
         let totalQty = 0;
         let totalRevenue = 0;
+        let skippedNonBeverage = 0;
 
         for (let i = headerRowIndex + 1; i < rawRows.length; i++) {
           const row = rawRows[i];
@@ -336,9 +362,26 @@ export default function PosUpload() {
           if (!menuName || menuName.toString().trim() === '') continue;
           if (menuName.toString().toLowerCase().includes('total')) continue;
 
+          // GAP-FIX 2026-07: kategori filter sekarang mengikuti pilihan user
+          // (Minuman / Makanan / Keduanya) alih-alih hardcode ke MINUMAN saja.
+          // Kalau categoryFilter === 'BOTH', tidak ada baris yang dibuang di sini
+          // sama sekali (baik MINUMAN maupun MAKANAN ikut masuk).
+          if (colMap.category !== undefined && categoryFilter !== 'BOTH') {
+            const catVal = (row[colMap.category] || '').toString().trim().toLowerCase();
+            const wanted = categoryFilter.toLowerCase();
+            if (catVal && catVal !== wanted) {
+              skippedNonBeverage++;
+              continue;
+            }
+          }
+
           const rawQty = row[colMap.qty];
           const qty = parseFloat(rawQty) || 0;
-          if (qty <= 0) continue;
+          // FIX: qty negatif (void/refund/cancel) SEBELUMNYA DIBUANG (qty <= 0 di-skip
+          // semua). Void seharusnya tetap dihitung sbg pengurang usage teoritis, bukan
+          // menghilang begitu saja (lihat edge case "Sales minus / Void" di dokumen
+          // reverse-engineering §K). qty === 0 tetap di-skip krn tidak ada efek apapun.
+          if (qty === 0) continue;
 
           const rawTotal = row[colMap.total];
           const total = parseFloat(rawTotal) || 0;
@@ -349,11 +392,12 @@ export default function PosUpload() {
           }
 
           salesRows.push({
-            branch: 'RESTO OUTLET',
+            branch: detectedBranch || 'UNKNOWN BRANCH',
             sales_date: dateStr,
             menu_name: menuName.toString().trim(),
             menu_code: '-',
             qty: qty,
+            is_void: qty < 0,
             total_sales: total
           });
 
@@ -362,31 +406,64 @@ export default function PosUpload() {
         }
 
         if (salesRows.length === 0) {
-          throw new Error('Tidak ada baris penjualan yang valid ditemukan.');
+          throw new Error(`Tidak ada baris penjualan yang valid ditemukan (setelah filter kategori ${categoryFilter === 'BOTH' ? 'Minuman + Makanan' : categoryFilter}). Cek apakah file ini berisi data dengan kategori tersebut.`);
         }
+
+        // --- Validasi Branch/Company vs tenant aktif ---
+        // Kasus nyata yang jadi alasan pengecekan ini: file "Daily Sales Menu Report
+        // Juni 2026" ternyata dari branch "Kasuna by Umatis" / "PT. Puri Asta Rasa",
+        // sedangkan tenant aktif adalah "UMATIS RESTO & VENUE" / "PT. Asta Boga
+        // Nusantara". BUG-FIX 2026-07: ini SEBELUMNYA melempar Error dan memblokir
+        // upload sepenuhnya. Dikonfirmasi ke pemilik tenant: "Kasuna by Umatis" adalah
+        // nama yang sama, hanya ditarik dari device/admin POS yang berbeda — bukan
+        // outlet/tenant yang benar-benar terpisah. Jadi sekarang ini HANYA sebuah
+        // peringatan non-blocking (banner info), datanya tetap digabung ke laporan
+        // tenant aktif seperti yang diminta, bukan lagi ditolak.
+        //
+        // GAP-FIX 2026-07: now calls the shared validateBranchMatch() from
+        // validationService.js instead of re-implementing the same comparison inline
+        // — that file existed with this exact rule already written but nothing ever
+        // called it.
+        const expectedBranch = currentTenant?.branch_name || currentTenant?.name;
+        const branchCheck = validateBranchMatch({ detectedBranch, detectedCompany, expectedBranch });
+        // Regardless of level (validateBranchMatch returns 'error' for a mismatch by
+        // default), treat it as informational only here — never block the upload.
+        const branchMismatchNote = branchCheck.code === 'BRANCH_MISMATCH'
+          ? `${branchCheck.message} Data tetap digabungkan ke laporan tenant ini (sesuai kebijakan yang sudah dikonfirmasi).`
+          : null;
 
         // --- Check Duplicates ---
         const { isDuplicate, message } = await api.checkPosSalesDuplicate(periodMonth, periodYear);
         if (isDuplicate) {
-          setDuplicateInfo({ sales: salesRows, filename: excelFile.name, branchName: 'RESTO OUTLET', totalQty, totalRevenue, periodMonth, periodYear, periodStr: `${periodMonth}/${periodYear}` });
+          setDuplicateInfo({ sales: salesRows, filename: excelFile.name, branchName: detectedBranch, companyName: detectedCompany, totalQty, totalRevenue, periodMonth, periodYear, periodStr: `${periodMonth}/${periodYear}` });
           setUploadStatus({ type: 'warning', message });
           setLoading(false);
           return;
         }
 
+        if (skippedNonBeverage > 0) {
+          console.log(`Filter kategori (${categoryFilter}): ${skippedNonBeverage} baris di luar kategori dilewati.`);
+        }
+
         setParsedData({
           sales: salesRows,
           filename: excelFile.name,
-          branchName: 'RESTO OUTLET',
+          branchName: detectedBranch,
+          companyName: detectedCompany,
+          branchMismatchNote,
+          categoryFilter,
+          skippedNonBeverage,
           totalQty,
           totalRevenue,
+          periodMonth,
+          periodYear,
           periodStr: `${periodMonth}/${periodYear}`
         });
-        
-        setUploadStatus({
-          type: 'success',
-          message: `AI Berhasil mengekstrak ${salesRows.length} data (${periodMonth}/${periodYear}).`
-        });
+
+        setUploadStatus(branchMismatchNote
+          ? { type: 'warning', message: `AI Berhasil mengekstrak ${salesRows.length} data (${periodMonth}/${periodYear}). ${branchMismatchNote}` }
+          : { type: 'success', message: `AI Berhasil mengekstrak ${salesRows.length} data (${periodMonth}/${periodYear}).` }
+        );
 
       } catch (err) {
         console.error(err);
@@ -424,7 +501,12 @@ export default function PosUpload() {
         filename: parsedData.filename, 
         mode: parsedData.uploadMode || 'append',
         periodMonth: parsedData.periodMonth,
-        periodYear: parsedData.periodYear
+        periodYear: parsedData.periodYear,
+        branchName: parsedData.branchName,
+        companyName: parsedData.companyName,
+        branchMismatch: !!parsedData.branchMismatchNote,
+        categoryFilter: parsedData.categoryFilter,
+        totalRows: parsedData.sales?.length || 0
       });
       await confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
       setRawFile(null);
@@ -488,6 +570,30 @@ export default function PosUpload() {
             {templates.map(t => (
               <option key={t.id} value={t.id}>{t.display_name}</option>
             ))}
+          </select>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', minWidth: 0 }}>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Kategori yang diproses:</span>
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            disabled={loading || !!parsedData}
+            title={parsedData ? 'Reset upload (batal) untuk mengganti filter kategori' : 'Pilih kategori baris yang mau diproses dari file POS'}
+            style={{
+              padding: '8px 14px',
+              background: 'var(--bg-tertiary)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+              color: 'var(--text-primary)',
+              fontSize: '0.825rem',
+              fontWeight: '600',
+              outline: 'none',
+              cursor: parsedData ? 'not-allowed' : 'pointer'
+            }}
+          >
+            <option value="MINUMAN">Minuman saja</option>
+            <option value="MAKANAN">Makanan saja</option>
+            <option value="BOTH">Makanan + Minuman</option>
           </select>
         </div>
       </div>
@@ -596,7 +702,7 @@ export default function PosUpload() {
               </div>
               <div>
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Branch Location</div>
-                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{parsedData.branchName}</div>
+                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{parsedData.branchName || 'Tidak terdeteksi'}</div>
               </div>
             </div>
 

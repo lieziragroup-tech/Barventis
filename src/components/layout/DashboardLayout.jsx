@@ -13,6 +13,7 @@ import Onboarding from '../Onboarding';
 import AIAssistant from '../AIAssistant';
 import GuidebookModal from '../GuidebookModal';
 import { BookOpen } from 'lucide-react';
+import barventisIcon from '../../assets/barventis-icon.png';
 
 const NavItem = ({ to, exact, label, icon: Icon, collapsed }) => {
   return (
@@ -183,7 +184,7 @@ export default function DashboardLayout() {
       <nav className={`sidebar ${isSidebarOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}>
         <div className="logo-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '20px', padding: '0 6px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
-            <div className="logo-icon" style={{ flexShrink: 0 }}>B</div>
+            <img src={barventisIcon} alt="Barventis" className="logo-icon" style={{ flexShrink: 0 }} />
             {!collapsed && <span className="logo-text">BARVENTIS</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>

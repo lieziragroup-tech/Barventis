@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useLang } from '../../contexts/LanguageContext';
 import { copy } from '../../data/landingCopy';
+import barventisIcon from '../../assets/barventis-icon.png';
 
 export default function LandingNavbar() {
   const { lang, setLang } = useLang();
@@ -17,7 +18,7 @@ export default function LandingNavbar() {
   return (
     <nav className={`landing-nav${scrolled ? ' scrolled' : ''}`}>
       <a href="/" className="landing-nav-brand">
-        <div className="landing-nav-logo">B</div>
+        <img src={barventisIcon} alt="Barventis" className="landing-nav-logo" />
         <span className="landing-nav-name">Barventis</span>
       </a>
 

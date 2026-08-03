@@ -1,0 +1,487 @@
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.invitations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL,
+  token uuid NOT NULL DEFAULT gen_random_uuid() UNIQUE,
+  expires_at timestamp with time zone NOT NULL,
+  is_used boolean NOT NULL DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  created_by uuid,
+  invite_role USER-DEFINED NOT NULL DEFAULT 'Admin / Owner'::user_role,
+  CONSTRAINT invitations_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.suppliers (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  tenant_id uuid NOT NULL,
+  name character varying NOT NULL,
+  phone character varying,
+  address text,
+  created_at timestamp with time zone DEFAULT now(),
+  contact_person character varying,
+  status character varying DEFAULT 'active'::character varying,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT suppliers_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.purchase_entries (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  tenant_id uuid NOT NULL,
+  material_id bigint NOT NULL,
+  supplier_id bigint,
+  qty numeric NOT NULL,
+  unit character varying NOT NULL,
+  unit_price numeric NOT NULL,
+  date date NOT NULL,
+  input_by uuid,
+  invoice_id bigint,
+  created_at timestamp with time zone DEFAULT now(),
+  notes text,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT purchase_entries_pkey PRIMARY KEY (id),
+  CONSTRAINT purchase_entries_material_id_fkey FOREIGN KEY (material_id) REFERENCES public.materials(id),
+  CONSTRAINT purchase_entries_invoice_id_fkey FOREIGN KEY (invoice_id) REFERENCES public.invoices(id),
+  CONSTRAINT purchase_entries_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id)
+);
+CREATE TABLE public.expected_usage (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  tenant_id uuid NOT NULL,
+  week_start date NOT NULL,
+  week_end date NOT NULL,
+  material_id bigint NOT NULL,
+  expected_qty numeric NOT NULL,
+  calculated_at timestamp with time zone DEFAULT now(),
+  total_sold integer,
+  last_pos_filename character varying,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT expected_usage_pkey PRIMARY KEY (id),
+  CONSTRAINT expected_usage_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.daily_inventories (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  tenant_id uuid NOT NULL,
+  date date NOT NULL,
+  checked_by uuid,
+  status character varying DEFAULT 'draft'::character varying,
+  notes text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  location USER-DEFINED NOT NULL DEFAULT 'RESTO'::stock_location,
+  verified_by uuid,
+  CONSTRAINT daily_inventories_pkey PRIMARY KEY (id),
+  CONSTRAINT daily_inventories_verified_by_fkey FOREIGN KEY (verified_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.daily_inventory_items (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  inventory_id bigint NOT NULL,
+  material_id bigint NOT NULL,
+  in_qty numeric DEFAULT 0,
+  out_qty numeric DEFAULT 0,
+  closing_qty numeric DEFAULT 0,
+  system_qty numeric DEFAULT 0,
+  variance numeric DEFAULT 0,
+  full_qty numeric DEFAULT 0,
+  broken_qty numeric DEFAULT 0,
+  waste_qty numeric DEFAULT 0,
+  prev_full_qty numeric DEFAULT 0,
+  notes text,
+  terpakai_qty numeric DEFAULT (COALESCE(out_qty, (0)::numeric) + COALESCE(waste_qty, (0)::numeric)),
+  CONSTRAINT daily_inventory_items_pkey PRIMARY KEY (id),
+  CONSTRAINT daily_inventory_items_inventory_id_fkey FOREIGN KEY (inventory_id) REFERENCES public.daily_inventories(id)
+);
+CREATE TABLE public.pos_templates (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name character varying NOT NULL UNIQUE,
+  display_name character varying NOT NULL,
+  column_mapping jsonb NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT pos_templates_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.tenants (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name character varying NOT NULL UNIQUE,
+  company_name character varying NOT NULL,
+  status character varying DEFAULT 'active'::character varying,
+  pos_template_id uuid,
+  locked_until_month integer,
+  locked_until_year integer,
+  overhead_pct numeric DEFAULT 0.0500,
+  whatsapp_number character varying DEFAULT NULL::character varying,
+  whatsapp_token character varying DEFAULT NULL::character varying,
+  whatsapp_enabled boolean DEFAULT false,
+  is_pos_enabled boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  branch_name character varying,
+  CONSTRAINT tenants_pkey PRIMARY KEY (id),
+  CONSTRAINT tenants_pos_template_id_fkey FOREIGN KEY (pos_template_id) REFERENCES public.pos_templates(id)
+);
+CREATE TABLE public.users (
+  id uuid NOT NULL,
+  tenant_id uuid,
+  name character varying NOT NULL,
+  email character varying NOT NULL UNIQUE,
+  role USER-DEFINED DEFAULT 'Staff'::user_role,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT users_pkey PRIMARY KEY (id),
+  CONSTRAINT users_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id),
+  CONSTRAINT users_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)
+);
+CREATE TABLE public.materials (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  tenant_id uuid NOT NULL,
+  name character varying NOT NULL,
+  category character varying NOT NULL,
+  supplier character varying NOT NULL,
+  unit character varying NOT NULL,
+  full_pack character varying NOT NULL,
+  price numeric NOT NULL DEFAULT 0.00 CHECK (price >= 0::numeric),
+  new_price numeric NOT NULL DEFAULT 0.00 CHECK (new_price >= 0::numeric),
+  qty_resto numeric NOT NULL DEFAULT 0.00 CHECK (qty_resto >= 0::numeric),
+  qty_central numeric NOT NULL DEFAULT 0.00 CHECK (qty_central >= 0::numeric),
+  min_stock numeric NOT NULL DEFAULT 15.00,
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT materials_pkey PRIMARY KEY (id),
+  CONSTRAINT materials_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)
+);
+CREATE TABLE public.recipes (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  tenant_id uuid NOT NULL,
+  menu_name character varying NOT NULL,
+  pos_code character varying,
+  category character varying DEFAULT 'NON-KOPI'::character varying,
+  selling_price numeric NOT NULL DEFAULT 0.00,
+  subtotal numeric NOT NULL DEFAULT 0.00,
+  fix_cost numeric NOT NULL DEFAULT 0.00,
+  basic_cost numeric NOT NULL DEFAULT 0.00,
+  food_cost_pct numeric NOT NULL DEFAULT 0.0000,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT recipes_pkey PRIMARY KEY (id),
+  CONSTRAINT recipes_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)
+);
+CREATE TABLE public.recipe_ingredients (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  recipe_id bigint NOT NULL,
+  material_id bigint NOT NULL,
+  qty_in_use numeric NOT NULL,
+  unit character varying NOT NULL,
+  unit_price numeric NOT NULL,
+  amount numeric NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT recipe_ingredients_pkey PRIMARY KEY (id),
+  CONSTRAINT recipe_ingredients_recipe_id_fkey FOREIGN KEY (recipe_id) REFERENCES public.recipes(id),
+  CONSTRAINT recipe_ingredients_material_id_fkey FOREIGN KEY (material_id) REFERENCES public.materials(id)
+);
+CREATE TABLE public.transactions (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  tenant_id uuid NOT NULL,
+  date date NOT NULL,
+  material_id bigint,
+  type USER-DEFINED NOT NULL,
+  location USER-DEFINED NOT NULL,
+  qty numeric NOT NULL CHECK (qty <> 0::numeric),
+  amount numeric NOT NULL,
+  notes text,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT transactions_pkey PRIMARY KEY (id),
+  CONSTRAINT transactions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id),
+  CONSTRAINT transactions_material_id_fkey FOREIGN KEY (material_id) REFERENCES public.materials(id),
+  CONSTRAINT transactions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.invoices (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  tenant_id uuid NOT NULL,
+  invoice_no character varying NOT NULL,
+  supplier character varying NOT NULL,
+  date date NOT NULL,
+  total numeric NOT NULL,
+  status USER-DEFINED DEFAULT 'DRAFT'::invoice_status,
+  location USER-DEFINED DEFAULT 'CENTRAL'::stock_location,
+  notes text,
+  received_date date,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT invoices_pkey PRIMARY KEY (id),
+  CONSTRAINT invoices_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)
+);
+CREATE TABLE public.invoice_items (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  invoice_id bigint NOT NULL,
+  material_id bigint NOT NULL,
+  qty numeric NOT NULL,
+  unit_price numeric NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT invoice_items_pkey PRIMARY KEY (id),
+  CONSTRAINT invoice_items_invoice_id_fkey FOREIGN KEY (invoice_id) REFERENCES public.invoices(id),
+  CONSTRAINT invoice_items_material_id_fkey FOREIGN KEY (material_id) REFERENCES public.materials(id)
+);
+CREATE TABLE public.audit_logs (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  tenant_id uuid NOT NULL,
+  user_id uuid,
+  action character varying NOT NULL,
+  description text NOT NULL,
+  ip_address character varying,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT audit_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT audit_logs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id),
+  CONSTRAINT audit_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.pos_upload_logs (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  tenant_id uuid NOT NULL,
+  filename character varying NOT NULL,
+  file_hash character varying NOT NULL,
+  period character varying NOT NULL,
+  total_rows integer NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  branch_name character varying,
+  company_name character varying,
+  period_start date,
+  period_end date,
+  category_filter character varying DEFAULT 'MINUMAN'::character varying,
+  branch_mismatch boolean DEFAULT false,
+  CONSTRAINT pos_upload_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT pos_upload_logs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)
+);
+CREATE TABLE public.pos_orders (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL,
+  order_no character varying NOT NULL,
+  total_amount numeric NOT NULL,
+  payment_method character varying DEFAULT 'CASH'::character varying,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT pos_orders_pkey PRIMARY KEY (id),
+  CONSTRAINT pos_orders_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id),
+  CONSTRAINT pos_orders_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.pos_order_items (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  order_id uuid NOT NULL,
+  recipe_id bigint NOT NULL,
+  qty integer NOT NULL,
+  unit_price numeric NOT NULL,
+  subtotal numeric NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT pos_order_items_pkey PRIMARY KEY (id),
+  CONSTRAINT pos_order_items_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.pos_orders(id),
+  CONSTRAINT pos_order_items_recipe_id_fkey FOREIGN KEY (recipe_id) REFERENCES public.recipes(id)
+);
+CREATE TABLE public.stock_opnames (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  tenant_id uuid NOT NULL,
+  period_month integer NOT NULL CHECK (period_month >= 1 AND period_month <= 12),
+  period_year integer NOT NULL CHECK (period_year >= 2020 AND period_year <= 2100),
+  location USER-DEFINED NOT NULL,
+  status USER-DEFINED DEFAULT 'DRAFT'::opname_status,
+  signature_svg text,
+  created_by uuid,
+  approved_by uuid,
+  submitted_at timestamp with time zone,
+  approved_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT stock_opnames_pkey PRIMARY KEY (id),
+  CONSTRAINT stock_opnames_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id),
+  CONSTRAINT stock_opnames_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id),
+  CONSTRAINT stock_opnames_approved_by_fkey FOREIGN KEY (approved_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.stock_opname_items (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  opname_id bigint NOT NULL,
+  material_id bigint NOT NULL,
+  book_qty numeric NOT NULL,
+  physical_qty numeric,
+  notes text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT stock_opname_items_pkey PRIMARY KEY (id),
+  CONSTRAINT stock_opname_items_opname_id_fkey FOREIGN KEY (opname_id) REFERENCES public.stock_opnames(id),
+  CONSTRAINT stock_opname_items_material_id_fkey FOREIGN KEY (material_id) REFERENCES public.materials(id)
+);
+CREATE TABLE public.backups (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL,
+  filename character varying NOT NULL,
+  size_bytes bigint NOT NULL,
+  size_formatted character varying NOT NULL,
+  data_json text NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT backups_pkey PRIMARY KEY (id),
+  CONSTRAINT backups_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)
+);
+CREATE TABLE public.seed_data_files (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name character varying NOT NULL,
+  description text,
+  type character varying NOT NULL,
+  storage_path character varying NOT NULL,
+  industry character varying DEFAULT 'F&B - Cafe & Bar'::character varying,
+  file_size_bytes integer,
+  row_count integer,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT seed_data_files_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.material_price_history (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  material_id bigint NOT NULL,
+  old_price numeric,
+  new_price numeric,
+  changed_by uuid,
+  changed_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT material_price_history_pkey PRIMARY KEY (id),
+  CONSTRAINT material_price_history_material_id_fkey FOREIGN KEY (material_id) REFERENCES public.materials(id),
+  CONSTRAINT material_price_history_changed_by_fkey FOREIGN KEY (changed_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.physical_checks (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  tenant_id uuid NOT NULL,
+  week_start date NOT NULL,
+  week_end date NOT NULL,
+  input_by uuid NOT NULL,
+  verified_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT physical_checks_pkey PRIMARY KEY (id),
+  CONSTRAINT physical_checks_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id),
+  CONSTRAINT physical_checks_input_by_fkey FOREIGN KEY (input_by) REFERENCES public.users(id),
+  CONSTRAINT physical_checks_verified_by_fkey FOREIGN KEY (verified_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.physical_check_items (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  check_id bigint NOT NULL,
+  material_id bigint NOT NULL,
+  opening_qty numeric NOT NULL,
+  purchase_qty numeric NOT NULL,
+  expected_usage numeric NOT NULL,
+  physical_qty numeric NOT NULL,
+  variance numeric NOT NULL,
+  waste_cause character varying,
+  notes text,
+  CONSTRAINT physical_check_items_pkey PRIMARY KEY (id),
+  CONSTRAINT physical_check_items_check_id_fkey FOREIGN KEY (check_id) REFERENCES public.physical_checks(id),
+  CONSTRAINT physical_check_items_material_id_fkey FOREIGN KEY (material_id) REFERENCES public.materials(id)
+);
+CREATE TABLE public.unit_conversions (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  tenant_id uuid NOT NULL,
+  material_id bigint NOT NULL,
+  from_unit character varying NOT NULL,
+  to_unit character varying NOT NULL,
+  factor numeric NOT NULL CHECK (factor > 0::numeric),
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT unit_conversions_pkey PRIMARY KEY (id),
+  CONSTRAINT unit_conversions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id),
+  CONSTRAINT unit_conversions_material_id_fkey FOREIGN KEY (material_id) REFERENCES public.materials(id)
+);
+CREATE TABLE public.recipe_versions (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  recipe_id bigint NOT NULL,
+  effective_from date NOT NULL,
+  effective_to date,
+  subtotal numeric NOT NULL,
+  basic_cost numeric NOT NULL,
+  selling_price numeric NOT NULL,
+  ingredients_snapshot jsonb NOT NULL,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT recipe_versions_pkey PRIMARY KEY (id),
+  CONSTRAINT recipe_versions_recipe_id_fkey FOREIGN KEY (recipe_id) REFERENCES public.recipes(id),
+  CONSTRAINT recipe_versions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.asset_items (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  tenant_id uuid NOT NULL,
+  name character varying NOT NULL,
+  unit character varying NOT NULL,
+  qty_owned numeric NOT NULL DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT asset_items_pkey PRIMARY KEY (id),
+  CONSTRAINT asset_items_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)
+);
+CREATE TABLE public.asset_opname_items (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  tenant_id uuid NOT NULL,
+  period_month integer NOT NULL CHECK (period_month >= 1 AND period_month <= 12),
+  period_year integer NOT NULL,
+  asset_id bigint NOT NULL,
+  stock_awal numeric NOT NULL DEFAULT 0,
+  stock_akhir numeric,
+  adjustment_plus numeric DEFAULT 0,
+  adjustment_minus numeric DEFAULT 0,
+  keterangan text,
+  selisih_tidak_teridentifikasi numeric DEFAULT (COALESCE(stock_akhir, (0)::numeric) - ((COALESCE(stock_awal, (0)::numeric) + COALESCE(adjustment_plus, (0)::numeric)) - COALESCE(adjustment_minus, (0)::numeric))),
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT asset_opname_items_pkey PRIMARY KEY (id),
+  CONSTRAINT asset_opname_items_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id),
+  CONSTRAINT asset_opname_items_asset_id_fkey FOREIGN KEY (asset_id) REFERENCES public.asset_items(id)
+);
+CREATE TABLE public.production_batches (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  tenant_id uuid NOT NULL,
+  batch_name character varying NOT NULL,
+  yield_qty numeric NOT NULL,
+  yield_unit character varying NOT NULL,
+  source_note text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT production_batches_pkey PRIMARY KEY (id),
+  CONSTRAINT production_batches_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)
+);
+CREATE TABLE public.production_batch_ingredients (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  batch_id bigint NOT NULL,
+  material_id bigint NOT NULL,
+  qty numeric NOT NULL,
+  unit character varying NOT NULL,
+  CONSTRAINT production_batch_ingredients_pkey PRIMARY KEY (id),
+  CONSTRAINT production_batch_ingredients_batch_id_fkey FOREIGN KEY (batch_id) REFERENCES public.production_batches(id),
+  CONSTRAINT production_batch_ingredients_material_id_fkey FOREIGN KEY (material_id) REFERENCES public.materials(id)
+);
+CREATE TABLE public.generated_so_reports (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  tenant_id uuid NOT NULL,
+  period_month integer NOT NULL CHECK (period_month >= 1 AND period_month <= 12),
+  period_year integer NOT NULL,
+  status character varying DEFAULT 'DRAFT'::character varying,
+  pemakaian_bulan numeric,
+  penjualan_bulan numeric,
+  food_cost_pct numeric,
+  data_snapshot jsonb,
+  generated_by uuid,
+  generated_at timestamp with time zone DEFAULT now(),
+  file_url text,
+  CONSTRAINT generated_so_reports_pkey PRIMARY KEY (id),
+  CONSTRAINT generated_so_reports_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id),
+  CONSTRAINT generated_so_reports_generated_by_fkey FOREIGN KEY (generated_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.usage_variance (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  tenant_id uuid NOT NULL,
+  period_month integer NOT NULL CHECK (period_month >= 1 AND period_month <= 12),
+  period_year integer NOT NULL,
+  material_id bigint NOT NULL,
+  theoretical_qty numeric NOT NULL DEFAULT 0,
+  actual_qty numeric NOT NULL DEFAULT 0,
+  variance_qty numeric DEFAULT (actual_qty - theoretical_qty),
+  variance_value numeric,
+  calculated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT usage_variance_pkey PRIMARY KEY (id),
+  CONSTRAINT usage_variance_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id),
+  CONSTRAINT usage_variance_material_id_fkey FOREIGN KEY (material_id) REFERENCES public.materials(id)
+);

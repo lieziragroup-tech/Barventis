@@ -3,6 +3,7 @@ import { RefreshCw, Search, Calendar, ChevronLeft, ChevronRight, CheckCircle, Da
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { calculateIngredientCost } from '../../services/costUtils';
 
 export default function DailyInventory() {
   const [loading, setLoading] = useState(true);
@@ -193,6 +194,46 @@ export default function DailyInventory() {
         if (error) throw error;
       }
 
+      // 4. GAP-FIX 2026-07: recorded waste_qty never used to flow anywhere beyond this
+      // table — getCostControlReport()'s `waste_valuation` metric sums transactions of
+      // type WASTE/BREAKAGE/EXPIRED/COMP, but nothing ever inserted one, so that metric
+      // was always 0 regardless of what staff entered here. Mirror waste_qty into a
+      // WASTE transaction so it actually surfaces in the monthly Cost Control / SO
+      // Barista-style report. Delete-then-insert per (tenant, date, material) keeps this
+      // idempotent across repeated saves of the same day.
+      const wasteRows = materials
+        .map(mat => ({ mat, d: itemsData[mat.id] }))
+        .filter(({ d }) => parseFloat(d?.waste_qty) > 0);
+
+      if (wasteRows.length > 0) {
+        const materialIds = wasteRows.map(({ mat }) => mat.id);
+        await supabase
+          .from('transactions')
+          .delete()
+          .eq('tenant_id', tenantId)
+          .eq('date', date)
+          .eq('type', 'WASTE')
+          .in('material_id', materialIds);
+
+        const wasteTxRows = wasteRows.map(({ mat, d }) => {
+          const wasteQty = parseFloat(d.waste_qty) || 0;
+          const wasteAmount = calculateIngredientCost(mat, wasteQty, mat.unit);
+          return {
+            tenant_id: tenantId,
+            date,
+            material_id: mat.id,
+            type: 'WASTE',
+            location,
+            qty: -wasteQty,
+            amount: -wasteAmount,
+            notes: `Waste tercatat via Daily Inventory (${location}, ${date})`,
+            created_by: userId
+          };
+        });
+        const { error: wasteErr } = await supabase.from('transactions').insert(wasteTxRows);
+        if (wasteErr) throw wasteErr;
+      }
+
       setNotification({ type: 'success', text: 'Daily inventory saved successfully!' });
     } catch (err) {
       console.error(err);
@@ -309,8 +350,12 @@ export default function DailyInventory() {
                     {mats.map(mat => {
                       const d = itemsData[mat.id] || {};
                       const terpakai = (parseFloat(d.prev_full_qty || 0) + parseFloat(d.in_qty || 0)) - parseFloat(d.full_qty || 0);
-                      const unitPrice = parseFloat(mat.new_price ?? mat.price ?? 0);
-                      const rp = terpakai * unitPrice;
+                      // BUG-FIX 2026-07: previously `unitPrice = mat.new_price ?? mat.price` was
+                      // multiplied directly by terpakai — but mat.price/new_price is a per-PACK
+                      // price, not per-base-unit. That inflated this value by the pack-size
+                      // factor for every gr/ml-tracked material. Route through the shared,
+                      // pack-size-aware calculator instead (single source of truth in costUtils).
+                      const rp = calculateIngredientCost({ ...mat, price: mat.new_price ?? mat.price }, terpakai, mat.unit);
 
                       return (
                         <tr key={mat.id}>
