@@ -19,7 +19,8 @@ import {
   PlusCircle,
   Sparkles,
   Utensils,
-  Star
+  Star,
+  Menu
 } from "lucide-react";
 import "./NewLanding.css";
 import { DEMO_PRESETS } from "./presets";
@@ -29,6 +30,7 @@ import barventisIcon from "../../assets/barventis-icon.png";
 export default function App() {
   // Navigation State
   const [activeTab, setActiveTab] = useState<"landing" | "playground">("landing");
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   // Scroll to top of page when changing tabs/menus
   useEffect(() => {
@@ -294,24 +296,22 @@ export default function App() {
     <div className="min-h-screen bg-[#FAFAF8] text-[#191C1E] font-sans antialiased overflow-x-hidden">
       
       {/* Header / Top Bar */}
-      <header className={`fixed top-0 w-full z-50 transition-all duration-300 h-16 flex justify-between items-center px-4 md:px-12 border-b border-[#bcc9c6]/20 ${scrolled ? "bg-white/95 backdrop-blur-md shadow-md" : "bg-[#FDFBF7]/85 backdrop-blur-md shadow-sm"}`}>
-        <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveTab("landing")}>
+      <header className={`fixed top-0 w-full z-50 transition-all duration-300 h-16 flex justify-between items-center px-3 md:px-12 border-b border-[#bcc9c6]/20 ${scrolled ? "bg-white/95 backdrop-blur-md shadow-md" : "bg-[#FDFBF7]/85 backdrop-blur-md shadow-sm"}`}>
+        <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setActiveTab("landing"); setIsMobileMenuOpen(false); }}>
           <img src={barventisIcon} alt="Barventis Logo" className="w-8 h-8 rounded-lg shadow-sm object-contain" />
-          <span className="text-xl font-serif font-extrabold text-primary tracking-tight">Barventis</span>
-          <span className="hidden sm:inline bg-primary-light text-primary px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider">Playground 2.0</span>
+          <span className="text-lg sm:text-xl font-serif font-extrabold text-primary tracking-tight">Barventis</span>
+          <span className="hidden md:inline bg-primary-light text-primary px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider">Playground 2.0</span>
         </div>
 
         <nav className="hidden md:flex items-center gap-8">
-          <button 
-            onClick={() => setActiveTab("landing")} 
+          <button
+            onClick={() => setActiveTab("landing")}
             className={`text-sm font-semibold transition-colors duration-200 ${activeTab === "landing" ? "text-primary" : "text-[#515f74] hover:text-primary"}`}
           >
             Beranda Solusi
           </button>
-          <button 
-            onClick={() => {
-              setActiveTab("playground");
-            }} 
+          <button
+            onClick={() => setActiveTab("playground")}
             className={`text-sm font-semibold transition-colors duration-200 ${activeTab === "playground" ? "text-primary" : "text-[#515f74] hover:text-primary"}`}
           >
             Kalkulator & AI Demo
@@ -321,31 +321,77 @@ export default function App() {
           </a>
         </nav>
 
-        <div className="flex items-center gap-3">
-          <Link 
+        <div className="flex items-center gap-2 md:gap-3">
+          <Link
             to="/login"
-            className="text-xs md:text-sm font-bold text-[#515f74] hover:text-primary transition-all px-4 py-2.5 rounded-full border border-[#bcc9c6]/40 hover:bg-[#FAFAF8] flex items-center gap-1 shadow-sm"
+            className="text-xs md:text-sm font-bold text-[#515f74] hover:text-primary transition-all px-3 py-2 md:px-4 md:py-2.5 rounded-full border border-[#bcc9c6]/40 hover:bg-[#FAFAF8] flex items-center gap-1 shadow-sm"
           >
             Masuk
           </Link>
           {activeTab === "landing" ? (
-            <button 
+            <button
               onClick={() => setActiveTab("playground")}
-              className="bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-full text-xs font-bold tracking-wide shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center gap-1.5"
+              className="bg-primary hover:bg-primary-hover text-white px-3.5 py-2 md:px-5 md:py-2.5 rounded-full text-xs font-bold tracking-wide shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center gap-1.5"
             >
-              <span className="hidden sm:inline">Coba Demo Interaktif</span><span className="sm:hidden">Coba Demo</span>
+              <span className="hidden sm:inline">Coba Demo Interaktif</span><span className="sm:hidden">Demo</span>
             </button>
           ) : (
-            <button 
+            <button
               onClick={() => setActiveTab("landing")}
-              className="bg-white border border-[#bcc9c6]/50 hover:bg-[#FAFAF8] text-[#515f74] px-4 py-2.5 rounded-full text-xs font-bold transition-all flex items-center gap-1"
+              className="bg-white border border-[#bcc9c6]/50 hover:bg-[#FAFAF8] text-[#515f74] px-3 py-2 md:px-4 md:py-2.5 rounded-full text-xs font-bold transition-all flex items-center gap-1"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               Kembali
             </button>
           )}
+          <button
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="md:hidden p-2 text-[#515f74] hover:text-primary transition-colors"
+            aria-label="Toggle Menu"
+          >
+            {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
         </div>
       </header>
+
+      {/* Mobile Drawer Menu */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.2 }}
+            className="fixed top-16 left-0 w-full bg-white z-40 border-b border-[#bcc9c6]/30 shadow-lg md:hidden flex flex-col p-6 gap-4"
+          >
+            <button
+              onClick={() => {
+                setActiveTab("landing");
+                setIsMobileMenuOpen(false);
+              }}
+              className={`text-left text-base font-semibold py-2 border-b border-gray-100 transition-colors ${activeTab === "landing" ? "text-primary" : "text-[#515f74]"}`}
+            >
+              Beranda Solusi
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab("playground");
+                setIsMobileMenuOpen(false);
+              }}
+              className={`text-left text-base font-semibold py-2 border-b border-gray-100 transition-colors ${activeTab === "playground" ? "text-primary" : "text-[#515f74]"}`}
+            >
+              Kalkulator & AI Demo
+            </button>
+            <a
+              href="#roi-calc"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="text-left text-base font-semibold py-2 text-[#515f74] transition-colors"
+            >
+              Hitung ROI Resto
+            </a>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Main Content Area */}
       <main className="pt-16">
@@ -447,17 +493,15 @@ export default function App() {
 
               {/* Dynamic Stats Banner */}
               <section className="bg-[#FAFAF8] py-10 border-y border-[#bcc9c6]/20 relative">
-                <div className="max-w-7xl mx-auto px-6 md:px-12 flex flex-wrap justify-center gap-8 md:gap-16">
+                <div className="max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 sm:grid-cols-3 gap-8 items-center text-center">
                   <div className="flex flex-col items-center text-center">
                     <span className="text-3xl md:text-4xl font-serif font-black text-primary">Rp 2.4 Miliar+</span>
                     <span className="text-xs md:text-sm text-[#515f74] font-medium mt-1">Stok Bahan Baku Terlacak Aman</span>
                   </div>
-                  <div className="w-px bg-[#bcc9c6]/30 self-stretch hidden md:block"></div>
                   <div className="flex flex-col items-center text-center">
                     <span className="text-3xl md:text-4xl font-serif font-black text-tertiary">37.2%</span>
                     <span className="text-xs md:text-sm text-[#515f74] font-medium mt-1">Rata-rata Penurunan Sisa Bahan Baku</span>
                   </div>
-                  <div className="w-px bg-[#bcc9c6]/30 self-stretch hidden md:block"></div>
                   <div className="flex flex-col items-center text-center">
                     <span className="text-3xl md:text-4xl font-serif font-black text-emerald-600">A+ Profit Score</span>
                     <span className="text-xs md:text-sm text-[#515f74] font-medium mt-1">Kategori Kesehatan Keuangan Kafe</span>
