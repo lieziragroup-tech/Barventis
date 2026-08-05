@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, Trash2, Save, X, UploadCloud, Coins, AlertTriangle, CheckCircle, ChefHat } from 'lucide-react';
+import { Search, Plus, Trash2, Save, X, UploadCloud, Coins, AlertTriangle, CheckCircle, ChefHat, RefreshCw } from 'lucide-react';
 import BulkImport from '../../components/BulkImport';
 import Pagination from '../../components/shared/Pagination';
 import { useData } from '../../contexts/DataContext';
@@ -12,7 +12,8 @@ const rowUid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUU
 const ensureUids = (arr = []) => arr.map(x => ({ ...x, _uid: x._uid ?? rowUid() }));
 
 export default function Recipes() {
-  const { stock, recipes, handleSaveRecipe: onSaveRecipe, handleAddRecipe: onAddRecipe, handleDeleteRecipe: onDeleteRecipe, refreshData } = useData();
+  const { stock, recipes, handleSaveRecipe: onSaveRecipe, handleAddRecipe: onAddRecipe, handleDeleteRecipe: onDeleteRecipe, refreshData, showToast } = useData();
+  const [recalculating, setRecalculating] = useState(false);
   const [activeRecipe, setActiveRecipe] = useState(recipes[0] || null);
   const [search, setSearch] = useState('');
   const [editedIngredients, setEditedIngredients] = useState(activeRecipe ? ensureUids(activeRecipe.ingredients) : []);
@@ -221,6 +222,24 @@ export default function Recipes() {
     onSaveRecipe(updatedRecipe);
   };
 
+  // GAP-FIX 2026-07: recipes' stored basic_cost/food_cost_pct only refresh when a
+  // human opens+saves each one individually. After fixing master-data pack sizes
+  // (e.g. Ice Cube), every recipe's stored number stays stale until re-saved. This
+  // lets the user refresh all of them in one action instead of opening all 56.
+  const handleRecalculateAll = async () => {
+    if (!window.confirm('Hitung ulang HPP & Food Cost% untuk SEMUA resep berdasarkan harga bahan terbaru? Resep yang datanya berubah akan otomatis tersimpan.')) return;
+    setRecalculating(true);
+    try {
+      const result = await api.recalculateAllRecipes();
+      showToast?.(`Selesai: ${result.updated} dari ${result.total} resep diperbarui angkanya.`, 'success');
+      if (refreshData) await refreshData();
+    } catch (err) {
+      showToast?.(err.message || 'Gagal menghitung ulang resep', 'error');
+    } finally {
+      setRecalculating(false);
+    }
+  };
+
   // Add new recipe
   const handleAddNewRecipe = (e) => {
     e.preventDefault();
@@ -311,6 +330,15 @@ export default function Recipes() {
               title="Bulk Import Resep"
             >
               <UploadCloud size={15} />
+            </button>
+            <button 
+              className="btn premium-btn premium-btn-secondary" 
+              style={{ width: '38px', height: '38px', padding: 0, borderRadius: 'var(--radius-md)' }} 
+              onClick={handleRecalculateAll}
+              disabled={recalculating}
+              title="Hitung ulang HPP & Food Cost% semua resep berdasarkan harga bahan terbaru (perlu dijalankan setelah memperbaiki data bahan)"
+            >
+              <RefreshCw size={15} className={recalculating ? 'spin' : ''} />
             </button>
           </div>
         )}
