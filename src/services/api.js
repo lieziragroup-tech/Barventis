@@ -1,6 +1,6 @@
 // UMATIS Serverless API Service Client for Supabase Backend Integration
 import { supabase } from '../lib/supabase';
-import { parsePackSize, calculateIngredientCost } from './costUtils';
+import { parsePackSize, calculateIngredientCost, getUnitPrice } from './costUtils';
 import { storeLog } from './activityLogService';
 import { calculateUsageVariance } from './varianceCalculator';
 
@@ -1152,6 +1152,83 @@ export const api = {
     if (error) throw new Error("Gagal menghapus resep: " + error.message);
     await logAudit('DELETE_RECIPE', `Menghapus resep menu: "${recipe.menu_name}" dari database COGS.`);
     return true;
+  },
+
+  // GAP-FIX 2026-07: recipes.basic_cost/food_cost_pct/subtotal/fix_cost are only
+  // ever recomputed when a HUMAN opens a specific recipe and clicks "Simpan Resep"
+  // (createRecipe/updateRecipe). The Recipe Builder's detail panel looks correct
+  // regardless, because it recomputes live from the current ingredient list on every
+  // render — but that live number is NEVER what the sidebar list, Menu Pricing page,
+  // or the generated SO Barista COGS sheet read; those all read the STORED column.
+  // So after any master-data fix (like the Ice Cube / pack-size corrections), every
+  // recipe's stored numbers stay stale at whatever they were computed as during the
+  // last manual save — until someone reopens and re-saves each of the 56 recipes one
+  // by one. This function does that in one shot: recompute + persist for every
+  // recipe in the tenant, using the exact same calculateIngredientCost() the Recipe
+  // Builder itself uses, so the stored values are guaranteed consistent with what
+  // the UI already shows live.
+  recalculateAllRecipes: async () => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return { updated: 0, results: [] };
+
+    const { data: recipes, error } = await supabase
+      .from('recipes')
+      .select('*, recipe_ingredients(*, materials(*))')
+      .eq('tenant_id', tenantId);
+    if (error) throw new Error("Gagal memuat resep: " + error.message);
+
+    const results = [];
+    for (const r of (recipes || [])) {
+      const ings = r.recipe_ingredients || [];
+      const subtotal = ings.reduce((sum, ing) => {
+        const mat = ing.materials;
+        const unit = ing.unit || mat?.unit || 'gr';
+        return sum + calculateIngredientCost(mat, parseFloat(ing.qty_in_use || 0), unit);
+      }, 0);
+      // Fix cost % stays whatever was last set on this recipe (food_cost_pct field
+      // doubles as both "target %" input and "actual %" output pre-save in the UI —
+      // here we only refresh cost figures, not the target the user chose).
+      const fixCostPct = 0.05;
+      const fixCost = subtotal * fixCostPct;
+      const basicCost = subtotal + fixCost;
+      const sellingPrice = parseFloat(r.selling_price || 0);
+      const foodCostPct = sellingPrice > 0 ? basicCost / sellingPrice : 0;
+
+      const before = { subtotal: parseFloat(r.subtotal || 0), basic_cost: parseFloat(r.basic_cost || 0) };
+      const changed = Math.abs(before.basic_cost - basicCost) > 1;
+
+      if (changed) {
+        const { error: updErr } = await supabase
+          .from('recipes')
+          .update({ subtotal, fix_cost: fixCost, basic_cost: basicCost, food_cost_pct: foodCostPct, updated_at: new Date().toISOString() })
+          .eq('id', r.id);
+        if (updErr) {
+          results.push({ menu_name: r.menu_name, status: 'error', message: updErr.message });
+          continue;
+        }
+        // Also refresh each ingredient row's stored amount/unit_price for consistency
+        // with reportGenerator.js's buildCOGSSheet, which reads recipe_ingredients.amount
+        // directly rather than recomputing it.
+        for (const ing of ings) {
+          const mat = ing.materials;
+          const unit = ing.unit || mat?.unit || 'gr';
+          const qty = parseFloat(ing.qty_in_use || 0);
+          const amount = calculateIngredientCost(mat, qty, unit);
+          const { unitPrice } = getUnitPrice(mat);
+          await supabase.from('recipe_ingredients').update({ unit_price: unitPrice, amount }).eq('id', ing.id);
+        }
+      }
+      results.push({
+        menu_name: r.menu_name,
+        status: changed ? 'updated' : 'unchanged',
+        before_basic_cost: before.basic_cost,
+        after_basic_cost: basicCost,
+      });
+    }
+
+    const updatedCount = results.filter(r => r.status === 'updated').length;
+    await logAudit('RECALC_ALL_RECIPES', `Menjalankan recompute massal ${recipes.length} resep — ${updatedCount} resep angkanya diperbarui.`);
+    return { updated: updatedCount, total: recipes.length, results };
   },
 
   // --- INVOICES ---
