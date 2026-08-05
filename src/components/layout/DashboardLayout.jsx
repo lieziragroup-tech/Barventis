@@ -16,13 +16,8 @@ import { BookOpen } from 'lucide-react';
 import barventisIcon from '../../assets/barventis-icon.png';
 
 const NavItem = ({ to, exact, label, icon: Icon, collapsed }) => {
-  const itemVariants = {
-    hidden: { opacity: 0, y: 8 },
-    visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 26 } }
-  };
-
   return (
-    <motion.div variants={itemVariants} style={{ display: 'block', width: '100%' }}>
+    <div style={{ display: 'block', width: '100%' }}>
       <NavLink
         to={to}
         end={exact}
@@ -37,13 +32,20 @@ const NavItem = ({ to, exact, label, icon: Icon, collapsed }) => {
             <div className="nav-item-content" style={{ justifyContent: collapsed ? 'center' : 'flex-start' }}>
               {Icon && <Icon size={16} style={{ flexShrink: 0 }} />}
               {!collapsed && (
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+                <motion.span
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 'auto' }}
+                  exit={{ opacity: 0, width: 0 }}
+                  style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block' }}
+                >
+                  {label}
+                </motion.span>
               )}
             </div>
           </>
         )}
       </NavLink>
-    </motion.div>
+    </div>
   );
 };
 

@@ -18,11 +18,13 @@ import {
   Plus,
   PlusCircle,
   Sparkles,
-  Utensils
+  Utensils,
+  Star
 } from "lucide-react";
 import "./NewLanding.css";
 import { DEMO_PRESETS } from "./presets";
 import { Ingredient, Recipe, AiCostingAnalysis } from "./types";
+import barventisIcon from "../../assets/barventis-icon.png";
 
 export default function App() {
   // Navigation State
@@ -294,9 +296,7 @@ export default function App() {
       {/* Header / Top Bar */}
       <header className={`fixed top-0 w-full z-50 transition-all duration-300 h-16 flex justify-between items-center px-4 md:px-12 border-b border-[#bcc9c6]/20 ${scrolled ? "bg-white/95 backdrop-blur-md shadow-md" : "bg-[#FDFBF7]/85 backdrop-blur-md shadow-sm"}`}>
         <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveTab("landing")}>
-          <div className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center font-serif font-black text-lg shadow-sm">
-            B
-          </div>
+          <img src={barventisIcon} alt="Barventis Logo" className="w-8 h-8 rounded-lg shadow-sm object-contain" />
           <span className="text-xl font-serif font-extrabold text-primary tracking-tight">Barventis</span>
           <span className="hidden sm:inline bg-primary-light text-primary px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider">Playground 2.0</span>
         </div>
@@ -369,7 +369,7 @@ export default function App() {
                     <div className="inline-flex items-center self-start gap-1 bg-white border border-[#bcc9c6]/30 px-3.5 py-1.5 rounded-full shadow-sm">
                       <div className="flex gap-0.5">
                         {[1,2,3,4,5].map((s) => (
-                          <span key={s} className="material-symbols-outlined text-[14px] text-[#ffb95f]" style={{ fontVariationSettings: "'FILL' 1" }}>star</span>
+                          <Star key={s} className="w-3.5 h-3.5 fill-accent text-accent" />
                         ))}
                       </div>
                       <span className="font-handwriting text-lg text-[#515f74] rotate-[-1deg] ml-1">
@@ -405,9 +405,9 @@ export default function App() {
 
                     <div className="flex items-center gap-6 mt-6 pt-6 border-t border-[#bcc9c6]/20">
                       <div className="flex -space-x-3">
-                        <img className="w-10 h-10 rounded-full border-2 border-white object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBLIvcEmjDduXvLFoJsMxAhGkxvsoWqzO69UZk1RoMt-8Qf2dRalDSP75aUWajt40udk6zpW4wRsOse-Rx861bdbrsVHEw9688GvKNiQbqpaYvNsbQQCHez6ntdGA4N8m7e0nXy0TsmpgoF2z8Gvltq2IQWcDPxXkJnmt_atgkxX2x-2DJoEycGdfLD7_8K5PKZ_k43rAynaVMqUjBsgzVG5Wd3_RcnGV3RnBVKNwbmZS7vdHznF3cSJw" alt="Rina" referrerPolicy="no-referrer" />
-                        <img className="w-10 h-10 rounded-full border-2 border-white object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAy_kpGIGkSNRKypx2RFd2BBrurRSxpvzr2YUDKMDCQFfpjILkK5Zh-ffFLM3IuZ2kC_YbR0UgLLtrg_vWcs2W_75bL0JYVuSF5pZCeHCRpDckashsGptJBKzos451qer-pcWTtGr1hINO0C8OP0Mh4d3FZPSXpmFXL31Dzz7HAwJjP2BZmE7zE_RXn7NitF4MRGmOP1mIZEmNKxETi-4opSoTX1o7bprNjVB8ait9USz2LcgkVASV_9Q" alt="Budi" referrerPolicy="no-referrer" />
-                        <div className="w-10 h-10 rounded-full border-2 border-white bg-accent text-primary font-bold text-xs flex items-center justify-center">
+                        <div className="w-10 h-10 rounded-full border-2 border-white bg-primary/80 text-white font-bold text-xs flex items-center justify-center">R</div>
+                        <div className="w-10 h-10 rounded-full border-2 border-white bg-[#191C1E] text-white font-bold text-xs flex items-center justify-center">B</div>
+                        <div className="w-10 h-10 rounded-full border-2 border-white bg-accent text-[#191C1E] font-bold text-xs flex items-center justify-center">
                           +200
                         </div>
                       </div>
@@ -418,30 +418,29 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Collage-style Hero Image Section */}
-                  <div className="lg:col-span-5 relative mt-8 lg:mt-0">
-                    <div className="relative z-10 organic-shape-1 overflow-hidden shadow-2xl border-4 border-white transform rotate-2 transition-transform hover:rotate-0 duration-500 max-w-sm mx-auto">
-                      <img 
-                        className="w-full h-auto object-cover aspect-[4/5]" 
-                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuABtykWVJEIUKga4mgjvh_DEMKIMneSPgCxpuj1SeZfjfirLf_fbnP9144g2io_yHn1E9-NZZ4QISUbv6bM2UVXgyC0VuEprpHrs35rirbXzD6qw9DewinVlsaBp_8fXPThM0tMaN1EREVote707hN6MxKAHY1iUV9CC_bPEDWsBrY18W5anxj9Js-VWpC0eCsGw6BFTbnkGmUauqzXRINGChO5MtBNe4LkZGCFp5lMMDKgDDJkrhjb5A" 
-                        alt="Restoran Dashboard Barventis" 
-                        referrerPolicy="no-referrer" 
+                  {/* Professional Dashboard Hero Image Section */}
+                  <div className="lg:col-span-5 relative mt-12 lg:mt-0">
+                    <div className="relative z-10 rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white/80 ring-1 ring-[#bcc9c6]/30 transform transition-transform hover:scale-[1.02] duration-500 w-full max-w-lg mx-auto">
+                      <img
+                        className="w-full h-auto object-cover"
+                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuABtykWVJEIUKga4mgjvh_DEMKIMneSPgCxpuj1SeZfjfirLf_fbnP9144g2io_yHn1E9-NZZ4QISUbv6bM2UVXgyC0VuEprpHrs35rirbXzD6qw9DewinVlsaBp_8fXPThM0tMaN1EREVote707hN6MxKAHY1iUV9CC_bPEDWsBrY18W5anxj9Js-VWpC0eCsGw6BFTbnkGmUauqzXRINGChO5MtBNe4LkZGCFp5lMMDKgDDJkrhjb5A"
+                        alt="Restoran Dashboard Barventis"
+                        referrerPolicy="no-referrer"
                       />
                     </div>
                     {/* Floating graphical cards */}
-                    <div className="absolute top-10 left-0 md:-left-6 glass-card p-4 rounded-2xl shadow-xl z-20 flex flex-col gap-0.5 transform -rotate-3 border border-[#bcc9c6]/30">
+                    <div className="absolute top-10 -left-2 md:-left-8 glass-card p-4 rounded-xl shadow-xl z-20 flex flex-col gap-1 border border-white/50 backdrop-blur-xl">
                       <span className="text-[10px] text-[#515f74] uppercase tracking-wider font-bold">Kebocoran Bahan</span>
-                      <span className="text-sm font-bold text-emerald-700">-37% Less Waste</span>
+                      <span className="text-sm font-bold text-emerald-700 flex items-center gap-1"><TrendingDown className="w-4 h-4"/> 37% Less Waste</span>
                     </div>
 
-                    <div className="absolute bottom-8 right-0 md:-right-4 glass-card p-4 rounded-2xl shadow-xl z-20 flex flex-col gap-0.5 transform rotate-3 border border-[#bcc9c6]/30">
-                      <span className="text-[10px] text-[#515f74] uppercase tracking-wider font-bold">Rekomendasi AI</span>
-                      <span className="text-sm font-bold text-primary">Saran HPP Akurat</span>
+                    <div className="absolute bottom-16 -right-2 md:-right-8 glass-card p-4 rounded-xl shadow-xl z-20 flex flex-col gap-1 border border-white/50 backdrop-blur-xl">
+                      <span className="text-[10px] text-[#515f74] uppercase tracking-wider font-bold">Akurasi HPP</span>
+                      <span className="text-sm font-bold text-primary flex items-center gap-1"><Check className="w-4 h-4"/> 99% Tepat</span>
                     </div>
 
                     {/* Background blob decorations */}
-                    <div className="absolute -top-6 -right-6 w-32 h-32 bg-accent/40 rounded-full opacity-60 blur-md -z-10"></div>
-                    <div className="absolute -bottom-6 -left-6 w-32 h-32 bg-primary/20 rounded-full opacity-60 blur-md -z-10"></div>
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-gradient-to-tr from-primary/10 to-accent/20 rounded-full blur-3xl -z-10"></div>
                   </div>
                 </div>
               </section>
