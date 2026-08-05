@@ -16,39 +16,58 @@ import { BookOpen } from 'lucide-react';
 import barventisIcon from '../../assets/barventis-icon.png';
 
 const NavItem = ({ to, exact, label, icon: Icon, collapsed }) => {
+  const itemVariants = {
+    hidden: { opacity: 0, y: 8 },
+    visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 26 } }
+  };
+
   return (
-    <NavLink 
-      to={to} 
-      end={exact}
-      className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} 
-      style={{ textDecoration: 'none', justifyContent: collapsed ? 'center' : 'flex-start' }}
-      title={collapsed ? label : undefined}
-    >
-      {Icon && <Icon size={16} style={{ flexShrink: 0 }} />}
-      {!collapsed && (
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-      )}
-    </NavLink>
+    <motion.div variants={itemVariants} style={{ display: 'block', width: '100%' }}>
+      <NavLink
+        to={to}
+        end={exact}
+        className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+        style={{ textDecoration: 'none', justifyContent: collapsed ? 'center' : 'flex-start' }}
+        title={collapsed ? label : undefined}
+      >
+        {({ isActive }) => (
+          <>
+            {isActive && <motion.div layoutId="active-bg" className="active-bg" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}
+            {isActive && <motion.div layoutId="active-ind" className="active-ind" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}
+            <div className="nav-item-content" style={{ justifyContent: collapsed ? 'center' : 'flex-start' }}>
+              {Icon && <Icon size={16} style={{ flexShrink: 0 }} />}
+              {!collapsed && (
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+              )}
+            </div>
+          </>
+        )}
+      </NavLink>
+    </motion.div>
   );
 };
 
 const NavGroup = ({ title, defaultOpen = true, collapsed, children }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  const itemVariants = {
+    hidden: { opacity: 0, y: 8 },
+    visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 26 } }
+  };
 
   if (collapsed) {
     return (
-      <div className="nav-group" style={{ marginBottom: '4px' }}>
+      <motion.div variants={itemVariants} className="nav-group" style={{ marginBottom: '4px' }}>
         <div style={{ height: '1px', background: 'var(--border)', margin: '10px 6px' }} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
           {children}
         </div>
-      </div>
+      </motion.div>
     );
   }
 
   return (
-    <div className="nav-group" style={{ marginBottom: '4px' }}>
-      <div 
+    <motion.div variants={itemVariants} className="nav-group" style={{ marginBottom: '4px' }}>
+      <div
         onClick={() => setIsOpen(!isOpen)}
         style={{
           padding: '6px 12px',
@@ -69,24 +88,29 @@ const NavGroup = ({ title, defaultOpen = true, collapsed, children }) => {
         onMouseOut={e => e.currentTarget.style.color = 'var(--text-muted)'}
       >
         {title}
-        <span style={{ 
-          fontSize: '0.55rem', 
-          transition: 'transform 0.2s ease', 
+        <span style={{
+          fontSize: '0.55rem',
+          transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
           transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
           display: 'inline-block'
         }}>▾</span>
       </div>
-      <div style={{ 
-        overflow: 'hidden', 
-        maxHeight: isOpen ? '500px' : '0',
-        opacity: isOpen ? 1 : 0,
-        transition: 'all 0.25s ease-in-out'
-      }}>
-        <div style={{ paddingTop: '2px' }}>
-          {children}
-        </div>
-      </div>
-    </div>
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div style={{ paddingTop: '2px' }}>
+              {children}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 };
 
@@ -181,11 +205,29 @@ export default function DashboardLayout() {
       )}
 
       {/* Sidebar Navigation */}
-      <nav className={`sidebar ${isSidebarOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}>
+      <motion.nav
+        className={`sidebar ${isSidebarOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}
+        initial={{ x: -280, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+      >
         <div className="logo-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '20px', padding: '0 6px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
             <img src={barventisIcon} alt="Barventis" className="logo-icon" style={{ flexShrink: 0 }} />
-            {!collapsed && <span className="logo-text">BARVENTIS</span>}
+            <AnimatePresence>
+              {!collapsed && (
+                <motion.span
+                  className="logo-text"
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 'auto' }}
+                  exit={{ opacity: 0, width: 0 }}
+                  transition={{ duration: 0.2 }}
+                  style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}
+                >
+                  BARVENTIS
+                </motion.span>
+              )}
+            </AnimatePresence>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
             <button
@@ -232,7 +274,15 @@ export default function DashboardLayout() {
           </div>
         )}
 
-        <div className="nav-links" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        <motion.div
+          className="nav-links"
+          style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}
+          variants={{
+            visible: { transition: { staggerChildren: 0.04, delayChildren: 0.08 } }
+          }}
+          initial="hidden"
+          whileInView="visible"
+        >
           {isSuperAdmin && (
             <NavGroup title="Platform" defaultOpen={true} collapsed={collapsed}>
               <NavItem to="/superadmin" exact label="Kelola Tenant" icon={Building2} collapsed={collapsed} />
@@ -275,22 +325,31 @@ export default function DashboardLayout() {
               </NavGroup>
             </>
           )}
-        </div>
+        </motion.div>
 
-        <div className="user-widget" style={{ justifyContent: collapsed ? 'center' : 'flex-start' }}>
+        <div className="user-widget" style={{ justifyContent: collapsed ? 'center' : 'flex-start', overflow: 'hidden' }}>
           <div className="user-avatar" title={collapsed ? `${userName} · ${userRole}` : undefined}>{userAvatar}</div>
-          {!collapsed && (
-            <div className="user-info">
-              <span className="user-name">{userName}</span>
-              <span className="user-role">{userRole}</span>
-            </div>
-          )}
+          <AnimatePresence>
+            {!collapsed && (
+              <motion.div
+                className="user-info"
+                initial={{ opacity: 0, width: 0 }}
+                animate={{ opacity: 1, width: 'auto' }}
+                exit={{ opacity: 0, width: 0 }}
+                transition={{ duration: 0.2 }}
+                style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}
+              >
+                <span className="user-name">{userName}</span>
+                <span className="user-role">{userRole}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <LogOut size={14} style={{ marginLeft: collapsed ? 0 : 'auto', cursor: 'pointer', color: 'var(--text-muted)', flexShrink: 0 }}
             onClick={logout}
             title="Log Out"
           />
         </div>
-      </nav>
+      </motion.nav>
 
       {/* Main Content Area */}
       <main className="main-content">
