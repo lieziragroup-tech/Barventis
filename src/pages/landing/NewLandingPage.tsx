@@ -8,6 +8,7 @@ import {
   ArrowLeft, 
   ArrowRight,
   X, 
+  Menu,
   TrendingDown, 
   Info,
   Check,
@@ -18,19 +19,16 @@ import {
   Plus,
   PlusCircle,
   Sparkles,
-  Utensils,
-  Star,
-  Menu
+  Utensils
 } from "lucide-react";
 import "./NewLanding.css";
+import barventisIcon from "../../assets/barventis-icon.png";
 import { DEMO_PRESETS } from "./presets";
 import { Ingredient, Recipe, AiCostingAnalysis } from "./types";
-import barventisIcon from "../../assets/barventis-icon.png";
 
 export default function App() {
   // Navigation State
   const [activeTab, setActiveTab] = useState<"landing" | "playground">("landing");
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   // Scroll to top of page when changing tabs/menus
   useEffect(() => {
@@ -39,6 +37,7 @@ export default function App() {
   
   // Applet scroll shadow
   const [scrolled, setScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   useEffect(() => {
     const handleScroll = () => {
       setScrolled(window.scrollY > 20);
@@ -296,22 +295,24 @@ export default function App() {
     <div className="min-h-screen bg-[#FAFAF8] text-[#191C1E] font-sans antialiased overflow-x-hidden">
       
       {/* Header / Top Bar */}
-      <header className={`fixed top-0 w-full z-50 transition-all duration-300 h-16 flex justify-between items-center px-3 md:px-12 border-b border-[#bcc9c6]/20 ${scrolled ? "bg-white/95 backdrop-blur-md shadow-md" : "bg-[#FDFBF7]/85 backdrop-blur-md shadow-sm"}`}>
-        <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setActiveTab("landing"); setIsMobileMenuOpen(false); }}>
-          <img src={barventisIcon} alt="Barventis Logo" className="w-8 h-8 rounded-lg shadow-sm object-contain" />
-          <span className="text-lg sm:text-xl font-serif font-extrabold text-primary tracking-tight">Barventis</span>
-          <span className="hidden md:inline bg-primary-light text-primary px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider">Playground 2.0</span>
+      <header className={`fixed top-0 w-full z-50 transition-all duration-300 h-16 flex justify-between items-center px-4 md:px-12 border-b border-[#bcc9c6]/20 ${scrolled ? "bg-white/95 backdrop-blur-md shadow-md" : "bg-[#FDFBF7]/85 backdrop-blur-md shadow-sm"}`}>
+        <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveTab("landing")}>
+          <img src={barventisIcon} alt="Barventis" className="w-8 h-8 object-contain" />
+          <span className="text-xl font-serif font-extrabold text-primary tracking-tight">Barventis</span>
+          <span className="hidden sm:inline bg-primary-light text-primary px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider">Playground 2.0</span>
         </div>
 
         <nav className="hidden md:flex items-center gap-8">
-          <button
-            onClick={() => setActiveTab("landing")}
+          <button 
+            onClick={() => setActiveTab("landing")} 
             className={`text-sm font-semibold transition-colors duration-200 ${activeTab === "landing" ? "text-primary" : "text-[#515f74] hover:text-primary"}`}
           >
             Beranda Solusi
           </button>
-          <button
-            onClick={() => setActiveTab("playground")}
+          <button 
+            onClick={() => {
+              setActiveTab("playground");
+            }} 
             className={`text-sm font-semibold transition-colors duration-200 ${activeTab === "playground" ? "text-primary" : "text-[#515f74] hover:text-primary"}`}
           >
             Kalkulator & AI Demo
@@ -321,74 +322,85 @@ export default function App() {
           </a>
         </nav>
 
-        <div className="flex items-center gap-2 md:gap-3">
-          <Link
+        <div className="flex items-center gap-3">
+          <Link 
             to="/login"
-            className="text-xs md:text-sm font-bold text-[#515f74] hover:text-primary transition-all px-3 py-2 md:px-4 md:py-2.5 rounded-full border border-[#bcc9c6]/40 hover:bg-[#FAFAF8] flex items-center gap-1 shadow-sm"
+            className="hidden md:flex text-xs md:text-sm font-bold text-[#515f74] hover:text-primary transition-all px-4 py-2.5 rounded-full border border-[#bcc9c6]/40 hover:bg-[#FAFAF8] items-center gap-1 shadow-sm"
           >
             Masuk
           </Link>
           {activeTab === "landing" ? (
-            <button
+            <button 
               onClick={() => setActiveTab("playground")}
-              className="bg-primary hover:bg-primary-hover text-white px-3.5 py-2 md:px-5 md:py-2.5 rounded-full text-xs font-bold tracking-wide shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center gap-1.5"
+              className="hidden md:flex bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-full text-xs font-bold tracking-wide shadow-md hover:shadow-lg transition-all active:scale-95 items-center gap-1.5"
             >
-              <span className="hidden sm:inline">Coba Demo Interaktif</span><span className="sm:hidden">Demo</span>
+              <span className="hidden sm:inline">Coba Demo Interaktif</span><span className="sm:hidden">Coba Demo</span>
             </button>
           ) : (
-            <button
+            <button 
               onClick={() => setActiveTab("landing")}
-              className="bg-white border border-[#bcc9c6]/50 hover:bg-[#FAFAF8] text-[#515f74] px-3 py-2 md:px-4 md:py-2.5 rounded-full text-xs font-bold transition-all flex items-center gap-1"
+              className="hidden md:flex bg-white border border-[#bcc9c6]/50 hover:bg-[#FAFAF8] text-[#515f74] px-4 py-2.5 rounded-full text-xs font-bold transition-all items-center gap-1"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               Kembali
             </button>
           )}
+
+          {/* Mobile hamburger — everything above collapses in here below md,
+              instead of squeezing logo + Masuk + CTA into one 64px-tall row */}
           <button
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="md:hidden p-2 text-[#515f74] hover:text-primary transition-colors"
-            aria-label="Toggle Menu"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg border border-[#bcc9c6]/40 text-[#191C1E] active:scale-95 transition-all"
+            aria-label="Menu"
           >
-            {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
       </header>
 
-      {/* Mobile Drawer Menu */}
+      {/* Mobile menu dropdown — stacks everything vertically instead of
+          squeezing it all into one row */}
       <AnimatePresence>
-        {isMobileMenuOpen && (
+        {mobileMenuOpen && (
           <motion.div
-            initial={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.2 }}
-            className="fixed top-16 left-0 w-full bg-white z-40 border-b border-[#bcc9c6]/30 shadow-lg md:hidden flex flex-col p-6 gap-4"
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.18 }}
+            className="md:hidden fixed top-16 left-0 right-0 z-40 bg-white border-b border-[#bcc9c6]/20 shadow-lg px-5 py-4 flex flex-col gap-1"
           >
             <button
-              onClick={() => {
-                setActiveTab("landing");
-                setIsMobileMenuOpen(false);
-              }}
-              className={`text-left text-base font-semibold py-2 border-b border-gray-100 transition-colors ${activeTab === "landing" ? "text-primary" : "text-[#515f74]"}`}
+              onClick={() => { setActiveTab("landing"); setMobileMenuOpen(false); }}
+              className={`text-left text-sm font-semibold py-2.5 px-2 rounded-lg transition-colors ${activeTab === "landing" ? "text-primary bg-primary-light/40" : "text-[#515f74]"}`}
             >
               Beranda Solusi
             </button>
             <button
-              onClick={() => {
-                setActiveTab("playground");
-                setIsMobileMenuOpen(false);
-              }}
-              className={`text-left text-base font-semibold py-2 border-b border-gray-100 transition-colors ${activeTab === "playground" ? "text-primary" : "text-[#515f74]"}`}
+              onClick={() => { setActiveTab("playground"); setMobileMenuOpen(false); }}
+              className={`text-left text-sm font-semibold py-2.5 px-2 rounded-lg transition-colors ${activeTab === "playground" ? "text-primary bg-primary-light/40" : "text-[#515f74]"}`}
             >
               Kalkulator & AI Demo
             </button>
             <a
               href="#roi-calc"
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="text-left text-base font-semibold py-2 text-[#515f74] transition-colors"
+              onClick={() => setMobileMenuOpen(false)}
+              className="text-left text-sm font-semibold py-2.5 px-2 rounded-lg text-[#515f74]"
             >
               Hitung ROI Resto
             </a>
+            <div className="h-px bg-[#bcc9c6]/20 my-2"></div>
+            <Link
+              to="/login"
+              className="text-center text-sm font-bold text-[#515f74] px-4 py-3 rounded-full border border-[#bcc9c6]/40 mb-2"
+            >
+              Masuk
+            </Link>
+            <button
+              onClick={() => { setActiveTab("playground"); setMobileMenuOpen(false); }}
+              className="bg-primary text-white px-5 py-3 rounded-full text-sm font-bold tracking-wide shadow-md text-center"
+            >
+              Coba Demo Interaktif
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -415,7 +427,7 @@ export default function App() {
                     <div className="inline-flex items-center self-start gap-1 bg-white border border-[#bcc9c6]/30 px-3.5 py-1.5 rounded-full shadow-sm">
                       <div className="flex gap-0.5">
                         {[1,2,3,4,5].map((s) => (
-                          <Star key={s} className="w-3.5 h-3.5 fill-accent text-accent" />
+                          <span key={s} className="material-symbols-outlined text-[14px] text-[#ffb95f]" style={{ fontVariationSettings: "'FILL' 1" }}>star</span>
                         ))}
                       </div>
                       <span className="font-handwriting text-lg text-[#515f74] rotate-[-1deg] ml-1">
@@ -451,9 +463,9 @@ export default function App() {
 
                     <div className="flex items-center gap-6 mt-6 pt-6 border-t border-[#bcc9c6]/20">
                       <div className="flex -space-x-3">
-                        <div className="w-10 h-10 rounded-full border-2 border-white bg-primary/80 text-white font-bold text-xs flex items-center justify-center">R</div>
-                        <div className="w-10 h-10 rounded-full border-2 border-white bg-[#191C1E] text-white font-bold text-xs flex items-center justify-center">B</div>
-                        <div className="w-10 h-10 rounded-full border-2 border-white bg-accent text-[#191C1E] font-bold text-xs flex items-center justify-center">
+                        <img className="w-10 h-10 rounded-full border-2 border-white object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBLIvcEmjDduXvLFoJsMxAhGkxvsoWqzO69UZk1RoMt-8Qf2dRalDSP75aUWajt40udk6zpW4wRsOse-Rx861bdbrsVHEw9688GvKNiQbqpaYvNsbQQCHez6ntdGA4N8m7e0nXy0TsmpgoF2z8Gvltq2IQWcDPxXkJnmt_atgkxX2x-2DJoEycGdfLD7_8K5PKZ_k43rAynaVMqUjBsgzVG5Wd3_RcnGV3RnBVKNwbmZS7vdHznF3cSJw" alt="Rina" referrerPolicy="no-referrer" />
+                        <img className="w-10 h-10 rounded-full border-2 border-white object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAy_kpGIGkSNRKypx2RFd2BBrurRSxpvzr2YUDKMDCQFfpjILkK5Zh-ffFLM3IuZ2kC_YbR0UgLLtrg_vWcs2W_75bL0JYVuSF5pZCeHCRpDckashsGptJBKzos451qer-pcWTtGr1hINO0C8OP0Mh4d3FZPSXpmFXL31Dzz7HAwJjP2BZmE7zE_RXn7NitF4MRGmOP1mIZEmNKxETi-4opSoTX1o7bprNjVB8ait9USz2LcgkVASV_9Q" alt="Budi" referrerPolicy="no-referrer" />
+                        <div className="w-10 h-10 rounded-full border-2 border-white bg-accent text-primary font-bold text-xs flex items-center justify-center">
                           +200
                         </div>
                       </div>
@@ -464,44 +476,51 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Professional Dashboard Hero Image Section */}
-                  <div className="lg:col-span-5 relative mt-12 lg:mt-0">
-                    <div className="relative z-10 rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white/80 ring-1 ring-[#bcc9c6]/30 transform transition-transform hover:scale-[1.02] duration-500 w-full max-w-lg mx-auto">
-                      <img
-                        className="w-full h-auto object-cover"
-                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuABtykWVJEIUKga4mgjvh_DEMKIMneSPgCxpuj1SeZfjfirLf_fbnP9144g2io_yHn1E9-NZZ4QISUbv6bM2UVXgyC0VuEprpHrs35rirbXzD6qw9DewinVlsaBp_8fXPThM0tMaN1EREVote707hN6MxKAHY1iUV9CC_bPEDWsBrY18W5anxj9Js-VWpC0eCsGw6BFTbnkGmUauqzXRINGChO5MtBNe4LkZGCFp5lMMDKgDDJkrhjb5A"
-                        alt="Restoran Dashboard Barventis"
-                        referrerPolicy="no-referrer"
-                      />
-                    </div>
-                    {/* Floating graphical cards */}
-                    <div className="absolute top-10 -left-2 md:-left-8 glass-card p-4 rounded-xl shadow-xl z-20 flex flex-col gap-1 border border-white/50 backdrop-blur-xl">
-                      <span className="text-[10px] text-[#515f74] uppercase tracking-wider font-bold">Kebocoran Bahan</span>
-                      <span className="text-sm font-bold text-emerald-700 flex items-center gap-1"><TrendingDown className="w-4 h-4"/> 37% Less Waste</span>
-                    </div>
+                  {/* Collage-style Hero Image Section */}
+                  <div className="lg:col-span-5 relative mt-8 lg:mt-0">
+                    <div className="relative max-w-sm mx-auto">
+                      <div className="relative z-10 organic-shape-1 overflow-hidden shadow-2xl border-4 border-white transform rotate-2 transition-transform hover:rotate-0 duration-500">
+                        <img 
+                          className="w-full h-auto object-cover aspect-[4/5]" 
+                          src="https://lh3.googleusercontent.com/aida-public/AB6AXuABtykWVJEIUKga4mgjvh_DEMKIMneSPgCxpuj1SeZfjfirLf_fbnP9144g2io_yHn1E9-NZZ4QISUbv6bM2UVXgyC0VuEprpHrs35rirbXzD6qw9DewinVlsaBp_8fXPThM0tMaN1EREVote707hN6MxKAHY1iUV9CC_bPEDWsBrY18W5anxj9Js-VWpC0eCsGw6BFTbnkGmUauqzXRINGChO5MtBNe4LkZGCFp5lMMDKgDDJkrhjb5A" 
+                          alt="Restoran Dashboard Barventis" 
+                          referrerPolicy="no-referrer" 
+                        />
+                      </div>
+                      {/* Floating graphical cards — positioned against the
+                          actual image box (not the wider outer grid column)
+                          so they stay visually attached to the image on mobile */}
+                      <div className="absolute top-10 left-0 md:-left-6 glass-card p-4 rounded-2xl shadow-xl z-20 flex flex-col gap-0.5 transform -rotate-3 border border-[#bcc9c6]/30 max-w-[45%]">
+                        <span className="text-[10px] text-[#515f74] uppercase tracking-wider font-bold">Kebocoran Bahan</span>
+                        <span className="text-sm font-bold text-emerald-700">-37% Less Waste</span>
+                      </div>
 
-                    <div className="absolute bottom-16 -right-2 md:-right-8 glass-card p-4 rounded-xl shadow-xl z-20 flex flex-col gap-1 border border-white/50 backdrop-blur-xl">
-                      <span className="text-[10px] text-[#515f74] uppercase tracking-wider font-bold">Akurasi HPP</span>
-                      <span className="text-sm font-bold text-primary flex items-center gap-1"><Check className="w-4 h-4"/> 99% Tepat</span>
-                    </div>
+                      <div className="absolute bottom-8 right-0 md:-right-4 glass-card p-4 rounded-2xl shadow-xl z-20 flex flex-col gap-0.5 transform rotate-3 border border-[#bcc9c6]/30 max-w-[45%]">
+                        <span className="text-[10px] text-[#515f74] uppercase tracking-wider font-bold">Rekomendasi AI</span>
+                        <span className="text-sm font-bold text-primary">Saran HPP Akurat</span>
+                      </div>
 
-                    {/* Background blob decorations */}
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-gradient-to-tr from-primary/10 to-accent/20 rounded-full blur-3xl -z-10"></div>
+                      {/* Background blob decorations */}
+                      <div className="absolute -top-6 -right-6 w-32 h-32 bg-accent/40 rounded-full opacity-60 blur-md -z-10"></div>
+                      <div className="absolute -bottom-6 -left-6 w-32 h-32 bg-primary/20 rounded-full opacity-60 blur-md -z-10"></div>
+                    </div>
                   </div>
                 </div>
               </section>
 
               {/* Dynamic Stats Banner */}
               <section className="bg-[#FAFAF8] py-10 border-y border-[#bcc9c6]/20 relative">
-                <div className="max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 sm:grid-cols-3 gap-8 items-center text-center">
+                <div className="max-w-7xl mx-auto px-6 md:px-12 flex flex-wrap justify-center gap-8 md:gap-16">
                   <div className="flex flex-col items-center text-center">
                     <span className="text-3xl md:text-4xl font-serif font-black text-primary">Rp 2.4 Miliar+</span>
                     <span className="text-xs md:text-sm text-[#515f74] font-medium mt-1">Stok Bahan Baku Terlacak Aman</span>
                   </div>
+                  <div className="w-px bg-[#bcc9c6]/30 self-stretch hidden md:block"></div>
                   <div className="flex flex-col items-center text-center">
                     <span className="text-3xl md:text-4xl font-serif font-black text-tertiary">37.2%</span>
                     <span className="text-xs md:text-sm text-[#515f74] font-medium mt-1">Rata-rata Penurunan Sisa Bahan Baku</span>
                   </div>
+                  <div className="w-px bg-[#bcc9c6]/30 self-stretch hidden md:block"></div>
                   <div className="flex flex-col items-center text-center">
                     <span className="text-3xl md:text-4xl font-serif font-black text-emerald-600">A+ Profit Score</span>
                     <span className="text-xs md:text-sm text-[#515f74] font-medium mt-1">Kategori Kesehatan Keuangan Kafe</span>
