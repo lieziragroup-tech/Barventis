@@ -146,7 +146,6 @@ export function validateDataCompleteness({ daysInMonth, dailyInventories, purcha
   const issues = [];
 
   const daysWithInventory = new Set((dailyInventories || []).map(d => d.date));
-  const missingDays = [];
   for (let d = 1; d <= daysInMonth; d++) {
     // Pengecekan tanggal sebenarnya sebaiknya pakai format penuh oleh caller;
     // di sini kita hanya hitung berapa hari yang ada datanya vs total hari.

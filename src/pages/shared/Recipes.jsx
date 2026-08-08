@@ -4,7 +4,8 @@ import BulkImport from '../../components/BulkImport';
 import Pagination from '../../components/shared/Pagination';
 import { useData } from '../../contexts/DataContext';
 import { api } from '../../services/api';
-import { formatIDR, calculateIngredientCost, parsePackSize, isPackUnitConsistent } from '../../services/costUtils';
+import { maintenanceService } from '../../services/maintenanceService';
+import { formatIDR, calculateIngredientCost, parsePackSize, isPackUnitConsistent, computeRecipeCosts, roundSellingPrice, DEFAULT_FIX_COST_PCT, DEFAULT_ROUNDING_DIRECTION, DEFAULT_ROUNDING_INCREMENT } from '../../services/costUtils';
 
 // Stable client-side id for editable ingredient rows so React keys don't rely on the
 // array index (preserves input focus/state across add/remove/reorder). (LOW #19)
@@ -19,11 +20,21 @@ export default function Recipes() {
   const [editedIngredients, setEditedIngredients] = useState(activeRecipe ? ensureUids(activeRecipe.ingredients) : []);
   const [editedSellingPrice, setEditedSellingPrice] = useState(activeRecipe ? Math.round(activeRecipe.selling_price) : 0);
   const [editedCategory, setEditedCategory] = useState(activeRecipe?.category || 'NON-KOPI');
+  const [editedImageUrl, setEditedImageUrl] = useState(activeRecipe?.image_url || '');
+  // Per Panduan_Kartu_Resep_HPP.md (2026-08): Fix Cost % is now per-recipe editable
+  // (5% default), and Food Cost % is the TARGET margin driving a computed + rounded
+  // selling-price suggestion — separate from editedSellingPrice, which is still the
+  // actual price charged (pre-filled from the suggestion, but always hand-editable).
+  const [editedFixCostPct, setEditedFixCostPct] = useState(activeRecipe?.fix_cost_pct ?? DEFAULT_FIX_COST_PCT);
+  const [editedFoodCostPctTarget, setEditedFoodCostPctTarget] = useState(activeRecipe?.food_cost_pct ?? 0);
+  const [editedRoundingDirection, setEditedRoundingDirection] = useState(activeRecipe?.rounding_direction || DEFAULT_ROUNDING_DIRECTION);
+  const [editedRoundingIncrement, setEditedRoundingIncrement] = useState(activeRecipe?.rounding_increment ?? DEFAULT_ROUNDING_INCREMENT);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [newMenuName, setNewMenuName] = useState('');
   const [newMenuCategory, setNewMenuCategory] = useState('KOPI');
   const [newMenuPrice, setNewMenuPrice] = useState('');
+  const [newImageUrl, setNewImageUrl] = useState('');
   const [openDropdown, setOpenDropdown] = useState(null);
   const [selectedItems, setSelectedItems] = useState([]);
 
@@ -86,6 +97,11 @@ export default function Recipes() {
     setEditedIngredients(ensureUids(r.ingredients || []));
     setEditedSellingPrice(Math.round(r.selling_price));
     setEditedCategory(r.category || 'NON-KOPI');
+    setEditedImageUrl(r.image_url || '');
+    setEditedFixCostPct(r.fix_cost_pct ?? DEFAULT_FIX_COST_PCT);
+    setEditedFoodCostPctTarget(r.food_cost_pct ?? 0);
+    setEditedRoundingDirection(r.rounding_direction || DEFAULT_ROUNDING_DIRECTION);
+    setEditedRoundingIncrement(r.rounding_increment ?? DEFAULT_ROUNDING_INCREMENT);
     setOpenDropdown(null);
   };
 
@@ -146,9 +162,20 @@ export default function Recipes() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const subtotal = useMemo(() => editedIngredients.reduce((acc, ing) => acc + calcRowAmount(ing), 0), [editedIngredients, stockMap]);
-  const fixCost = useMemo(() => subtotal * 0.05, [subtotal]);
-  const basicCost = useMemo(() => subtotal + fixCost, [subtotal, fixCost]);
-  const foodCostPct = useMemo(() => editedSellingPrice > 0 ? (basicCost / editedSellingPrice) : 0, [basicCost, editedSellingPrice]);
+  // Per Panduan_Kartu_Resep_HPP.md (2026-08): Fix Cost % is now per-recipe editable
+  // (was hardcoded 5% everywhere), and Food Cost % is a TARGET margin that drives a
+  // computed + rounded "Harga Jual Ideal" suggestion (editedFoodCostPctTarget below),
+  // separate from actualFoodCostPct (the real ratio given whatever Harga Jual is
+  // currently set — manual or applied-from-suggestion).
+  const { fixCost, basicCost, sellingPriceRaw, sellingPriceFinal } = useMemo(() => computeRecipeCosts({
+    subtotal, fixCostPct: editedFixCostPct, foodCostPct: editedFoodCostPctTarget,
+    roundingDirection: editedRoundingDirection, roundingIncrement: editedRoundingIncrement
+  }), [subtotal, editedFixCostPct, editedFoodCostPctTarget, editedRoundingDirection, editedRoundingIncrement]);
+  const actualFoodCostPct = useMemo(() => editedSellingPrice > 0 ? (basicCost / editedSellingPrice) : 0, [basicCost, editedSellingPrice]);
+  // Keep the old name available anywhere below that still reads `foodCostPct` — it
+  // now means "actual ratio at the current Harga Jual", matching what the top badge
+  // has always shown (a real-time cost-vs-price health check), not the target input.
+  const foodCostPct = actualFoodCostPct;
 
   // Ingredient actions
   const handleQtyChange = (idx, val) => {
@@ -215,7 +242,12 @@ export default function Recipes() {
       ...activeRecipe,
       category: editedCategory,
       selling_price: editedSellingPrice,
-      subtotal, fix_cost: fixCost, basic_cost: basicCost, food_cost_pct: foodCostPct,
+      image_url: editedImageUrl,
+      subtotal, fix_cost: fixCost, basic_cost: basicCost, food_cost_pct: editedFoodCostPctTarget,
+      fix_cost_pct: editedFixCostPct,
+      selling_price_raw: sellingPriceRaw,
+      rounding_direction: editedRoundingDirection,
+      rounding_increment: editedRoundingIncrement,
       total_cost: basicCost,
       ingredients: savedIngredients
     };
@@ -226,12 +258,14 @@ export default function Recipes() {
   // human opens+saves each one individually. After fixing master-data pack sizes
   // (e.g. Ice Cube), every recipe's stored number stays stale until re-saved. This
   // lets the user refresh all of them in one action instead of opening all 56.
+  // Reuses maintenanceService.recalcAllRecipeCosts() (also surfaced on the
+  // Maintenance/System Health page) rather than a separate implementation here.
   const handleRecalculateAll = async () => {
-    if (!window.confirm('Hitung ulang HPP & Food Cost% untuk SEMUA resep berdasarkan harga bahan terbaru? Resep yang datanya berubah akan otomatis tersimpan.')) return;
+    if (!window.confirm('Hitung ulang HPP untuk SEMUA resep berdasarkan harga bahan terbaru? Target Food Cost % dan Harga Jual tiap resep tidak akan berubah — cuma biaya bahannya yang di-refresh.')) return;
     setRecalculating(true);
     try {
-      const result = await api.recalculateAllRecipes();
-      showToast?.(`Selesai: ${result.updated} dari ${result.total} resep diperbarui angkanya.`, 'success');
+      const result = await maintenanceService.recalcAllRecipeCosts();
+      showToast?.(`Selesai: HPP ${result.updated} resep diperbarui${result.failed ? `, ${result.failed} gagal` : ''}.`, 'success');
       if (refreshData) await refreshData();
     } catch (err) {
       showToast?.(err.message || 'Gagal menghitung ulang resep', 'error');
@@ -247,20 +281,31 @@ export default function Recipes() {
     const newRecipe = {
       menu_name: newMenuName.trim(),
       category: newMenuCategory,
+      image_url: newImageUrl,
       total_cost: 0, yield: '1',
       ingredients: [],
       subtotal: 0, fix_cost: 0, basic_cost: 0,
+      fix_cost_pct: DEFAULT_FIX_COST_PCT,
       food_cost_pct: 0,
+      selling_price_raw: 0,
+      rounding_direction: DEFAULT_ROUNDING_DIRECTION,
+      rounding_increment: DEFAULT_ROUNDING_INCREMENT,
       selling_price: parseFloat(newMenuPrice) || 0
     };
     if (onAddRecipe) onAddRecipe(newRecipe);
     setShowAddModal(false);
     setNewMenuName('');
     setNewMenuPrice('');
+    setNewImageUrl('');
     setActiveRecipe(newRecipe);
     setEditedIngredients([]);
     setEditedSellingPrice(parseInt(newMenuPrice) || 0);
     setEditedCategory(newMenuCategory);
+    setEditedImageUrl(newImageUrl);
+    setEditedFixCostPct(DEFAULT_FIX_COST_PCT);
+    setEditedFoodCostPctTarget(0);
+    setEditedRoundingDirection(DEFAULT_ROUNDING_DIRECTION);
+    setEditedRoundingIncrement(DEFAULT_ROUNDING_INCREMENT);
   };
 
   // Cost badge color. food_cost_pct is ALWAYS stored as a fraction (basic_cost /
@@ -519,6 +564,97 @@ export default function Recipes() {
                 onChange={e => setEditedSellingPrice(parseInt(e.target.value) || 0)} 
               />
             </div>
+            <div className="form-group" style={{ marginBottom: 0, gridColumn: '1 / -1' }}>
+              <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>URL Gambar Menu</label>
+              <input 
+                type="text" 
+                className="form-control premium-input" 
+                style={{ height: '40px' }}
+                placeholder="https://example.com/image.jpg" 
+                value={editedImageUrl} 
+                onChange={e => setEditedImageUrl(e.target.value)} 
+              />
+            </div>
+          </div>
+
+          {/* Pricing formula controls — per Panduan_Kartu_Resep_HPP.md (2026-08):
+              Fix Cost % (per-recipe, was hardcoded 5%) and Food Cost % (now a TARGET
+              margin, not derived) drive a computed + rounded "Harga Jual Ideal"
+              suggestion. Harga Jual above stays the actual, always hand-editable
+              price — the suggestion here is a one-click apply, never auto-overwritten. */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '14px',
+            marginBottom: '16px', padding: '14px 16px', borderRadius: 'var(--radius-lg)',
+            background: 'rgba(30, 41, 59, 0.25)', border: '1px solid var(--border)'
+          }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Fix Cost %</label>
+              <input
+                type="number" step="0.5" min="0" max="100"
+                className="form-control premium-input"
+                style={{ height: '36px' }}
+                value={Math.round(editedFixCostPct * 1000) / 10}
+                onChange={e => setEditedFixCostPct((parseFloat(e.target.value) || 0) / 100)}
+              />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Food Cost % (Target)</label>
+              <input
+                type="number" step="1" min="0" max="100"
+                className="form-control premium-input"
+                style={{ height: '36px' }}
+                placeholder="wajib diisi"
+                value={editedFoodCostPctTarget > 0 ? Math.round(editedFoodCostPctTarget * 1000) / 10 : ''}
+                onChange={e => setEditedFoodCostPctTarget((parseFloat(e.target.value) || 0) / 100)}
+              />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Arah Pembulatan</label>
+              <select
+                className="form-control premium-input"
+                style={{ height: '36px' }}
+                value={editedRoundingDirection}
+                onChange={e => setEditedRoundingDirection(e.target.value)}
+              >
+                <option value="down">Ke bawah</option>
+                <option value="up">Ke atas</option>
+              </select>
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Kelipatan Pembulatan</label>
+              <select
+                className="form-control premium-input"
+                style={{ height: '36px' }}
+                value={editedRoundingIncrement}
+                onChange={e => setEditedRoundingIncrement(parseFloat(e.target.value))}
+              >
+                <option value={500}>Rp 500</option>
+                <option value={1000}>Rp 1.000</option>
+                <option value={2000}>Rp 2.000</option>
+              </select>
+            </div>
+
+            {sellingPriceFinal > 0 && (
+              <div style={{
+                gridColumn: '1 / -1', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                gap: '12px', marginTop: '2px', padding: '10px 14px', borderRadius: 'var(--radius-md)',
+                background: 'rgba(59, 130, 246, 0.06)', border: '1px solid rgba(59, 130, 246, 0.2)'
+              }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  Harga Jual Ideal (sebelum dibulatkan: {formatIDR(sellingPriceRaw)}):{' '}
+                  <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatIDR(sellingPriceFinal)}</strong>
+                </div>
+                <button
+                  type="button"
+                  className="btn premium-btn premium-btn-secondary"
+                  style={{ padding: '6px 14px', fontSize: '0.75rem', flexShrink: 0 }}
+                  onClick={() => setEditedSellingPrice(sellingPriceFinal)}
+                  disabled={editedSellingPrice === sellingPriceFinal}
+                >
+                  Pakai harga ini
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Ingredients Header */}
@@ -695,7 +831,7 @@ export default function Recipes() {
             <div style={{ display: 'flex', gap: '24px', fontSize: '0.825rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
               <span>Subtotal: <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatIDR(subtotal)}</strong></span>
               <span style={{ width: 1, background: 'var(--border)', height: '14px', alignSelf: 'center' }} />
-              <span>Fix Cost (5%): <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatIDR(fixCost)}</strong></span>
+              <span>Fix Cost ({(editedFixCostPct * 100).toFixed(1).replace(/\.0$/, '')}%): <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatIDR(fixCost)}</strong></span>
               <span style={{ width: 1, background: 'var(--border)', height: '14px', alignSelf: 'center' }} />
               <span>HPP Gabungan: <strong style={{ color: 'var(--accent)', fontWeight: 800 }}>{formatIDR(basicCost)}</strong></span>
             </div>
@@ -783,6 +919,18 @@ export default function Recipes() {
                   placeholder="contoh: 35000" 
                   value={newMenuPrice} 
                   onChange={e => setNewMenuPrice(e.target.value)} 
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0, marginTop: '16px' }}>
+                <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>URL Gambar Menu</label>
+                <input 
+                  type="text" 
+                  className="form-control" 
+                  style={{ height: '40px' }}
+                  placeholder="https://example.com/image.jpg" 
+                  value={newImageUrl} 
+                  onChange={e => setNewImageUrl(e.target.value)} 
                 />
               </div>
               

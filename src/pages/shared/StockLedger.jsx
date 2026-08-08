@@ -99,7 +99,7 @@ export default function StockLedger() {
     for (const name of selectedItems) {
       try {
         await onDeleteItem(name);
-      } catch (err) {
+      } catch {
         failedCount++;
         failedNames.push(name);
       }
@@ -610,7 +610,7 @@ export default function StockLedger() {
       {/* Force Delete Dependency Modal */}
       {dependencyDeleteModal && (
         <div className="modal-overlay" style={{ position: 'fixed', top: '0', left: '0', right: '0', bottom: '0', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div className="glass-card modal-card" style={{ width: '400px', maxWidth: 'calc(100vw - 32px)', padding: '24px', border: '1px solid var(--danger)' }}>
+          <div className="glass-card modal-card" style={{ width: '400px', maxWidth: 'calc(100vw - 32px)', maxHeight: '90vh', overflowY: 'auto', padding: '24px', border: '1px solid var(--danger)' }}>
             <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
               <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '12px', borderRadius: '50%' }}>
                 <Trash2 size={24} style={{ color: 'var(--danger)' }} />

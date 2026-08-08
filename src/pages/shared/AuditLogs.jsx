@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   History, Search, ShieldAlert, Calendar,
   ArrowRight, Clock, Laptop, RefreshCw, X, AlertTriangle, CheckCircle, Info

@@ -1,23 +1,3 @@
-@import "tailwindcss";
-
-@theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "Lora", Georgia, serif;
-  --font-handwriting: "Caveat", cursive;
-  --font-mono: "JetBrains Mono", monospace;
-  
-  --color-primary: #00685f;
-  --color-primary-hover: #005049;
-  --color-primary-light: #eceef0;
-  --color-cream: #FDFBF7;
-  --color-warm-white: #FAFAF8;
-  --color-tertiary: #825100;
-  --color-tertiary-light: #ffddb8;
-  --color-accent: #ffb95f;
-  --color-surface-dim: #191c1e;
-  --color-surface-text: #eff1f3;
-}
-
 /* Custom classes for the beautiful glass effects and organic shape transformations */
 .glass-card {
   background: rgba(255, 253, 250, 0.85);

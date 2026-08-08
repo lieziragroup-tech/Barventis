@@ -5,10 +5,11 @@ import {
   LogOut, Bell, AlertTriangle, X, RefreshCw, Menu,
   ChevronLeft, LayoutDashboard, ClipboardList, UploadCloud,
   Utensils, Tag, ShoppingCart, FileText, Boxes, Trash2, Package,
-  Calculator, History, Settings, Archive, Wrench, Building2, Layout
+  Calculator, History, Settings, Archive, Wrench, Building2, Layout, Edit, MonitorSmartphone
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useData } from '../../contexts/DataContext';
+import { api } from '../../services/api';
 import Onboarding from '../Onboarding';
 import AIAssistant from '../AIAssistant';
 import GuidebookModal from '../GuidebookModal';
@@ -118,11 +119,32 @@ const NavGroup = ({ title, defaultOpen = true, collapsed, children }) => {
 
 export default function DashboardLayout() {
   const { activeUser, tenantName, logout } = useAuth();
-  const { loadingData, stock, refreshData } = useData();
+  const { loadingData, stock, refreshData, currentTenant, showToast } = useData();
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 992);
   const [collapsed, setCollapsed] = useState(false);
   const [showGuidebook, setShowGuidebook] = useState(false);
+  
+  const [showPosSetupModal, setShowPosSetupModal] = useState(false);
+  const [posTaxRate, setPosTaxRate] = useState(11);
+  const [posServiceCharge, setPosServiceCharge] = useState(5);
+  const [isSavingPosSetup, setIsSavingPosSetup] = useState(false);
+  
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [editProfileName, setEditProfileName] = useState('');
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const userMenuRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setShowUserMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // The collapse-to-rail mode is desktop-only; if the window is resized
   // down to mobile width while collapsed, expand back so the mobile
@@ -134,6 +156,33 @@ export default function DashboardLayout() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  const handleOpenPos = () => {
+    if (currentTenant?.pos_tax_rate === undefined || currentTenant?.pos_tax_rate === null) {
+      setShowPosSetupModal(true);
+    } else {
+      navigate(`/${basePath}/pos-terminal`);
+    }
+  };
+
+  const handleSavePosSetup = async (e) => {
+    e.preventDefault();
+    try {
+      setIsSavingPosSetup(true);
+      await api.updateTenantSettings({
+        pos_tax_rate: parseFloat(posTaxRate),
+        pos_service_charge: parseFloat(posServiceCharge)
+      });
+      showToast('Pengaturan POS berhasil disimpan.', 'success');
+      setShowPosSetupModal(false);
+      refreshData();
+      navigate(`/${basePath}/pos-terminal`);
+    } catch (err) {
+      showToast('Gagal menyimpan pengaturan POS.', 'error');
+    } finally {
+      setIsSavingPosSetup(false);
+    }
+  };
 
   // Close sidebar on route change
   useEffect(() => {
@@ -195,6 +244,26 @@ export default function DashboardLayout() {
 
   const basePath = getBasePath();
 
+  const handleUpdateProfile = async () => {
+    if (!editProfileName.trim()) return;
+    setIsUpdatingProfile(true);
+    try {
+      await api.updateProfileName(editProfileName.trim());
+      setShowProfileModal(false);
+      window.location.reload(); // Reload to refresh user info
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
+  const openProfileModal = () => {
+    setEditProfileName(userName);
+    setShowProfileModal(true);
+    setShowUserMenu(false);
+  };
+
   return (
     <div className="app-container" style={{ '--sidebar-width': collapsed ? '64px' : '250px' }}>
       {/* Mobile Overlay */}
@@ -213,9 +282,18 @@ export default function DashboardLayout() {
         animate={{ x: 0, opacity: 1 }}
         transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
       >
-        <div className="logo-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '20px', padding: '0 6px' }}>
+        <div className="logo-container" style={{ 
+          display: 'flex', 
+          flexDirection: collapsed ? 'column' : 'row',
+          justifyContent: collapsed ? 'center' : 'space-between', 
+          alignItems: 'center', 
+          width: '100%', 
+          marginBottom: '20px', 
+          padding: collapsed ? '0' : '0 6px',
+          gap: collapsed ? '16px' : '0'
+        }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
-            <img src={barventisIcon} alt="Barventis" className="logo-icon" style={{ flexShrink: 0 }} />
+            <img src={barventisIcon} alt="Barventis" className="logo-icon" style={{ flexShrink: 0, width: collapsed ? '28px' : '30px', height: collapsed ? '28px' : '30px' }} />
             <AnimatePresence>
               {!collapsed && (
                 <motion.span
@@ -236,8 +314,17 @@ export default function DashboardLayout() {
               className="sidebar-collapse-btn"
               onClick={() => setCollapsed(!collapsed)}
               title={collapsed ? 'Perluas sidebar' : 'Ciutkan sidebar'}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '4px'
+              }}
             >
-              <ChevronLeft size={15} style={{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
+              <ChevronLeft size={16} style={{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', color: 'var(--text-secondary)' }} />
             </button>
             <button 
               className="mobile-close-btn"
@@ -297,6 +384,7 @@ export default function DashboardLayout() {
             <>
               <NavGroup title="Menu Utama" defaultOpen={true} collapsed={collapsed}>
                 <NavItem to={basePath} exact label="Dashboard" icon={LayoutDashboard} collapsed={collapsed} />
+                <NavItem to={`${basePath}/pos-terminal`} label="Kasir (POS)" icon={MonitorSmartphone} collapsed={collapsed} />
                 <NavItem to={`${basePath}/stock`} label="Stock Ledger" icon={BookOpen} collapsed={collapsed} />
                 <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" icon={ClipboardList} collapsed={collapsed} />
                 <NavItem to={`${basePath}/pos`} label="Upload POS Sales" icon={UploadCloud} collapsed={collapsed} />
@@ -329,8 +417,20 @@ export default function DashboardLayout() {
           )}
         </motion.div>
 
-        <div className="user-widget" style={{ justifyContent: collapsed ? 'center' : 'flex-start', overflow: 'hidden' }}>
-          <div className="user-avatar" title={collapsed ? `${userName} · ${userRole}` : undefined}>{userAvatar}</div>
+        <div 
+          className="user-widget" 
+          ref={userMenuRef}
+          style={{ 
+            flexDirection: collapsed ? 'column' : 'row',
+            justifyContent: collapsed ? 'center' : 'flex-start', 
+            padding: collapsed ? '10px 4px' : '10px 12px',
+            gap: collapsed ? '12px' : '10px',
+            cursor: 'pointer',
+            position: 'relative'
+          }}
+          onClick={() => setShowUserMenu(!showUserMenu)}
+        >
+          <div className="user-avatar" title={collapsed ? `${userName} · ${userRole}` : undefined} style={{ width: collapsed ? '28px' : '32px', height: collapsed ? '28px' : '32px', fontSize: collapsed ? '0.65rem' : '0.75rem', flexShrink: 0 }}>{userAvatar}</div>
           <AnimatePresence>
             {!collapsed && (
               <motion.div
@@ -346,10 +446,50 @@ export default function DashboardLayout() {
               </motion.div>
             )}
           </AnimatePresence>
-          <LogOut size={14} style={{ marginLeft: collapsed ? 0 : 'auto', cursor: 'pointer', color: 'var(--text-muted)', flexShrink: 0 }}
-            onClick={logout}
-            title="Log Out"
-          />
+          
+          <AnimatePresence>
+            {showUserMenu && (
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                transition={{ duration: 0.15 }}
+                style={{
+                  position: 'absolute',
+                  bottom: 'calc(100% + 10px)',
+                  left: collapsed ? '10px' : '0',
+                  right: collapsed ? 'auto' : '0',
+                  minWidth: collapsed ? '180px' : '100%',
+                  background: 'var(--bg-primary)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-md)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                  overflow: 'hidden',
+                  zIndex: 100
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div 
+                  style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
+                  onClick={openProfileModal}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  <Edit size={14} color="var(--text-secondary)" />
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 500 }}>Edit Profile</span>
+                </div>
+                <div 
+                  style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+                  onClick={logout}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  <LogOut size={14} color="var(--danger)" />
+                  <span style={{ fontSize: '0.85rem', color: 'var(--danger)', fontWeight: 500 }}>Log Out</span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </motion.nav>
 
@@ -418,14 +558,33 @@ export default function DashboardLayout() {
             </p>
           </div>
           </div>
-          <div className="header-actions">
+          <div className="header-actions" style={{ flexWrap: 'wrap' }}>
+            {currentTenant?.is_pos_enabled && (
+              <button
+                className="btn"
+                onClick={handleOpenPos}
+                title="Buka POS Terminal"
+                style={{
+                  background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: 'var(--radius-md)',
+                  padding: '7px 12px', color: '#3b82f6', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, transition: 'all var(--ease)',
+                  flexShrink: 0
+                }}
+                onMouseOver={e => { e.currentTarget.style.background = '#3b82f6'; e.currentTarget.style.color = '#fff'; }}
+                onMouseOut={e => { e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)'; e.currentTarget.style.color = '#3b82f6'; }}
+              >
+                <MonitorSmartphone size={15} /> <span className="hide-mobile">POS Terminal</span>
+              </button>
+            )}
             <button
+              className="btn"
               onClick={() => setShowGuidebook(true)}
               title="Buku Panduan Sistem"
               style={{
                 background: 'var(--accent-glow)', border: '1px solid var(--accent)', borderRadius: 'var(--radius-md)',
                 padding: '7px 12px', color: 'var(--accent)', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, transition: 'all var(--ease)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, transition: 'all var(--ease)',
+                flexShrink: 0
               }}
               onMouseOver={e => { e.currentTarget.style.background = 'var(--accent)'; e.currentTarget.style.color = '#fff'; }}
               onMouseOut={e => { e.currentTarget.style.background = 'var(--accent-glow)'; e.currentTarget.style.color = 'var(--accent)'; }}
@@ -435,13 +594,15 @@ export default function DashboardLayout() {
             {/* Refresh Button */}
             {(isOwner || isStaff) && (
               <button
+                className="btn"
                 onClick={refreshData}
                 disabled={loadingData}
                 title="Sinkronisasi ulang data"
                 style={{
                   background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
                   padding: '7px 10px', color: 'var(--text-secondary)', cursor: loadingData ? 'not-allowed' : 'pointer',
-                  display: 'flex', alignItems: 'center', transition: 'all var(--ease)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all var(--ease)',
+                  flexShrink: 0
                 }}
                 onMouseOver={e => e.currentTarget.style.color = 'var(--accent)'}
                 onMouseOut={e => e.currentTarget.style.color = 'var(--text-secondary)'}
@@ -631,6 +792,182 @@ export default function DashboardLayout() {
       {/* Floating AI Assistant */}
       <AIAssistant />
       <GuidebookModal isOpen={showGuidebook} onClose={() => setShowGuidebook(false)} />
+
+      {/* POS Setup Modal */}
+      <AnimatePresence>
+        {showPosSetupModal && (
+          <div style={{
+            position: 'fixed', inset: 0, background: 'rgba(26,25,23,0.35)',
+            backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', zIndex: 9999, padding: '16px'
+          }}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              style={{
+                background: 'var(--bg-primary)',
+                width: '100%', maxWidth: '400px',
+                maxHeight: '90vh', overflowY: 'auto',
+                padding: '24px', borderRadius: 'var(--radius-lg)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+                border: '1px solid var(--border)'
+              }}
+            >
+              <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>Setup Awal POS</h3>
+              <p style={{ margin: '0 0 20px 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                Tentukan pajak dan service charge untuk sistem kasir Anda. Nilai ini akan diterapkan otomatis pada setiap transaksi.
+              </p>
+              
+              <form onSubmit={handleSavePosSetup}>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>Pajak (Tax) %</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={posTaxRate}
+                    onChange={(e) => setPosTaxRate(e.target.value)}
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    required
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                
+                <div style={{ marginBottom: '24px' }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>Service Charge %</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={posServiceCharge}
+                    onChange={(e) => setPosServiceCharge(e.target.value)}
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    required
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setShowPosSetupModal(false)}
+                    disabled={isSavingPosSetup}
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={isSavingPosSetup}
+                  >
+                    {isSavingPosSetup ? 'Menyimpan...' : 'Simpan & Lanjutkan'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Profile Modal */}
+      <AnimatePresence>
+        {showProfileModal && (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(26,25,23,0.35)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px'
+          }}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              style={{
+                background: 'var(--bg-primary)',
+                width: '100%',
+                maxWidth: '400px',
+                maxHeight: '90vh',
+                overflowY: 'auto',
+                padding: '24px',
+                borderRadius: 'var(--radius-lg)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+                border: '1px solid var(--border)'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>Edit Profile</h4>
+                <button onClick={() => setShowProfileModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Display Name</label>
+                <input
+                  type="text"
+                  value={editProfileName}
+                  onChange={(e) => setEditProfileName(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)',
+                    fontSize: '0.9rem'
+                  }}
+                  placeholder="Enter your name"
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '24px' }}>
+                <button
+                  onClick={() => setShowProfileModal(false)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: 500
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateProfile}
+                  disabled={isUpdatingProfile || !editProfileName.trim()}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--primary)',
+                    border: 'none',
+                    color: 'white',
+                    cursor: (isUpdatingProfile || !editProfileName.trim()) ? 'not-allowed' : 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: 600,
+                    opacity: (isUpdatingProfile || !editProfileName.trim()) ? 0.7 : 1
+                  }}
+                >
+                  {isUpdatingProfile ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <style>{`
         @keyframes spin {

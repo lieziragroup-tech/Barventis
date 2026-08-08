@@ -18,7 +18,6 @@ export default function PosUpload() {
   const { recipes, currentTenant, handleProcessPosSales, fetchAllData } = useData();
   const onProcessPosSales = handleProcessPosSales;
   const [dragActive, setDragActive] = useState(false);
-  const [rawFile, setRawFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [parsedData, setParsedData] = useState(null);
   const [customMappings, setCustomMappings] = useState({});
@@ -88,7 +87,7 @@ export default function PosUpload() {
     setLoading(true);
     try {
       const rowsToImport = Object.entries(bulkSelection)
-        .filter(([_, data]) => data.selected)
+        .filter((entry) => entry[1].selected)
         .map(([name, data]) => ({
           menu_name: name,
           pos_code: data.posCode || null,
@@ -227,7 +226,6 @@ export default function PosUpload() {
   // 2. Excel Parsing Engine
   const processExcelFile = async (excelFile) => {
     const XLSX = await getXLSX();
-    setRawFile(excelFile);
     setLoading(true);
     setUploadStatus(null);
     const reader = new FileReader();
@@ -509,7 +507,6 @@ export default function PosUpload() {
         totalRows: parsedData.sales?.length || 0
       });
       await confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
-      setRawFile(null);
       setParsedData(null);
       setUploadStatus(null);
     } catch (err) {
@@ -791,7 +788,6 @@ export default function PosUpload() {
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>POS Spreadsheet Rows Preview</h3>
             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
               <button className="btn btn-secondary" onClick={() => {
-                setRawFile(null);
                 setParsedData(null);
                 setUploadStatus(null);
               }}>
@@ -867,7 +863,7 @@ export default function PosUpload() {
           background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
         }}>
-          <div className="glass-card modal-card" style={{ width: '450px', maxWidth: 'calc(100vw - 32px)', padding: '28px', border: '1px solid var(--border-focus)' }}>
+          <div className="glass-card modal-card" style={{ width: '450px', maxWidth: 'calc(100vw - 32px)', maxHeight: '90vh', overflowY: 'auto', padding: '28px', border: '1px solid var(--border-focus)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700 }}>Bind POS Menu to Recipe</h3>
               <button className="btn btn-secondary" style={{ padding: '4px', borderRadius: '50%' }} onClick={() => setShowMappingModal(false)}>

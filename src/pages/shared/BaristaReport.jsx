@@ -1,10 +1,9 @@
-import React, { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import {
   Upload, FileSpreadsheet, CheckCircle, AlertTriangle, Download,
   FileText, Archive, Filter, Calendar, Database, ChevronRight, X, Loader
 } from 'lucide-react';
 import { api } from '../../services/api';
-import { useData } from '../../contexts/DataContext';
 import { formatIDR } from '../../services/costUtils';
 import {
   parseSalesReport, generateReports, buildCombinedWorkbook,
@@ -24,7 +23,6 @@ const MONTHS = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
 const STEPS = ['Upload File', 'Pilih Kategori', 'Cek Data', 'Download'];
 
 export default function BaristaReport() {
-  const { recipes } = useData();
   const fileInputRef = useRef(null);
 
   // Step tracking

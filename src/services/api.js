@@ -1,6 +1,6 @@
 // UMATIS Serverless API Service Client for Supabase Backend Integration
 import { supabase } from '../lib/supabase';
-import { parsePackSize, calculateIngredientCost, getUnitPrice } from './costUtils';
+import { parsePackSize, calculateIngredientCost, getUnitPrice, computeRecipeCosts, DEFAULT_FIX_COST_PCT, DEFAULT_ROUNDING_DIRECTION, DEFAULT_ROUNDING_INCREMENT } from './costUtils';
 import { storeLog } from './activityLogService';
 import { calculateUsageVariance } from './varianceCalculator';
 
@@ -246,10 +246,11 @@ export const api = {
   // Set memory cache to avoid async locks in browser
   getPOSOrders: async () => {
     try {
+      const tenantId = await getActiveTenantId();
       const { data, error } = await supabase
         .from('pos_orders')
         .select('*')
-        .eq('tenant_id', activeTenantId)
+        .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data;
@@ -569,6 +570,16 @@ export const api = {
     localStorage.removeItem('umatis_user');
     await supabase.auth.signOut();
     // onAuthStateChange in App.jsx will handle state reset
+  },
+
+  updateProfileName: async (newName) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) throw new Error('No active session.');
+    const { error } = await supabase
+      .from('users')
+      .update({ name: newName })
+      .eq('id', session.user.id);
+    if (error) throw new Error('Failed to update name: ' + error.message);
   },
 
   // getProfile — reads from Supabase DB, not localStorage (KRITIS-01 fix)
@@ -948,8 +959,12 @@ export const api = {
       selling_price: parseFloat(r.selling_price),
       basic_cost: parseFloat(r.basic_cost),
       fix_cost: parseFloat(r.fix_cost),
+      fix_cost_pct: r.fix_cost_pct != null ? parseFloat(r.fix_cost_pct) : DEFAULT_FIX_COST_PCT,
       subtotal: parseFloat(r.subtotal),
       food_cost_pct: parseFloat(r.food_cost_pct),
+      selling_price_raw: r.selling_price_raw != null ? parseFloat(r.selling_price_raw) : 0,
+      rounding_direction: r.rounding_direction || DEFAULT_ROUNDING_DIRECTION,
+      rounding_increment: r.rounding_increment != null ? parseFloat(r.rounding_increment) : DEFAULT_ROUNDING_INCREMENT,
       ingredients: (r.recipe_ingredients || []).map(ing => ({
         material_id: ing.material_id,
         item_name: ing.materials ? ing.materials.name : 'Bahan Terhapus',
@@ -994,8 +1009,12 @@ export const api = {
         selling_price: parseFloat(r.selling_price),
         basic_cost: parseFloat(r.basic_cost),
         fix_cost: parseFloat(r.fix_cost),
+        fix_cost_pct: r.fix_cost_pct != null ? parseFloat(r.fix_cost_pct) : DEFAULT_FIX_COST_PCT,
         subtotal: parseFloat(r.subtotal),
         food_cost_pct: parseFloat(r.food_cost_pct),
+        selling_price_raw: r.selling_price_raw != null ? parseFloat(r.selling_price_raw) : 0,
+        rounding_direction: r.rounding_direction || DEFAULT_ROUNDING_DIRECTION,
+        rounding_increment: r.rounding_increment != null ? parseFloat(r.rounding_increment) : DEFAULT_ROUNDING_INCREMENT,
         ingredients: (r.recipe_ingredients || []).map(ing => ({
           material_id: ing.material_id,
           item_name: ing.materials ? ing.materials.name : 'Bahan Terhapus',
@@ -1038,10 +1057,23 @@ export const api = {
       });
     }
 
-    const fixCost = subtotal * activeOverheadPct; // Standard F&B Fixed Cost
-    const basicCost = subtotal + fixCost;
-    const sellingPrice = parseFloat(recipeData.selling_price || 0);
-    const foodCostPct = sellingPrice > 0 ? (basicCost / sellingPrice) : 0.00;
+    // BUSINESS RULE CHANGE 2026-08 (Panduan_Kartu_Resep_HPP.md): Fix Cost % is now
+    // per-recipe editable (5% stays the default), and Food Cost % is now the TARGET
+    // input that drives a computed + rounded Selling Price — rather than Selling
+    // Price being typed first and Food Cost % derived from it as before. A manual
+    // `selling_price_override` is still honored if the user adjusts the suggested
+    // price afterward (real-world pricing often needs to, e.g. competitor matching).
+    const fixCostPct = recipeData.fix_cost_pct != null ? parseFloat(recipeData.fix_cost_pct) : DEFAULT_FIX_COST_PCT;
+    const roundingDirection = recipeData.rounding_direction || DEFAULT_ROUNDING_DIRECTION;
+    const roundingIncrement = recipeData.rounding_increment != null ? parseFloat(recipeData.rounding_increment) : DEFAULT_ROUNDING_INCREMENT;
+    const foodCostPctTarget = parseFloat(recipeData.food_cost_pct || 0);
+
+    const { fixCost, basicCost, sellingPriceRaw, sellingPriceFinal } = computeRecipeCosts({
+      subtotal, fixCostPct, foodCostPct: foodCostPctTarget, roundingDirection, roundingIncrement
+    });
+    const sellingPrice = recipeData.selling_price_override != null
+      ? parseFloat(recipeData.selling_price_override)
+      : (sellingPriceFinal || parseFloat(recipeData.selling_price || 0));
 
     // 2. Insert Recipe
     const { data: recipe, error: recipeErr } = await supabase
@@ -1050,11 +1082,16 @@ export const api = {
         tenant_id: tenantId,
         menu_name: recipeData.menu_name,
         category: recipeData.category || 'NON-KOPI',
+        image_url: recipeData.image_url || null,
         selling_price: sellingPrice,
         subtotal: parseFloat(subtotal.toFixed(2)),
+        fix_cost_pct: fixCostPct,
         fix_cost: parseFloat(fixCost.toFixed(2)),
         basic_cost: parseFloat(basicCost.toFixed(2)),
-        food_cost_pct: parseFloat(foodCostPct.toFixed(4))
+        food_cost_pct: parseFloat(foodCostPctTarget.toFixed(4)),
+        selling_price_raw: parseFloat((sellingPriceRaw || 0).toFixed(2)),
+        rounding_direction: roundingDirection,
+        rounding_increment: roundingIncrement
       })
       .select('*')
       .single();
@@ -1108,10 +1145,17 @@ export const api = {
       });
     }
 
-    const fixCost = subtotal * activeOverheadPct;
-    const basicCost = subtotal + fixCost;
-    const sellingPrice = parseFloat(recipeData.selling_price || 0);
-    const foodCostPct = sellingPrice > 0 ? (basicCost / sellingPrice) : 0.00;
+    const fixCostPct = recipeData.fix_cost_pct != null ? parseFloat(recipeData.fix_cost_pct) : DEFAULT_FIX_COST_PCT;
+    const roundingDirection = recipeData.rounding_direction || DEFAULT_ROUNDING_DIRECTION;
+    const roundingIncrement = recipeData.rounding_increment != null ? parseFloat(recipeData.rounding_increment) : DEFAULT_ROUNDING_INCREMENT;
+    const foodCostPctTarget = parseFloat(recipeData.food_cost_pct || 0);
+
+    const { fixCost, basicCost, sellingPriceRaw, sellingPriceFinal } = computeRecipeCosts({
+      subtotal, fixCostPct, foodCostPct: foodCostPctTarget, roundingDirection, roundingIncrement
+    });
+    const sellingPrice = recipeData.selling_price_override != null
+      ? parseFloat(recipeData.selling_price_override)
+      : (sellingPriceFinal || parseFloat(recipeData.selling_price || 0));
 
     // 2. Update Recipe
     const { data: recipe, error: recipeErr } = await supabase
@@ -1121,11 +1165,16 @@ export const api = {
         // Only touch category when explicitly provided, so recalc (which omits it)
         // never clobbers an existing category. (M-2)
         ...(recipeData.category !== undefined ? { category: recipeData.category } : {}),
+        ...(recipeData.image_url !== undefined ? { image_url: recipeData.image_url } : {}),
         selling_price: sellingPrice,
         subtotal: parseFloat(subtotal.toFixed(2)),
+        fix_cost_pct: fixCostPct,
         fix_cost: parseFloat(fixCost.toFixed(2)),
         basic_cost: parseFloat(basicCost.toFixed(2)),
-        food_cost_pct: parseFloat(foodCostPct.toFixed(4))
+        food_cost_pct: parseFloat(foodCostPctTarget.toFixed(4)),
+        selling_price_raw: parseFloat((sellingPriceRaw || 0).toFixed(2)),
+        rounding_direction: roundingDirection,
+        rounding_increment: roundingIncrement
       })
       .eq('id', id)
       .select('*')
@@ -1717,10 +1766,23 @@ export const api = {
   },
 
   // --- NATIVE POS CHECKOUT ---
-  processPosCheckout: async (cartItems, paymentMethod = 'CASH') => {
+  processPosCheckout: async (cartItems, paymentMethod = 'CASH', customerName = '') => {
     const tenantId = await getActiveTenantId();
     const userId = await getActiveUserId();
     const nowStr = new Date().toISOString().split('T')[0];
+
+    // Check transaction limit (Maks 50 transaksi / hari)
+    const { count, error: countErr } = await supabase
+      .from('pos_orders')
+      .select('*', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
+      .gte('created_at', `${nowStr}T00:00:00Z`)
+      .lte('created_at', `${nowStr}T23:59:59Z`);
+      
+    if (!countErr && count >= 50) {
+      throw new Error('Batas transaksi POS harian (50) telah tercapai untuk paket Langkah Awal. Silakan upgrade paket atau beli Add-On untuk limit yang lebih besar.');
+    }
+
     const orderNo = `ORD-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
 
     // 1. Fetch recipes & ingredients for deduction calculation
@@ -1733,14 +1795,14 @@ export const api = {
     const recipeMap = new Map((recipes || []).map(r => [r.id, r]));
 
     // 1b. Securely recalculate totalAmount based on DB prices
-    let totalAmount = 0;
+    let subtotalAmount = 0;
     const orderItems = [];
 
     for (const item of cartItems) {
       const dbRecipe = recipeMap.get(item.id);
       if (dbRecipe) {
         const dbPrice = parseFloat(dbRecipe.selling_price || 0);
-        totalAmount += (dbPrice * item.qty);
+        subtotalAmount += (dbPrice * item.qty);
         orderItems.push({
           recipe_id: item.id,
           qty: item.qty,
@@ -1751,6 +1813,15 @@ export const api = {
         });
       }
     }
+
+    // Apply tax and service charge
+    const { data: tenantData } = await supabase.from('tenants').select('pos_tax_rate, pos_service_charge').eq('id', tenantId).single();
+    const taxRate = tenantData?.pos_tax_rate ? parseFloat(tenantData.pos_tax_rate) : 0;
+    const serviceChargeRate = tenantData?.pos_service_charge ? parseFloat(tenantData.pos_service_charge) : 0;
+    
+    const serviceChargeAmount = (subtotalAmount * serviceChargeRate) / 100;
+    const taxAmount = ((subtotalAmount + serviceChargeAmount) * taxRate) / 100;
+    let totalAmount = subtotalAmount + serviceChargeAmount + taxAmount;
 
     // 2. Aggregate deductions & revenue
     const deductionMap = {};
@@ -1841,10 +1912,16 @@ export const api = {
       p_transactions: transactionRows
     });
 
+    
     if (checkoutErr) {
       console.error("Checkout failed:", checkoutErr);
       return { success: false, error: checkoutErr.message };
     }
+
+    if (customerName) {
+      await supabase.from('pos_orders').update({ customer_name: customerName }).eq('order_no', orderNo);
+    }
+
 
     await logAudit('POS_CHECKOUT', `Transaksi POS Kasir ${orderNo} berhasil (Rp ${totalAmount.toLocaleString('id-ID')}).`);
 
@@ -2348,6 +2425,42 @@ export const api = {
   // Audit Logs page. `category` mirrors the frontend's getActionCategory()
   // grouping (AUTH/MATERIAL/RECIPE/INVOICING/POS/OTHER) so filtering by
   // category still happens server-side instead of pulling everything.
+  getSuperAdminAuditLogsPaged: async ({ page = 1, pageSize = 20, search = '', tenantFilter = '', actionFilter = '' } = {}) => {
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+      .from('audit_logs')
+      .select('*, tenants(name, company_name), users(name, role)', { count: 'exact' });
+
+    if (tenantFilter) {
+      query = query.eq('tenant_id', tenantFilter);
+    }
+
+    if (actionFilter) {
+      query = query.eq('action', actionFilter);
+    }
+
+    if (search && search.trim()) {
+      const s = search.trim();
+      // Supabase text search on jsonb is complicated. We'll search action & description for simple ilike,
+      // and unfortunately filtering by user name on joined tables with 'or' is tricky in PostgREST without a view.
+      // We will just filter by action/description for now.
+      query = query.or(`action.ilike.%${s}%,description.ilike.%${s}%`);
+    }
+
+    const { data, error, count } = await query
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (error) throw new Error("Gagal mengambil log audit superadmin: " + error.message);
+
+    return {
+      data,
+      totalCount: count || 0
+    };
+  },
+
   getAuditLogsPaged: async ({ page = 1, pageSize = 20, search = '', category = 'ALL' } = {}) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { data: [], totalCount: 0 };
@@ -2745,7 +2858,15 @@ export const api = {
             return sum;
           }, 0);
         }
-        const fixCost = subtotal * activeOverheadPct;
+        // BUSINESS RULE CHANGE 2026-08 (Panduan_Kartu_Resep_HPP.md): fix_cost_pct is
+        // now per-recipe (5% default) instead of the old tenant-wide activeOverheadPct.
+        // The bulk-import template only supplies a known selling_price directly (no
+        // "target Food Cost %" column), so this path keeps selling_price as the input
+        // and food_cost_pct as the derived actual ratio — unlike the interactive
+        // Recipe Builder form, which now treats food_cost_pct as the target driving a
+        // computed+rounded selling_price. Both paths share the same fixCostPct default.
+        const fixCostPct = row.fix_cost_pct != null ? parseFloat(row.fix_cost_pct) : DEFAULT_FIX_COST_PCT;
+        const fixCost = subtotal * fixCostPct;
         const basicCost = subtotal + fixCost;
         let foodCostPct = sellingPrice > 0 ? basicCost / sellingPrice : 0;
         if (foodCostPct > 99.9999) foodCostPct = 99.9999;
@@ -2760,9 +2881,13 @@ export const api = {
             category: category,
             selling_price: sellingPrice,
             subtotal: parseFloat(subtotal.toFixed(2)),
+            fix_cost_pct: fixCostPct,
             fix_cost: parseFloat(fixCost.toFixed(2)),
             basic_cost: parseFloat(basicCost.toFixed(2)),
-            food_cost_pct: parseFloat(foodCostPct.toFixed(4))
+            food_cost_pct: parseFloat(foodCostPct.toFixed(4)),
+            selling_price_raw: sellingPrice,
+            rounding_direction: DEFAULT_ROUNDING_DIRECTION,
+            rounding_increment: DEFAULT_ROUNDING_INCREMENT
           }, { onConflict: 'menu_name,tenant_id' })
           .select('id')
           .single();
@@ -2899,6 +3024,9 @@ export const api = {
       .from('tenants')
       .update({
         company_name: settings.company_name || undefined,
+        is_pos_enabled: settings.is_pos_enabled !== undefined ? settings.is_pos_enabled : undefined,
+        pos_tax_rate: settings.pos_tax_rate !== undefined ? settings.pos_tax_rate : undefined,
+        pos_service_charge: settings.pos_service_charge !== undefined ? settings.pos_service_charge : undefined,
         locked_until_month: settings.locked_until_month !== undefined ? (settings.locked_until_month ? parseInt(settings.locked_until_month) : null) : undefined,
         locked_until_year: settings.locked_until_year !== undefined ? (settings.locked_until_year ? parseInt(settings.locked_until_year) : null) : undefined,
         updated_at: new Date().toISOString()

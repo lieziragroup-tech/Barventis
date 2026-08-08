@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import {
   Play, Pause, Edit3, Plus,
@@ -7,6 +8,7 @@ import {
   Database, Activity, ShieldAlert, Eye, Calendar, Percent
 } from 'lucide-react';
 import { api } from '../../services/api';
+import Pagination from '../../components/shared/Pagination';
 
 // Landing Page Inspired Theme Palette & CSS Variables (No Tailwind)
 const colors = {
@@ -62,16 +64,31 @@ export default function SuperAdminPanel({ tab }) {
   const [tenants, setTenants] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [totalLogs, setTotalLogs] = useState(0);
 
   // Filter States
   const [tenantFilter, setTenantFilter] = useState('');
   const [actionFilter, setActionFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Pagination States
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
 
   // Modals / Editor States
   const [showTenantModal, setShowTenantModal] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState(null);
-  const [tenantForm, setTenantForm] = useState({ name: '', company_name: '', locked_until_month: '', locked_until_year: '', overhead_pct: 0.05, is_pos_enabled: false });
+  const [tenantForm, setTenantForm] = useState({ 
+    name: '', 
+    company_name: '', 
+    locked_until_month: '', 
+    locked_until_year: '', 
+    overhead_pct: 0.05, 
+    is_pos_enabled: false,
+    plan_type: 'LANGKAH_AWAL',
+    pos_daily_limit: 50,
+    recipe_limit: 50
+  });
   const [selectedDetailTenant, setSelectedDetailTenant] = useState(null);
 
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -88,8 +105,49 @@ export default function SuperAdminPanel({ tab }) {
     }
   };
 
+  const fetchLogs = useCallback(async (targetPage = page, targetSearch = searchQuery, targetTenant = tenantFilter, targetAction = actionFilter) => {
+    setLoading(true);
+    try {
+      const [{ data, totalCount }, tenantsRes] = await Promise.all([
+        api.getSuperAdminAuditLogsPaged({ 
+          page: targetPage, 
+          pageSize: PAGE_SIZE, 
+          search: targetSearch, 
+          tenantFilter: targetTenant, 
+          actionFilter: targetAction 
+        }).catch(() => ({ data: [], totalCount: 0 })),
+        supabase.from('tenants').select('id, name, company_name')
+      ]);
+      setLogs(data || []);
+      setTotalLogs(totalCount || 0);
+      if (!tenantsRes.error) {
+        setTenants(tenantsRes.data || []);
+      }
+    } catch (err) {
+      console.error(err);
+      displayToast('Gagal memuat logs: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, searchQuery, tenantFilter, actionFilter]);
+
+  // Reset to page 1 whenever filters change
+  useEffect(() => {
+    if (tab === 'logs') {
+      setPage(1);
+    }
+  }, [tenantFilter, actionFilter, searchQuery, tab]);
+
+  useEffect(() => {
+    if (tab === 'logs') {
+      fetchLogs(page, searchQuery, tenantFilter, actionFilter);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, tenantFilter, actionFilter, searchQuery, tab]);
+
   // 1. Fetch data based on active tab
   const fetchData = async () => {
+    if (tab === 'logs') return; // Handled by fetchLogs effect
     setLoading(true);
     try {
       if (tab === 'tenants') {
@@ -123,22 +181,6 @@ export default function SuperAdminPanel({ tab }) {
         const { data, error } = await supabase.from('pos_templates').select('*').order('created_at', { ascending: false });
         if (error) throw error;
         setTemplates(data || []);
-      } else if (tab === 'logs') {
-        const [logsRes, tenantsRes] = await Promise.all([
-          supabase
-            .from('audit_logs')
-            .select('*, tenants(name, company_name), users(name, role)')
-            .order('created_at', { ascending: false })
-            .limit(200),
-          supabase.from('tenants').select('id, name, company_name')
-        ]);
-
-        if (logsRes.error) throw logsRes.error;
-        setLogs(logsRes.data || []);
-        
-        if (!tenantsRes.error) {
-          setTenants(tenantsRes.data || []);
-        }
       }
     } catch (err) {
       console.error(err);
@@ -234,6 +276,9 @@ export default function SuperAdminPanel({ tab }) {
             locked_until_year: tenantForm.locked_until_year ? parseInt(tenantForm.locked_until_year) : null,
             overhead_pct: tenantForm.overhead_pct !== '' ? parseFloat(tenantForm.overhead_pct) : 0.05,
             is_pos_enabled: !!tenantForm.is_pos_enabled,
+            plan_type: tenantForm.plan_type,
+            pos_daily_limit: parseInt(tenantForm.pos_daily_limit) || 0,
+            recipe_limit: parseInt(tenantForm.recipe_limit) || 0,
             updated_at: new Date().toISOString()
           })
           .eq('id', selectedTenant.id);
@@ -262,7 +307,10 @@ export default function SuperAdminPanel({ tab }) {
             company_name: tenantForm.company_name,
             overhead_pct: tenantForm.overhead_pct !== '' ? parseFloat(tenantForm.overhead_pct) : 0.05,
             is_pos_enabled: !!tenantForm.is_pos_enabled,
-            status: 'active'
+            status: 'active',
+            plan_type: tenantForm.plan_type,
+            pos_daily_limit: parseInt(tenantForm.pos_daily_limit) || 0,
+            recipe_limit: parseInt(tenantForm.recipe_limit) || 0
           });
 
         if (error) {
@@ -286,14 +334,27 @@ export default function SuperAdminPanel({ tab }) {
       locked_until_month: tenant.locked_until_month || '',
       locked_until_year: tenant.locked_until_year || '',
       overhead_pct: tenant.overhead_pct !== undefined ? tenant.overhead_pct : 0.05,
-      is_pos_enabled: !!tenant.is_pos_enabled
+      is_pos_enabled: !!tenant.is_pos_enabled,
+      plan_type: tenant.plan_type || 'LANGKAH_AWAL',
+      pos_daily_limit: tenant.pos_daily_limit ?? 50,
+      recipe_limit: tenant.recipe_limit ?? 50
     });
     setShowTenantModal(true);
   };
 
   const openTenantCreate = () => {
     setSelectedTenant(null);
-    setTenantForm({ name: '', company_name: '', locked_until_month: '', locked_until_year: '', overhead_pct: 0.05, is_pos_enabled: false });
+    setTenantForm({ 
+      name: '', 
+      company_name: '', 
+      locked_until_month: '', 
+      locked_until_year: '', 
+      overhead_pct: 0.05, 
+      is_pos_enabled: false,
+      plan_type: 'LANGKAH_AWAL',
+      pos_daily_limit: 50,
+      recipe_limit: 50
+    });
     setShowTenantModal(true);
   };
 
@@ -382,18 +443,7 @@ export default function SuperAdminPanel({ tab }) {
   };
 
   // 4. Log Filters and Search
-  const filteredLogs = useMemo(() => {
-    return logs.filter(log => {
-      const matchesTenant = !tenantFilter || log.tenant_id === tenantFilter;
-      const matchesAction = !actionFilter || (log.action || '').toUpperCase() === actionFilter.toUpperCase();
-      const matchesSearch = !searchQuery ||
-        (log.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (log.action || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (log.users?.name && log.users.name.toLowerCase().includes(searchQuery.toLowerCase()));
-      
-      return matchesTenant && matchesAction && matchesSearch;
-    });
-  }, [logs, tenantFilter, actionFilter, searchQuery]);
+  const filteredLogs = logs; // Filtering is now done server-side
 
   // Dynamic Dashboard Stats to follow the premium landing layout
   const tenantStats = useMemo(() => {
@@ -412,10 +462,10 @@ export default function SuperAdminPanel({ tab }) {
   }, [templates]);
 
   const logStats = useMemo(() => {
-    const total = filteredLogs.length;
-    const logins = logs.filter(l => l.action === 'LOGIN').length;
+    const total = totalLogs;
+    const logins = logs.filter(l => l.action === 'LOGIN').length; // logins on current page
     return { total, logins };
-  }, [filteredLogs, logs]);
+  }, [totalLogs, logs]);
 
   return (
     <div style={{ fontFamily: 'var(--font-sans)', color: colors.textPrimary }}>
@@ -603,6 +653,7 @@ export default function SuperAdminPanel({ tab }) {
                     <tr style={{ background: 'rgba(0,104,95,0.03)' }}>
                       <th style={{ padding: '8px 12px', borderBottom: `1px solid ${colors.border}` }}>Nama ID Resto</th>
                       <th style={{ padding: '8px 12px', borderBottom: `1px solid ${colors.border}` }}>Nama Bisnis / Company</th>
+                      <th style={{ padding: '8px 12px', borderBottom: `1px solid ${colors.border}` }}>Plan</th>
                       <th style={{ padding: '8px 12px', borderBottom: `1px solid ${colors.border}` }}>Kunci Opname</th>
                       <th style={{ padding: '8px 12px', borderBottom: `1px solid ${colors.border}` }}>Modul POS</th>
                       <th style={{ padding: '8px 12px', borderBottom: `1px solid ${colors.border}` }}>Status Akun</th>
@@ -642,6 +693,18 @@ export default function SuperAdminPanel({ tab }) {
                           </span>
                         </td>
                         <td style={{ padding: '8px 12px', color: colors.textPrimary, fontWeight: 500 }}>{t.company_name}</td>
+                        <td style={{ padding: '8px 12px' }}>
+                          <span style={{ 
+                            padding: '2px 6px', 
+                            borderRadius: '4px', 
+                            fontSize: '0.7rem', 
+                            fontWeight: 700, 
+                            background: t.plan_type === 'LANGKAH_AWAL' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                            color: t.plan_type === 'LANGKAH_AWAL' ? '#3b82f6' : '#d97706'
+                          }}>
+                            {t.plan_type || 'LANGKAH_AWAL'}
+                          </span>
+                        </td>
                         <td style={{ padding: '8px 12px' }}>
                           {t.locked_until_month && t.locked_until_year ? (
                             <span style={{ color: colors.warning, fontSize: '0.725rem', display: 'inline-flex', alignItems: 'center', gap: '4px', background: colors.warningGlow, padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
@@ -718,7 +781,7 @@ export default function SuperAdminPanel({ tab }) {
                     ))}
                     {tenants.length === 0 && (
                       <tr>
-                        <td colSpan={8} style={{ textAlign: 'center', color: colors.textMuted, padding: '32px' }}>Belum ada tenant terdaftar.</td>
+                        <td colSpan={9} style={{ textAlign: 'center', color: colors.textMuted, padding: '32px' }}>Belum ada tenant terdaftar.</td>
                       </tr>
                     )}
                   </tbody>
@@ -955,6 +1018,17 @@ export default function SuperAdminPanel({ tab }) {
                 </table>
               </div>
             )}
+            
+            {!loading && totalLogs > 0 && (
+              <div style={{ marginTop: '16px' }}>
+                <Pagination 
+                  page={page} 
+                  totalCount={totalLogs} 
+                  pageSize={PAGE_SIZE} 
+                  onPageChange={(newPage) => setPage(newPage)} 
+                />
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -964,7 +1038,7 @@ export default function SuperAdminPanel({ tab }) {
           ==================================================================== */}
       {showTenantModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,25,23,0.35)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '16px' }}>
-          <div style={{ ...glassCardStyle, width: '100%', maxWidth: '440px', padding: '16px 20px', border: `1px solid ${colors.primary}22` }}>
+          <div style={{ ...glassCardStyle, width: '100%', maxWidth: '440px', maxHeight: '90vh', overflowY: 'auto', padding: '16px 20px', border: `1px solid ${colors.primary}22` }}>
             <h4 style={{ margin: '0 0 6px 0', color: colors.primary, fontWeight: 800, fontSize: '1.05rem', letterSpacing: '-0.02em' }}>
               {selectedTenant ? 'Edit Konfigurasi Tenant' : 'Daftarkan Tenant Baru'}
             </h4>
@@ -1027,6 +1101,52 @@ export default function SuperAdminPanel({ tab }) {
                   required
                   style={inputStyle}
                 />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.725rem', fontWeight: 700, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Paket Langganan (Plan)
+                </label>
+                <select
+                  value={tenantForm.plan_type}
+                  onChange={(e) => setTenantForm({ ...tenantForm, plan_type: e.target.value })}
+                  style={inputStyle}
+                >
+                  <option value="LANGKAH_AWAL">Langkah Awal (Free)</option>
+                  <option value="TUMBUH_BERSAMA">Tumbuh Bersama</option>
+                  <option value="PRO">Pro</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.725rem', fontWeight: 700, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Limit POS Harian
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 50"
+                    value={tenantForm.pos_daily_limit}
+                    onChange={(e) => setTenantForm({ ...tenantForm, pos_daily_limit: e.target.value })}
+                    required
+                    style={inputStyle}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.725rem', fontWeight: 700, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Limit Resep Menu
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 50"
+                    value={tenantForm.recipe_limit}
+                    onChange={(e) => setTenantForm({ ...tenantForm, recipe_limit: e.target.value })}
+                    required
+                    style={inputStyle}
+                  />
+                </div>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', background: 'rgba(0,104,95,0.03)', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${colors.border}` }}>
@@ -1129,7 +1249,7 @@ export default function SuperAdminPanel({ tab }) {
           ==================================================================== */}
       {selectedDetailTenant && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,25,23,0.35)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '16px' }}>
-          <div style={{ ...glassCardStyle, width: '100%', maxWidth: '420px', padding: '16px 20px', border: `1px solid ${colors.primary}22` }}>
+          <div style={{ ...glassCardStyle, width: '100%', maxWidth: '420px', maxHeight: '90vh', overflowY: 'auto', padding: '16px 20px', border: `1px solid ${colors.primary}22` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: `1px solid ${colors.border}`, paddingBottom: '8px' }}>
               <div>
                 <span style={{ fontSize: '0.6rem', fontWeight: 800, color: colors.tertiary, background: 'rgba(130,81,0,0.06)', padding: '2px 4px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -1288,7 +1408,7 @@ export default function SuperAdminPanel({ tab }) {
           ==================================================================== */}
       {showTemplateModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,25,23,0.35)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '16px' }}>
-          <div style={{ ...glassCardStyle, width: '100%', maxWidth: '500px', padding: '16px 20px', border: `1px solid ${colors.primary}22` }}>
+          <div style={{ ...glassCardStyle, width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto', padding: '16px 20px', border: `1px solid ${colors.primary}22` }}>
             <h4 style={{ margin: '0 0 6px 0', color: colors.primary, fontWeight: 800, fontSize: '1.05rem', letterSpacing: '-0.02em' }}>
               {selectedTemplate ? 'Edit Template POS Mapping' : 'Buat Template POS Baru'}
             </h4>

@@ -1,4 +1,4 @@
-import { X, BookOpen, Settings, ShoppingCart, Calculator, Store, LineChart, Database, FileText, FileSpreadsheet, Activity, ClipboardCheck, Laptop, Users } from 'lucide-react';
+import { X, BookOpen, Settings, ShoppingCart, Calculator, Store, LineChart } from 'lucide-react';
 
 export default function GuidebookModal({ isOpen, onClose }) {
   if (!isOpen) return null;

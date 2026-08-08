@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { Plus, X, FileText, CheckCircle, XCircle, Clock, Package, Search, Download, Eye, UploadCloud } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import BulkImport from '../../components/BulkImport';

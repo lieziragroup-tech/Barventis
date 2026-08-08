@@ -153,7 +153,11 @@ export const DataProvider = ({ children }) => {
     await api.updateRecipe(recipeId, {
       menu_name: updatedRecipe.menu_name,
       category: updatedRecipe.category,
-      selling_price: updatedRecipe.selling_price,
+      selling_price_override: updatedRecipe.selling_price,
+      fix_cost_pct: updatedRecipe.fix_cost_pct,
+      food_cost_pct: updatedRecipe.food_cost_pct,
+      rounding_direction: updatedRecipe.rounding_direction,
+      rounding_increment: updatedRecipe.rounding_increment,
       ingredients: mappedIngredients
     });
     await fetchAllData();
@@ -172,7 +176,11 @@ export const DataProvider = ({ children }) => {
     await api.createRecipe({
       menu_name: newRecipe.menu_name,
       category: newRecipe.category,
-      selling_price: newRecipe.selling_price,
+      selling_price_override: newRecipe.selling_price,
+      fix_cost_pct: newRecipe.fix_cost_pct,
+      food_cost_pct: newRecipe.food_cost_pct,
+      rounding_direction: newRecipe.rounding_direction,
+      rounding_increment: newRecipe.rounding_increment,
       ingredients: mappedIngredients
     });
     await fetchAllData();

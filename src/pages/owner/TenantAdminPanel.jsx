@@ -13,12 +13,15 @@ export default function TenantAdminPanel() {
   const [tenantUsers, setTenantUsers] = useState([]);
   const [invitations, setInvitations] = useState([]);
   const [companyName, setCompanyName] = useState('');
+  const [isPosEnabled, setIsPosEnabled] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (currentTenant) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCompanyName(currentTenant.company_name || '');
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsPosEnabled(!!currentTenant.is_pos_enabled);
     }
     fetchUsers();
     fetchInvitations();
@@ -121,13 +124,13 @@ export default function TenantAdminPanel() {
     e.preventDefault();
     try {
       setIsSaving(true);
-      const { error } = await supabase
-        .from('tenants')
-        .update({ company_name: companyName, updated_at: new Date().toISOString() })
-        .eq('id', currentTenant.id);
-        
-      if (error) throw error;
+      await api.updateTenantSettings({
+        company_name: companyName,
+        is_pos_enabled: isPosEnabled
+      });
       displayToast('Profil resto berhasil diperbarui.', 'success');
+      // A small hack to force reload context data if needed
+      window.location.reload();
     } catch (err) {
       displayToast('Gagal memperbarui profil: ' + err.message, 'error');
     } finally {
@@ -182,6 +185,18 @@ export default function TenantAdminPanel() {
           }}
         >
           <Building size={14} /> Profil Resto
+        </button>
+        <button
+          className="btn"
+          onClick={() => setTab('addons')}
+          style={{
+            background: tab === 'addons' ? 'rgba(59, 130, 246, 0.12)' : 'transparent',
+            border: tab === 'addons' ? '1px solid rgba(59, 130, 246, 0.25)' : '1px solid rgba(255,255,255,0.08)',
+            color: tab === 'addons' ? 'var(--accent)' : 'var(--text-secondary)',
+            padding: '6px 12px', fontSize: '0.78rem', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer'
+          }}
+        >
+          <Store size={14} /> Add-Ons & Kuota
         </button>
       </div>
 
@@ -383,6 +398,33 @@ export default function TenantAdminPanel() {
                 />
               </div>
 
+              <div style={{ marginTop: '8px', padding: '16px', background: 'rgba(59, 130, 246, 0.05)', border: '1px solid rgba(59, 130, 246, 0.2)', borderRadius: 'var(--radius-md)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h4 style={{ margin: '0 0 4px 0', fontSize: '0.9rem', color: 'var(--text-primary)' }}>Integrasi POS Internal</h4>
+                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Aktifkan modul Point of Sale (Kasir) bawaan Barventis.</p>
+                  </div>
+                  <label className="toggle-switch" style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={isPosEnabled} 
+                      onChange={(e) => setIsPosEnabled(e.target.checked)}
+                      style={{ opacity: 0, width: 0, height: 0 }}
+                    />
+                    <span style={{
+                      position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
+                      backgroundColor: isPosEnabled ? 'var(--success)' : 'rgba(255,255,255,0.1)', transition: '.4s', borderRadius: '34px'
+                    }}>
+                      <span style={{
+                        position: 'absolute', content: '""', height: '18px', width: '18px', left: '3px', bottom: '3px',
+                        backgroundColor: 'white', transition: '.4s', borderRadius: '50%',
+                        transform: isPosEnabled ? 'translateX(20px)' : 'translateX(0)'
+                      }}></span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+
               <div style={{ background: 'rgba(245, 158, 11, 0.05)', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(245, 158, 11, 0.1)' }}>
                 <h4 style={{ margin: '0 0 4px 0', color: 'var(--warning)', fontSize: '0.82rem', fontWeight: '700' }}>Status Kunci Pembukuan</h4>
                 <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -404,6 +446,94 @@ export default function TenantAdminPanel() {
                 {isSaving ? 'Menyimpan...' : 'Simpan Perubahan'}
               </button>
             </form>
+          </div>
+        )}
+        
+        {tab === 'addons' && (
+          <div>
+            <h3 style={{ margin: '0 0 4px 0', color: 'var(--text-primary)', fontSize: '1.2rem', fontWeight: 700 }}>Upgrade & Beli Add-Ons</h3>
+            <p style={{ margin: '0 0 20px 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+              Tingkatkan kapasitas sistem Barventis sesuai kebutuhan bisnis Anda tanpa harus upgrade ke paket yang lebih mahal.
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+              
+              {/* Addon 1 */}
+              <div style={{ 
+                background: 'rgba(15, 23, 42, 0.4)', 
+                border: '1px solid rgba(255, 255, 255, 0.08)', 
+                borderRadius: 'var(--radius-md)', padding: '20px', 
+                display: 'flex', flexDirection: 'column' 
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                  <div>
+                    <h4 style={{ margin: '0 0 4px 0', color: 'var(--text-primary)', fontSize: '1rem' }}>+ 500 Kuota Transaksi POS</h4>
+                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>Tambahan kuota transaksi per hari.</p>
+                  </div>
+                  <span style={{ 
+                    background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent)', 
+                    padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' 
+                  }}>
+                    Rp 15.000 / bln
+                  </span>
+                </div>
+                <button className="btn btn-primary" style={{ marginTop: 'auto', padding: '8px', fontSize: '0.8rem', justifyContent: 'center' }}>
+                  Beli Add-On Ini
+                </button>
+              </div>
+
+              {/* Addon 2 */}
+              <div style={{ 
+                background: 'rgba(15, 23, 42, 0.4)', 
+                border: '1px solid rgba(255, 255, 255, 0.08)', 
+                borderRadius: 'var(--radius-md)', padding: '20px', 
+                display: 'flex', flexDirection: 'column' 
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                  <div>
+                    <h4 style={{ margin: '0 0 4px 0', color: 'var(--text-primary)', fontSize: '1rem' }}>+ 20 Slot Resep Menu</h4>
+                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>Tambahkan lebih banyak variasi menu.</p>
+                  </div>
+                  <span style={{ 
+                    background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent)', 
+                    padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' 
+                  }}>
+                    Rp 10.000 / bln
+                  </span>
+                </div>
+                <button className="btn btn-primary" style={{ marginTop: 'auto', padding: '8px', fontSize: '0.8rem', justifyContent: 'center' }}>
+                  Beli Add-On Ini
+                </button>
+              </div>
+
+              {/* Upgrade Plan */}
+              <div style={{ 
+                background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.02) 100%)', 
+                border: '1px solid rgba(245, 158, 11, 0.3)', 
+                borderRadius: 'var(--radius-md)', padding: '20px', 
+                display: 'flex', flexDirection: 'column' 
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                  <div>
+                    <h4 style={{ margin: '0 0 4px 0', color: 'var(--warning)', fontSize: '1rem' }}>Upgrade Paket Pro</h4>
+                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>Unlimited POS, unlimited resep, multi-cabang.</p>
+                  </div>
+                  <span style={{ 
+                    background: 'rgba(245, 158, 11, 0.2)', color: 'var(--warning)', 
+                    padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' 
+                  }}>
+                    Rp 149.000 / bln
+                  </span>
+                </div>
+                <button className="btn" style={{ 
+                  marginTop: 'auto', padding: '8px', fontSize: '0.8rem', justifyContent: 'center',
+                  background: 'var(--warning)', color: '#000', fontWeight: 'bold', border: 'none'
+                }}>
+                  Upgrade Sekarang
+                </button>
+              </div>
+
+            </div>
           </div>
         )}
       </div>

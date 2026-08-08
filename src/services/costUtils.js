@@ -135,3 +135,69 @@ export const calculateHppPercentage = (totalPemakaian, totalPenjualan) => {
   if (penjualan === 0) return 0;
   return (pemakaian / penjualan) * 100;
 };
+
+// ═══════════════════════════════════════════════════════════════════
+// Recipe/HPP pricing — per Panduan_Kartu_Resep_HPP.md (2026-08)
+//
+// BUSINESS RULE CHANGE: Fix Cost % used to be hardcoded at 5% everywhere in
+// the codebase with no way to change it. It's now a PER-RECIPE editable
+// value (5% stays the default for a brand-new recipe). Selling Price also
+// gains a formal raw -> rounded step. This file is the single source of
+// truth for that formula — every place that computes a recipe's Fix Cost/
+// Basic Cost/Selling Price (Recipes.jsx, api.js createRecipe/updateRecipe/
+// bulkImportRecipes/recalculateAllRecipes, reportGenerator.js) must call
+// this instead of re-deriving the formula inline, so a future spec change
+// only needs to happen in one place.
+// ═══════════════════════════════════════════════════════════════════
+
+export const DEFAULT_FIX_COST_PCT = 0.05;
+export const DEFAULT_ROUNDING_DIRECTION = 'down';
+export const DEFAULT_ROUNDING_INCREMENT = 1000;
+
+/**
+ * Round a raw selling price to the nearest `increment`, in the given
+ * `direction` ('up' or 'down'). Matches the worked example in the spec doc:
+ * roundSellingPrice(39361.45, 'down', 2000) === 38000.
+ */
+export function roundSellingPrice(rawPrice, direction = DEFAULT_ROUNDING_DIRECTION, increment = DEFAULT_ROUNDING_INCREMENT) {
+  const price = parseFloat(rawPrice || 0);
+  const inc = parseFloat(increment || DEFAULT_ROUNDING_INCREMENT);
+  if (inc <= 0) return Math.round(price);
+  const steps = price / inc;
+  const roundedSteps = direction === 'up' ? Math.ceil(steps) : Math.floor(steps);
+  return roundedSteps * inc;
+}
+
+/**
+ * Full recipe cost/pricing computation, steps 1-5 of the spec doc:
+ *   Subtotal -> Fix Cost -> Basic Cost -> Selling Price (raw) -> Selling Price (final)
+ *
+ * @param {object} params
+ * @param {number} params.subtotal - SUM(Amount) of all ingredients (already computed
+ *        by the caller via calculateIngredientCost per ingredient)
+ * @param {number} params.fixCostPct - defaults to DEFAULT_FIX_COST_PCT (5%) for new recipes
+ * @param {number} params.foodCostPct - target Food Cost % (required — no silent default;
+ *        pass 0 explicitly if genuinely not set yet, sellingPriceRaw will come back 0)
+ * @param {string} params.roundingDirection - 'up' | 'down', defaults to 'down'
+ * @param {number} params.roundingIncrement - defaults to 1000
+ */
+export function computeRecipeCosts({
+  subtotal,
+  fixCostPct = DEFAULT_FIX_COST_PCT,
+  foodCostPct = 0,
+  roundingDirection = DEFAULT_ROUNDING_DIRECTION,
+  roundingIncrement = DEFAULT_ROUNDING_INCREMENT,
+}) {
+  const sub = parseFloat(subtotal || 0);
+  const fcPct = parseFloat(fixCostPct ?? DEFAULT_FIX_COST_PCT);
+  const targetPct = parseFloat(foodCostPct || 0);
+
+  const fixCost = sub * fcPct;
+  const basicCost = sub + fixCost;
+  const sellingPriceRaw = targetPct > 0 ? basicCost / targetPct : 0;
+  const sellingPriceFinal = sellingPriceRaw > 0
+    ? roundSellingPrice(sellingPriceRaw, roundingDirection, roundingIncrement)
+    : 0;
+
+  return { subtotal: sub, fixCost, basicCost, sellingPriceRaw, sellingPriceFinal };
+}

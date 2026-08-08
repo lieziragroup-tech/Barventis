@@ -291,21 +291,38 @@ export default function App() {
   const beforeProfit = Math.round(roiRevenue * (1 - roiFoodCost/100));
   const afterProfit = beforeProfit + calculatedSavings;
 
+  const handleScrollClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    const href = e.currentTarget.getAttribute("href");
+    const targetId = href ? href.substring(1) : "";
+    if (activeTab !== "landing") {
+      setActiveTab("landing");
+      setTimeout(() => {
+        const el = document.getElementById(targetId);
+        if (el) el.scrollIntoView({ behavior: "smooth" });
+      }, 300);
+    } else {
+      const el = document.getElementById(targetId);
+      if (el) el.scrollIntoView({ behavior: "smooth" });
+    }
+    setMobileMenuOpen(false);
+  };
+
   return (
     <div className="min-h-screen bg-[#FAFAF8] text-[#191C1E] font-sans antialiased overflow-x-hidden">
       
       {/* Header / Top Bar */}
-      <header className={`fixed top-0 w-full z-50 transition-all duration-300 h-16 flex justify-between items-center px-4 md:px-12 border-b border-[#bcc9c6]/20 ${scrolled ? "bg-white/95 backdrop-blur-md shadow-md" : "bg-[#FDFBF7]/85 backdrop-blur-md shadow-sm"}`}>
-        <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveTab("landing")}>
-          <img src={barventisIcon} alt="Barventis" className="w-8 h-8 object-contain" />
-          <span className="text-xl font-serif font-extrabold text-primary tracking-tight">Barventis</span>
-          <span className="hidden sm:inline bg-primary-light text-primary px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider">Playground 2.0</span>
+      <header className={`fixed top-0 w-full z-50 transition-all duration-300 h-16 flex justify-between items-center px-4 md:px-8 xl:px-12 border-b border-[#bcc9c6]/20 ${scrolled ? "bg-white/95 backdrop-blur-md shadow-md" : "bg-[#FDFBF7]/85 backdrop-blur-md shadow-sm"}`}>
+        <div className="flex items-center gap-2 cursor-pointer shrink-0" onClick={() => setActiveTab("landing")}>
+          <img src={barventisIcon} alt="Barventis" className="w-8 h-8 object-contain shrink-0" />
+          <span className="text-xl font-serif font-extrabold text-primary tracking-tight whitespace-nowrap">Barventis</span>
+          <span className="hidden xl:inline bg-primary-light text-primary px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">Playground 2.0</span>
         </div>
 
-        <nav className="hidden md:flex items-center gap-8">
+        <nav className="hidden lg:flex items-center gap-4 xl:gap-7 shrink-0">
           <button 
             onClick={() => setActiveTab("landing")} 
-            className={`text-sm font-semibold transition-colors duration-200 ${activeTab === "landing" ? "text-primary" : "text-[#515f74] hover:text-primary"}`}
+            className={`text-xs xl:text-sm font-semibold transition-colors duration-200 whitespace-nowrap ${activeTab === "landing" ? "text-primary" : "text-[#515f74] hover:text-primary"}`}
           >
             Beranda Solusi
           </button>
@@ -313,44 +330,49 @@ export default function App() {
             onClick={() => {
               setActiveTab("playground");
             }} 
-            className={`text-sm font-semibold transition-colors duration-200 ${activeTab === "playground" ? "text-primary" : "text-[#515f74] hover:text-primary"}`}
+            className={`text-xs xl:text-sm font-semibold transition-colors duration-200 whitespace-nowrap ${activeTab === "playground" ? "text-primary" : "text-[#515f74] hover:text-primary"}`}
           >
             Kalkulator & AI Demo
           </button>
-          <a href="#roi-calc" className="text-sm font-semibold text-[#515f74] hover:text-primary transition-colors">
+          <a href="#roi-calc" onClick={handleScrollClick} className="text-xs xl:text-sm font-semibold text-[#515f74] hover:text-primary transition-colors whitespace-nowrap">
             Hitung ROI Resto
+          </a>
+          <a href="#faq" onClick={handleScrollClick} className="text-xs xl:text-sm font-semibold text-[#515f74] hover:text-primary transition-colors whitespace-nowrap">
+            FAQ
+          </a>
+          <a href="#contact" onClick={handleScrollClick} className="text-xs xl:text-sm font-semibold text-[#515f74] hover:text-primary transition-colors whitespace-nowrap">
+            Kontak Kami
           </a>
         </nav>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 xl:gap-3 shrink-0">
           <Link 
             to="/login"
-            className="hidden md:flex text-xs md:text-sm font-bold text-[#515f74] hover:text-primary transition-all px-4 py-2.5 rounded-full border border-[#bcc9c6]/40 hover:bg-[#FAFAF8] items-center gap-1 shadow-sm"
+            className="hidden lg:flex text-xs xl:text-sm font-bold text-[#515f74] hover:text-primary transition-all px-3.5 xl:px-4 py-2 rounded-full border border-[#bcc9c6]/40 hover:bg-[#FAFAF8] items-center gap-1 shadow-sm whitespace-nowrap"
           >
             Masuk
           </Link>
           {activeTab === "landing" ? (
             <button 
               onClick={() => setActiveTab("playground")}
-              className="hidden md:flex bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-full text-xs font-bold tracking-wide shadow-md hover:shadow-lg transition-all active:scale-95 items-center gap-1.5"
+              className="hidden lg:flex bg-primary hover:bg-primary-hover text-white px-4 xl:px-5 py-2 rounded-full text-xs font-bold tracking-wide shadow-md hover:shadow-lg transition-all active:scale-95 items-center gap-1.5 whitespace-nowrap"
             >
-              <span className="hidden sm:inline">Coba Demo Interaktif</span><span className="sm:hidden">Coba Demo</span>
+              <span>Coba Demo Interaktif</span>
             </button>
           ) : (
             <button 
               onClick={() => setActiveTab("landing")}
-              className="hidden md:flex bg-white border border-[#bcc9c6]/50 hover:bg-[#FAFAF8] text-[#515f74] px-4 py-2.5 rounded-full text-xs font-bold transition-all items-center gap-1"
+              className="hidden lg:flex bg-white border border-[#bcc9c6]/50 hover:bg-[#FAFAF8] text-[#515f74] px-4 py-2 rounded-full text-xs font-bold transition-all items-center gap-1 whitespace-nowrap"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               Kembali
             </button>
           )}
 
-          {/* Mobile hamburger — everything above collapses in here below md,
-              instead of squeezing logo + Masuk + CTA into one 64px-tall row */}
+          {/* Mobile hamburger — everything above collapses in here below lg */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg border border-[#bcc9c6]/40 text-[#191C1E] active:scale-95 transition-all"
+            className="lg:hidden w-9 h-9 flex items-center justify-center rounded-lg border border-[#bcc9c6]/40 text-[#191C1E] active:scale-95 transition-all"
             aria-label="Menu"
           >
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -367,7 +389,7 @@ export default function App() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.18 }}
-            className="md:hidden fixed top-16 left-0 right-0 z-40 bg-white border-b border-[#bcc9c6]/20 shadow-lg px-5 py-4 flex flex-col gap-1"
+            className="lg:hidden fixed top-16 left-0 right-0 z-40 bg-white border-b border-[#bcc9c6]/20 shadow-lg px-5 py-4 flex flex-col gap-1"
           >
             <button
               onClick={() => { setActiveTab("landing"); setMobileMenuOpen(false); }}
@@ -383,10 +405,24 @@ export default function App() {
             </button>
             <a
               href="#roi-calc"
-              onClick={() => setMobileMenuOpen(false)}
+              onClick={handleScrollClick}
               className="text-left text-sm font-semibold py-2.5 px-2 rounded-lg text-[#515f74]"
             >
               Hitung ROI Resto
+            </a>
+            <a
+              href="#faq"
+              onClick={handleScrollClick}
+              className="text-left text-sm font-semibold py-2.5 px-2 rounded-lg text-[#515f74]"
+            >
+              FAQ
+            </a>
+            <a
+              href="#contact"
+              onClick={handleScrollClick}
+              className="text-left text-sm font-semibold py-2.5 px-2 rounded-lg text-[#515f74]"
+            >
+              Kontak Kami
             </a>
             <div className="h-px bg-[#bcc9c6]/20 my-2"></div>
             <Link
@@ -435,7 +471,7 @@ export default function App() {
                       </span>
                     </div>
 
-                    <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-black text-[#191C1E] leading-tight tracking-tight">
+                    <h1 className="font-serif text-4xl md:text-4xl lg:text-5xl font-black text-[#191C1E] leading-tight tracking-tight">
                       Kembalikan <span className="text-primary italic font-semibold underline decoration-accent decoration-wavy decoration-3">Waktu & Ketenangan</span> Anda dalam Mengelola Restoran.
                     </h1>
                     
@@ -617,7 +653,6 @@ export default function App() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
                     {/* Before Card */}
                     <div className="bg-white/5 border border-white/10 p-8 rounded-[2rem] flex flex-col gap-6 relative">
-                      <div className="absolute top-4 right-4 md:-top-4 md:-right-4 text-5xl opacity-15">🌧️</div>
                       <h3 className="text-xl font-serif font-bold text-white/95 border-b border-white/10 pb-3">Hari-hari yang Melelahkan</h3>
                       <ul className="flex flex-col gap-4">
                         <li className="flex gap-3 items-start">
@@ -637,7 +672,6 @@ export default function App() {
 
                     {/* After Card */}
                     <div className="bg-primary/20 border border-primary/30 p-8 rounded-[2rem] flex flex-col gap-6 relative shadow-lg shadow-black/10">
-                      <div className="absolute top-4 right-4 md:-top-4 md:-right-4 text-5xl opacity-20">☀️</div>
                       <h3 className="text-xl font-serif font-bold text-[#ffddb8] border-b border-primary/30 pb-3">Bernafas Lebih Lega</h3>
                       <ul className="flex flex-col gap-4">
                         <li className="flex gap-3 items-start">
@@ -693,8 +727,8 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="lg:col-span-7 relative">
-                      <div className="organic-shape-2 overflow-hidden shadow-2xl border-4 border-white/80 relative z-10 max-w-lg mx-auto">
+                      <div className="lg:col-span-7 relative flex items-center justify-center mt-8 lg:mt-0">
+                        <div className="organic-shape-2 overflow-hidden shadow-2xl border-4 border-white/80 relative z-10 w-full max-w-lg mx-auto">
                         <img 
                           className="w-full h-80 object-cover object-center" 
                           src="https://lh3.googleusercontent.com/aida-public/AB6AXuCFYwG3HIDJOSiE04Q5iJbKB3zRCXDoIVrOsxCw_8rtE_TImqhiQmtpeeaZURaVJrYye5apj3dkwll9_D0BaqosjF8V8dGZNjhLXlPVRxZ6rSawG0GkwU0plH1YXtJfM6u1Oe0Ue7DDZ3wg2M72eBaR0qcl90jO83bHzd8ASiQTFn-gGrtYLMTzSwIuRYNPUysmZ9IwDoFpq1pUC_Kdsl7DBIj2xhWHs3ako00H9GEztd597QxwVZRlZQ" 
@@ -703,8 +737,6 @@ export default function App() {
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
                       </div>
-                      <div className="absolute right-0 md:-right-4 top-1/2 text-5xl opacity-25 animate-pulse">✨</div>
-                      <div className="absolute left-2 md:left-6 bottom-4 text-4xl opacity-25">🌿</div>
                     </div>
                   </div>
                 </div>
@@ -729,7 +761,7 @@ export default function App() {
                         </div>
                         <div className="bg-[#FAFAF8] p-5 rounded-2xl rounded-bl-none shadow-sm border border-[#bcc9c6]/20 text-sm md:text-base text-[#191C1E] relative">
                           <p className="italic leading-relaxed">
-                            "Sumpah, sejak pakai Barventis, waste bahan baku susu dan sirup di kafe saya turun drastis. Dulu cuma tebak-tebak buah manggis pas stok opname, sekarang tidurnya tenang banget karena semua kecatat presisi datanya. 🙏✨"
+                            "Sumpah, sejak pakai Barventis, waste bahan baku susu dan sirup di kafe saya turun drastis. Dulu cuma tebak-tebak buah manggis pas stok opname, sekarang tidurnya tenang banget karena semua kecatat presisi datanya."
                           </p>
                         </div>
                       </div>
@@ -819,7 +851,7 @@ export default function App() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
-                      <div className="bg-[#FAFAF8] border border-[#bcc9c6]/30 p-6 rounded-2xl flex flex-col justify-between">
+                      <div className="bg-[#FAFAF8] border border-[#bcc9c6]/30 p-6 rounded-2xl flex flex-col justify-between w-full overflow-hidden">
                         <span className="text-xs font-bold text-[#515f74]">ESTIMASI LABA KOTOR SEBELUMNYA</span>
                         <div className="mt-2">
                           <span className="text-lg text-gray-400 font-medium">Rp</span>
@@ -828,7 +860,7 @@ export default function App() {
                         <span className="text-[10px] text-gray-400 mt-1">Berdasarkan total biaya food cost {roiFoodCost}%</span>
                       </div>
 
-                      <div className="bg-primary/5 border-2 border-primary/20 p-6 rounded-2xl flex flex-col justify-between relative overflow-hidden">
+                      <div className="bg-primary/5 border-2 border-primary/20 p-6 rounded-2xl flex flex-col justify-between relative overflow-hidden w-full">
                         <div className="absolute right-2 top-2 bg-primary text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
                           Barventis Efek
                         </div>
@@ -857,15 +889,16 @@ export default function App() {
                     </h2>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto items-stretch">
-                    {/* Tier 1 */}
-                    <div className="bg-white p-8 rounded-[2rem] border border-[#bcc9c6]/20 shadow-sm flex flex-col gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto items-stretch mt-8">
+                      {/* Tier 1 */}
+                      <div className="bg-white p-8 rounded-[2rem] border border-[#bcc9c6]/20 shadow-sm flex flex-col gap-6 mt-4 md:mt-0">
                       <div>
                         <h3 className="font-serif text-2xl font-bold text-[#191C1E]">Langkah Awal</h3>
                         <p className="text-xs text-[#515f74] mt-1">Sempurna untuk merintis usaha kuliner mandiri.</p>
                       </div>
                       <div className="flex items-baseline gap-1 mt-2">
-                        <span className="font-serif text-4xl font-extrabold text-primary">Gratis Selamanya</span>
+                        <span className="font-serif text-4xl font-extrabold text-[#191C1E]">Rp 25K</span>
+                        <span className="text-[#515f74] font-medium">/ bulan</span>
                       </div>
                       <ul className="flex flex-col gap-3.5 border-t border-gray-100 pt-6 mt-2">
                         <li className="flex gap-3 text-xs md:text-sm items-center text-[#515f74]">
@@ -874,27 +907,31 @@ export default function App() {
                         </li>
                         <li className="flex gap-3 text-xs md:text-sm items-center text-[#515f74]">
                           <span className="text-primary font-bold shrink-0 font-mono">✓</span>
+                          <span>POS Sederhana (Maks. 50 Transaksi/hari)</span>
+                        </li>
+                        <li className="flex gap-3 text-xs md:text-sm items-center text-[#515f74]">
+                          <span className="text-primary font-bold shrink-0 font-mono">✓</span>
+                          <span>Maksimum 50 Resep Menu Aktif</span>
+                        </li>
+                        <li className="flex gap-3 text-xs md:text-sm items-center text-[#515f74]">
+                          <span className="text-primary font-bold shrink-0 font-mono">✓</span>
                           <span>Catatan Opname Stok Dasar</span>
                         </li>
                         <li className="flex gap-3 text-xs md:text-sm items-center text-[#515f74]">
                           <span className="text-primary font-bold shrink-0 font-mono">✓</span>
-                          <span>Maksimum 10 Resep Menu Aktif</span>
-                        </li>
-                        <li className="flex gap-3 text-xs md:text-sm items-center text-[#515f74]">
-                          <span className="text-primary font-bold shrink-0 font-mono">✓</span>
-                          <span>Hubungkan ke 1 POS Terintegrasi</span>
+                          <span>Mendukung Pembelian Fitur Add-Ons</span>
                         </li>
                       </ul>
                       <button 
                         onClick={() => setActiveTab("playground")}
-                        className="w-full py-3.5 mt-auto border-2 border-primary/20 text-primary hover:bg-primary-light/50 font-bold rounded-xl transition-colors cursor-pointer text-sm text-center"
+                        className="w-full py-3.5 mt-auto border-2 border-primary text-primary hover:bg-primary-light/50 font-bold rounded-xl transition-colors cursor-pointer text-sm text-center"
                       >
-                        Mulai Dengan Paket Gratis
+                        Mulai Paket Langkah Awal
                       </button>
                     </div>
 
                     {/* Tier 2 */}
-                    <div className="bg-primary p-8 rounded-[2.2rem] shadow-2xl shadow-primary/25 flex flex-col gap-6 relative transform scale-[1.03] border-2 border-accent">
+                      <div className="bg-primary p-8 rounded-[2.2rem] shadow-2xl shadow-primary/25 flex flex-col gap-6 relative md:transform md:scale-[1.03] border-2 border-accent mt-4 md:mt-0">
                       <div className="absolute -top-4 right-6 bg-accent text-primary px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-md transform rotate-2">
                         Paling Banyak Dipilih
                       </div>
@@ -932,6 +969,102 @@ export default function App() {
                         Coba Gratis Selama 14 Hari
                       </button>
                     </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* FAQ Section */}
+              <section id="faq" className="px-6 md:px-12 py-24 bg-white">
+                <div className="max-w-4xl mx-auto">
+                  <div className="text-center mb-16">
+                    <h2 className="font-serif text-3xl md:text-4xl font-black text-[#191C1E] tracking-tight mb-4">
+                      Tanya Jawab (FAQ)
+                    </h2>
+                    <p className="text-[#515f74]">
+                      Pertanyaan yang sering diajukan mengenai sistem Barventis.
+                    </p>
+                  </div>
+                  
+                  <div className="grid gap-6">
+                    {[
+                      {
+                        q: "Apakah Barventis bisa diintegrasikan dengan aplikasi kasir (POS) yang sudah saya gunakan?",
+                        a: "Tentu! Barventis mendukung impor data penjualan dari Excel secara universal. Artinya, dari aplikasi Moka, Pawoon, Olsera, hingga sistem internal Anda, cukup export ke Excel dan unggah ke Barventis."
+                      },
+                      {
+                        q: "Bagaimana cara kerja stock opname di Barventis?",
+                        a: "Barventis akan otomatis menghitung estimasi sisa stok berdasarkan HPP resep dan data POS. Anda hanya perlu mencocokkan angka tersebut dengan fisik di lapangan. Sistem akan mengalkulasi variance (selisih) dan biaya waste-nya."
+                      },
+                      {
+                        q: "Apakah data saya aman dan tidak akan bocor ke kompetitor?",
+                        a: "Keamanan data resep Anda adalah prioritas utama kami. Kami menggunakan enkripsi kelas industri dan setiap data tenant / kafe diisolasi dari tenant lainnya (Multi-tenant Architecture)."
+                      },
+                      {
+                        q: "Apakah ada batasan jumlah menu atau resep yang bisa diinput?",
+                        a: "Tidak ada. Anda dapat memasukkan resep, bahan baku, dan menu sebanyak-banyaknya tanpa ada biaya tambahan atau pembatasan."
+                      }
+                    ].map((faq, idx) => (
+                      <div key={idx} className="bg-[#FAFAF8] border border-[#bcc9c6]/30 p-6 rounded-2xl">
+                        <h3 className="font-bold text-[#191C1E] text-lg mb-3">{faq.q}</h3>
+                        <p className="text-[#515f74] text-sm leading-relaxed">{faq.a}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+
+              {/* Contact Us Section */}
+              <section id="contact" className="px-6 md:px-12 py-24 bg-[#FDFBF7] relative overflow-hidden">
+                <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-16 items-center">
+                  <div className="flex flex-col gap-6">
+                    <h2 className="font-serif text-3xl md:text-4xl font-black text-[#191C1E] tracking-tight">
+                      Punya Kebutuhan Spesifik untuk Restoran Anda?
+                    </h2>
+                    <p className="text-[#515f74] leading-relaxed">
+                      Tim ahli F&B dan teknisi kami siap mendengarkan masalah Anda. Mulai dari custom integrasi POS, setup awal ribuan resep, hingga konsultasi manajemen HPP.
+                    </p>
+                    <div className="flex flex-col gap-4 mt-4">
+                      <div className="flex items-center gap-4 bg-white p-4 rounded-xl border border-[#bcc9c6]/30 shadow-sm">
+                        <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center text-primary shrink-0">
+                          <span className="material-symbols-outlined">mail</span>
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-[#515f74]">Email Kami</p>
+                          <p className="text-[#191C1E] font-semibold">halo@barventis.com</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 bg-white p-4 rounded-xl border border-[#bcc9c6]/30 shadow-sm">
+                        <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center text-primary shrink-0">
+                          <span className="material-symbols-outlined">support_agent</span>
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-[#515f74]">WhatsApp Support</p>
+                          <p className="text-[#191C1E] font-semibold">+62 811 0000 0000</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-white p-8 rounded-3xl border border-[#bcc9c6]/30 shadow-xl shadow-black/5">
+                    <h3 className="font-bold text-[#191C1E] text-xl mb-6">Kirim Pesan Langsung</h3>
+                    <form className="flex flex-col gap-4" onSubmit={(e) => e.preventDefault()}>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-[#515f74]">Nama Lengkap</label>
+                        <input type="text" placeholder="John Doe" className="w-full px-4 py-3 bg-[#FAFAF8] border border-[#bcc9c6]/40 rounded-xl focus:ring-2 focus:ring-primary focus:outline-none transition-all text-sm" />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-[#515f74]">Nama Bisnis (Kafe/Resto)</label>
+                        <input type="text" placeholder="Kopi Senja" className="w-full px-4 py-3 bg-[#FAFAF8] border border-[#bcc9c6]/40 rounded-xl focus:ring-2 focus:ring-primary focus:outline-none transition-all text-sm" />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-[#515f74]">Pesan / Pertanyaan</label>
+                        <textarea placeholder="Ceritakan kendala manajemen stok Anda..." rows={4} className="w-full px-4 py-3 bg-[#FAFAF8] border border-[#bcc9c6]/40 rounded-xl focus:ring-2 focus:ring-primary focus:outline-none transition-all text-sm resize-none"></textarea>
+                      </div>
+                      <button className="w-full mt-2 bg-primary hover:bg-primary-hover text-white py-3.5 rounded-xl font-bold transition-all shadow-md flex justify-center items-center gap-2">
+                        <span>Kirim Pesan</span>
+                        <span className="material-symbols-outlined text-[18px]">send</span>
+                      </button>
+                    </form>
                   </div>
                 </div>
               </section>
@@ -1304,9 +1437,9 @@ export default function App() {
 
                     {/* Circular Food Cost Indicator */}
                     <div className="flex flex-col items-center text-center p-4 rounded-2xl bg-[#FAFAF8] border border-[#bcc9c6]/20 relative overflow-hidden">
-                      <div className="relative w-36 h-36 flex items-center justify-center">
+                      <div className="relative w-36 h-36 flex items-center justify-center shrink-0">
                         {/* Circle path bar SVG */}
-                        <svg className="w-full h-full transform -rotate-90">
+                        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 144 144">
                           <circle
                             cx="72"
                             cy="72"
@@ -1482,7 +1615,7 @@ export default function App() {
                               <span className="font-bold text-gray-800 flex items-center gap-1.5">
                                 Rp {calculatedPrice.toLocaleString("id-ID")}
                                 {isCurrent && (
-                                  <span className="bg-primary text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold">🎯 Aktif</span>
+                                  <span className="bg-primary text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold">Aktif</span>
                                 )}
                               </span>
                               <span className="text-[10px] text-gray-400 font-medium">{tier.label}</span>
