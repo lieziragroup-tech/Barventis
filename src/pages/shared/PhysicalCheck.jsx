@@ -48,14 +48,31 @@ export default function PhysicalCheck() {
         setNotification({ type: 'warning', text: 'Cek fisik untuk periode ini sudah diselesaikan sebelumnya.' });
       }
 
-      // Fetch materials and their expected usage for the latest week
-      const { data: usages, error } = await supabase
+      // BUG-FIX 2026-08: expected_usage.material_id was missing its FK constraint
+      // to materials(id) (see migration_fix_expected_usage_fk.sql) — without it,
+      // PostgREST can't resolve an embedded `materials(...)` select and returns
+      // 400. Fetching separately and joining client-side works regardless of
+      // whether that migration has been applied yet (and keeps working after,
+      // as a defensive fallback if the schema cache is ever stale).
+      const { data: rawUsages, error } = await supabase
         .from('expected_usage')
-        .select('id, expected_qty, total_sold, material_id, materials(name, qty_resto, unit, price, new_price)')
+        .select('id, expected_qty, total_sold, material_id')
         .eq('tenant_id', tenantId)
         .eq('week_start', latestStart);
 
       if (error) throw error;
+
+      const materialIds = [...new Set((rawUsages || []).map(u => u.material_id))];
+      let materialsById = {};
+      if (materialIds.length > 0) {
+        const { data: materialsData, error: matErr } = await supabase
+          .from('materials')
+          .select('id, name, qty_resto, unit, price, new_price')
+          .in('id', materialIds);
+        if (matErr) throw matErr;
+        materialsById = Object.fromEntries((materialsData || []).map(m => [m.id, m]));
+      }
+      const usages = (rawUsages || []).map(u => ({ ...u, materials: materialsById[u.material_id] || null }));
 
       // Initialize state for physical counts
       const counts = {};

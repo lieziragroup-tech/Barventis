@@ -1,6 +1,6 @@
 // UMATIS Serverless API Service Client for Supabase Backend Integration
 import { supabase } from '../lib/supabase';
-import { parsePackSize, calculateIngredientCost, getUnitPrice, computeRecipeCosts, DEFAULT_FIX_COST_PCT, DEFAULT_ROUNDING_DIRECTION, DEFAULT_ROUNDING_INCREMENT } from './costUtils';
+import { parsePackSize, calculateIngredientCost, getUnitPrice, computeRecipeCosts, DEFAULT_FIX_COST_PCT, DEFAULT_ROUNDING_DIRECTION, DEFAULT_ROUNDING_INCREMENT, DEFAULT_PRICE_ADJUSTMENT } from './costUtils';
 import { storeLog } from './activityLogService';
 import { calculateUsageVariance } from './varianceCalculator';
 
@@ -965,6 +965,7 @@ export const api = {
       selling_price_raw: r.selling_price_raw != null ? parseFloat(r.selling_price_raw) : 0,
       rounding_direction: r.rounding_direction || DEFAULT_ROUNDING_DIRECTION,
       rounding_increment: r.rounding_increment != null ? parseFloat(r.rounding_increment) : DEFAULT_ROUNDING_INCREMENT,
+      price_adjustment: r.price_adjustment != null ? parseFloat(r.price_adjustment) : DEFAULT_PRICE_ADJUSTMENT,
       ingredients: (r.recipe_ingredients || []).map(ing => ({
         material_id: ing.material_id,
         item_name: ing.materials ? ing.materials.name : 'Bahan Terhapus',
@@ -1015,6 +1016,7 @@ export const api = {
         selling_price_raw: r.selling_price_raw != null ? parseFloat(r.selling_price_raw) : 0,
         rounding_direction: r.rounding_direction || DEFAULT_ROUNDING_DIRECTION,
         rounding_increment: r.rounding_increment != null ? parseFloat(r.rounding_increment) : DEFAULT_ROUNDING_INCREMENT,
+        price_adjustment: r.price_adjustment != null ? parseFloat(r.price_adjustment) : DEFAULT_PRICE_ADJUSTMENT,
         ingredients: (r.recipe_ingredients || []).map(ing => ({
           material_id: ing.material_id,
           item_name: ing.materials ? ing.materials.name : 'Bahan Terhapus',
@@ -1057,19 +1059,25 @@ export const api = {
       });
     }
 
-    // BUSINESS RULE CHANGE 2026-08 (Panduan_Kartu_Resep_HPP.md): Fix Cost % is now
-    // per-recipe editable (5% stays the default), and Food Cost % is now the TARGET
-    // input that drives a computed + rounded Selling Price — rather than Selling
-    // Price being typed first and Food Cost % derived from it as before. A manual
-    // `selling_price_override` is still honored if the user adjusts the suggested
-    // price afterward (real-world pricing often needs to, e.g. competitor matching).
+    // BUSINESS RULE CHANGE 2026-08 (Panduan_Kartu_Resep_HPP.md, refined per
+    // follow-up): Fix Cost % is now per-recipe editable (5% stays the default),
+    // and Food Cost % is now the TARGET input that drives a computed Selling
+    // Price — rather than Selling Price being typed first and Food Cost %
+    // derived from it as before. Rounding now defaults to the nearest whole
+    // rupiah (not a fixed 500/1000/2000 bucket), and price_adjustment is an
+    // optional manual Rp nudge applied after rounding. A manual
+    // `selling_price_override` is still honored if the user sets a totally
+    // custom final price (real-world pricing often needs to, e.g. competitor
+    // matching) — in that case fix_cost_pct/food_cost_pct/rounding/adjustment
+    // are still saved (so the form doesn't lose them) but don't drive the price.
     const fixCostPct = recipeData.fix_cost_pct != null ? parseFloat(recipeData.fix_cost_pct) : DEFAULT_FIX_COST_PCT;
     const roundingDirection = recipeData.rounding_direction || DEFAULT_ROUNDING_DIRECTION;
     const roundingIncrement = recipeData.rounding_increment != null ? parseFloat(recipeData.rounding_increment) : DEFAULT_ROUNDING_INCREMENT;
+    const priceAdjustment = recipeData.price_adjustment != null ? parseFloat(recipeData.price_adjustment) : DEFAULT_PRICE_ADJUSTMENT;
     const foodCostPctTarget = parseFloat(recipeData.food_cost_pct || 0);
 
     const { fixCost, basicCost, sellingPriceRaw, sellingPriceFinal } = computeRecipeCosts({
-      subtotal, fixCostPct, foodCostPct: foodCostPctTarget, roundingDirection, roundingIncrement
+      subtotal, fixCostPct, foodCostPct: foodCostPctTarget, roundingDirection, roundingIncrement, priceAdjustment
     });
     const sellingPrice = recipeData.selling_price_override != null
       ? parseFloat(recipeData.selling_price_override)
@@ -1091,7 +1099,8 @@ export const api = {
         food_cost_pct: parseFloat(foodCostPctTarget.toFixed(4)),
         selling_price_raw: parseFloat((sellingPriceRaw || 0).toFixed(2)),
         rounding_direction: roundingDirection,
-        rounding_increment: roundingIncrement
+        rounding_increment: roundingIncrement,
+        price_adjustment: priceAdjustment
       })
       .select('*')
       .single();
@@ -1148,10 +1157,11 @@ export const api = {
     const fixCostPct = recipeData.fix_cost_pct != null ? parseFloat(recipeData.fix_cost_pct) : DEFAULT_FIX_COST_PCT;
     const roundingDirection = recipeData.rounding_direction || DEFAULT_ROUNDING_DIRECTION;
     const roundingIncrement = recipeData.rounding_increment != null ? parseFloat(recipeData.rounding_increment) : DEFAULT_ROUNDING_INCREMENT;
+    const priceAdjustment = recipeData.price_adjustment != null ? parseFloat(recipeData.price_adjustment) : DEFAULT_PRICE_ADJUSTMENT;
     const foodCostPctTarget = parseFloat(recipeData.food_cost_pct || 0);
 
     const { fixCost, basicCost, sellingPriceRaw, sellingPriceFinal } = computeRecipeCosts({
-      subtotal, fixCostPct, foodCostPct: foodCostPctTarget, roundingDirection, roundingIncrement
+      subtotal, fixCostPct, foodCostPct: foodCostPctTarget, roundingDirection, roundingIncrement, priceAdjustment
     });
     const sellingPrice = recipeData.selling_price_override != null
       ? parseFloat(recipeData.selling_price_override)
@@ -1174,7 +1184,8 @@ export const api = {
         food_cost_pct: parseFloat(foodCostPctTarget.toFixed(4)),
         selling_price_raw: parseFloat((sellingPriceRaw || 0).toFixed(2)),
         rounding_direction: roundingDirection,
-        rounding_increment: roundingIncrement
+        rounding_increment: roundingIncrement,
+        price_adjustment: priceAdjustment
       })
       .eq('id', id)
       .select('*')
@@ -2858,18 +2869,28 @@ export const api = {
             return sum;
           }, 0);
         }
-        // BUSINESS RULE CHANGE 2026-08 (Panduan_Kartu_Resep_HPP.md): fix_cost_pct is
-        // now per-recipe (5% default) instead of the old tenant-wide activeOverheadPct.
-        // The bulk-import template only supplies a known selling_price directly (no
-        // "target Food Cost %" column), so this path keeps selling_price as the input
-        // and food_cost_pct as the derived actual ratio — unlike the interactive
-        // Recipe Builder form, which now treats food_cost_pct as the target driving a
-        // computed+rounded selling_price. Both paths share the same fixCostPct default.
+        // BUSINESS RULE CHANGE 2026-08 (Panduan_Kartu_Resep_HPP.md, refined per
+        // follow-up instruction): the bulk-import template now carries Fix Cost %
+        // and Food Cost % TARGET as manual columns (since a flat Excel template
+        // can't run live formulas) — Barventis does the actual Subtotal -> Fix
+        // Cost -> Basic Cost -> Selling Price computation on import, using the
+        // exact same computeRecipeCosts() the interactive Recipe Builder uses.
+        // HARGA_JUAL in the template is optional: if a row has it filled in,
+        // that becomes a manual override (selling_price_override) and wins over
+        // the computed suggestion; if left blank, the computed+rounded+adjusted
+        // price is what gets saved.
         const fixCostPct = row.fix_cost_pct != null ? parseFloat(row.fix_cost_pct) : DEFAULT_FIX_COST_PCT;
-        const fixCost = subtotal * fixCostPct;
-        const basicCost = subtotal + fixCost;
-        let foodCostPct = sellingPrice > 0 ? basicCost / sellingPrice : 0;
-        if (foodCostPct > 99.9999) foodCostPct = 99.9999;
+        const foodCostPctTarget = parseFloat(row.food_cost_pct || 0);
+        const roundingDirection = row.rounding_direction || DEFAULT_ROUNDING_DIRECTION;
+        const roundingIncrement = row.rounding_increment != null ? parseFloat(row.rounding_increment) : DEFAULT_ROUNDING_INCREMENT;
+        const priceAdjustment = row.price_adjustment != null ? parseFloat(row.price_adjustment) : DEFAULT_PRICE_ADJUSTMENT;
+
+        const { fixCost, basicCost, sellingPriceRaw, sellingPriceFinal } = computeRecipeCosts({
+          subtotal, fixCostPct, foodCostPct: foodCostPctTarget, roundingDirection, roundingIncrement, priceAdjustment
+        });
+        const finalSellingPrice = sellingPrice > 0 ? sellingPrice : (sellingPriceFinal || 0);
+        let foodCostPctActual = finalSellingPrice > 0 ? basicCost / finalSellingPrice : 0;
+        if (foodCostPctActual > 99.9999) foodCostPctActual = 99.9999;
 
         // Upsert recipe and retrieve the generated id
         const { data: recipeData, error: recipeErr } = await supabase
@@ -2879,15 +2900,20 @@ export const api = {
             menu_name: row.menu_name,
             pos_code: row.pos_code || row.menu_code || null,
             category: category,
-            selling_price: sellingPrice,
+            selling_price: finalSellingPrice,
             subtotal: parseFloat(subtotal.toFixed(2)),
             fix_cost_pct: fixCostPct,
             fix_cost: parseFloat(fixCost.toFixed(2)),
             basic_cost: parseFloat(basicCost.toFixed(2)),
-            food_cost_pct: parseFloat(foodCostPct.toFixed(4)),
-            selling_price_raw: sellingPrice,
-            rounding_direction: DEFAULT_ROUNDING_DIRECTION,
-            rounding_increment: DEFAULT_ROUNDING_INCREMENT
+            // food_cost_pct stores the TARGET (what drove the price), matching the
+            // Recipe Builder's semantics — not the actual ratio at finalSellingPrice.
+            // If no target was given (pure manual selling_price row), fall back to
+            // storing the actual ratio so the field isn't just left at 0.
+            food_cost_pct: parseFloat((foodCostPctTarget > 0 ? foodCostPctTarget : foodCostPctActual).toFixed(4)),
+            selling_price_raw: parseFloat((sellingPriceRaw || 0).toFixed(2)),
+            rounding_direction: roundingDirection,
+            rounding_increment: roundingIncrement,
+            price_adjustment: priceAdjustment
           }, { onConflict: 'menu_name,tenant_id' })
           .select('id')
           .single();

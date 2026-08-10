@@ -158,6 +158,7 @@ export const DataProvider = ({ children }) => {
       food_cost_pct: updatedRecipe.food_cost_pct,
       rounding_direction: updatedRecipe.rounding_direction,
       rounding_increment: updatedRecipe.rounding_increment,
+      price_adjustment: updatedRecipe.price_adjustment,
       ingredients: mappedIngredients
     });
     await fetchAllData();
@@ -181,6 +182,7 @@ export const DataProvider = ({ children }) => {
       food_cost_pct: newRecipe.food_cost_pct,
       rounding_direction: newRecipe.rounding_direction,
       rounding_increment: newRecipe.rounding_increment,
+      price_adjustment: newRecipe.price_adjustment,
       ingredients: mappedIngredients
     });
     await fetchAllData();

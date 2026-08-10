@@ -181,6 +181,7 @@ export const maintenanceService = {
           food_cost_pct: r.food_cost_pct,
           rounding_direction: r.rounding_direction,
           rounding_increment: r.rounding_increment,
+          price_adjustment: r.price_adjustment,
           ingredients
         });
         updated++;

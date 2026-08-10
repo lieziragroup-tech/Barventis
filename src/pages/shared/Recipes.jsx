@@ -5,7 +5,7 @@ import Pagination from '../../components/shared/Pagination';
 import { useData } from '../../contexts/DataContext';
 import { api } from '../../services/api';
 import { maintenanceService } from '../../services/maintenanceService';
-import { formatIDR, calculateIngredientCost, parsePackSize, isPackUnitConsistent, computeRecipeCosts, roundSellingPrice, DEFAULT_FIX_COST_PCT, DEFAULT_ROUNDING_DIRECTION, DEFAULT_ROUNDING_INCREMENT } from '../../services/costUtils';
+import { formatIDR, calculateIngredientCost, parsePackSize, isPackUnitConsistent, computeRecipeCosts, roundSellingPrice, DEFAULT_FIX_COST_PCT, DEFAULT_ROUNDING_DIRECTION, DEFAULT_ROUNDING_INCREMENT, DEFAULT_PRICE_ADJUSTMENT } from '../../services/costUtils';
 
 // Stable client-side id for editable ingredient rows so React keys don't rely on the
 // array index (preserves input focus/state across add/remove/reorder). (LOW #19)
@@ -29,6 +29,10 @@ export default function Recipes() {
   const [editedFoodCostPctTarget, setEditedFoodCostPctTarget] = useState(activeRecipe?.food_cost_pct ?? 0);
   const [editedRoundingDirection, setEditedRoundingDirection] = useState(activeRecipe?.rounding_direction || DEFAULT_ROUNDING_DIRECTION);
   const [editedRoundingIncrement, setEditedRoundingIncrement] = useState(activeRecipe?.rounding_increment ?? DEFAULT_ROUNDING_INCREMENT);
+  // Manual Rp nudge applied AFTER rounding, per follow-up refinement to
+  // Panduan_Kartu_Resep_HPP.md — rounding alone now targets the nearest whole
+  // rupiah (not a 500/1000/2000 bucket); this is for fine-tuning beyond that.
+  const [editedPriceAdjustment, setEditedPriceAdjustment] = useState(activeRecipe?.price_adjustment ?? DEFAULT_PRICE_ADJUSTMENT);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [newMenuName, setNewMenuName] = useState('');
@@ -102,6 +106,7 @@ export default function Recipes() {
     setEditedFoodCostPctTarget(r.food_cost_pct ?? 0);
     setEditedRoundingDirection(r.rounding_direction || DEFAULT_ROUNDING_DIRECTION);
     setEditedRoundingIncrement(r.rounding_increment ?? DEFAULT_ROUNDING_INCREMENT);
+    setEditedPriceAdjustment(r.price_adjustment ?? DEFAULT_PRICE_ADJUSTMENT);
     setOpenDropdown(null);
   };
 
@@ -162,15 +167,18 @@ export default function Recipes() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const subtotal = useMemo(() => editedIngredients.reduce((acc, ing) => acc + calcRowAmount(ing), 0), [editedIngredients, stockMap]);
-  // Per Panduan_Kartu_Resep_HPP.md (2026-08): Fix Cost % is now per-recipe editable
-  // (was hardcoded 5% everywhere), and Food Cost % is a TARGET margin that drives a
-  // computed + rounded "Harga Jual Ideal" suggestion (editedFoodCostPctTarget below),
-  // separate from actualFoodCostPct (the real ratio given whatever Harga Jual is
-  // currently set — manual or applied-from-suggestion).
-  const { fixCost, basicCost, sellingPriceRaw, sellingPriceFinal } = useMemo(() => computeRecipeCosts({
+  // Per Panduan_Kartu_Resep_HPP.md (2026-08, refined per follow-up): Fix Cost %
+  // is per-recipe editable, Food Cost % is a TARGET margin driving a computed
+  // "Harga Jual Ideal" suggestion, rounding defaults to the nearest whole
+  // rupiah (not a 500/1000/2000 bucket), and editedPriceAdjustment is an
+  // optional manual Rp nudge applied after rounding — actualFoodCostPct below
+  // reflects whatever Harga Jual is currently set (manual or
+  // applied-from-suggestion-plus-adjustment), not the pre-adjustment target.
+  const { fixCost, basicCost, sellingPriceRaw, sellingPriceRounded, sellingPriceFinal } = useMemo(() => computeRecipeCosts({
     subtotal, fixCostPct: editedFixCostPct, foodCostPct: editedFoodCostPctTarget,
-    roundingDirection: editedRoundingDirection, roundingIncrement: editedRoundingIncrement
-  }), [subtotal, editedFixCostPct, editedFoodCostPctTarget, editedRoundingDirection, editedRoundingIncrement]);
+    roundingDirection: editedRoundingDirection, roundingIncrement: editedRoundingIncrement,
+    priceAdjustment: editedPriceAdjustment
+  }), [subtotal, editedFixCostPct, editedFoodCostPctTarget, editedRoundingDirection, editedRoundingIncrement, editedPriceAdjustment]);
   const actualFoodCostPct = useMemo(() => editedSellingPrice > 0 ? (basicCost / editedSellingPrice) : 0, [basicCost, editedSellingPrice]);
   // Keep the old name available anywhere below that still reads `foodCostPct` — it
   // now means "actual ratio at the current Harga Jual", matching what the top badge
@@ -248,6 +256,7 @@ export default function Recipes() {
       selling_price_raw: sellingPriceRaw,
       rounding_direction: editedRoundingDirection,
       rounding_increment: editedRoundingIncrement,
+      price_adjustment: editedPriceAdjustment,
       total_cost: basicCost,
       ingredients: savedIngredients
     };
@@ -290,6 +299,7 @@ export default function Recipes() {
       selling_price_raw: 0,
       rounding_direction: DEFAULT_ROUNDING_DIRECTION,
       rounding_increment: DEFAULT_ROUNDING_INCREMENT,
+      price_adjustment: DEFAULT_PRICE_ADJUSTMENT,
       selling_price: parseFloat(newMenuPrice) || 0
     };
     if (onAddRecipe) onAddRecipe(newRecipe);
@@ -306,6 +316,7 @@ export default function Recipes() {
     setEditedFoodCostPctTarget(0);
     setEditedRoundingDirection(DEFAULT_ROUNDING_DIRECTION);
     setEditedRoundingIncrement(DEFAULT_ROUNDING_INCREMENT);
+    setEditedPriceAdjustment(DEFAULT_PRICE_ADJUSTMENT);
   };
 
   // Cost badge color. food_cost_pct is ALWAYS stored as a fraction (basic_cost /
@@ -577,61 +588,64 @@ export default function Recipes() {
             </div>
           </div>
 
-          {/* Pricing formula controls — per Panduan_Kartu_Resep_HPP.md (2026-08):
-              Fix Cost % (per-recipe, was hardcoded 5%) and Food Cost % (now a TARGET
-              margin, not derived) drive a computed + rounded "Harga Jual Ideal"
-              suggestion. Harga Jual above stays the actual, always hand-editable
-              price — the suggestion here is a one-click apply, never auto-overwritten. */}
+          {/* Pricing formula controls — per Panduan_Kartu_Resep_HPP.md (2026-08,
+              refined per follow-up): Fix Cost % (per-recipe, was hardcoded 5%) and
+              Food Cost % (a TARGET margin, not derived) drive a computed "Harga
+              Jual Ideal" suggestion, rounded to the nearest whole rupiah (no
+              500/1000/2000 bucket forced — Arah Pembulatan still matters for
+              which way a fractional rupiah rounds). Penyesuaian Manual is an
+              optional extra nudge on top of that, for hitting a specific price
+              point; it feeds into the actual Food Cost % once applied. Harga
+              Jual above stays the actual, always hand-editable price — the
+              suggestion here is a one-click apply, never auto-overwritten. */}
           <div style={{
-            display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '14px',
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '14px',
             marginBottom: '16px', padding: '14px 16px', borderRadius: 'var(--radius-lg)',
             background: 'rgba(30, 41, 59, 0.25)', border: '1px solid var(--border)'
           }}>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Fix Cost %</label>
+            <div className="form-group" style={{ marginBottom: 0, minWidth: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'normal', display: 'block' }}>Fix Cost %</label>
               <input
                 type="number" step="0.5" min="0" max="100"
                 className="form-control premium-input"
-                style={{ height: '36px' }}
+                style={{ height: '36px', width: '100%', boxSizing: 'border-box' }}
                 value={Math.round(editedFixCostPct * 1000) / 10}
                 onChange={e => setEditedFixCostPct((parseFloat(e.target.value) || 0) / 100)}
               />
             </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Food Cost % (Target)</label>
+            <div className="form-group" style={{ marginBottom: 0, minWidth: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'normal', display: 'block' }}>Food Cost % (Target)</label>
               <input
                 type="number" step="1" min="0" max="100"
                 className="form-control premium-input"
-                style={{ height: '36px' }}
+                style={{ height: '36px', width: '100%', boxSizing: 'border-box' }}
                 placeholder="wajib diisi"
                 value={editedFoodCostPctTarget > 0 ? Math.round(editedFoodCostPctTarget * 1000) / 10 : ''}
                 onChange={e => setEditedFoodCostPctTarget((parseFloat(e.target.value) || 0) / 100)}
               />
             </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Arah Pembulatan</label>
+            <div className="form-group" style={{ marginBottom: 0, minWidth: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'normal', display: 'block' }}>Arah Pembulatan</label>
               <select
                 className="form-control premium-input"
-                style={{ height: '36px' }}
+                style={{ height: '36px', width: '100%', boxSizing: 'border-box' }}
                 value={editedRoundingDirection}
                 onChange={e => setEditedRoundingDirection(e.target.value)}
               >
-                <option value="down">Ke bawah</option>
-                <option value="up">Ke atas</option>
+                <option value="down">Ke bawah (rupiah bulat)</option>
+                <option value="up">Ke atas (rupiah bulat)</option>
               </select>
             </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Kelipatan Pembulatan</label>
-              <select
+            <div className="form-group" style={{ marginBottom: 0, minWidth: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'normal', display: 'block' }}>Penyesuaian Manual (Rp)</label>
+              <input
+                type="number" step="1"
                 className="form-control premium-input"
-                style={{ height: '36px' }}
-                value={editedRoundingIncrement}
-                onChange={e => setEditedRoundingIncrement(parseFloat(e.target.value))}
-              >
-                <option value={500}>Rp 500</option>
-                <option value={1000}>Rp 1.000</option>
-                <option value={2000}>Rp 2.000</option>
-              </select>
+                style={{ height: '36px', width: '100%', boxSizing: 'border-box' }}
+                placeholder="opsional, +/-"
+                value={editedPriceAdjustment !== 0 ? editedPriceAdjustment : ''}
+                onChange={e => setEditedPriceAdjustment(parseFloat(e.target.value) || 0)}
+              />
             </div>
 
             {sellingPriceFinal > 0 && (
@@ -641,7 +655,8 @@ export default function Recipes() {
                 background: 'rgba(59, 130, 246, 0.06)', border: '1px solid rgba(59, 130, 246, 0.2)'
               }}>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  Harga Jual Ideal (sebelum dibulatkan: {formatIDR(sellingPriceRaw)}):{' '}
+                  Harga Jual Ideal — raw: {formatIDR(sellingPriceRaw)}, dibulatkan: {formatIDR(sellingPriceRounded)}
+                  {editedPriceAdjustment !== 0 && <> + penyesuaian {formatIDR(editedPriceAdjustment)}</>}:{' '}
                   <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatIDR(sellingPriceFinal)}</strong>
                 </div>
                 <button
