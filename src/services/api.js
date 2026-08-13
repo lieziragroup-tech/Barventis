@@ -2879,11 +2879,20 @@ export const api = {
         // that becomes a manual override (selling_price_override) and wins over
         // the computed suggestion; if left blank, the computed+rounded+adjusted
         // price is what gets saved.
-        const fixCostPct = row.fix_cost_pct != null ? parseFloat(row.fix_cost_pct) : DEFAULT_FIX_COST_PCT;
-        const foodCostPctTarget = parseFloat(row.food_cost_pct || 0);
-        const roundingDirection = row.rounding_direction || DEFAULT_ROUNDING_DIRECTION;
-        const roundingIncrement = row.rounding_increment != null ? parseFloat(row.rounding_increment) : DEFAULT_ROUNDING_INCREMENT;
-        const priceAdjustment = row.price_adjustment != null ? parseFloat(row.price_adjustment) : DEFAULT_PRICE_ADJUSTMENT;
+        // Template stores percentages as whole numbers (e.g. "5" meaning 5%, "18"
+        // meaning 18%) since that's what's readable in a spreadsheet cell —
+        // computeRecipeCosts() expects fractions (0.05, 0.18), so divide by 100.
+        // NOTE: BulkImport.jsx parses blank number cells as 0 (not undefined/''),
+        // so "0" is treated as "not provided" here (a genuine 0% fix cost is an
+        // edge case not worth losing the "use default" convenience for).
+        const fixCostPct = row.fix_cost_pct > 0 ? parseFloat(row.fix_cost_pct) / 100 : DEFAULT_FIX_COST_PCT;
+        const foodCostPctTarget = row.food_cost_pct > 0 ? parseFloat(row.food_cost_pct) / 100 : 0;
+        // Template column asks for "ke bawah" / "ke atas" (Indonesian, human-facing)
+        // — normalize to the 'down'/'up' values roundSellingPrice() actually checks.
+        const rawDirection = (row.rounding_direction || '').toString().toLowerCase().trim();
+        const roundingDirection = rawDirection.includes('atas') ? 'up' : (rawDirection.includes('bawah') ? 'down' : DEFAULT_ROUNDING_DIRECTION);
+        const roundingIncrement = row.rounding_increment > 0 ? parseFloat(row.rounding_increment) : DEFAULT_ROUNDING_INCREMENT;
+        const priceAdjustment = row.price_adjustment ? parseFloat(row.price_adjustment) : DEFAULT_PRICE_ADJUSTMENT;
 
         const { fixCost, basicCost, sellingPriceRaw, sellingPriceFinal } = computeRecipeCosts({
           subtotal, fixCostPct, foodCostPct: foodCostPctTarget, roundingDirection, roundingIncrement, priceAdjustment

@@ -973,7 +973,19 @@ export default function Recipes() {
         expectedColumns={[
           { key: 'menu_name', label: 'NAMA MENU', required: true, type: 'string', description: 'Nama menu (harus sama persis dengan di POS)', sample: 'Ice Caramel Latte' },
           { key: 'category', label: 'KATEGORI', required: false, type: 'string', description: 'Kategori menu: KOPI/NON-KOPI/TEA/MOCKTAIL/JUICE/BEER', sample: 'KOPI' },
-          { key: 'selling_price', label: 'HARGA JUAL', required: true, type: 'number', description: 'Harga Jual (angka tanpa titik)', sample: 45000 },
+          // Per Panduan_Kartu_Resep_HPP.md (2026-08, refined per follow-up): a flat
+          // Excel template can't run live formulas, so Fix Cost % and Food Cost %
+          // (target) are manual-input columns here — Barventis computes Subtotal ->
+          // Fix Cost -> Basic Cost -> Selling Price on import using the exact same
+          // computeRecipeCosts() the interactive Recipe Builder uses. HARGA JUAL is
+          // now optional: leave blank to let the target-driven formula decide the
+          // price, or fill it in to override with a specific number regardless of
+          // what the formula would suggest.
+          { key: 'fix_cost_pct', label: 'FIX COST %', required: false, type: 'number', description: 'Persen fix cost (contoh: isi 5 untuk 5%). Kosong = default 5%.', sample: 5 },
+          { key: 'food_cost_pct', label: 'FOOD COST % TARGET', required: true, type: 'number', description: 'Target food cost (contoh: isi 18 untuk 18%). Ini yang menentukan Harga Jual kalau kolom HARGA JUAL dikosongkan.', sample: 18 },
+          { key: 'rounding_direction', label: 'ARAH PEMBULATAN', required: false, type: 'string', description: 'ke bawah / ke atas (ke rupiah bulat terdekat). Kosong = ke bawah.', sample: 'ke bawah' },
+          { key: 'price_adjustment', label: 'PENYESUAIAN MANUAL', required: false, type: 'number', description: 'Nilai tambahan/pengurang setelah dibulatkan, boleh negatif. Kosong = 0.', sample: 0 },
+          { key: 'selling_price', label: 'HARGA JUAL (OPSIONAL)', required: false, type: 'number', description: 'Isi hanya kalau mau override harga manual — kosongkan supaya dihitung dari Food Cost % Target di atas.', sample: '' },
           { key: 'bahan_1', label: 'BAHAN 1', required: false, type: 'string', description: 'Nama bahan baku 1', sample: 'Espresso Bean' },
           { key: 'qty_1', label: 'QTY 1', required: false, type: 'number', description: 'Jumlah bahan baku 1', sample: 36 },
           { key: 'bahan_2', label: 'BAHAN 2', required: false, type: 'string', description: 'Nama bahan baku 2', sample: 'Fresh Milk' },
