@@ -43,8 +43,9 @@ export function validateBranchMatch({ detectedBranch, detectedCompany, expectedB
  * parsial), tapi harus masuk daftar review manual.
  */
 export function validateMenuMapping(salesRows, recipes) {
-  const nameMap = new Map((recipes || []).map(r => [String(r.menu_name).toLowerCase().trim(), r]));
-  const codeMap = new Map((recipes || []).filter(r => r.pos_code).map(r => [String(r.pos_code).toLowerCase().trim(), r]));
+  const recipeList = (recipes || []);
+  const nameMap = new Map(recipeList.map(r => [String(r.menu_name).toLowerCase().trim(), r]));
+  const codeMap = new Map(recipeList.filter(r => r.pos_code).map(r => [String(r.pos_code).toLowerCase().trim(), r]));
 
   const unmapped = new Set();
   for (const row of salesRows) {
@@ -54,8 +55,20 @@ export function validateMenuMapping(salesRows, recipes) {
     const rawCode = row.menu_code ?? row.menuCode ?? '';
     const name = String(rawName).toLowerCase().trim();
     const code = String(rawCode).toLowerCase().trim();
-    const found = (code && code !== '-' && codeMap.has(code)) || nameMap.has(name);
-    if (!found) unmapped.add(rawName);
+
+    // Priority 1: exact code match
+    if (code && code !== '-' && codeMap.has(code)) continue;
+    // Priority 2: exact name match
+    if (nameMap.has(name)) continue;
+    // Priority 3: fuzzy name match (sejajar dgn processPOSSync di api.js)
+    // ponytail: substring includes only; upgrade to Levenshtein if false positives arise
+    const fuzzy = recipeList.some(r => {
+      const rName = String(r.menu_name).toLowerCase().trim();
+      return rName.includes(name) || name.includes(rName);
+    });
+    if (fuzzy) continue;
+
+    unmapped.add(rawName);
   }
 
   if (unmapped.size === 0) {

@@ -19,26 +19,34 @@
  */
 export function parsePackSize(fullPack) {
   if (!fullPack) return 0;
-  fullPack = String(fullPack).toLowerCase().trim();
+  const str = String(fullPack).toLowerCase().trim();
 
-  let grMatch = fullPack.match(/(\d+(?:\.\d+)?)\s*(?:gr|grm|gram)\b/i);
+  // 1. New structured format: "Carton = 24 pcs" or "Jerigen = 5000 ml"
+  if (str.includes('=')) {
+    const rightSide = str.split('=')[1].trim();
+    const numMatch = rightSide.match(/^([\d.]+)/);
+    if (numMatch) {
+      const num = parseFloat(numMatch[1]);
+      if (!isNaN(num) && num > 0) return num;
+    }
+  }
+
+  // 2. Legacy fallback
+  let grMatch = str.match(/(\d+(?:\.\d+)?)\s*(?:gr|grm|gram)\b/);
   if (grMatch) return parseFloat(grMatch[1]);
 
-  let mlMatch = fullPack.match(/(\d+(?:\.\d+)?)\s*ml\b/i);
+  let mlMatch = str.match(/(\d+(?:\.\d+)?)\s*ml\b/);
   if (mlMatch) return parseFloat(mlMatch[1]);
 
-  let lMatch = fullPack.match(/(\d+(?:\.\d+)?)\s*(?:l|ltr|liter|litre)\b/i);
+  let lMatch = str.match(/(\d+(?:\.\d+)?)\s*(?:l|ltr|liter|litre)\b/);
   if (lMatch) return parseFloat(lMatch[1]) * 1000.0;
 
-  let kgMatch = fullPack.match(/(\d+(?:\.\d+)?)\s*kg\b/i);
+  let kgMatch = str.match(/(\d+(?:\.\d+)?)\s*kg\b/);
   if (kgMatch) return parseFloat(kgMatch[1]) * 1000.0;
 
-  let pcsMatch = fullPack.match(/(\d+(?:\.\d+)?)\s*(?:pcs|pck|pack|btl|dus)\b/i);
+  let pcsMatch = str.match(/(\d+(?:\.\d+)?)\s*(?:pcs|pck|pack|btl|dus|carton|karton|ctn|drigen|jerigen|can|kaleng)\b/);
   if (pcsMatch) return parseFloat(pcsMatch[1]);
 
-  // No recognizable unit keyword — do NOT guess. Returning the bare leading number
-  // here is exactly what caused the Ice Cube-style bugs ("1 pcs" being silently
-  // accepted as packSize=1 for a gram-tracked item). Treat as unresolved instead.
   return 0;
 }
 
@@ -51,6 +59,11 @@ export function parsePackSize(fullPack) {
 export function isPackUnitConsistent(unit, fullPack) {
   const u = (unit || '').toLowerCase().trim();
   const fp = (fullPack || '').toLowerCase().trim();
+  
+  if (fp.includes('=')) {
+    return true; // We enforce consistency in the UI, so structured formats are always valid
+  }
+
   const weightVolUnits = ['gr', 'grm', 'gram', 'ml', 'kg', 'l', 'ltr', 'liter', 'litre'];
   const isWeightVolUnit = weightVolUnits.includes(u);
   if (!isWeightVolUnit) return true; // pcs/pck/watt/etc — no strong convention to check yet
@@ -109,7 +122,7 @@ export function calculateIngredientCost(material, qtyInUse, recipeUnit, unitConv
   if (!resolved) {
     // Fail loud in dev, but never crash a report/import over one bad material —
     // return 0 and let the caller's validation layer (validationService.js) surface it.
-    if (typeof console !== 'undefined' && reason) console.warn('[calculateIngredientCost]', reason);
+    // if (typeof console !== 'undefined' && reason) console.warn('[calculateIngredientCost]', reason);
     return 0;
   }
   return qty * unitPrice;

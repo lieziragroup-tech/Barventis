@@ -16,6 +16,9 @@ let activeWhatsappNumber = null;
 let activeWhatsappToken = null;
 let activeWhatsappEnabled = false;
 
+// Helper to sanitize search strings for PostgREST .or() filters to prevent injection
+const sanitizePostgrest = (str) => String(str).replace(/[,\.\(\)\"\'\\]/g, ' ').trim();
+
 // Helper to get active tenant info — uses cached memory first, falls back to Supabase session (KRITIS-01 fix)
 const getActiveTenantId = async () => {
   if (activeTenantId !== null) return activeTenantId;
@@ -92,6 +95,16 @@ export const api = {
       const today = new Date().toISOString().split('T')[0];
       let minDate = today;
       let maxDate = today;
+
+      // FIX: Paksa minDate/maxDate ke awal-akhir bulan jika periodMonth/Year tersedia.
+      // Ini mencegah double-counting ketika user upload 2 file berbeda (Senin vs Selasa)
+      // di bulan yang sama — keduanya sekarang di-aggregate ke satu periode yang sama.
+      if (options.periodMonth && options.periodYear) {
+        const m = options.periodMonth.toString().padStart(2, '0');
+        const lastDay = new Date(parseInt(options.periodYear), parseInt(options.periodMonth), 0).getDate();
+        minDate = `${options.periodYear}-${m}-01`;
+        maxDate = `${options.periodYear}-${m}-${String(lastDay).padStart(2, '0')}`;
+      }
 
       // Override handling
       if (options.mode === 'overwrite' && options.periodMonth && options.periodYear) {
@@ -297,6 +310,10 @@ export const api = {
 
   getPOSOrderItems: async (orderId) => {
     try {
+      const tenantId = await getActiveTenantId();
+      // Verify the order belongs to the active tenant before returning items
+      const { data: order } = await supabase.from('pos_orders').select('id').eq('id', orderId).eq('tenant_id', tenantId).maybeSingle();
+      if (!order) throw new Error('Order tidak ditemukan atau akses ditolak.');
       const { data, error } = await supabase
         .from('pos_order_items')
         .select('*, recipes(menu_name)')
@@ -339,7 +356,7 @@ export const api = {
     });
 
     if (authErr || !authData.user) {
-      throw new Error(authErr.message || 'Email atau password salah.');
+      throw new Error(authErr?.message || 'Email atau password salah.');
     }
 
     // 2. Fetch user profile
@@ -502,7 +519,7 @@ export const api = {
     if (signupErr || !authData.user) {
       // Cleanup created tenant
       await supabase.from('tenants').delete().eq('id', newTenant.id);
-      throw new Error('Gagal mendaftarkan admin: ' + signupErr.message);
+      throw new Error('Gagal mendaftarkan admin: ' + (signupErr?.message || 'Menunggu verifikasi email'));
     }
 
     // 4. Trigger database profile insertion manually in case of slow DB trigger sync
@@ -532,12 +549,12 @@ export const api = {
     };
   },
 
-  registerWithToken: async (name, email, password, token, inviteRole = 'Staff') => {
+  registerWithToken: async (name, email, password, token) => {
     // 1. Re-validate the invitation server-side (client SDK) right before using it,
     //    and grab tenant_id so we can fallback-create the profile below.
     const { data: invite, error: inviteErr } = await supabase
       .from('invitations')
-      .select('id, tenant_id, is_used, expires_at')
+      .select('id, tenant_id, is_used, expires_at, invite_role')
       .eq('token', token)
       .single();
 
@@ -551,6 +568,8 @@ export const api = {
       throw new Error('Undangan ini sudah kadaluarsa.');
     }
 
+    const assignedRole = invite.invite_role || 'Staff';
+
     // 2. Create the Supabase Auth user (passing full metadata including tenant_id and role to prevent database trigger failures)
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -559,21 +578,18 @@ export const api = {
         data: {
           name: name,
           tenant_id: invite.tenant_id,
-          role: inviteRole,
+          role: assignedRole,
           invite_token: token,
         }
       }
     });
-    if (error) {
+    if (error || !data.user) {
       console.error("Detailed Supabase signUp error:", error);
       throw new Error(
-        error.message || 
-        'Terjadi kesalahan internal (500) di Supabase. Ini biasanya disebabkan oleh: ' +
-        '1) Fitur "Confirm email" aktif di Supabase Dashboard tapi email gagal dikirim (SMTP/limit harian limit), ' +
-        'atau 2) Trigger on_auth_user_created di database Anda mengalami error saat sinkronisasi profil.'
+        error?.message ||
+        'Terjadi kesalahan internal (500) di Supabase atau menunggu verifikasi email.'
       );
     }
-    if (!data.user) throw new Error('Gagal membuat akun.');
 
     // 3. Fallback: insert into public.users in case the DB trigger didn't
     //    (mirrors the same fallback already used in register() — KRITIS-01 fix pattern)
@@ -584,7 +600,7 @@ export const api = {
         tenant_id: invite.tenant_id,
         name: name,
         email: email,
-        role: inviteRole
+        role: assignedRole
       });
       if (insertErr) {
         throw new Error('Akun berhasil dibuat, tapi gagal menyimpan profil: ' + insertErr.message);
@@ -603,6 +619,15 @@ export const api = {
     localStorage.removeItem('umatis_token');
     localStorage.removeItem('umatis_tenant_name');
     localStorage.removeItem('umatis_user');
+
+    // SEC-01: Clear module-level cache
+    activeTenantId = null;
+    activeUserId = null;
+    activeOverheadPct = 0.05;
+    activeWhatsappNumber = null;
+    activeWhatsappToken = null;
+    activeWhatsappEnabled = false;
+
     await supabase.auth.signOut();
     // onAuthStateChange in App.jsx will handle state reset
   },
@@ -689,16 +714,17 @@ export const api = {
       .insert({
         tenant_id: tenantId,
         expires_at: expiresAt.toISOString(),
-        created_by: userId
+        created_by: userId,
+        invite_role: role
       })
       .select('token')
       .single();
 
     if (error) throw new Error("Gagal membuat link undangan: " + error.message);
-    
-    // Return full URL with role encoded in query parameters
+
+    // Return full URL
     const baseUrl = window.location.origin;
-    return `${baseUrl}/login?token=${data.token}&role=${encodeURIComponent(role)}`;
+    return `${baseUrl}/login?token=${data.token}`;
   },
 
   // --- LEDGER TRANSACTIONS ---
@@ -745,7 +771,8 @@ export const api = {
       query = query.eq('material_id', mat ? mat.id : -1);
     }
     if (search && search.trim()) {
-      query = query.or(`notes.ilike.%${search.trim()}%,type.ilike.%${search.trim()}%`);
+      const s = sanitizePostgrest(search);
+      query = query.or(`notes.ilike.%${s}%,type.ilike.%${s}%`);
     }
 
     const { data, error, count } = await query
@@ -801,7 +828,7 @@ export const api = {
       .eq('is_active', true);
 
     if (search && search.trim()) {
-      const s = search.trim();
+      const s = sanitizePostgrest(search);
       query = query.or(`name.ilike.%${s}%,category.ilike.%${s}%,supplier.ilike.%${s}%`);
     }
 
@@ -842,8 +869,9 @@ export const api = {
   },
 
   updateMaterial: async (id, materialData) => {
-    const { data: oldMaterial } = await supabase.from('materials').select('*').eq('id', id).single();
-    
+    const tenantId = await getActiveTenantId();
+    const { data: oldMaterial } = await supabase.from('materials').select('*').eq('id', id).eq('tenant_id', tenantId).single();
+
     const { data, error } = await supabase
       .from('materials')
       .update({
@@ -858,6 +886,7 @@ export const api = {
         min_stock: parseFloat(materialData.min_stock || 15.00)
       })
       .eq('id', id)
+      .eq('tenant_id', tenantId)
       .select('*')
       .single();
 
@@ -875,6 +904,7 @@ export const api = {
   },
 
   deleteMaterial: async (id, force = false) => {
+    const tenantId = await getActiveTenantId();
     // Check if ingredient is used in recipes
     const { count, error: countErr } = await supabase
       .from('recipe_ingredients')
@@ -897,6 +927,7 @@ export const api = {
       .from('materials')
       .update({ is_active: false })
       .eq('id', id)
+      .eq('tenant_id', tenantId)
       .select('*')
       .single();
 
@@ -907,7 +938,7 @@ export const api = {
 
   adjustStock: async (id, adjustData) => {
     const tenantId = await getActiveTenantId();
-    const { data: material, error: matErr } = await supabase.from('materials').select('*').eq('id', id).single();
+    const { data: material, error: matErr } = await supabase.from('materials').select('*').eq('id', id).eq('tenant_id', tenantId).single();
     if (matErr || !material) throw new Error("Bahan baku tidak ditemukan.");
 
     const { location, type, qty, notes } = adjustData;
@@ -1033,7 +1064,7 @@ export const api = {
       .eq('tenant_id', tenantId);
 
     if (search && search.trim()) {
-      const s = search.trim();
+      const s = sanitizePostgrest(search);
       query = query.or(`menu_name.ilike.%${s}%,category.ilike.%${s}%,pos_code.ilike.%${s}%`);
     }
 
@@ -1378,7 +1409,7 @@ export const api = {
       .eq('tenant_id', tenantId);
 
     if (search && search.trim()) {
-      const s = search.trim();
+      const s = sanitizePostgrest(search);
       query = query.or(`invoice_no.ilike.%${s}%,supplier.ilike.%${s}%`);
     }
 
@@ -1481,7 +1512,8 @@ export const api = {
   },
 
   updateInvoiceStatus: async (id, status) => {
-    const { data: oldInvoice } = await supabase.from('invoices').select('*').eq('id', id).single();
+    const tenantId = await getActiveTenantId();
+    const { data: oldInvoice } = await supabase.from('invoices').select('*').eq('id', id).eq('tenant_id', tenantId).single();
     if (oldInvoice.status === 'RECEIVED') {
       throw new Error('Tidak bisa mengubah status invoice PO yang sudah diterima (RECEIVED).');
     }
@@ -1490,6 +1522,7 @@ export const api = {
       .from('invoices')
       .update({ status })
       .eq('id', id)
+      .eq('tenant_id', tenantId)
       .select('*')
       .single();
 
@@ -1935,10 +1968,12 @@ export const api = {
       const material = data.material;
       const deductQty = data.totalDeduct;
       const currentResto = parseFloat(material.qty_resto);
-      
+
+      // FIX: izinkan stok negatif. Di realitas, fisik kopi tetap terpotong walau sistem bilangnya habis
+      // (biasanya karena telat catat stok masuk). Supaya di akhir bulan kelihatan minusnya pas opname.
       if (currentResto - deductQty < 0) {
-        negativeWarnings.push(`Stok ${material.name} tersisa ${currentResto.toFixed(2)}, tapi order butuh ${deductQty.toFixed(2)}. Potongan dilewati.`);
-        continue; // Skip deduction if it would be negative
+        negativeWarnings.push(`Stok ${material.name} tersisa ${currentResto.toFixed(2)}, tapi order butuh ${deductQty.toFixed(2)}. (Stok akan jadi minus)`);
+        // continue; // HAPUS SKIP INI
       }
 
         deductionsPayload.push({
@@ -1946,14 +1981,16 @@ export const api = {
         deduct_qty: deductQty
       });
 
-      const unitPrice = parseFloat(material.price ?? 0);
+      // FIX: jangan kali lurus deductQty (bisa dalam gram) dengan unitPrice (harga per pack)
+      const exactCost = calculateIngredientCost(material, deductQty, material.unit);
+
       transactionRows.push({
         date: nowStr,
         material_id: material.id,
         type: 'POS_DEDUCTION',
         location: 'RESTO',
         qty: -deductQty,
-        amount: -deductQty * unitPrice,
+        amount: -exactCost,
         notes: `POS Kasir (Native) Deduction - Order: ${orderNo}`
       });
     }
@@ -1997,8 +2034,9 @@ export const api = {
     
     const location = opnameData.location;
     const items = opnameData.items;
-    const currentMonth = new Date().getMonth() + 1;
-    const currentYear = new Date().getFullYear();
+    // FIX: Gunakan bulan/tahun dari UI jika user pilih backdate. Jangan kunci ke waktu sekarang.
+    const currentMonth = opnameData.period_month ? parseInt(opnameData.period_month, 10) : new Date().getMonth() + 1;
+    const currentYear = opnameData.period_year ? parseInt(opnameData.period_year, 10) : new Date().getFullYear();
 
     // 1. Delete existing opname for this period & location to prevent unique constraint crash
     const { data: oldOpname } = await supabase
@@ -2369,7 +2407,7 @@ export const api = {
     }
 
     if (search && search.trim()) {
-      const s = search.trim();
+      const s = sanitizePostgrest(search);
       const { data: matMatches } = await supabase
         .from('materials')
         .select('id')
@@ -2500,7 +2538,7 @@ export const api = {
     }
 
     if (search && search.trim()) {
-      const s = search.trim();
+      const s = sanitizePostgrest(search);
       // Supabase text search on jsonb is complicated. We'll search action & description for simple ilike,
       // and unfortunately filtering by user name on joined tables with 'or' is tricky in PostgREST without a view.
       // We will just filter by action/description for now.
@@ -2539,7 +2577,7 @@ export const api = {
       .eq('tenant_id', tenantId);
 
     if (search && search.trim()) {
-      const s = search.trim();
+      const s = sanitizePostgrest(search);
       query = query.or(`action.ilike.%${s}%,description.ilike.%${s}%`);
     }
 
@@ -2641,7 +2679,8 @@ export const api = {
   },
 
   deleteBackup: async (filename) => {
-    const { error } = await supabase.from('backups').delete().eq('filename', filename);
+    const tenantId = await getActiveTenantId();
+    const { error } = await supabase.from('backups').delete().eq('filename', filename).eq('tenant_id', tenantId);
     if (error) throw new Error("Gagal menghapus cadangan: " + error.message);
     await logAudit('DELETE_BACKUP', `Menghapus arsip cadangan: "${filename}".`);
     return true;
@@ -2657,6 +2696,7 @@ export const api = {
         .from('backups')
         .select('data_json, filename')
         .eq('filename', formDataOrFilename)
+        .eq('tenant_id', tenantId)
         .single();
 
       if (error || !data) throw new Error("Gagal memuat arsip pemulihan: " + error.message);
@@ -2684,11 +2724,13 @@ export const api = {
   },
 
   downloadBackup: async (filename) => {
+    const tenantId = await getActiveTenantId();
     // 1. Fetch file record from Supabase backups table
     const { data, error } = await supabase
       .from('backups')
       .select('data_json')
       .eq('filename', filename)
+      .eq('tenant_id', tenantId)
       .single();
 
     if (error || !data) throw new Error("Gagal mengunduh backup: " + error.message);
@@ -3197,12 +3239,17 @@ export const api = {
   bulkImportOpnameItems: async (opnameId, rows) => {
     let success = 0;
     let failed = 0;
+    const tenantId = await getActiveTenantId();
+
+    // Verify ownership of the opnameId
+    const { data: opnameCheck } = await supabase.from('stock_opnames').select('id').eq('id', opnameId).eq('tenant_id', tenantId).maybeSingle();
+    if (!opnameCheck) throw new Error("Akses ditolak: Opname tidak valid atau bukan milik tenant ini.");
 
     // rows: { material_name, physical_qty, notes }
     const { data: allMaterials } = await supabase
       .from('materials')
       .select('id, name')
-      .eq('tenant_id', await getActiveTenantId());
+      .eq('tenant_id', tenantId);
 
     const materialMap = new Map((allMaterials || []).map(m => [m.name.toLowerCase(), m.id]));
 
