@@ -385,7 +385,7 @@ export default function DashboardLayout() {
             <img src={barventisIcon} alt="Barventis" className="w-8 h-8" />
             <span className="font-bold text-lg tracking-wide">BARVENTIS</span>
           </div>
-          <button onClick={() => setIsSidebarOpen(false)} className="text-[var(--text-muted)] hover:text-white p-1">
+          <button onClick={() => setIsSidebarOpen(false)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1">
             <X size={20} />
           </button>
         </div>
@@ -468,7 +468,7 @@ export default function DashboardLayout() {
             >
               <Menu size={18} />
             </button>
-            <div>
+            <div className="min-w-0">
               <h1 className="text-sm md:text-xl font-bold truncate m-0">
                 {isSuperAdmin && location.pathname === '/superadmin' && "Platform Tenants Management"}
                 {isSuperAdmin && location.pathname === '/superadmin/templates' && "Global POS Excel Templates"}
@@ -495,7 +495,7 @@ export default function DashboardLayout() {
                   </>
                 )}
               </h1>
-            <p className="hidden md:block text-xs md:text-sm text-[var(--text-secondary)]">
+            <p className="hidden md:block text-xs md:text-sm text-[var(--text-secondary)] truncate">
               {isSuperAdmin && location.pathname === '/superadmin' && "Manage client databases, licenses, active/inactive statuses, and seed metrics."}
               {isSuperAdmin && location.pathname === '/superadmin/templates' && "Define global Excel sheet mappings for Moka, Pawoon, Olsera, and other POS engines."}
               {isSuperAdmin && location.pathname === '/superadmin/logs' && "Consolidated platform-wide security audit trails and log tracking."}
@@ -522,7 +522,7 @@ export default function DashboardLayout() {
             </p>
           </div>
           </div>
-          <div className="header-actions flex items-center gap-2">
+          <div className="header-actions flex items-center gap-2 shrink-0">
             {currentTenant?.is_pos_enabled && (
               <button
                 className="btn hover:opacity-80 transition-opacity flex items-center justify-center gap-1.5"

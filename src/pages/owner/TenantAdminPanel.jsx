@@ -660,7 +660,7 @@ export default function TenantAdminPanel() {
               <h3 className="text-lg font-bold text-[var(--danger)] flex items-center gap-2 m-0">
                 <Trash2 size={20} /> Reset Data Spesifik
               </h3>
-              <button onClick={() => setShowResetModal(false)} className="text-[var(--text-muted)] hover:text-white transition-colors">
+              <button onClick={() => setShowResetModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
                 <XCircle size={20} />
               </button>
             </div>

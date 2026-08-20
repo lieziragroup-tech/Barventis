@@ -198,7 +198,7 @@ export const DataProvider = ({ children }) => {
     await fetchAllData();
   }, [fetchAllData]);
 
-  const handleCompleteOpname = useCallback(async (auditLoc, reconciliation, signatureData) => {
+  const handleCompleteOpname = useCallback(async (auditLoc, reconciliation, signatureData, period_month = null, period_year = null) => {
     const formattedItems = reconciliation.map(item => {
       const mat = stock.find(s => s.name === item.name);
       return {
@@ -211,7 +211,9 @@ export const DataProvider = ({ children }) => {
     await api.completeOpname({
       location: auditLoc,
       items: formattedItems,
-      signature_svg: signatureData || ''
+      signature_svg: signatureData || '',
+      period_month,
+      period_year
     });
     await fetchAllData();
   }, [stock, fetchAllData]);

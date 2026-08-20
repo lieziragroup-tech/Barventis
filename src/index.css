@@ -6,10 +6,10 @@
   --font-serif: "Lora", Georgia, serif;
   --font-handwriting: "Caveat", cursive;
   --font-mono: "JetBrains Mono", monospace;
-  
-  --color-primary: #00685f;
-  --color-primary-hover: #005049;
-  --color-primary-light: #eceef0;
+
+  --color-primary: var(--accent, #2563eb);
+  --color-primary-hover: var(--accent-hover, #1d4ed8);
+  --color-primary-light: var(--accent-glow, rgba(37, 99, 235, 0.08));
   --color-cream: #FDFBF7;
   --color-warm-white: #FAFAF8;
   --color-tertiary: #825100;
