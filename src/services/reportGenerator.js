@@ -3,7 +3,7 @@
  * Generates 13 sheets matching "Pendataan yang ingin dicapai" folder structure
  * Output: individual Excel files, combined Excel, and full PDF
  */
-import { calculateIngredientCost, DEFAULT_FIX_COST_PCT } from './costUtils';
+import { calculateIngredientCost } from './costUtils';
 
 const MONTHS_ID = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
@@ -336,15 +336,10 @@ export async function generatePDF(salesData, dbData) {
   // 8. COGS Summary
   {
     const y = addPage('COGS ALL BEVERAGES');
-    // BUG-FIX 2026-08 (Panduan_Kartu_Resep_HPP.md): fix_cost_pct is now per-recipe
-    // (was hardcoded 5% here, independently of what the recipe was actually saved
-    // with). Read the stored subtotal/fix_cost/basic_cost directly instead of
-    // recomputing — same approach buildCOGSSheet() already uses, so this PDF and
-    // the Excel COGS sheet never disagree with each other.
     const rows = dbData.recipes.map(r => {
       const subtotal = Number(r.subtotal) || 0;
       const fixCost = Number(r.fix_cost) || 0;
-      const fixCostPct = r.fix_cost_pct != null ? Number(r.fix_cost_pct) : DEFAULT_FIX_COST_PCT;
+      const fixCostPct = Number(r.fix_cost_pct) || 0.05;
       return [
         r.menu_name, r.category, fmtNum(subtotal), `${fmtNum(fixCost)} (${(fixCostPct * 100).toFixed(1)}%)`,
         fmtNum(Number(r.basic_cost) || (subtotal + fixCost)), `${((r.food_cost_pct || 0) * 100).toFixed(1)}%`,
@@ -353,7 +348,7 @@ export async function generatePDF(salesData, dbData) {
     });
     doc.autoTable({
       startY: y,
-      head: [['Menu', 'Category', 'Subtotal', 'Fix Cost', 'Basic Cost', 'Food Cost % (Target)', 'Selling Price']],
+      head: [['Menu', 'Category', 'Subtotal', 'Fix Cost', 'Basic Cost', 'Food Cost %', 'Selling Price']],
       body: rows,
       styles: { fontSize: 7 },
       headStyles: { fillColor: [41, 128, 185] }
@@ -622,7 +617,10 @@ function buildDailyInventoryBeerSheet(salesData, dbData, daysInMonth, XLSX) {
     if (lower.includes('bintang') || lower.includes('heineken') || lower.includes('bali hai') ||
         lower.includes('prost') || lower.includes('konig') || lower.includes('kaltenberg') ||
         lower.includes('iceland') || lower.includes('beer') || lower.includes('bir')) {
-      if (!beerMenus[m.name]) beerMenus[m.name] = { price: m.price };
+      // BUG-FIX 2026-08: was `m.price` (per-CARTON) used directly as the fallback
+      // per-bottle price — route through the shared calculator to get the price
+      // per base unit, same convention as every other fallback in this file.
+      if (!beerMenus[m.name]) beerMenus[m.name] = { price: calculateIngredientCost(m, 1, m.unit) };
     }
   });
 
@@ -852,14 +850,11 @@ function buildCOGSSheet(dbData, XLSX) {
     }
 
     // Subtotal, Fix Cost, Basic Cost, Food Cost, Selling Price
-    // BUG-FIX 2026-08 (Panduan_Kartu_Resep_HPP.md): fix_cost_pct is now per-recipe
-    // (was hardcoded 0.05 for every recipe in this sheet regardless of what it was
-    // actually saved with).
     const subtotalRow = [], fixRow = [], basicRow = [], fcRow = [], spRow = [];
     chunk.forEach(r => {
       const ings = r.recipe_ingredients || [];
       const sub = ings.reduce((s, i) => s + (Number(i.amount) || 0), 0);
-      const fixCostPct = r.fix_cost_pct != null ? Number(r.fix_cost_pct) : DEFAULT_FIX_COST_PCT;
+      const fixCostPct = Number(r.fix_cost_pct) || 0.05;
       const fix = sub * fixCostPct;
       subtotalRow.push('', '', 'Subtotal', '', sub, '');
       fixRow.push('', '', 'Fix Cost', fixCostPct, fix, '');

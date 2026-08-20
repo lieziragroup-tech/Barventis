@@ -120,10 +120,23 @@ export default function BulkImport({
         
         const headers = rawRows[0].map(h => (h || '').toString().trim().toLowerCase());
 
+        // A column can optionally declare `labels: [..]` — alternate header text
+        // that should also match (e.g. a column renamed between template
+        // versions). Falls back to the single `label` when not provided, so
+        // existing expectedColumns definitions are unaffected.
+        const labelCandidates = (col) => (col.labels && col.labels.length ? col.labels : [col.label]);
+        const findHeaderIdx = (col) => {
+          for (const cand of labelCandidates(col)) {
+            const idx = headers.indexOf(cand.toLowerCase());
+            if (idx >= 0) return idx;
+          }
+          return -1;
+        };
+
         // Check required columns exist
         const missingCols = expectedColumns
           .filter(c => c.required)
-          .filter(c => !headers.includes(c.label.toLowerCase()));
+          .filter(c => findHeaderIdx(c) === -1);
         
         if (missingCols.length > 0) {
           setErrors([{ 
@@ -147,7 +160,7 @@ export default function BulkImport({
           let rowErrorMsg = null;
           
           expectedColumns.forEach(col => {
-            const headerIdx = headers.indexOf(col.label.toLowerCase());
+            const headerIdx = findHeaderIdx(col);
             const rawVal = headerIdx >= 0 ? row[headerIdx] : undefined;
             
             if (col.required && (rawVal === undefined || rawVal === '' || rawVal === null)) {
@@ -472,6 +485,23 @@ export default function BulkImport({
                 {importResult.errors.map((err, i) => (
                   <p key={i} style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', margin: '2px 0 2px 23px', lineHeight: 1.4 }}>
                     • <strong>{err.row || '(tanpa nama)'}</strong>: {err.error}
+                  </p>
+                ))}
+              </div>
+            )}
+            {importResult && Array.isArray(importResult.warnings) && importResult.warnings.length > 0 && (
+              <div style={{
+                textAlign: 'left', marginBottom: '20px', background: 'var(--warning-glow)',
+                border: '1px solid rgba(217,119,6,0.2)', borderRadius: 'var(--radius-lg)',
+                padding: '12px 14px', maxHeight: '220px', overflowY: 'auto'
+              }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
+                  <AlertTriangle size={15} style={{ color: 'var(--warning)' }} />
+                  <span style={{ color: 'var(--warning-text)', fontWeight: 600, fontSize: '0.82rem' }}>Perlu Dicek</span>
+                </div>
+                {importResult.warnings.map((w, i) => (
+                  <p key={i} style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', margin: '2px 0 2px 23px', lineHeight: 1.4 }}>
+                    • {w}
                   </p>
                 ))}
               </div>

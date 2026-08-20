@@ -1,6 +1,11 @@
 // UMATIS Serverless API Service Client for Supabase Backend Integration
 import { supabase } from '../lib/supabase';
-import { parsePackSize, calculateIngredientCost, getUnitPrice, computeRecipeCosts, DEFAULT_FIX_COST_PCT, DEFAULT_ROUNDING_DIRECTION, DEFAULT_ROUNDING_INCREMENT, DEFAULT_PRICE_ADJUSTMENT } from './costUtils';
+import { parsePackSize, calculateIngredientCost, getUnitPrice, computeRecipeCosts, DEFAULT_ROUNDING_DIRECTION, DEFAULT_ROUNDING_INCREMENT, DEFAULT_PRICE_ADJUSTMENT } from './costUtils';
+// NOTE: DEFAULT_FIX_COST_PCT intentionally NOT imported here — per PRD §4.2
+// Opsi B, a new recipe's fix_cost_pct falls back to the tenant's existing
+// `overhead_pct` setting (activeOverheadPct below), not a hardcoded 5%.
+// This preserves current behavior for tenants who already changed their
+// Overhead % away from 5%.
 import { storeLog } from './activityLogService';
 import { calculateUsageVariance } from './varianceCalculator';
 
@@ -156,10 +161,40 @@ export const api = {
         });
       }
       if (expectedUsageRows.length > 0) {
-        const { error: euErr } = await supabase.from('expected_usage').upsert(expectedUsageRows, {
-          onConflict: 'tenant_id, week_start, material_id'
-        });
-        if (euErr) console.warn('Failed to save expected_usage:', euErr);
+        // BUG-FIX 2026-08: `onConflict: 'tenant_id, week_start, material_id'` has
+        // no confirmed matching unique constraint/index in any migration for this
+        // project (analysis Bagian 3.4) — if it's actually missing, every upsert()
+        // here fails outright with a Postgres "no unique or exclusion constraint"
+        // error. Resolve existing rows explicitly instead (all rows in this batch
+        // share the same week_start), so this never depends on that constraint.
+        const { data: existingUsageRows } = await supabase
+          .from('expected_usage')
+          .select('id, material_id')
+          .eq('tenant_id', activeTenantId)
+          .eq('week_start', minDate);
+
+        const existingUsageByMaterial = new Map((existingUsageRows || []).map(u => [u.material_id, u.id]));
+        const usageRowsToInsert = [];
+        const usageUpdateOps = [];
+
+        for (const usageRow of expectedUsageRows) {
+          const existingId = existingUsageByMaterial.get(usageRow.material_id);
+          if (existingId) {
+            usageUpdateOps.push(supabase.from('expected_usage').update(usageRow).eq('id', existingId));
+          } else {
+            usageRowsToInsert.push(usageRow);
+          }
+        }
+
+        if (usageUpdateOps.length > 0) {
+          const updateResults = await Promise.all(usageUpdateOps);
+          const updateErr = updateResults.find(r => r.error)?.error;
+          if (updateErr) console.warn('Failed to update expected_usage:', updateErr);
+        }
+        if (usageRowsToInsert.length > 0) {
+          const { error: euErr } = await supabase.from('expected_usage').insert(usageRowsToInsert);
+          if (euErr) console.warn('Failed to save expected_usage:', euErr);
+        }
       }
 
       const transactions = [];
@@ -612,12 +647,17 @@ export const api = {
       try {
         const { data: tenantData } = await supabase
           .from('tenants')
-          .select('name, company_name')
+          .select('*')
           .eq('id', userProfile.tenant_id)
           .maybeSingle();
         if (tenantData) {
           tenantName = tenantData.name;
           companyName = tenantData.company_name;
+          userProfile.is_pos_enabled = tenantData.is_pos_enabled;
+          userProfile.pos_tax_rate = tenantData.pos_tax_rate;
+          userProfile.pos_service_charge = tenantData.pos_service_charge;
+          userProfile.locked_until_month = tenantData.locked_until_month;
+          userProfile.locked_until_year = tenantData.locked_until_year;
         }
       } catch (e) {
         console.warn("Could not fetch tenant data:", e);
@@ -785,6 +825,7 @@ export const api = {
         supplier: materialData.supplier,
         unit: materialData.unit,
         full_pack: materialData.full_pack,
+        sku: materialData.sku || null,
         price: parseFloat(materialData.price || 0),
         new_price: parseFloat(materialData.price || 0),
         qty_resto: 0.00,
@@ -811,6 +852,7 @@ export const api = {
         supplier: materialData.supplier,
         unit: materialData.unit,
         full_pack: materialData.full_pack,
+        sku: materialData.sku !== undefined ? (materialData.sku || null) : oldMaterial?.sku,
         price: parseFloat(materialData.price || 0),
         new_price: parseFloat(materialData.new_price ?? materialData.price ?? 0),
         min_stock: parseFloat(materialData.min_stock || 15.00)
@@ -959,9 +1001,9 @@ export const api = {
       selling_price: parseFloat(r.selling_price),
       basic_cost: parseFloat(r.basic_cost),
       fix_cost: parseFloat(r.fix_cost),
-      fix_cost_pct: r.fix_cost_pct != null ? parseFloat(r.fix_cost_pct) : DEFAULT_FIX_COST_PCT,
       subtotal: parseFloat(r.subtotal),
       food_cost_pct: parseFloat(r.food_cost_pct),
+      fix_cost_pct: r.fix_cost_pct != null ? parseFloat(r.fix_cost_pct) : activeOverheadPct,
       selling_price_raw: r.selling_price_raw != null ? parseFloat(r.selling_price_raw) : 0,
       rounding_direction: r.rounding_direction || DEFAULT_ROUNDING_DIRECTION,
       rounding_increment: r.rounding_increment != null ? parseFloat(r.rounding_increment) : DEFAULT_ROUNDING_INCREMENT,
@@ -1010,9 +1052,9 @@ export const api = {
         selling_price: parseFloat(r.selling_price),
         basic_cost: parseFloat(r.basic_cost),
         fix_cost: parseFloat(r.fix_cost),
-        fix_cost_pct: r.fix_cost_pct != null ? parseFloat(r.fix_cost_pct) : DEFAULT_FIX_COST_PCT,
         subtotal: parseFloat(r.subtotal),
         food_cost_pct: parseFloat(r.food_cost_pct),
+        fix_cost_pct: r.fix_cost_pct != null ? parseFloat(r.fix_cost_pct) : activeOverheadPct,
         selling_price_raw: r.selling_price_raw != null ? parseFloat(r.selling_price_raw) : 0,
         rounding_direction: r.rounding_direction || DEFAULT_ROUNDING_DIRECTION,
         rounding_increment: r.rounding_increment != null ? parseFloat(r.rounding_increment) : DEFAULT_ROUNDING_INCREMENT,
@@ -1059,25 +1101,21 @@ export const api = {
       });
     }
 
-    // BUSINESS RULE CHANGE 2026-08 (Panduan_Kartu_Resep_HPP.md, refined per
-    // follow-up): Fix Cost % is now per-recipe editable (5% stays the default),
-    // and Food Cost % is now the TARGET input that drives a computed Selling
-    // Price — rather than Selling Price being typed first and Food Cost %
-    // derived from it as before. Rounding now defaults to the nearest whole
-    // rupiah (not a fixed 500/1000/2000 bucket), and price_adjustment is an
-    // optional manual Rp nudge applied after rounding. A manual
-    // `selling_price_override` is still honored if the user sets a totally
-    // custom final price (real-world pricing often needs to, e.g. competitor
-    // matching) — in that case fix_cost_pct/food_cost_pct/rounding/adjustment
-    // are still saved (so the form doesn't lose them) but don't drive the price.
-    const fixCostPct = recipeData.fix_cost_pct != null ? parseFloat(recipeData.fix_cost_pct) : DEFAULT_FIX_COST_PCT;
+    // Recipe pricing engine (merged from barventis-vercel-repo, PRD §4.2 Opsi B):
+    // fix_cost_pct defaults to this tenant's existing Overhead % setting
+    // (activeOverheadPct) rather than a hardcoded 5%, unless the caller
+    // explicitly passes one. selling_price_override (sent by the unchanged
+    // Recipes.jsx form via DataContext.jsx) wins over the computed target
+    // price, so manual price entry keeps working exactly as before.
+    const fixCostPct = recipeData.fix_cost_pct != null ? parseFloat(recipeData.fix_cost_pct) : activeOverheadPct;
     const roundingDirection = recipeData.rounding_direction || DEFAULT_ROUNDING_DIRECTION;
     const roundingIncrement = recipeData.rounding_increment != null ? parseFloat(recipeData.rounding_increment) : DEFAULT_ROUNDING_INCREMENT;
     const priceAdjustment = recipeData.price_adjustment != null ? parseFloat(recipeData.price_adjustment) : DEFAULT_PRICE_ADJUSTMENT;
     const foodCostPctTarget = parseFloat(recipeData.food_cost_pct || 0);
 
     const { fixCost, basicCost, sellingPriceRaw, sellingPriceFinal } = computeRecipeCosts({
-      subtotal, fixCostPct, foodCostPct: foodCostPctTarget, roundingDirection, roundingIncrement, priceAdjustment
+      subtotal, fixCostPct, foodCostPct: foodCostPctTarget,
+      roundingDirection, roundingIncrement, priceAdjustment
     });
     const sellingPrice = recipeData.selling_price_override != null
       ? parseFloat(recipeData.selling_price_override)
@@ -1154,14 +1192,17 @@ export const api = {
       });
     }
 
-    const fixCostPct = recipeData.fix_cost_pct != null ? parseFloat(recipeData.fix_cost_pct) : DEFAULT_FIX_COST_PCT;
+    // Recipe pricing engine (merged from barventis-vercel-repo, PRD §4.2 Opsi B) —
+    // see createRecipe above for the full rationale.
+    const fixCostPct = recipeData.fix_cost_pct != null ? parseFloat(recipeData.fix_cost_pct) : activeOverheadPct;
     const roundingDirection = recipeData.rounding_direction || DEFAULT_ROUNDING_DIRECTION;
     const roundingIncrement = recipeData.rounding_increment != null ? parseFloat(recipeData.rounding_increment) : DEFAULT_ROUNDING_INCREMENT;
     const priceAdjustment = recipeData.price_adjustment != null ? parseFloat(recipeData.price_adjustment) : DEFAULT_PRICE_ADJUSTMENT;
     const foodCostPctTarget = parseFloat(recipeData.food_cost_pct || 0);
 
     const { fixCost, basicCost, sellingPriceRaw, sellingPriceFinal } = computeRecipeCosts({
-      subtotal, fixCostPct, foodCostPct: foodCostPctTarget, roundingDirection, roundingIncrement, priceAdjustment
+      subtotal, fixCostPct, foodCostPct: foodCostPctTarget,
+      roundingDirection, roundingIncrement, priceAdjustment
     });
     const sellingPrice = recipeData.selling_price_override != null
       ? parseFloat(recipeData.selling_price_override)
@@ -1524,6 +1565,12 @@ export const api = {
     return { isDuplicate: false };
   },
 
+  // JANGAN DIPAKAI: dead code — no caller anywhere in the app (verified by
+  // reference search, analysis Bagian 3.3). The active POS upload path is
+  // `processPOSSync` above, which intentionally does NOT deduct qty_resto
+  // in real time. This function calls `deduct_stock_atomic` and DOES deduct
+  // stock immediately — a materially different behavior. Do not wire this up
+  // without confirming that's actually the intended design change.
   syncPos: async (filename, salesData) => {
     const tenantId = await getActiveTenantId();
     const userId = await getActiveUserId();
@@ -2765,6 +2812,25 @@ export const api = {
     // Track known suppliers by name (case-insensitive)
     const suppliersMap = new Map((allSuppliers || []).map(s => [s.name.toLowerCase().trim(), s]));
 
+    // BUG-FIX 2026-08: previously upserted with `onConflict: 'tenant_id, name'`,
+    // so re-importing after a name fix/rename (KODE ITEM unchanged) inserted a
+    // NEW orphaned row instead of updating the existing one — see analysis
+    // Bagian 1.1. Pre-fetch existing materials by sku AND name, resolve the
+    // target row ourselves (sku wins over name), then use an explicit
+    // update()/insert() instead of upsert()+onConflict — this also sidesteps
+    // needing a DB unique constraint on (tenant_id, sku) (analysis Bagian 3.4).
+    const { data: allMaterialsForImport } = await supabase
+      .from('materials')
+      .select('id, name, sku')
+      .eq('tenant_id', tenantId);
+
+    const materialsBySkuForImport = new Map(
+      (allMaterialsForImport || []).filter(m => m.sku).map(m => [String(m.sku).toLowerCase().trim(), m])
+    );
+    const materialsByNameForImport = new Map(
+      (allMaterialsForImport || []).map(m => [m.name.toLowerCase().trim(), m])
+    );
+
     for (const row of rows) {
       try {
         let supplierName = row.supplier ? String(row.supplier).trim() : 'Default Supplier';
@@ -2800,13 +2866,49 @@ export const api = {
           min_stock: parseFloat(row.min_stock || 15),
           is_active: true
         };
+
+        // Stable code (KODE ITEM) for cross-referencing this material from
+        // recipe bulk imports and any external backend/POS integration,
+        // instead of matching by name text alone.
+        const rowSku = row.sku !== undefined && row.sku !== '' ? String(row.sku).trim() : '';
+        if (rowSku) {
+          insertData.sku = rowSku;
+        }
         
         // If they provided initial stock, set it (optional)
         if (row.qty_resto !== undefined && row.qty_resto !== '') {
           insertData.qty_resto = parseFloat(row.qty_resto || 0);
         }
 
-        const { error } = await supabase.from('materials').upsert(insertData, { onConflict: 'tenant_id, name' });
+        // Resolve the existing row this import row refers to: KODE ITEM (sku)
+        // wins over name, so editing the name on re-import (typo fix, rename)
+        // still updates the SAME material instead of creating an orphan.
+        let existingMaterial = null;
+        if (rowSku) existingMaterial = materialsBySkuForImport.get(rowSku.toLowerCase());
+        if (!existingMaterial && row.name) {
+          existingMaterial = materialsByNameForImport.get(String(row.name).toLowerCase().trim());
+        }
+
+        let error;
+        if (existingMaterial) {
+          ({ error } = await supabase.from('materials').update(insertData).eq('id', existingMaterial.id));
+        } else {
+          const { data: insertedMaterial, error: insErr } = await supabase
+            .from('materials')
+            .insert(insertData)
+            .select('id, name, sku')
+            .single();
+          error = insErr;
+          // Keep local maps in sync so later rows in this same import batch
+          // (e.g. duplicate sku typo'd twice) resolve against it too.
+          if (!insErr && insertedMaterial) {
+            materialsByNameForImport.set(insertedMaterial.name.toLowerCase().trim(), insertedMaterial);
+            if (insertedMaterial.sku) {
+              materialsBySkuForImport.set(String(insertedMaterial.sku).toLowerCase().trim(), insertedMaterial);
+            }
+          }
+        }
+
         if (error) { failed++; errors.push({ row: row.name, error: error.message }); }
         else success++;
       } catch (e) {
@@ -2824,35 +2926,77 @@ export const api = {
     let success = 0;
     let failed = 0;
     const errors = [];
+    const warnings = [];
 
-    // Pre-fetch all materials for the tenant to resolve material_id by name
+    // Pre-fetch all materials for the tenant, indexed by both name AND sku
+    // (kode item) so ingredient references can be resolved deterministically
+    // by code when given, instead of relying purely on exact name matching.
     const { data: allMaterials } = await supabase
       .from('materials')
-      .select('id, name, unit, price, new_price')
+      .select('id, name, sku, unit, price, new_price')
       .eq('tenant_id', tenantId)
       .eq('is_active', true);
 
     const materialsMap = new Map((allMaterials || []).map(m => [m.name.toLowerCase().trim(), m]));
+    const materialsBySku = new Map((allMaterials || []).filter(m => m.sku).map(m => [m.sku.toLowerCase().trim(), m]));
 
-    // rows format: { menu_name, selling_price, bahan_1, qty_1, bahan_2, qty_2, bahan_3, qty_3, ... }
+    // BUG-FIX 2026-08: previously upserted with `onConflict: 'menu_name,tenant_id'`,
+    // so re-importing after a menu name fix/rename (KODE MENU/pos_code unchanged)
+    // inserted a NEW recipe row with the SAME pos_code as the old one — see
+    // analysis Bagian 1.2, which then breaks POS matching (Bagian 1.3) because
+    // two recipes share one pos_code. Pre-fetch existing recipes by pos_code AND
+    // menu_name, resolve the target row ourselves (pos_code wins over name), then
+    // use an explicit update()/insert() instead of upsert()+onConflict — this also
+    // sidesteps needing a DB unique constraint on (tenant_id, pos_code) (Bagian 3.4).
+    const { data: allRecipesForImport } = await supabase
+      .from('recipes')
+      .select('id, menu_name, pos_code')
+      .eq('tenant_id', tenantId);
+
+    const recipesByCodeForImport = new Map(
+      (allRecipesForImport || []).filter(r => r.pos_code).map(r => [String(r.pos_code).toLowerCase().trim(), r])
+    );
+    const recipesByNameForImport = new Map(
+      (allRecipesForImport || []).map(r => [r.menu_name.toLowerCase().trim(), r])
+    );
+
+    const resolveMaterial = (itemCode, itemName) => {
+      if (itemCode) {
+        const bySku = materialsBySku.get(itemCode.toLowerCase().trim());
+        if (bySku) return bySku;
+      }
+      if (itemName) {
+        const byName = materialsMap.get(itemName.toLowerCase().trim());
+        if (byName) return byName;
+      }
+      return null;
+    };
+
+    // rows format: { menu_name, selling_price, bahan_1, qty_1, kode_bahan_1, ... }
     for (const row of rows) {
       try {
         let ingredients = [];
         
-        // Extract up to 10 ingredient columns from the flat row
+        // Extract up to 10 ingredient columns from the flat row. kode_bahan_N
+        // (material SKU/kode item) is optional and, when present, wins over
+        // bahan_N (name) when resolving which material the row refers to —
+        // deterministic ID-based matching instead of fuzzy name matching.
         for (let i = 1; i <= 10; i++) {
           const bahanKey = `bahan_${i}`;
           const qtyKey = `qty_${i}`;
-          
-          if (row[bahanKey] && String(row[bahanKey]).trim() !== '') {
+          const kodeKey = `kode_bahan_${i}`;
+          const hasName = row[bahanKey] && String(row[bahanKey]).trim() !== '';
+          const hasCode = row[kodeKey] && String(row[kodeKey]).trim() !== '';
+
+          if (hasName || hasCode) {
             ingredients.push({
-              item_name: String(row[bahanKey]).trim(),
+              item_name: hasName ? String(row[bahanKey]).trim() : '',
+              item_code: hasCode ? String(row[kodeKey]).trim() : '',
               qty_in_use: parseFloat(row[qtyKey] || 0)
             });
           }
         }
 
-        const sellingPrice = parseFloat(row.selling_price || 0);
         const VALID_CATEGORIES = ['KOPI', 'NON-KOPI', 'MOCKTAIL', 'JUICE', 'TEA', 'BEER'];
         const rawCategory = row.category ? row.category.toString().trim().toUpperCase() : '';
         const category = VALID_CATEGORIES.includes(rawCategory) ? rawCategory : 'NON-KOPI';
@@ -2861,7 +3005,7 @@ export const api = {
         // Simple subtotal calculation from ingredients if available
         if (ingredients.length > 0) {
           subtotal = ingredients.reduce((sum, ing) => {
-            const mat = materialsMap.get((ing.item_name || ing.material_name || '').toLowerCase().trim());
+            const mat = resolveMaterial(ing.item_code, ing.item_name);
             if (mat) {
               const unit = ing.unit || mat.unit || 'gr';
               return sum + calculateIngredientCost(mat, parseFloat(ing.qty_in_use || 0), unit);
@@ -2869,80 +3013,134 @@ export const api = {
             return sum;
           }, 0);
         }
-        // BUSINESS RULE CHANGE 2026-08 (Panduan_Kartu_Resep_HPP.md, refined per
-        // follow-up instruction): the bulk-import template now carries Fix Cost %
-        // and Food Cost % TARGET as manual columns (since a flat Excel template
-        // can't run live formulas) — Barventis does the actual Subtotal -> Fix
-        // Cost -> Basic Cost -> Selling Price computation on import, using the
-        // exact same computeRecipeCosts() the interactive Recipe Builder uses.
-        // HARGA_JUAL in the template is optional: if a row has it filled in,
-        // that becomes a manual override (selling_price_override) and wins over
-        // the computed suggestion; if left blank, the computed+rounded+adjusted
-        // price is what gets saved.
-        // Template stores percentages as whole numbers (e.g. "5" meaning 5%, "18"
-        // meaning 18%) since that's what's readable in a spreadsheet cell —
-        // computeRecipeCosts() expects fractions (0.05, 0.18), so divide by 100.
-        // NOTE: BulkImport.jsx parses blank number cells as 0 (not undefined/''),
-        // so "0" is treated as "not provided" here (a genuine 0% fix cost is an
-        // edge case not worth losing the "use default" convenience for).
-        const fixCostPct = row.fix_cost_pct > 0 ? parseFloat(row.fix_cost_pct) / 100 : DEFAULT_FIX_COST_PCT;
-        const foodCostPctTarget = row.food_cost_pct > 0 ? parseFloat(row.food_cost_pct) / 100 : 0;
-        // Template column asks for "ke bawah" / "ke atas" (Indonesian, human-facing)
-        // — normalize to the 'down'/'up' values roundSellingPrice() actually checks.
-        const rawDirection = (row.rounding_direction || '').toString().toLowerCase().trim();
-        const roundingDirection = rawDirection.includes('atas') ? 'up' : (rawDirection.includes('bawah') ? 'down' : DEFAULT_ROUNDING_DIRECTION);
-        const roundingIncrement = row.rounding_increment > 0 ? parseFloat(row.rounding_increment) : DEFAULT_ROUNDING_INCREMENT;
-        const priceAdjustment = row.price_adjustment ? parseFloat(row.price_adjustment) : DEFAULT_PRICE_ADJUSTMENT;
+
+        // Full recipe pricing engine, same as createRecipe/updateRecipe (PRD §4.2
+        // Opsi B). row.fix_cost_pct / row.food_cost_pct are expected as FRACTIONS
+        // (0.05 = 5%) — Recipes.jsx's onCommit handler converts the Excel sheet's
+        // human-friendly percent numbers (5, 18, ...) before this function is
+        // called. Any of these being unset/undefined (old-style templates without
+        // these columns) falls back to the pre-existing bulk-import behavior.
+        const fixCostPct = row.fix_cost_pct != null && row.fix_cost_pct !== ''
+          ? parseFloat(row.fix_cost_pct) : activeOverheadPct;
+        const roundingDirection = row.rounding_direction || DEFAULT_ROUNDING_DIRECTION;
+        const roundingIncrement = row.rounding_increment != null && row.rounding_increment !== ''
+          ? parseFloat(row.rounding_increment) : DEFAULT_ROUNDING_INCREMENT;
+        const priceAdjustment = row.price_adjustment != null && row.price_adjustment !== ''
+          ? parseFloat(row.price_adjustment) : DEFAULT_PRICE_ADJUSTMENT;
+        const foodCostPctTarget = row.food_cost_pct != null && row.food_cost_pct !== ''
+          ? parseFloat(row.food_cost_pct) : 0;
+
+        // Flexible-but-guarded: catch an obviously wrong percentage (e.g. a
+        // stray value >100% or a raw "50" that should've been "0.5") with a
+        // clear per-row error instead of silently saving a nonsense HPP.
+        if (isNaN(fixCostPct) || fixCostPct < 0 || fixCostPct > 1) {
+          throw new Error(`FIX COST % tidak valid (${(fixCostPct * 100).toFixed(1)}%) — harus 0-100%`);
+        }
+        if (isNaN(foodCostPctTarget) || foodCostPctTarget < 0 || foodCostPctTarget > 1) {
+          throw new Error(`FOOD COST % TARGET tidak valid (${(foodCostPctTarget * 100).toFixed(1)}%) — harus 0-100%`);
+        }
 
         const { fixCost, basicCost, sellingPriceRaw, sellingPriceFinal } = computeRecipeCosts({
-          subtotal, fixCostPct, foodCostPct: foodCostPctTarget, roundingDirection, roundingIncrement, priceAdjustment
+          subtotal, fixCostPct, foodCostPct: foodCostPctTarget,
+          roundingDirection, roundingIncrement, priceAdjustment
         });
-        const finalSellingPrice = sellingPrice > 0 ? sellingPrice : (sellingPriceFinal || 0);
-        let foodCostPctActual = finalSellingPrice > 0 ? basicCost / finalSellingPrice : 0;
-        if (foodCostPctActual > 99.9999) foodCostPctActual = 99.9999;
 
-        // Upsert recipe and retrieve the generated id
-        const { data: recipeData, error: recipeErr } = await supabase
-          .from('recipes')
-          .upsert({
-            tenant_id: tenantId,
-            menu_name: row.menu_name,
-            pos_code: row.pos_code || row.menu_code || null,
-            category: category,
-            selling_price: finalSellingPrice,
-            subtotal: parseFloat(subtotal.toFixed(2)),
-            fix_cost_pct: fixCostPct,
-            fix_cost: parseFloat(fixCost.toFixed(2)),
-            basic_cost: parseFloat(basicCost.toFixed(2)),
-            // food_cost_pct stores the TARGET (what drove the price), matching the
-            // Recipe Builder's semantics — not the actual ratio at finalSellingPrice.
-            // If no target was given (pure manual selling_price row), fall back to
-            // storing the actual ratio so the field isn't just left at 0.
-            food_cost_pct: parseFloat((foodCostPctTarget > 0 ? foodCostPctTarget : foodCostPctActual).toFixed(4)),
-            selling_price_raw: parseFloat((sellingPriceRaw || 0).toFixed(2)),
-            rounding_direction: roundingDirection,
-            rounding_increment: roundingIncrement,
-            price_adjustment: priceAdjustment
-          }, { onConflict: 'menu_name,tenant_id' })
-          .select('id')
-          .single();
+        // A manually-typed HARGA JUAL always wins over the target-driven price —
+        // same "selling_price_override wins" rule as createRecipe/updateRecipe.
+        // Only when it's blank/0 do we fall back to the computed target price.
+        const manualSellingPrice = parseFloat(row.selling_price || 0);
+        const sellingPrice = manualSellingPrice > 0 ? manualSellingPrice : (sellingPriceFinal || 0);
+
+        // food_cost_pct stored value: prefer the explicit target (consistent with
+        // createRecipe/updateRecipe — this column means "target", not "achieved
+        // ratio"). Rows with no target column but a manual selling price fall back
+        // to the achieved ratio, matching bulk import's original pre-merge
+        // behavior so old-style templates keep working exactly as before.
+        let foodCostPct = foodCostPctTarget > 0
+          ? foodCostPctTarget
+          : (sellingPrice > 0 ? basicCost / sellingPrice : 0);
+        if (foodCostPct > 99.9999) foodCostPct = 99.9999;
+
+        // Recipe code (KODE MENU) — reuses the existing pos_code column, which
+        // PosTerminal.jsx already matches sales against, so a code assigned here
+        // is immediately usable for POS/back-end integration.
+        const recipeCode = row.recipe_code || row.pos_code || row.menu_code || null;
+        const normalizedRecipeCode = recipeCode ? String(recipeCode).trim() : null;
+
+        const recipePayload = {
+          tenant_id: tenantId,
+          menu_name: row.menu_name,
+          pos_code: normalizedRecipeCode,
+          category: category,
+          selling_price: sellingPrice,
+          subtotal: parseFloat(subtotal.toFixed(2)),
+          fix_cost_pct: fixCostPct,
+          fix_cost: parseFloat(fixCost.toFixed(2)),
+          basic_cost: parseFloat(basicCost.toFixed(2)),
+          food_cost_pct: parseFloat(foodCostPct.toFixed(4)),
+          selling_price_raw: parseFloat((sellingPriceRaw || 0).toFixed(2)),
+          rounding_direction: roundingDirection,
+          rounding_increment: roundingIncrement,
+          price_adjustment: priceAdjustment
+        };
+
+        // Resolve the existing row this import row refers to: KODE MENU
+        // (pos_code) wins over menu_name, so editing the name on re-import
+        // still updates the SAME recipe instead of creating a pos_code-colliding
+        // duplicate.
+        let existingRecipe = null;
+        if (normalizedRecipeCode) {
+          existingRecipe = recipesByCodeForImport.get(normalizedRecipeCode.toLowerCase());
+        }
+        if (!existingRecipe && row.menu_name) {
+          existingRecipe = recipesByNameForImport.get(String(row.menu_name).toLowerCase().trim());
+        }
+
+        let recipeData, recipeErr;
+        if (existingRecipe) {
+          ({ data: recipeData, error: recipeErr } = await supabase
+            .from('recipes')
+            .update(recipePayload)
+            .eq('id', existingRecipe.id)
+            .select('id')
+            .single());
+        } else {
+          ({ data: recipeData, error: recipeErr } = await supabase
+            .from('recipes')
+            .insert(recipePayload)
+            .select('id')
+            .single());
+        }
 
         if (recipeErr) throw new Error(recipeErr.message);
+
+        // Keep local maps in sync so later rows in this same import batch
+        // resolve against the row we just wrote.
+        if (recipeData?.id) {
+          const rec = { id: recipeData.id, menu_name: row.menu_name, pos_code: normalizedRecipeCode };
+          if (normalizedRecipeCode) recipesByCodeForImport.set(normalizedRecipeCode.toLowerCase(), rec);
+          if (row.menu_name) recipesByNameForImport.set(String(row.menu_name).toLowerCase().trim(), rec);
+        }
 
         // Link ingredients if recipe was successfully upserted
         if (ingredients.length > 0 && recipeData?.id) {
           const ingredientsToInsert = [];
           for (const ing of ingredients) {
-            let matName = (ing.item_name || ing.material_name || '').trim();
-            if (!matName) continue;
+            if (!ing.item_name && !ing.item_code) continue;
+
+            let mat = resolveMaterial(ing.item_code, ing.item_name);
             
-            let mat = materialsMap.get(matName.toLowerCase());
-            
-            // AUTO-CREATE MATERIAL IF NOT EXIST
+            // AUTO-CREATE MATERIAL IF NOT FOUND (by kode or nama) — kept as a
+            // convenience default so an import never hard-fails over a missing
+            // material, but now tracked and surfaced via `warnings` so it's
+            // visible and fixable instead of a silent Rp0 material quietly
+            // skewing this and every other recipe's HPP.
             if (!mat) {
+              const newName = ing.item_name || ing.item_code;
               const { data: newMat, error: newMatErr } = await supabase.from('materials').insert({
                 tenant_id: tenantId,
-                name: matName,
+                name: newName,
+                sku: ing.item_code || null,
                 category: 'Others',
                 supplier: 'Default Supplier',
                 unit: 'gr',
@@ -2951,11 +3149,13 @@ export const api = {
                 new_price: 0,
                 min_stock: 15,
                 is_active: true
-              }).select('id, name, unit, price, new_price').single();
+              }).select('id, name, sku, unit, price, new_price').single();
               
               if (!newMatErr && newMat) {
-                materialsMap.set(matName.toLowerCase(), newMat);
+                materialsMap.set(newName.toLowerCase(), newMat);
+                if (newMat.sku) materialsBySku.set(newMat.sku.toLowerCase(), newMat);
                 mat = newMat;
+                warnings.push(`Bahan baru "${newName}" dibuat otomatis dengan harga Rp0 (dipakai di resep "${row.menu_name}") — mohon cek & lengkapi harganya di halaman Materials.`);
               }
             }
 
@@ -2991,7 +3191,7 @@ export const api = {
     }
 
     await logAudit('BULK_IMPORT_RECIPES', `Bulk import ${success} resep berhasil, ${failed} gagal.`);
-    return { success, failed, errors };
+    return { success, failed, errors, warnings };
   },
 
   bulkImportOpnameItems: async (opnameId, rows) => {
@@ -3037,7 +3237,7 @@ export const api = {
 
     const { data, error } = await supabase
       .from('tenants')
-      .select('name, company_name, locked_until_month, locked_until_year')
+      .select('*')
       .eq('id', tenantId)
       .single();
 
@@ -3180,5 +3380,35 @@ export const api = {
       transactions: transactionsRes.data || [],
       unitConversions: unitConversionsRes.data || []
     };
+  },
+
+  async factoryReset(tenantId, options = {}) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('Not authenticated');
+
+    const {
+      resetPos = true,
+      resetStockHistory = true,
+      resetPurchasing = true,
+      resetRecipes = false,
+      resetMaterials = false
+    } = options;
+
+    const { error } = await supabase.rpc('factory_reset_atomic', {
+      p_tenant_id: tenantId,
+      p_reset_pos: resetPos,
+      p_reset_stock_history: resetStockHistory,
+      p_reset_purchasing: resetPurchasing,
+      p_reset_recipes: resetRecipes,
+      p_reset_materials: resetMaterials
+    });
+
+    if (error) {
+      console.error('Factory Reset RPC failed:', error);
+      if (error.code === 'PGRST202' || error.message.includes('Could not find the function')) {
+        throw new Error('SYSTEM_UPDATE_REQUIRED: Fitur reset memerlukan update database. Silakan jalankan script SQL yang diberikan oleh AI untuk mengaktifkan fungsi ini.');
+      }
+      throw new Error(`Gagal mereset data: ${error.message}`);
+    }
   }
 };

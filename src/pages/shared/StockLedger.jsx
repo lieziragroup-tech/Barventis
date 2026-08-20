@@ -596,6 +596,7 @@ export default function StockLedger() {
         }}
         expectedColumns={[
           { key: 'NO', label: 'NO', required: false, type: 'number', description: 'Nomor', sample: 1 },
+          { key: 'sku', label: 'KODE ITEM', required: false, type: 'string', description: 'Kode/ID unik bahan baku (opsional) — dipakai resep untuk mencocokkan bahan secara otomatis & integrasi backend lain. Kosongkan untuk bahan lama tanpa kode.', sample: 'MTR-0001' },
           { key: 'name', label: 'NAMA ITEM', required: true, type: 'string', description: 'Nama unik bahan baku', sample: 'Espresso Bean' },
           { key: 'category', label: 'Kategori', required: true, type: 'string', description: 'Kategori (Coffee, Milk, dll)', sample: 'Coffee & Tea' },
           { key: 'supplier', label: 'SUPPLIER', required: false, type: 'string', description: 'Nama supplier', sample: 'Vendor A' },

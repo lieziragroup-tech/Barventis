@@ -49,11 +49,11 @@ export default function PhysicalCheck() {
       }
 
       // BUG-FIX 2026-08: expected_usage.material_id was missing its FK constraint
-      // to materials(id) (see migration_fix_expected_usage_fk.sql) — without it,
-      // PostgREST can't resolve an embedded `materials(...)` select and returns
-      // 400. Fetching separately and joining client-side works regardless of
-      // whether that migration has been applied yet (and keeps working after,
-      // as a defensive fallback if the schema cache is ever stale).
+      // to materials(id) (see sql_migrations/05_migration_fix_expected_usage_fk.sql)
+      // — without it, PostgREST can't resolve an embedded `materials(...)` select
+      // and returns 400. Fetching separately and joining client-side works
+      // regardless of whether that migration has been applied yet (and keeps
+      // working after, as a defensive fallback if the schema cache is ever stale).
       const { data: rawUsages, error } = await supabase
         .from('expected_usage')
         .select('id, expected_qty, total_sold, material_id')

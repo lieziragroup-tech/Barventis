@@ -4,8 +4,7 @@ import BulkImport from '../../components/BulkImport';
 import Pagination from '../../components/shared/Pagination';
 import { useData } from '../../contexts/DataContext';
 import { api } from '../../services/api';
-import { maintenanceService } from '../../services/maintenanceService';
-import { formatIDR, calculateIngredientCost, parsePackSize, isPackUnitConsistent, computeRecipeCosts, roundSellingPrice, DEFAULT_FIX_COST_PCT, DEFAULT_ROUNDING_DIRECTION, DEFAULT_ROUNDING_INCREMENT, DEFAULT_PRICE_ADJUSTMENT } from '../../services/costUtils';
+import { formatIDR, calculateIngredientCost, parsePackSize, isPackUnitConsistent } from '../../services/costUtils';
 
 // Stable client-side id for editable ingredient rows so React keys don't rely on the
 // array index (preserves input focus/state across add/remove/reorder). (LOW #19)
@@ -21,18 +20,6 @@ export default function Recipes() {
   const [editedSellingPrice, setEditedSellingPrice] = useState(activeRecipe ? Math.round(activeRecipe.selling_price) : 0);
   const [editedCategory, setEditedCategory] = useState(activeRecipe?.category || 'NON-KOPI');
   const [editedImageUrl, setEditedImageUrl] = useState(activeRecipe?.image_url || '');
-  // Per Panduan_Kartu_Resep_HPP.md (2026-08): Fix Cost % is now per-recipe editable
-  // (5% default), and Food Cost % is the TARGET margin driving a computed + rounded
-  // selling-price suggestion — separate from editedSellingPrice, which is still the
-  // actual price charged (pre-filled from the suggestion, but always hand-editable).
-  const [editedFixCostPct, setEditedFixCostPct] = useState(activeRecipe?.fix_cost_pct ?? DEFAULT_FIX_COST_PCT);
-  const [editedFoodCostPctTarget, setEditedFoodCostPctTarget] = useState(activeRecipe?.food_cost_pct ?? 0);
-  const [editedRoundingDirection, setEditedRoundingDirection] = useState(activeRecipe?.rounding_direction || DEFAULT_ROUNDING_DIRECTION);
-  const [editedRoundingIncrement, setEditedRoundingIncrement] = useState(activeRecipe?.rounding_increment ?? DEFAULT_ROUNDING_INCREMENT);
-  // Manual Rp nudge applied AFTER rounding, per follow-up refinement to
-  // Panduan_Kartu_Resep_HPP.md — rounding alone now targets the nearest whole
-  // rupiah (not a 500/1000/2000 bucket); this is for fine-tuning beyond that.
-  const [editedPriceAdjustment, setEditedPriceAdjustment] = useState(activeRecipe?.price_adjustment ?? DEFAULT_PRICE_ADJUSTMENT);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [newMenuName, setNewMenuName] = useState('');
@@ -102,11 +89,6 @@ export default function Recipes() {
     setEditedSellingPrice(Math.round(r.selling_price));
     setEditedCategory(r.category || 'NON-KOPI');
     setEditedImageUrl(r.image_url || '');
-    setEditedFixCostPct(r.fix_cost_pct ?? DEFAULT_FIX_COST_PCT);
-    setEditedFoodCostPctTarget(r.food_cost_pct ?? 0);
-    setEditedRoundingDirection(r.rounding_direction || DEFAULT_ROUNDING_DIRECTION);
-    setEditedRoundingIncrement(r.rounding_increment ?? DEFAULT_ROUNDING_INCREMENT);
-    setEditedPriceAdjustment(r.price_adjustment ?? DEFAULT_PRICE_ADJUSTMENT);
     setOpenDropdown(null);
   };
 
@@ -167,23 +149,9 @@ export default function Recipes() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const subtotal = useMemo(() => editedIngredients.reduce((acc, ing) => acc + calcRowAmount(ing), 0), [editedIngredients, stockMap]);
-  // Per Panduan_Kartu_Resep_HPP.md (2026-08, refined per follow-up): Fix Cost %
-  // is per-recipe editable, Food Cost % is a TARGET margin driving a computed
-  // "Harga Jual Ideal" suggestion, rounding defaults to the nearest whole
-  // rupiah (not a 500/1000/2000 bucket), and editedPriceAdjustment is an
-  // optional manual Rp nudge applied after rounding — actualFoodCostPct below
-  // reflects whatever Harga Jual is currently set (manual or
-  // applied-from-suggestion-plus-adjustment), not the pre-adjustment target.
-  const { fixCost, basicCost, sellingPriceRaw, sellingPriceRounded, sellingPriceFinal } = useMemo(() => computeRecipeCosts({
-    subtotal, fixCostPct: editedFixCostPct, foodCostPct: editedFoodCostPctTarget,
-    roundingDirection: editedRoundingDirection, roundingIncrement: editedRoundingIncrement,
-    priceAdjustment: editedPriceAdjustment
-  }), [subtotal, editedFixCostPct, editedFoodCostPctTarget, editedRoundingDirection, editedRoundingIncrement, editedPriceAdjustment]);
-  const actualFoodCostPct = useMemo(() => editedSellingPrice > 0 ? (basicCost / editedSellingPrice) : 0, [basicCost, editedSellingPrice]);
-  // Keep the old name available anywhere below that still reads `foodCostPct` — it
-  // now means "actual ratio at the current Harga Jual", matching what the top badge
-  // has always shown (a real-time cost-vs-price health check), not the target input.
-  const foodCostPct = actualFoodCostPct;
+  const fixCost = useMemo(() => subtotal * 0.05, [subtotal]);
+  const basicCost = useMemo(() => subtotal + fixCost, [subtotal, fixCost]);
+  const foodCostPct = useMemo(() => editedSellingPrice > 0 ? (basicCost / editedSellingPrice) : 0, [basicCost, editedSellingPrice]);
 
   // Ingredient actions
   const handleQtyChange = (idx, val) => {
@@ -251,12 +219,7 @@ export default function Recipes() {
       category: editedCategory,
       selling_price: editedSellingPrice,
       image_url: editedImageUrl,
-      subtotal, fix_cost: fixCost, basic_cost: basicCost, food_cost_pct: editedFoodCostPctTarget,
-      fix_cost_pct: editedFixCostPct,
-      selling_price_raw: sellingPriceRaw,
-      rounding_direction: editedRoundingDirection,
-      rounding_increment: editedRoundingIncrement,
-      price_adjustment: editedPriceAdjustment,
+      subtotal, fix_cost: fixCost, basic_cost: basicCost, food_cost_pct: foodCostPct,
       total_cost: basicCost,
       ingredients: savedIngredients
     };
@@ -267,14 +230,12 @@ export default function Recipes() {
   // human opens+saves each one individually. After fixing master-data pack sizes
   // (e.g. Ice Cube), every recipe's stored number stays stale until re-saved. This
   // lets the user refresh all of them in one action instead of opening all 56.
-  // Reuses maintenanceService.recalcAllRecipeCosts() (also surfaced on the
-  // Maintenance/System Health page) rather than a separate implementation here.
   const handleRecalculateAll = async () => {
-    if (!window.confirm('Hitung ulang HPP untuk SEMUA resep berdasarkan harga bahan terbaru? Target Food Cost % dan Harga Jual tiap resep tidak akan berubah — cuma biaya bahannya yang di-refresh.')) return;
+    if (!window.confirm('Hitung ulang HPP & Food Cost% untuk SEMUA resep berdasarkan harga bahan terbaru? Resep yang datanya berubah akan otomatis tersimpan.')) return;
     setRecalculating(true);
     try {
-      const result = await maintenanceService.recalcAllRecipeCosts();
-      showToast?.(`Selesai: HPP ${result.updated} resep diperbarui${result.failed ? `, ${result.failed} gagal` : ''}.`, 'success');
+      const result = await api.recalculateAllRecipes();
+      showToast?.(`Selesai: ${result.updated} dari ${result.total} resep diperbarui angkanya.`, 'success');
       if (refreshData) await refreshData();
     } catch (err) {
       showToast?.(err.message || 'Gagal menghitung ulang resep', 'error');
@@ -294,12 +255,7 @@ export default function Recipes() {
       total_cost: 0, yield: '1',
       ingredients: [],
       subtotal: 0, fix_cost: 0, basic_cost: 0,
-      fix_cost_pct: DEFAULT_FIX_COST_PCT,
       food_cost_pct: 0,
-      selling_price_raw: 0,
-      rounding_direction: DEFAULT_ROUNDING_DIRECTION,
-      rounding_increment: DEFAULT_ROUNDING_INCREMENT,
-      price_adjustment: DEFAULT_PRICE_ADJUSTMENT,
       selling_price: parseFloat(newMenuPrice) || 0
     };
     if (onAddRecipe) onAddRecipe(newRecipe);
@@ -312,11 +268,6 @@ export default function Recipes() {
     setEditedSellingPrice(parseInt(newMenuPrice) || 0);
     setEditedCategory(newMenuCategory);
     setEditedImageUrl(newImageUrl);
-    setEditedFixCostPct(DEFAULT_FIX_COST_PCT);
-    setEditedFoodCostPctTarget(0);
-    setEditedRoundingDirection(DEFAULT_ROUNDING_DIRECTION);
-    setEditedRoundingIncrement(DEFAULT_ROUNDING_INCREMENT);
-    setEditedPriceAdjustment(DEFAULT_PRICE_ADJUSTMENT);
   };
 
   // Cost badge color. food_cost_pct is ALWAYS stored as a fraction (basic_cost /
@@ -588,90 +539,6 @@ export default function Recipes() {
             </div>
           </div>
 
-          {/* Pricing formula controls — per Panduan_Kartu_Resep_HPP.md (2026-08,
-              refined per follow-up): Fix Cost % (per-recipe, was hardcoded 5%) and
-              Food Cost % (a TARGET margin, not derived) drive a computed "Harga
-              Jual Ideal" suggestion, rounded to the nearest whole rupiah (no
-              500/1000/2000 bucket forced — Arah Pembulatan still matters for
-              which way a fractional rupiah rounds). Penyesuaian Manual is an
-              optional extra nudge on top of that, for hitting a specific price
-              point; it feeds into the actual Food Cost % once applied. Harga
-              Jual above stays the actual, always hand-editable price — the
-              suggestion here is a one-click apply, never auto-overwritten. */}
-          <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '14px',
-            marginBottom: '16px', padding: '14px 16px', borderRadius: 'var(--radius-lg)',
-            background: 'rgba(30, 41, 59, 0.25)', border: '1px solid var(--border)'
-          }}>
-            <div className="form-group" style={{ marginBottom: 0, minWidth: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'normal', display: 'block' }}>Fix Cost %</label>
-              <input
-                type="number" step="0.5" min="0" max="100"
-                className="form-control premium-input"
-                style={{ height: '36px', width: '100%', boxSizing: 'border-box' }}
-                value={Math.round(editedFixCostPct * 1000) / 10}
-                onChange={e => setEditedFixCostPct((parseFloat(e.target.value) || 0) / 100)}
-              />
-            </div>
-            <div className="form-group" style={{ marginBottom: 0, minWidth: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'normal', display: 'block' }}>Food Cost % (Target)</label>
-              <input
-                type="number" step="1" min="0" max="100"
-                className="form-control premium-input"
-                style={{ height: '36px', width: '100%', boxSizing: 'border-box' }}
-                placeholder="wajib diisi"
-                value={editedFoodCostPctTarget > 0 ? Math.round(editedFoodCostPctTarget * 1000) / 10 : ''}
-                onChange={e => setEditedFoodCostPctTarget((parseFloat(e.target.value) || 0) / 100)}
-              />
-            </div>
-            <div className="form-group" style={{ marginBottom: 0, minWidth: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'normal', display: 'block' }}>Arah Pembulatan</label>
-              <select
-                className="form-control premium-input"
-                style={{ height: '36px', width: '100%', boxSizing: 'border-box' }}
-                value={editedRoundingDirection}
-                onChange={e => setEditedRoundingDirection(e.target.value)}
-              >
-                <option value="down">Ke bawah (rupiah bulat)</option>
-                <option value="up">Ke atas (rupiah bulat)</option>
-              </select>
-            </div>
-            <div className="form-group" style={{ marginBottom: 0, minWidth: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'normal', display: 'block' }}>Penyesuaian Manual (Rp)</label>
-              <input
-                type="number" step="1"
-                className="form-control premium-input"
-                style={{ height: '36px', width: '100%', boxSizing: 'border-box' }}
-                placeholder="opsional, +/-"
-                value={editedPriceAdjustment !== 0 ? editedPriceAdjustment : ''}
-                onChange={e => setEditedPriceAdjustment(parseFloat(e.target.value) || 0)}
-              />
-            </div>
-
-            {sellingPriceFinal > 0 && (
-              <div style={{
-                gridColumn: '1 / -1', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                gap: '12px', marginTop: '2px', padding: '10px 14px', borderRadius: 'var(--radius-md)',
-                background: 'rgba(59, 130, 246, 0.06)', border: '1px solid rgba(59, 130, 246, 0.2)'
-              }}>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  Harga Jual Ideal — raw: {formatIDR(sellingPriceRaw)}, dibulatkan: {formatIDR(sellingPriceRounded)}
-                  {editedPriceAdjustment !== 0 && <> + penyesuaian {formatIDR(editedPriceAdjustment)}</>}:{' '}
-                  <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatIDR(sellingPriceFinal)}</strong>
-                </div>
-                <button
-                  type="button"
-                  className="btn premium-btn premium-btn-secondary"
-                  style={{ padding: '6px 14px', fontSize: '0.75rem', flexShrink: 0 }}
-                  onClick={() => setEditedSellingPrice(sellingPriceFinal)}
-                  disabled={editedSellingPrice === sellingPriceFinal}
-                >
-                  Pakai harga ini
-                </button>
-              </div>
-            )}
-          </div>
-
           {/* Ingredients Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
             <h3 style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '1px' }}>
@@ -846,7 +713,7 @@ export default function Recipes() {
             <div style={{ display: 'flex', gap: '24px', fontSize: '0.825rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
               <span>Subtotal: <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatIDR(subtotal)}</strong></span>
               <span style={{ width: 1, background: 'var(--border)', height: '14px', alignSelf: 'center' }} />
-              <span>Fix Cost ({(editedFixCostPct * 100).toFixed(1).replace(/\.0$/, '')}%): <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatIDR(fixCost)}</strong></span>
+              <span>Fix Cost (5%): <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatIDR(fixCost)}</strong></span>
               <span style={{ width: 1, background: 'var(--border)', height: '14px', alignSelf: 'center' }} />
               <span>HPP Gabungan: <strong style={{ color: 'var(--accent)', fontWeight: 800 }}>{formatIDR(basicCost)}</strong></span>
             </div>
@@ -966,47 +833,77 @@ export default function Recipes() {
         title="Bulk Import Resep & Harga Jual"
         description="Upload data menu, harga jual, dan resep sekaligus dari file Excel."
         onCommit={async (rows) => {
-          const res = await api.bulkImportRecipes(rows);
+          // Excel uses human-friendly percent numbers (5 = 5%, matching the
+          // FIX COST %/FOOD COST % TARGET column labels) and Indonesian rounding
+          // labels ('ke bawah'/'ke atas') — convert to the fraction (0.05) and
+          // enum ('down'/'up') values costUtils.computeRecipeCosts() and the DB
+          // CHECK constraint on rounding_direction expect, same convention as
+          // the Overhead % field in Maintenance.jsx. Blank cells stay blank
+          // (not 0) so api.js's "not provided -> use tenant default" fallback
+          // still applies correctly.
+          const normalizedRows = rows.map(row => {
+            const out = { ...row };
+            if (row.fix_cost_pct_input !== undefined && row.fix_cost_pct_input !== '') {
+              const n = parseFloat(row.fix_cost_pct_input);
+              if (!isNaN(n)) out.fix_cost_pct = n / 100;
+            }
+            if (row.food_cost_pct_input !== undefined && row.food_cost_pct_input !== '') {
+              const n = parseFloat(row.food_cost_pct_input);
+              if (!isNaN(n)) out.food_cost_pct = n / 100;
+            }
+            if (row.price_adjustment_input !== undefined && row.price_adjustment_input !== '') {
+              const n = parseFloat(row.price_adjustment_input);
+              if (!isNaN(n)) out.price_adjustment = n;
+            }
+            const arah = (row.rounding_direction_input || '').toString().trim().toLowerCase();
+            if (arah === 'ke atas' || arah === 'up') out.rounding_direction = 'up';
+            else if (arah === 'ke bawah' || arah === 'down') out.rounding_direction = 'down';
+            return out;
+          });
+          const res = await api.bulkImportRecipes(normalizedRows);
           if (res.success > 0) refreshData();
           return res;
         }}
         expectedColumns={[
+          { key: 'recipe_code', label: 'KODE MENU', required: false, type: 'string', description: 'Kode/ID resep (opsional) — dipakai untuk pencocokan otomatis di POS Terminal & integrasi backend lain. Kosongkan untuk resep lama tanpa kode.', sample: 'RCP-0001' },
           { key: 'menu_name', label: 'NAMA MENU', required: true, type: 'string', description: 'Nama menu (harus sama persis dengan di POS)', sample: 'Ice Caramel Latte' },
           { key: 'category', label: 'KATEGORI', required: false, type: 'string', description: 'Kategori menu: KOPI/NON-KOPI/TEA/MOCKTAIL/JUICE/BEER', sample: 'KOPI' },
-          // Per Panduan_Kartu_Resep_HPP.md (2026-08, refined per follow-up): a flat
-          // Excel template can't run live formulas, so Fix Cost % and Food Cost %
-          // (target) are manual-input columns here — Barventis computes Subtotal ->
-          // Fix Cost -> Basic Cost -> Selling Price on import using the exact same
-          // computeRecipeCosts() the interactive Recipe Builder uses. HARGA JUAL is
-          // now optional: leave blank to let the target-driven formula decide the
-          // price, or fill it in to override with a specific number regardless of
-          // what the formula would suggest.
-          { key: 'fix_cost_pct', label: 'FIX COST %', required: false, type: 'number', description: 'Persen fix cost (contoh: isi 5 untuk 5%). Kosong = default 5%.', sample: 5 },
-          { key: 'food_cost_pct', label: 'FOOD COST % TARGET', required: true, type: 'number', description: 'Target food cost (contoh: isi 18 untuk 18%). Ini yang menentukan Harga Jual kalau kolom HARGA JUAL dikosongkan.', sample: 18 },
-          { key: 'rounding_direction', label: 'ARAH PEMBULATAN', required: false, type: 'string', description: 'ke bawah / ke atas (ke rupiah bulat terdekat). Kosong = ke bawah.', sample: 'ke bawah' },
-          { key: 'price_adjustment', label: 'PENYESUAIAN MANUAL', required: false, type: 'number', description: 'Nilai tambahan/pengurang setelah dibulatkan, boleh negatif. Kosong = 0.', sample: 0 },
-          { key: 'selling_price', label: 'HARGA JUAL (OPSIONAL)', required: false, type: 'number', description: 'Isi hanya kalau mau override harga manual — kosongkan supaya dihitung dari Food Cost % Target di atas.', sample: '' },
-          { key: 'bahan_1', label: 'BAHAN 1', required: false, type: 'string', description: 'Nama bahan baku 1', sample: 'Espresso Bean' },
+          { key: 'fix_cost_pct_input', label: 'FIX COST %', required: false, type: 'string', description: 'Fix Cost % khusus resep ini, contoh: 5 untuk 5%. Kosongkan untuk pakai Overhead % tenant (Pengaturan > Maintenance).', sample: 5 },
+          { key: 'food_cost_pct_input', label: 'FOOD COST % TARGET', required: false, type: 'string', description: 'Target Food Cost %, contoh: 30 untuk 30%. Kalau diisi dan HARGA JUAL dikosongkan, harga jual dihitung & dibulatkan otomatis dari target ini.', sample: 30 },
+          { key: 'rounding_direction_input', label: 'ARAH PEMBULATAN', required: false, type: 'string', description: '"ke bawah" atau "ke atas" (default: ke bawah). Cuma dipakai kalau FOOD COST % TARGET diisi.', sample: 'ke bawah' },
+          { key: 'price_adjustment_input', label: 'PENYESUAIAN MANUAL', required: false, type: 'string', description: 'Penyesuaian harga hasil hitung otomatis dalam Rupiah, +/- (opsional).', sample: '' },
+          { key: 'selling_price', label: 'HARGA JUAL (OPSIONAL)', labels: ['HARGA JUAL (OPSIONAL)', 'HARGA JUAL'], required: false, type: 'number', description: 'Harga jual manual (opsional). Kosongkan kalau mau harga dihitung otomatis dari FOOD COST % TARGET.', sample: '' },
+          { key: 'kode_bahan_1', label: 'KODE BAHAN 1', required: false, type: 'string', description: 'Kode/SKU bahan baku 1 (lihat sheet Materials) — kalau diisi, dipakai untuk mencocokkan bahan, bukan nama.', sample: 'MTR-0001' },
+          { key: 'bahan_1', label: 'BAHAN 1', required: false, type: 'string', description: 'Nama bahan baku 1 (dipakai kalau KODE BAHAN 1 kosong)', sample: 'Espresso Bean' },
           { key: 'qty_1', label: 'QTY 1', required: false, type: 'number', description: 'Jumlah bahan baku 1', sample: 36 },
+          { key: 'kode_bahan_2', label: 'KODE BAHAN 2', required: false, type: 'string', description: 'Kode/SKU bahan baku 2', sample: '' },
           { key: 'bahan_2', label: 'BAHAN 2', required: false, type: 'string', description: 'Nama bahan baku 2', sample: 'Fresh Milk' },
           { key: 'qty_2', label: 'QTY 2', required: false, type: 'number', description: 'Jumlah bahan baku 2', sample: 150 },
+          { key: 'kode_bahan_3', label: 'KODE BAHAN 3', required: false, type: 'string', description: 'Kode/SKU bahan baku 3', sample: '' },
           { key: 'bahan_3', label: 'BAHAN 3', required: false, type: 'string', description: 'Nama bahan baku 3', sample: 'Caramel Syrup' },
           { key: 'qty_3', label: 'QTY 3', required: false, type: 'number', description: 'Jumlah bahan baku 3', sample: 20 },
           // BAHAN 4-10 / QTY 4-10: api.bulkImportRecipes already reads up to 10 ingredient
           // pairs from the row object, but this list previously stopped at 3, so any
           // ingredient past slot 3 was silently dropped before it ever reached the API.
+          { key: 'kode_bahan_4', label: 'KODE BAHAN 4', required: false, type: 'string', description: 'Kode/SKU bahan baku 4', sample: '' },
           { key: 'bahan_4', label: 'BAHAN 4', required: false, type: 'string', description: 'Nama bahan baku 4', sample: '' },
           { key: 'qty_4', label: 'QTY 4', required: false, type: 'number', description: 'Jumlah bahan baku 4', sample: '' },
+          { key: 'kode_bahan_5', label: 'KODE BAHAN 5', required: false, type: 'string', description: 'Kode/SKU bahan baku 5', sample: '' },
           { key: 'bahan_5', label: 'BAHAN 5', required: false, type: 'string', description: 'Nama bahan baku 5', sample: '' },
           { key: 'qty_5', label: 'QTY 5', required: false, type: 'number', description: 'Jumlah bahan baku 5', sample: '' },
+          { key: 'kode_bahan_6', label: 'KODE BAHAN 6', required: false, type: 'string', description: 'Kode/SKU bahan baku 6', sample: '' },
           { key: 'bahan_6', label: 'BAHAN 6', required: false, type: 'string', description: 'Nama bahan baku 6', sample: '' },
           { key: 'qty_6', label: 'QTY 6', required: false, type: 'number', description: 'Jumlah bahan baku 6', sample: '' },
+          { key: 'kode_bahan_7', label: 'KODE BAHAN 7', required: false, type: 'string', description: 'Kode/SKU bahan baku 7', sample: '' },
           { key: 'bahan_7', label: 'BAHAN 7', required: false, type: 'string', description: 'Nama bahan baku 7', sample: '' },
           { key: 'qty_7', label: 'QTY 7', required: false, type: 'number', description: 'Jumlah bahan baku 7', sample: '' },
+          { key: 'kode_bahan_8', label: 'KODE BAHAN 8', required: false, type: 'string', description: 'Kode/SKU bahan baku 8', sample: '' },
           { key: 'bahan_8', label: 'BAHAN 8', required: false, type: 'string', description: 'Nama bahan baku 8', sample: '' },
           { key: 'qty_8', label: 'QTY 8', required: false, type: 'number', description: 'Jumlah bahan baku 8', sample: '' },
+          { key: 'kode_bahan_9', label: 'KODE BAHAN 9', required: false, type: 'string', description: 'Kode/SKU bahan baku 9', sample: '' },
           { key: 'bahan_9', label: 'BAHAN 9', required: false, type: 'string', description: 'Nama bahan baku 9', sample: '' },
           { key: 'qty_9', label: 'QTY 9', required: false, type: 'number', description: 'Jumlah bahan baku 9', sample: '' },
+          { key: 'kode_bahan_10', label: 'KODE BAHAN 10', required: false, type: 'string', description: 'Kode/SKU bahan baku 10', sample: '' },
           { key: 'bahan_10', label: 'BAHAN 10', required: false, type: 'string', description: 'Nama bahan baku 10', sample: '' },
           { key: 'qty_10', label: 'QTY 10', required: false, type: 'number', description: 'Jumlah bahan baku 10', sample: '' }
         ]}

@@ -164,18 +164,12 @@ export const maintenanceService = {
         const ingredients = (r.ingredients || [])
           .filter(i => i.material_id)
           .map(i => ({ material_id: i.material_id, qty_in_use: i.qty_in_use, unit: i.unit }));
-        // BUG-FIX 2026-08: updateRecipe() now treats food_cost_pct as the TARGET
-        // ratio the user chose (per Panduan_Kartu_Resep_HPP.md) and computes/rounds
-        // selling_price from it unless selling_price_override is passed. This call
-        // used to omit food_cost_pct/fix_cost_pct/rounding entirely, which — after
-        // that change — would have silently reset every recipe's target to 0% and
-        // recomputed a bogus selling_price on every recalc run. Pass all of it
-        // through unchanged, and use selling_price_override so the recipe's
-        // committed price is preserved verbatim regardless of what the formula
-        // would suggest for its (possibly stale) target.
         await api.updateRecipe(r.id, {
           menu_name: r.menu_name,
           category: r.category,
+          // selling_price_override (not selling_price) so this recompute only
+          // refreshes fix_cost/basic_cost from current ingredient prices —
+          // it must NOT silently change the price the owner already set.
           selling_price_override: r.selling_price,
           fix_cost_pct: r.fix_cost_pct,
           food_cost_pct: r.food_cost_pct,

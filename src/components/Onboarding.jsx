@@ -59,7 +59,7 @@ export default function Onboarding({ onNavigate, onDismiss, tenantName }) {
               Setup Awal — {tenantName || 'Tenant Baru'}
             </span>
           </div>
-           <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-inverse)', marginBottom: '4px' }}>
+           <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>
             Selamat Datang di Barventis! 🎉
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
@@ -98,7 +98,7 @@ export default function Onboarding({ onNavigate, onDismiss, tenantName }) {
           <span style={{ fontSize: '0.7rem', color: step.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
             Langkah {currentStep + 1} dari 3
           </span>
-           <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-inverse)', margin: '6px 0 8px' }}>
+           <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)', margin: '6px 0 8px' }}>
             {step.title}
           </h3>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.55, marginBottom: '20px' }}>

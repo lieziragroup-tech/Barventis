@@ -153,6 +153,11 @@ export const DataProvider = ({ children }) => {
     await api.updateRecipe(recipeId, {
       menu_name: updatedRecipe.menu_name,
       category: updatedRecipe.category,
+      // selling_price_override (not selling_price): the manual price typed in
+      // the (unchanged) Recipe Builder form always wins over the new
+      // target-price formula. See PRD §5. The fields below are undefined
+      // for now since Recipes.jsx doesn't set them yet (Phase 1) — api.js
+      // falls back to sensible defaults when they're undefined/null.
       selling_price_override: updatedRecipe.selling_price,
       fix_cost_pct: updatedRecipe.fix_cost_pct,
       food_cost_pct: updatedRecipe.food_cost_pct,
@@ -252,7 +257,16 @@ export const DataProvider = ({ children }) => {
     loadingData,
     refreshData: fetchAllData,
     showToast,
-    currentTenant: activeUser ? { id: activeUser.tenant_id, company_name: activeUser.company_name, name: activeUser.tenant_name } : null,
+    currentTenant: activeUser ? { 
+      id: activeUser.tenant_id, 
+      company_name: activeUser.company_name, 
+      name: activeUser.tenant_name,
+      is_pos_enabled: activeUser.is_pos_enabled,
+      pos_tax_rate: activeUser.pos_tax_rate,
+      pos_service_charge: activeUser.pos_service_charge,
+      locked_until_month: activeUser.locked_until_month,
+      locked_until_year: activeUser.locked_until_year
+    } : null,
     sessionUser: activeUser,
     handleAdjustStock,
     handleUpdateItem,

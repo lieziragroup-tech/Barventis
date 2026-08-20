@@ -513,7 +513,7 @@ body::before {
   min-height: 300px;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 768px) {
   .charts-grid {
     grid-template-columns: 1fr;
   }
@@ -670,7 +670,7 @@ body::before {
   gap: 20px;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 768px) {
   .grid-3 {
     grid-template-columns: 1fr 1fr;
   }
@@ -870,6 +870,76 @@ input[type='number']::-webkit-outer-spin-button {
 /* ==========================================================================
    MOBILE & RESPONSIVE DESIGN
    ========================================================================== */
+
+/* ==========================================================================
+   APP-LIKE MOBILE SIZING (TIKTOK/INSTAGRAM STYLE)
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* Shrink cards to maximize edge-to-edge space */
+  .glass-card {
+    padding: 12px !important;
+    border-radius: var(--radius-lg) !important;
+    margin-bottom: 12px !important;
+  }
+
+  /* Optimize KPI Cards for mobile view */
+  .kpi-card {
+    padding: 12px !important;
+  }
+  
+  .kpi-grid {
+    gap: 8px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .kpi-title {
+    font-size: 0.7rem !important;
+  }
+
+  .kpi-value {
+    font-size: 1.4rem !important;
+    margin-bottom: 4px !important;
+  }
+  
+  .kpi-icon-wrap {
+    width: 32px !important;
+    height: 32px !important;
+  }
+  
+  .kpi-icon-wrap svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+
+  /* Tables smaller and compact */
+  .custom-table th, .custom-table td,
+  .table th, .table td {
+    padding: 8px 10px !important;
+    font-size: 0.75rem !important;
+  }
+
+  /* General buttons and inputs smaller on mobile */
+  .btn {
+    font-size: 0.85rem !important;
+  }
+  .form-control {
+    font-size: 16px !important; /* iOS fix */
+    padding: 8px 12px !important;
+  }
+  
+  /* Inline style overrides for inline paddings defined in JSX */
+  div[style*="padding: 24px"], div[style*="padding: '24px'"],
+  div[style*="padding: 16px"], div[style*="padding: '16px'"] {
+    padding: 12px !important;
+  }
+}
+
+
+/* Sembunyikan tombol hamburger di Desktop */
+.mobile-menu-btn {
+  display: none !important;
+}
+
 @media (max-width: 1024px) {
   .sidebar {
     transform: translateX(-100%);
@@ -900,15 +970,12 @@ input[type='number']::-webkit-outer-spin-button {
   }
   
   .header-actions {
-    width: 100%;
-    flex-wrap: wrap;
-    justify-content: flex-start;
+    width: auto;
+    justify-content: flex-end;
   }
   
   .header-actions .btn {
-    flex: 1;
-    min-width: 100px;
-    justify-content: center;
+    padding: 6px 10px; /* Make buttons smaller on mobile */
   }
 
   .header-title-sec h1 {
@@ -1031,6 +1098,7 @@ input[type='number']::-webkit-outer-spin-button {
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
   border: none;
   box-shadow: 0 4px 12px rgba(79, 110, 247, 0.2);
+  color: #ffffff;
 }
 
 .premium-btn-primary:hover {

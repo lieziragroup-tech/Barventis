@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import BulkImport from '../../components/BulkImport';
 import { useData } from '../../contexts/DataContext';
-import { formatIDR } from '../../services/costUtils';
+import { formatIDR, calculateIngredientCost } from '../../services/costUtils';
 
 let _confetti;
 const getConfetti = async () => { if (!_confetti) _confetti = (await import('canvas-confetti')).default; return _confetti; };
@@ -32,6 +32,9 @@ export default function StockOpname() {
       category: item.category,
       unit: item.unit,
       price: item.new_price || item.price,
+      // BUG-FIX 2026-08: full_pack wasn't carried over, so valAdjustment below
+      // had no pack-size info to divide by and used the raw per-pack price instead.
+      full_pack: item.full_pack,
       book_qty: location === 'RESTO' ? (item.qty_resto || 0) : (item.qty_central || 0),
       physical_qty: '',
       notes: ''
@@ -154,7 +157,9 @@ export default function StockOpname() {
           ...item,
           physical_qty: pQty,
           variance,
-          valAdjustment: variance * (item.price || 0)
+          // BUG-FIX 2026-08: was `variance * price` with price as per-pack — route
+          // through the shared calculator (display-only, never persisted; see completeOpname).
+          valAdjustment: calculateIngredientCost(item, variance, item.unit)
         };
       });
 
@@ -338,7 +343,8 @@ export default function StockOpname() {
                   // BUG-SO-01 (display): Guard against '' before calling .toFixed
                   const pQty = parseFloat(item.physical_qty);
                   const variance = pQty - item.book_qty;
-                  const valAdjustment = variance * (item.price || 0);
+                  // BUG-FIX 2026-08: same pack-size fix as handleCommitOpname above.
+                  const valAdjustment = calculateIngredientCost(item, variance, item.unit);
 
                   return (
                     <tr key={item.name}>

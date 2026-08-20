@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
@@ -6,20 +6,20 @@ import barventisIcon from '../../assets/barventis-icon.png';
 
 export default function AuthScreen({ onAuthSuccess }) {
   const toast = useToast();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [name, setName] = React.useState('');
+  const [error, setError] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
 
   // Invite Token States
   const queryParams = new URLSearchParams(window.location.search);
   const inviteToken = queryParams.get('token');
   const roleFromUrl = queryParams.get('role') || 'Staff';
-  const [tokenStatus, setTokenStatus] = useState(inviteToken ? 'checking' : 'none');
-  const [inviteRole, setInviteRole] = useState(roleFromUrl);
+  const [tokenStatus, setTokenStatus] = React.useState(inviteToken ? 'checking' : 'none');
+  const [inviteRole, setInviteRole] = React.useState(roleFromUrl);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (!inviteToken) return;
     async function validateToken() {
       try {

@@ -16,6 +16,24 @@ export default function TenantAdminPanel() {
   const [isPosEnabled, setIsPosEnabled] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetOptions, setResetOptions] = useState({
+    resetPos: true,
+    resetStockHistory: true,
+    resetPurchasing: true,
+    resetRecipes: false,
+    resetMaterials: false
+  });
+
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmActionState, setConfirmActionState] = useState(null);
+
+  // Helper for Double Confirmation
+  const requestConfirmation = (title, message, onConfirm) => {
+    setConfirmActionState({ title, message, onConfirm });
+    setShowConfirmModal(true);
+  };
+
   useEffect(() => {
     if (currentTenant) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -101,41 +119,72 @@ export default function TenantAdminPanel() {
       return;
     }
     
-    const confirmDelete = window.confirm(`Apakah Anda yakin ingin menghapus user ${user.name} (${user.email})?`);
-    if (!confirmDelete) return;
+    requestConfirmation(
+      'Hapus Pengguna',
+      `Apakah Anda yakin ingin menghapus staf ${user.name} (${user.email})?`,
+      async () => {
+        try {
+          setLoading(true);
+          const { error } = await supabase
+            .from('users')
+            .delete()
+            .eq('id', user.id);
+            
+          if (error) throw error;
+          displayToast('Pengguna berhasil dihapus.', 'success');
+          fetchUsers();
+        } catch (err) {
+          displayToast('Gagal menghapus pengguna: ' + err.message, 'error');
+          setLoading(false);
+        }
+      }
+    );
+  };
 
-    try {
-      setLoading(true);
-      const { error } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', user.id);
-        
-      if (error) throw error;
-      displayToast('Pengguna berhasil dihapus.', 'success');
-      fetchUsers();
-    } catch (err) {
-      displayToast('Gagal menghapus pengguna: ' + err.message, 'error');
-      setLoading(false);
-    }
+  const executeFactoryReset = async () => {
+    setShowResetModal(false);
+    requestConfirmation(
+      'Konfirmasi Reset Data',
+      `Apakah Anda YAKIN ingin melakukan reset permanen pada data terpilih untuk resto "${currentTenant?.company_name}"? Aksi ini tidak dapat dibatalkan!`,
+      async () => {
+        try {
+          setIsSaving(true);
+          await api.factoryReset(currentTenant.id, resetOptions);
+
+          displayToast('Data berhasil di-reset sesuai opsi.', 'success');
+          setTimeout(() => {
+            window.location.reload();
+          }, 1500);
+        } catch (err) {
+          displayToast('Gagal mereset data: ' + err.message, 'error');
+        } finally {
+          setIsSaving(false);
+        }
+      }
+    );
   };
 
   const handleSaveProfile = async (e) => {
     e.preventDefault();
-    try {
-      setIsSaving(true);
-      await api.updateTenantSettings({
-        company_name: companyName,
-        is_pos_enabled: isPosEnabled
-      });
-      displayToast('Profil resto berhasil diperbarui.', 'success');
-      // A small hack to force reload context data if needed
-      window.location.reload();
-    } catch (err) {
-      displayToast('Gagal memperbarui profil: ' + err.message, 'error');
-    } finally {
-      setIsSaving(false);
-    }
+    requestConfirmation(
+      'Simpan Profil',
+      'Apakah Anda yakin ingin menyimpan perubahan profil pengaturan resto ini?',
+      async () => {
+        try {
+          setIsSaving(true);
+          await api.updateTenantSettings({
+            company_name: companyName,
+            is_pos_enabled: isPosEnabled
+          });
+          displayToast('Profil resto berhasil diperbarui.', 'success');
+          window.location.reload();
+        } catch (err) {
+          displayToast('Gagal memperbarui profil: ' + err.message, 'error');
+        } finally {
+          setIsSaving(false);
+        }
+      }
+    );
   };
 
   return (
@@ -375,8 +424,7 @@ export default function TenantAdminPanel() {
                   value={currentTenant?.name || ''}
                   disabled
                   style={{
-                    width: '100%', padding: '8px 12px', background: 'var(--bg-tertiary)',
-                    border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)',
+                    width: '100%', padding: '8px 12px',
                     cursor: 'not-allowed', fontSize: '0.8rem'
                   }}
                 />
@@ -392,8 +440,7 @@ export default function TenantAdminPanel() {
                   onChange={(e) => setCompanyName(e.target.value)}
                   required
                   style={{
-                    width: '100%', padding: '8px 12px', background: 'rgba(15, 23, 42, 0.6)',
-                    border: '1px solid rgba(255,255,255,0.1)', borderRadius: 'var(--radius-sm)', color: 'var(--text-inverse)', fontSize: '0.8rem'
+                    width: '100%', padding: '8px 12px', fontSize: '0.8rem'
                   }}
                 />
               </div>
@@ -408,16 +455,32 @@ export default function TenantAdminPanel() {
                     <input 
                       type="checkbox" 
                       checked={isPosEnabled} 
-                      onChange={(e) => setIsPosEnabled(e.target.checked)}
+                      onChange={async (e) => {
+                        const newValue = e.target.checked;
+                        setIsPosEnabled(newValue);
+                        try {
+                          setIsSaving(true);
+                          await api.updateTenantSettings({
+                            is_pos_enabled: newValue
+                          });
+                          displayToast(`Integrasi POS Internal ${newValue ? 'Diaktifkan' : 'Dinonaktifkan'}.`, 'success');
+                          setTimeout(() => window.location.reload(), 800);
+                        } catch (err) {
+                          displayToast('Gagal mengubah pengaturan POS: ' + err.message, 'error');
+                          setIsPosEnabled(!newValue);
+                        } finally {
+                          setIsSaving(false);
+                        }
+                      }}
                       style={{ opacity: 0, width: 0, height: 0 }}
                     />
                     <span style={{
                       position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
-                      backgroundColor: isPosEnabled ? 'var(--success)' : 'rgba(255,255,255,0.1)', transition: '.4s', borderRadius: '34px'
+                      backgroundColor: isPosEnabled ? 'var(--accent)' : 'var(--surface-active)', border: '1px solid ' + (isPosEnabled ? 'var(--accent)' : 'var(--border)'), transition: '.4s', borderRadius: '34px'
                     }}>
                       <span style={{
-                        position: 'absolute', content: '""', height: '18px', width: '18px', left: '3px', bottom: '3px',
-                        backgroundColor: 'white', transition: '.4s', borderRadius: '50%',
+                        position: 'absolute', content: '""', height: '18px', width: '18px', left: '2px', bottom: '2px',
+                        backgroundColor: isPosEnabled ? '#ffffff' : 'var(--text-muted)', transition: '.4s', borderRadius: '50%', boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
                         transform: isPosEnabled ? 'translateX(20px)' : 'translateX(0)'
                       }}></span>
                     </span>
@@ -425,13 +488,29 @@ export default function TenantAdminPanel() {
                 </div>
               </div>
 
-              <div style={{ background: 'rgba(245, 158, 11, 0.05)', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(245, 158, 11, 0.1)' }}>
+              <div style={{ background: 'rgba(245, 158, 11, 0.05)', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(245, 158, 11, 0.1)', marginBottom: '16px' }}>
                 <h4 style={{ margin: '0 0 4px 0', color: 'var(--warning)', fontSize: '0.82rem', fontWeight: '700' }}>Status Kunci Pembukuan</h4>
                 <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                   {currentTenant?.locked_until_month && currentTenant?.locked_until_year 
                     ? `Transaksi sebelum bulan ${currentTenant.locked_until_month}/${currentTenant.locked_until_year} telah dikunci dan tidak dapat diubah.` 
                     : 'Belum ada periode yang dikunci. Data masih bebas diubah.'}
                 </p>
+              </div>
+
+              <div style={{ background: 'rgba(239, 68, 68, 0.05)', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(239, 68, 68, 0.1)', marginBottom: '16px' }}>
+                <h4 style={{ margin: '0 0 4px 0', color: 'var(--danger)', fontSize: '0.82rem', fontWeight: '700' }}>Zona Berbahaya (Danger Zone)</h4>
+                <p style={{ margin: '0 0 12px 0', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                  Reset seluruh statistik penjualan dan transaksi (mengulang dari 0). Bahan baku dan resep tidak akan dihapus.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowResetModal(true)}
+                  disabled={isSaving}
+                  className="btn btn-secondary"
+                  style={{ padding: '6px 12px', fontSize: '0.75rem', color: 'var(--danger-text)', borderColor: 'var(--danger)' }}
+                >
+                  <Trash2 size={12} style={{ marginRight: 4 }} /> Reset Data Transaksi (0)
+                </button>
               </div>
 
               <button
@@ -537,6 +616,123 @@ export default function TenantAdminPanel() {
           </div>
         )}
       </div>
+
+      {/* Confirmation Modal (Generic) */}
+      {showConfirmModal && confirmActionState && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl w-full max-w-sm overflow-hidden shadow-2xl">
+            <div className="p-5">
+              <h3 className="text-lg font-bold text-[var(--text-primary)] mb-2 flex items-center gap-2">
+                <Trash2 size={20} className="text-[var(--danger)]" /> {confirmActionState.title}
+              </h3>
+              <p className="text-[var(--text-secondary)] text-sm mb-6 leading-relaxed">
+                {confirmActionState.message}
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  className="btn btn-secondary px-4 py-2"
+                  onClick={() => setShowConfirmModal(false)}
+                  disabled={isSaving}
+                >
+                  Batal
+                </button>
+                <button
+                  className="btn premium-btn-danger px-4 py-2"
+                  onClick={async () => {
+                    await confirmActionState.onConfirm();
+                    setShowConfirmModal(false);
+                  }}
+                  disabled={isSaving}
+                >
+                  {isSaving ? 'Memproses...' : 'Ya, Lanjutkan'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Modal */}
+      {showResetModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-[var(--border)] flex justify-between items-center bg-[rgba(239,68,68,0.05)]">
+              <h3 className="text-lg font-bold text-[var(--danger)] flex items-center gap-2 m-0">
+                <Trash2 size={20} /> Reset Data Spesifik
+              </h3>
+              <button onClick={() => setShowResetModal(false)} className="text-[var(--text-muted)] hover:text-white transition-colors">
+                <XCircle size={20} />
+              </button>
+            </div>
+            
+            <div className="p-5 overflow-y-auto">
+              <p className="text-sm text-[var(--text-secondary)] mb-4">
+                Pilih kategori data yang ingin Anda hapus. Ini akan mereset statistik yang bersangkutan menjadi 0.
+              </p>
+
+              <div className="flex flex-col gap-3">
+                <label className="flex items-start gap-3 p-3 rounded-lg border border-[var(--border)] cursor-pointer hover:bg-[var(--bg-tertiary)] transition-colors">
+                  <input type="checkbox" checked={resetOptions.resetPos} onChange={(e) => setResetOptions({...resetOptions, resetPos: e.target.checked})} className="mt-1" />
+                  <div>
+                    <h5 className="font-bold text-sm text-[var(--text-primary)] m-0">Data Kasir (POS)</h5>
+                    <p className="text-xs text-[var(--text-secondary)] m-0">Log Upload POS, Riwayat Transaksi Penjualan, Expected Usage.</p>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-3 p-3 rounded-lg border border-[var(--border)] cursor-pointer hover:bg-[var(--bg-tertiary)] transition-colors">
+                  <input type="checkbox" checked={resetOptions.resetStockHistory} onChange={(e) => setResetOptions({...resetOptions, resetStockHistory: e.target.checked})} className="mt-1" />
+                  <div>
+                    <h5 className="font-bold text-sm text-[var(--text-primary)] m-0">Riwayat Penyesuaian Stok</h5>
+                    <p className="text-xs text-[var(--text-secondary)] m-0">Stock Opname, Daily Inventory, Kartu Stok.</p>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-3 p-3 rounded-lg border border-[var(--border)] cursor-pointer hover:bg-[var(--bg-tertiary)] transition-colors">
+                  <input type="checkbox" checked={resetOptions.resetPurchasing} onChange={(e) => setResetOptions({...resetOptions, resetPurchasing: e.target.checked})} className="mt-1" />
+                  <div>
+                    <h5 className="font-bold text-sm text-[var(--text-primary)] m-0">Pembelian & Supplier</h5>
+                    <p className="text-xs text-[var(--text-secondary)] m-0">Invoices, Purchase Orders, Riwayat Pembelian.</p>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-3 p-3 rounded-lg border border-[var(--border)] cursor-pointer hover:bg-[var(--bg-tertiary)] transition-colors">
+                  <input type="checkbox" checked={resetOptions.resetRecipes} onChange={(e) => setResetOptions({...resetOptions, resetRecipes: e.target.checked})} className="mt-1" />
+                  <div>
+                    <h5 className="font-bold text-sm text-[var(--text-primary)] m-0">F&B Recipes (HPP)</h5>
+                    <p className="text-xs text-[var(--text-secondary)] m-0 text-[var(--warning)] font-medium">Peringatan: Menghapus semua racikan resep yang sudah Anda buat.</p>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-3 p-3 rounded-lg border border-[var(--border)] cursor-pointer hover:bg-[var(--bg-tertiary)] transition-colors">
+                  <input type="checkbox" checked={resetOptions.resetMaterials} onChange={(e) => setResetOptions({...resetOptions, resetMaterials: e.target.checked})} className="mt-1" />
+                  <div>
+                    <h5 className="font-bold text-sm text-[var(--text-primary)] m-0">Master Bahan Baku</h5>
+                    <p className="text-xs text-[var(--text-secondary)] m-0 text-[var(--danger)] font-medium">Hati-hati: Menghapus seluruh nama bahan baku (Stock Ledger).</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-[var(--border)] bg-[var(--bg-tertiary)] flex justify-end gap-3">
+              <button 
+                type="button" 
+                className="btn btn-secondary px-4"
+                onClick={() => setShowResetModal(false)}
+              >
+                Batal
+              </button>
+              <button 
+                type="button" 
+                className="btn premium-btn-danger px-4"
+                onClick={executeFactoryReset}
+                disabled={!Object.values(resetOptions).some(v => v)}
+              >
+                Eksekusi Reset Terpilih
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

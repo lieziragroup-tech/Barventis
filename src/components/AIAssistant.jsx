@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Bot, X, Send, Sparkles, Loader, ChevronRight } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
+import { calculateIngredientCost } from '../services/costUtils';
 
 // Context-aware response engine using real stock/recipe/transaction data
 function buildAIResponse(input, { stock, recipes, transactions }) {
@@ -9,7 +10,9 @@ function buildAIResponse(input, { stock, recipes, transactions }) {
   // --- DATA CONTEXT CALCULATIONS ---
   const lowStock = stock.filter(i => ((i.qty_resto || 0) + (i.qty_central || 0)) < (i.min_stock || 15));
   const criticalStock = stock.filter(i => ((i.qty_resto || 0) + (i.qty_central || 0)) === 0);
-  const stockValuation = stock.reduce((s, i) => s + ((i.qty_resto || 0) + (i.qty_central || 0)) * (i.new_price || i.price || 0), 0);
+  // BUG-FIX 2026-08: was `qty * material.price` directly (per-pack price), same
+  // inflation bug as Dashboard.jsx's stockValuation — route through the shared calculator.
+  const stockValuation = stock.reduce((s, i) => s + calculateIngredientCost(i, (i.qty_resto || 0) + (i.qty_central || 0), i.unit), 0);
 
   const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
   const monthSales = (transactions || [])
@@ -61,8 +64,9 @@ function buildAIResponse(input, { stock, recipes, transactions }) {
 
   // Valuasi stok
   if (/nilai.*stok|stok.*nilai|valuas|inventory.*value|aset/.test(q)) {
-    const restoVal = stock.reduce((s, i) => s + (i.qty_resto || 0) * (i.new_price || i.price || 0), 0);
-    const centralVal = stock.reduce((s, i) => s + (i.qty_central || 0) * (i.new_price || i.price || 0), 0);
+    // BUG-FIX 2026-08: same pack-size issue as stockValuation above.
+    const restoVal = stock.reduce((s, i) => s + calculateIngredientCost(i, i.qty_resto || 0, i.unit), 0);
+    const centralVal = stock.reduce((s, i) => s + calculateIngredientCost(i, i.qty_central || 0, i.unit), 0);
     return `📦 **Valuasi Stok Saat Ini:**\n\n• RESTO: ${fmtIDR(restoVal)}\n• CENTRAL: ${fmtIDR(centralVal)}\n• **Total: ${fmtIDR(stockValuation)}**\n\nTotal ${stock.length} jenis bahan baku aktif terdaftar.`;
   }
 

@@ -5,7 +5,8 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
-import { formatIDR } from '../../services/costUtils';
+import { formatIDR, calculateIngredientCost } from '../../services/costUtils';
+import WidgetErrorBoundary from '../../components/WidgetErrorBoundary';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
 
 export default function Dashboard() {
@@ -14,7 +15,11 @@ export default function Dashboard() {
 
 
   // KPI Calculations
-  const stockValuation = useMemo(() => stock.reduce((acc, item) => acc + ((item.qty_resto || 0) + (item.qty_central || 0)) * (item.new_price || item.price || 0), 0), [stock]);
+  // BUG-FIX 2026-08: was `qty * material.price` directly — material.price is a
+  // per-PACK price, so this inflated the KPI by the pack-size factor (e.g. 2000x
+  // for a 2000gr pack). Route through the shared calculator, same as
+  // getCostControlReport's fallback branch.
+  const stockValuation = useMemo(() => stock.reduce((acc, item) => acc + calculateIngredientCost(item, (item.qty_resto || 0) + (item.qty_central || 0), item.unit), 0), [stock]);
   const lowStockItems = useMemo(() => stock.filter(item => ((item.qty_resto || 0) + (item.qty_central || 0)) < (item.min_stock || 15)), [stock]);
 
   // Calculate real metrics from live transaction data
@@ -63,7 +68,8 @@ export default function Dashboard() {
     return [...(stock || [])]
       .map(item => ({
         name: item.name,
-        cost: ((item.qty_resto || 0) + (item.qty_central || 0)) * (item.new_price || item.price || 0)
+        // BUG-FIX 2026-08: same pack-size issue as stockValuation above.
+        cost: calculateIngredientCost(item, (item.qty_resto || 0) + (item.qty_central || 0), item.unit)
       }))
       .filter(item => item.cost > 0)
       .sort((a, b) => b.cost - a.cost)
@@ -79,7 +85,8 @@ export default function Dashboard() {
   const pieData = useMemo(() => {
     const categoryVals = {};
     stock.forEach(item => {
-      const val = ((item.qty_resto || 0) + (item.qty_central || 0)) * (item.new_price || item.price || 0);
+      // BUG-FIX 2026-08: same pack-size issue as stockValuation above.
+      const val = calculateIngredientCost(item, (item.qty_resto || 0) + (item.qty_central || 0), item.unit);
       categoryVals[item.category] = (categoryVals[item.category] || 0) + val;
     });
     return Object.entries(categoryVals).map(([name, value]) => ({ name, value: Math.round(value) })).sort((a, b) => b.value - a.value).slice(0, 6);
@@ -148,7 +155,8 @@ export default function Dashboard() {
             <span>Beverage Cost Trend (30 Days)</span>
             <span className="badge badge-info">Target: 27%</span>
           </div>
-          <ResponsiveContainer width="100%" height={300}>
+          <WidgetErrorBoundary name="Grafik Dasbor">
+            <ResponsiveContainer width="100%" height={300}>
             <LineChart data={trendData} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey="name" stroke="var(--text-muted)" tick={{ fontSize: 12 }} />
@@ -159,11 +167,13 @@ export default function Dashboard() {
               <Line type="monotone" dataKey="target" name="Target" stroke="var(--danger)" strokeDasharray="5 5" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
+          </WidgetErrorBoundary>
         </div>
 
         <div className="glass-card" style={{ padding: '24px' }}>
           <div className="chart-title">Stock Value by Category</div>
-          <ResponsiveContainer width="100%" height={260}>
+          <WidgetErrorBoundary name="Grafik Dasbor">
+            <ResponsiveContainer width="100%" height={260}>
             <PieChart>
               <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3} dataKey="value">
                 {pieData.map((entry, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
@@ -171,6 +181,7 @@ export default function Dashboard() {
               <Tooltip formatter={(v) => formatIDR(v)} contentStyle={tooltipStyle} />
             </PieChart>
           </ResponsiveContainer>
+          </WidgetErrorBoundary>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', marginTop: '8px' }}>
             {pieData.map((entry, i) => (
               <div key={entry.name} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem' }}>
@@ -186,7 +197,8 @@ export default function Dashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
         <div className="glass-card" style={{ padding: '24px' }}>
           <div className="chart-title">Top 5 Cost Contributors</div>
-          <ResponsiveContainer width="100%" height={300}>
+          <WidgetErrorBoundary name="Grafik Dasbor">
+            <ResponsiveContainer width="100%" height={300}>
             <BarChart data={contributorsData} layout="vertical" margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis type="number" stroke="var(--text-muted)" tickFormatter={(v) => `${(v / 1000000).toFixed(1)}M`} tick={{ fontSize: 11 }} />
@@ -195,6 +207,7 @@ export default function Dashboard() {
               <Bar dataKey="cost" fill="var(--warning)" radius={[0, 4, 4, 0]} name="Pemakaian (IDR)" />
             </BarChart>
           </ResponsiveContainer>
+          </WidgetErrorBoundary>
         </div>
 
         <div className="glass-card" style={{ padding: '24px' }}>

@@ -6,8 +6,8 @@ import './App.css';
 
 // Components & Pages
 import ErrorBoundary from './components/ErrorBoundary';
+import AuthScreen from './pages/auth/AuthScreen';
 
-const AuthScreen = React.lazy(() => import('./pages/auth/AuthScreen'));
 const DashboardLayout = React.lazy(() => import('./components/layout/DashboardLayout'));
 const Dashboard = React.lazy(() => import('./pages/shared/Dashboard'));
 const StockLedger = React.lazy(() => import('./pages/shared/StockLedger'));

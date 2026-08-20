@@ -13,10 +13,10 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@sentry/react": "^10.65.0",
-    "@supabase/supabase-js": "^2.97.0",
+    "@supabase/supabase-js": "^2.112.3",
     "@tailwindcss/vite": "^4.3.2",
     "canvas-confetti": "^1.9.4",
+    "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "file-saver": "^2.0.5",
     "framer-motion": "^12.42.2",

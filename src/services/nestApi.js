@@ -55,6 +55,11 @@ async function request(method, path, body, isFormData = false) {
 }
 
 export const nestApi = {
+  // JANGAN DIPAKAI: dead code — no caller anywhere in the app (verified by
+  // reference search, analysis Bagian 3.3). This proxies to a separate NestJS
+  // backend (`/api/pos/sync`), not the active `processPOSSync` path in
+  // api.js, so its behavior may have diverged. Do not wire this up without
+  // first confirming what that endpoint actually does to stock.
   async syncPos(file, filename) {
     const fd = new FormData();
     fd.append('file', file);

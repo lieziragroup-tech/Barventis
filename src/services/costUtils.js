@@ -137,22 +137,15 @@ export const calculateHppPercentage = (totalPemakaian, totalPenjualan) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════
-// Recipe/HPP pricing — per Panduan_Kartu_Resep_HPP.md (2026-08), refined 2026-08
-// per follow-up instruction: rounding now defaults to the nearest whole rupiah
-// (not forced into 500/1000/2000 buckets), and there's an additional optional
-// "Penyesuaian Manual" (manual price adjustment) applied AFTER rounding — a
-// free-form Rp amount (+/-) for fine-tuning to a psychological price point,
-// which then feeds into the actual Food Cost % (computed off the adjusted
-// final price, not the raw/rounded-only one).
-//
-// BUSINESS RULE CHANGE: Fix Cost % used to be hardcoded at 5% everywhere in
-// the codebase with no way to change it. It's now a PER-RECIPE editable
-// value (5% stays the default for a brand-new recipe). This file is the
-// single source of truth for the whole formula — every place that computes
-// a recipe's Fix Cost/Basic Cost/Selling Price (Recipes.jsx, api.js
-// createRecipe/updateRecipe/bulkImportRecipes/recalculateAllRecipes,
-// reportGenerator.js) must call this instead of re-deriving the formula
-// inline, so a future spec change only needs to happen in one place.
+// RECIPE PRICING ENGINE (merged from barventis-vercel-repo)
+// Formula: Subtotal -> Fix Cost (per-recipe %) -> Basic Cost ->
+// Selling Price (raw, from target Food Cost %) -> rounded -> + manual
+// adjustment -> Selling Price (final) -> actual Food Cost % at that price.
+// This file is the single source of truth for the whole formula — every
+// place that computes a recipe's Fix Cost/Basic Cost/Selling Price
+// (Recipes.jsx, api.js createRecipe/updateRecipe/bulkImportRecipes/
+// recalcAllRecipeCosts, reportGenerator.js) must call this instead of
+// re-deriving the formula inline.
 // ═══════════════════════════════════════════════════════════════════
 
 export const DEFAULT_FIX_COST_PCT = 0.05;
@@ -166,8 +159,7 @@ export const DEFAULT_PRICE_ADJUSTMENT = 0;
 /**
  * Round a raw selling price to the nearest `increment`, in the given
  * `direction` ('up' or 'down'). With the default increment of 1, this is
- * just "round to the nearest whole rupiah" (no decimals). Still matches the
- * original spec doc's worked example when called with increment=2000:
+ * just "round to the nearest whole rupiah" (no decimals).
  * roundSellingPrice(39361.45, 'down', 2000) === 38000.
  */
 export function roundSellingPrice(rawPrice, direction = DEFAULT_ROUNDING_DIRECTION, increment = DEFAULT_ROUNDING_INCREMENT) {
@@ -186,16 +178,14 @@ export function roundSellingPrice(rawPrice, direction = DEFAULT_ROUNDING_DIRECTI
  *   -> Food Cost % Aktual (basic_cost / Selling Price final)
  *
  * @param {object} params
- * @param {number} params.subtotal - SUM(Amount) of all ingredients (already computed
- *        by the caller via calculateIngredientCost per ingredient)
- * @param {number} params.fixCostPct - defaults to DEFAULT_FIX_COST_PCT (5%) for new recipes
- * @param {number} params.foodCostPct - target Food Cost % (required — no silent default;
- *        pass 0 explicitly if genuinely not set yet, sellingPriceRaw will come back 0)
+ * @param {number} params.subtotal - SUM(Amount) of all ingredients
+ * @param {number} params.fixCostPct - defaults to DEFAULT_FIX_COST_PCT (5%)
+ * @param {number} params.foodCostPct - target Food Cost % (pass 0 explicitly
+ *        if not set yet; sellingPriceRaw will come back 0)
  * @param {string} params.roundingDirection - 'up' | 'down', defaults to 'down'
  * @param {number} params.roundingIncrement - defaults to 1 (nearest whole rupiah)
- * @param {number} params.priceAdjustment - optional manual Rp nudge (+/-) applied
- *        after rounding, defaults to 0. Not itself rounded — if you want a clean
- *        final number, put a round number here too.
+ * @param {number} params.priceAdjustment - optional manual Rp nudge (+/-)
+ *        applied after rounding, defaults to 0.
  */
 export function computeRecipeCosts({
   subtotal,
@@ -218,8 +208,7 @@ export function computeRecipeCosts({
     : 0;
   const sellingPriceFinal = sellingPriceRounded > 0 ? sellingPriceRounded + adjustment : 0;
   // Reality-check ratio using the price actually charged (post-adjustment),
-  // not the pre-adjustment target — this is what the recipe will ACTUALLY
-  // run at if the suggested + adjusted price is applied.
+  // not the pre-adjustment target.
   const actualFoodCostPctAtFinalPrice = sellingPriceFinal > 0 ? basicCost / sellingPriceFinal : 0;
 
   return {

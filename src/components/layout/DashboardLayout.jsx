@@ -2,10 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  LogOut, Bell, AlertTriangle, X, RefreshCw, Menu,
-  ChevronLeft, LayoutDashboard, ClipboardList, UploadCloud,
-  Utensils, Tag, ShoppingCart, FileText, Boxes, Trash2, Package,
-  Calculator, History, Settings, Archive, Wrench, Building2, Layout, Edit, MonitorSmartphone
+  LogOut, Bell, X, RefreshCw, Menu, 
+  LayoutDashboard, ClipboardList, UploadCloud, 
+  Utensils, Tag, ShoppingCart, FileText, Boxes, Trash2, Package, 
+  Calculator, History, Settings, Archive, Wrench, Building2, Layout, Edit, MonitorSmartphone, BookOpen
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useData } from '../../contexts/DataContext';
@@ -13,107 +13,56 @@ import { api } from '../../services/api';
 import Onboarding from '../Onboarding';
 import AIAssistant from '../AIAssistant';
 import GuidebookModal from '../GuidebookModal';
-import { BookOpen } from 'lucide-react';
 import barventisIcon from '../../assets/barventis-icon.png';
 
-const NavItem = ({ to, exact, label, icon: Icon, collapsed }) => {
+const NavItem = ({ to, exact, label, icon: Icon, isHovered, onClick }) => {
   return (
-    <div style={{ display: 'block', width: '100%' }}>
+    <div style={{ display: 'block', width: '100%', marginBottom: '2px' }}>
       <NavLink
         to={to}
         end={exact}
-        className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-        style={{ textDecoration: 'none', justifyContent: collapsed ? 'center' : 'flex-start' }}
-        title={collapsed ? label : undefined}
+        onClick={onClick}
+        className={({ isActive }) => 
+          `flex items-center px-4 py-2.5 rounded-lg transition-colors duration-200 ${
+            isActive 
+              ? 'bg-[var(--accent-glow)] text-[var(--accent)] font-semibold' 
+              : 'hover:bg-[var(--accent-glow)] text-[var(--text-secondary)] hover:text-[var(--accent)]'
+          }`
+        }
+        style={{ textDecoration: 'none' }}
+        title={!isHovered ? label : undefined}
       >
-        {({ isActive }) => (
-          <>
-            {isActive && <motion.div layoutId="active-bg" className="active-bg" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}
-            {isActive && <motion.div layoutId="active-ind" className="active-ind" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}
-            <div className="nav-item-content" style={{ justifyContent: collapsed ? 'center' : 'flex-start' }}>
-              {Icon && <Icon size={16} style={{ flexShrink: 0 }} />}
-              {!collapsed && (
-                <motion.span
-                  initial={{ opacity: 0, width: 0 }}
-                  animate={{ opacity: 1, width: 'auto' }}
-                  exit={{ opacity: 0, width: 0 }}
-                  style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block' }}
-                >
-                  {label}
-                </motion.span>
-              )}
-            </div>
-          </>
-        )}
+        <div className="min-w-[24px] flex items-center justify-center flex-shrink-0">
+          {Icon && <Icon size={18} />}
+        </div>
+        <span 
+          className="whitespace-nowrap ml-3 text-[0.85rem]"
+          style={{ 
+            opacity: isHovered ? 1 : 0, 
+            transform: isHovered ? 'translateX(0)' : 'translateX(-8px)',
+            transition: 'opacity 0.3s ease, transform 0.3s ease',
+            pointerEvents: isHovered ? 'auto' : 'none'
+          }}
+        >
+          {label}
+        </span>
       </NavLink>
     </div>
   );
 };
 
-const NavGroup = ({ title, defaultOpen = true, collapsed, children }) => {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  const itemVariants = {
-    hidden: { opacity: 0, y: 8 },
-    visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 26 } }
-  };
-
-  if (collapsed) {
-    return (
-      <motion.div variants={itemVariants} className="nav-group" style={{ marginBottom: '4px' }}>
-        <div style={{ height: '1px', background: 'var(--border)', margin: '10px 6px' }} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          {children}
-        </div>
-      </motion.div>
-    );
-  }
-
+const NavGroup = ({ children, isFirst }) => {
   return (
-    <motion.div variants={itemVariants} className="nav-group" style={{ marginBottom: '4px' }}>
-      <div
-        onClick={() => setIsOpen(!isOpen)}
-        style={{
-          padding: '6px 12px',
-          fontSize: '0.65rem',
-          color: 'var(--text-muted)',
-          fontWeight: '600',
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-          cursor: 'pointer',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          userSelect: 'none',
-          borderRadius: '4px',
-          transition: 'color var(--ease)'
-        }}
-        onMouseOver={e => e.currentTarget.style.color = 'var(--text-secondary)'}
-        onMouseOut={e => e.currentTarget.style.color = 'var(--text-muted)'}
-      >
-        {title}
-        <span style={{
-          fontSize: '0.55rem',
-          transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-          transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
-          display: 'inline-block'
-        }}>▾</span>
+    <div className="nav-group mb-1">
+      {!isFirst && (
+        <div className="px-4 my-2">
+          <div className="border-t border-[var(--border)] opacity-50"></div>
+        </div>
+      )}
+      <div className="flex flex-col px-2">
+        {children}
       </div>
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-            style={{ overflow: 'hidden' }}
-          >
-            <div style={{ paddingTop: '2px' }}>
-              {children}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+    </div>
   );
 };
 
@@ -121,9 +70,40 @@ export default function DashboardLayout() {
   const { activeUser, tenantName, logout } = useAuth();
   const { loadingData, stock, refreshData, currentTenant, showToast } = useData();
   const location = useLocation();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 992);
-  const [collapsed, setCollapsed] = useState(false);
+  const navigate = useNavigate();
+
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    // Show onboarding for non-Super-Admin users who haven't dismissed it
+    // this session and have no stock data yet (first-time setup guidance).
+    // Original rar condition checked `activeUser?.role === 'owner'`
+    // (lowercase) — actual role values are 'Admin / Owner' / 'Staff' / etc,
+    // so that comparison never matched anything and onboarding never showed
+    // for anyone. Fixed to match barventis-vercel-repo's working logic.
+    if (!loadingData && activeUser?.role !== 'Super Admin' && activeUser?.role !== 'SuperAdmin') {
+      const hasDismissed = sessionStorage.getItem('barventis_onboarding_dismissed') === 'true';
+      if (stock.length === 0 && !hasDismissed) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setShowOnboarding(true);
+      }
+    }
+  }, [loadingData, stock, activeUser]);
+
   const [showGuidebook, setShowGuidebook] = useState(false);
+  const [showPosNotif, setShowPosNotif] = useState(false);
+
+  useEffect(() => {
+    if (currentTenant?.is_pos_enabled) {
+      const hasSeenNotif = localStorage.getItem(`pos_notif_${currentTenant.id}`);
+      if (!hasSeenNotif) {
+        setShowPosNotif(true);
+        localStorage.setItem(`pos_notif_${currentTenant.id}`, 'true');
+      }
+    }
+  }, [currentTenant?.is_pos_enabled, currentTenant?.id]);
   
   const [showPosSetupModal, setShowPosSetupModal] = useState(false);
   const [posTaxRate, setPosTaxRate] = useState(11);
@@ -134,29 +114,84 @@ export default function DashboardLayout() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [editProfileName, setEditProfileName] = useState('');
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  
+  const [showNotifications, setShowNotifications] = useState(false);
+
   const userMenuRef = useRef(null);
+  const notifRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
         setShowUserMenu(false);
       }
+      if (notifRef.current && !notifRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // The collapse-to-rail mode is desktop-only; if the window is resized
-  // down to mobile width while collapsed, expand back so the mobile
-  // off-canvas drawer behaves normally.
   useEffect(() => {
     const handleResize = () => {
-      if (window.innerWidth <= 1024) setCollapsed(false);
+      if (window.innerWidth >= 768) {
+        setIsSidebarOpen(false);
+      }
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Role-check logic merged from barventis-vercel-repo (exact match, not
+  // substring match). rar's original `.includes('admin')` check made every
+  // Super Admin ALSO match isOwner (since 'superadmin' contains 'admin'),
+  // bleeding Owner-only nav items into the Super Admin sidebar. The actual
+  // invite flow (TenantAdminPanel.jsx, AuthScreen.jsx) only ever assigns
+  // 'Staff', 'Admin / Owner', or 'Super Admin' / 'SuperAdmin' — so exact
+  // match here is not a behavior regression, it's the bug fix.
+  const isSuperAdmin = activeUser?.role === 'Super Admin' || activeUser?.role === 'SuperAdmin';
+  const isOwner = activeUser?.role === 'Admin / Owner';
+  const isStaff = activeUser?.role === 'Staff';
+  // Fallback kept as '/staff' (rar's original behavior) rather than vercel's
+  // '' for any unrecognized role value, so navigation links never silently
+  // break if a role string doesn't match any of the three above.
+  const basePath = isSuperAdmin ? '/superadmin' : (isOwner ? '/owner' : '/staff');
+
+  const userAvatar = activeUser?.name ? activeUser.name.charAt(0).toUpperCase() : 'U';
+
+  const lowStockItems = stock?.filter(item => {
+    const totalQty = (item.qty_resto || 0) + (item.qty_central || 0);
+    return totalQty <= (item.min_stock || 5);
+  }) || [];
+
+  const notifCount = lowStockItems.length;
+
+  const openProfileModal = () => {
+    setEditProfileName(activeUser?.name || '');
+    setShowProfileModal(true);
+    setShowUserMenu(false);
+  };
+
+  const handleUpdateProfile = async () => {
+    if (!editProfileName.trim()) return;
+    setIsUpdatingProfile(true);
+    try {
+      await api.updateProfile(activeUser?.id, { name: editProfileName });
+      showToast('Profil berhasil diperbarui', 'success');
+      setShowProfileModal(false);
+      setTimeout(() => window.location.reload(), 1000);
+    } catch {
+      showToast('Gagal memperbarui profil', 'error');
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
+  // handleOpenPos was referenced by the "Buka POS" button below but its
+  // definition was missing in the original rar codebase (ReferenceError on
+  // click). Restored from barventis-vercel-repo, which has it correctly —
+  // this is a straight logic fix, the surrounding modal/JSX is unchanged.
   const handleOpenPos = () => {
     if (currentTenant?.pos_tax_rate === undefined || currentTenant?.pos_tax_rate === null) {
       setShowPosSetupModal(true);
@@ -167,345 +202,274 @@ export default function DashboardLayout() {
 
   const handleSavePosSetup = async (e) => {
     e.preventDefault();
+    setIsSavingPosSetup(true);
     try {
-      setIsSavingPosSetup(true);
-      await api.updateTenantSettings({
-        pos_tax_rate: parseFloat(posTaxRate),
-        pos_service_charge: parseFloat(posServiceCharge)
+      await api.updateTenantSettings({ 
+        pos_tax_rate: parseFloat(posTaxRate), 
+        pos_service_charge: parseFloat(posServiceCharge) 
       });
-      showToast('Pengaturan POS berhasil disimpan.', 'success');
+      showToast('Pengaturan POS berhasil disimpan', 'success');
       setShowPosSetupModal(false);
       refreshData();
-      navigate(`/${basePath}/pos-terminal`);
-    } catch (err) {
-      showToast('Gagal menyimpan pengaturan POS.', 'error');
+    } catch {
+      showToast('Gagal menyimpan pengaturan', 'error');
     } finally {
       setIsSavingPosSetup(false);
     }
   };
 
-  // Close sidebar on route change
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsSidebarOpen(false);
-  }, [location.pathname]);
-  const navigate = useNavigate();
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const notifRef = useRef(null);
-
-  // Close notification panel when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (notifRef.current && !notifRef.current.contains(e.target)) {
-        setShowNotifications(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Calculate low stock items for notifications
-  const lowStockItems = stock.filter(item => {
-    const totalQty = (item.qty_resto || 0) + (item.qty_central || 0);
-    return totalQty < (item.min_stock || 15);
-  });
-  const criticalItems = lowStockItems.filter(item => {
-    const totalQty = (item.qty_resto || 0) + (item.qty_central || 0);
-    return totalQty === 0;
-  });
-  const notifCount = lowStockItems.length;
-
-  useEffect(() => {
-    if (!loadingData && activeUser?.role !== 'Super Admin' && activeUser?.role !== 'SuperAdmin') {
-      const hasDismissed = sessionStorage.getItem('barventis_onboarding_dismissed') === 'true';
-      if (stock.length === 0 && !hasDismissed) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setShowOnboarding(true);
-      }
-    }
-  }, [loadingData, stock, activeUser]);
-
-  const userAvatar = activeUser?.name ? activeUser.name.charAt(0).toUpperCase() : 'G';
-  const userName = activeUser?.name || 'User Resto';
-  const userRole = activeUser?.role || 'Staff';
-
-  const isSuperAdmin = activeUser?.role === 'Super Admin' || activeUser?.role === 'SuperAdmin';
-  const isOwner = activeUser?.role === 'Admin / Owner';
-  const isStaff = activeUser?.role === 'Staff';
-
-  // Helper to determine base path
-  const getBasePath = () => {
-    if (isSuperAdmin) return '/superadmin';
-    if (isOwner) return '/owner';
-    if (isStaff) return '/staff';
-    return '';
-  };
-
-  const basePath = getBasePath();
-
-  const handleUpdateProfile = async () => {
-    if (!editProfileName.trim()) return;
-    setIsUpdatingProfile(true);
-    try {
-      await api.updateProfileName(editProfileName.trim());
-      setShowProfileModal(false);
-      window.location.reload(); // Reload to refresh user info
-    } catch (e) {
-      alert(e.message);
-    } finally {
-      setIsUpdatingProfile(false);
-    }
-  };
-
-  const openProfileModal = () => {
-    setEditProfileName(userName);
-    setShowProfileModal(true);
-    setShowUserMenu(false);
-  };
-
   return (
-    <div className="app-container" style={{ '--sidebar-width': collapsed ? '64px' : '250px' }}>
-      {/* Mobile Overlay */}
-      {isSidebarOpen && (
-        <div 
-          className="mobile-overlay" 
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 40 }}
-          onClick={() => setIsSidebarOpen(false)}
-        />
-      )}
-
-      {/* Sidebar Navigation */}
-      <motion.nav
-        className={`sidebar ${isSidebarOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}
-        initial={{ x: -280, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+    <div className="flex h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] overflow-hidden font-sans relative">
+      {/* Desktop Sidebar Container (Transparent Spacer) */}
+      <div 
+        className="hidden lg:block relative z-50 flex-shrink-0"
+        style={{ width: '80px' }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
       >
-        <div className="logo-container" style={{ 
-          display: 'flex', 
-          flexDirection: collapsed ? 'column' : 'row',
-          justifyContent: collapsed ? 'center' : 'space-between', 
-          alignItems: 'center', 
-          width: '100%', 
-          marginBottom: '20px', 
-          padding: collapsed ? '0' : '0 6px',
-          gap: collapsed ? '16px' : '0'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
-            <img src={barventisIcon} alt="Barventis" className="logo-icon" style={{ flexShrink: 0, width: collapsed ? '28px' : '30px', height: collapsed ? '28px' : '30px' }} />
-            <AnimatePresence>
-              {!collapsed && (
-                <motion.span
-                  className="logo-text"
-                  initial={{ opacity: 0, width: 0 }}
-                  animate={{ opacity: 1, width: 'auto' }}
-                  exit={{ opacity: 0, width: 0 }}
-                  transition={{ duration: 0.2 }}
-                  style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}
+        {/* Clipping Mask (Absolute) */}
+        <motion.div 
+          initial={false}
+          animate={{ 
+            width: isHovered ? 280 : 80,
+            boxShadow: isHovered ? "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)" : "none"
+          }}
+          transition={{ type: "spring", bounce: 0, duration: 0.4 }}
+          className="absolute top-0 left-0 h-screen bg-[var(--bg-secondary)] border-r border-[var(--border)] overflow-hidden z-50"
+        >
+          {/* Static Content Container */}
+          <div className="flex flex-col h-full w-[280px]">
+            <div className="flex items-center justify-between py-5 pl-6 pr-5 mb-2">
+              <div className="flex items-center gap-3 overflow-hidden">
+                <img src={barventisIcon} alt="Barventis" className="w-8 h-8 flex-shrink-0" />
+                <span 
+                  className="font-bold text-lg tracking-wide whitespace-nowrap overflow-hidden"
+                  style={{ 
+                    opacity: isHovered ? 1 : 0,
+                    transition: 'opacity 0.3s ease',
+                    width: '120px'
+                  }}
                 >
                   BARVENTIS
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
-            <button
-              className="sidebar-collapse-btn"
-              onClick={() => setCollapsed(!collapsed)}
-              title={collapsed ? 'Perluas sidebar' : 'Ciutkan sidebar'}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '4px'
-              }}
-            >
-              <ChevronLeft size={16} style={{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', color: 'var(--text-secondary)' }} />
-            </button>
-            <button 
-              className="mobile-close-btn"
-              onClick={() => setIsSidebarOpen(false)}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--text-muted)',
-                cursor: 'pointer',
-                display: 'none',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '4px',
-                borderRadius: 'var(--radius-sm)',
-                transition: 'all var(--ease)'
-              }}
-              onMouseOver={e => e.currentTarget.style.color = 'var(--text-primary)'}
-              onMouseOut={e => e.currentTarget.style.color = 'var(--text-muted)'}
-            >
-              <X size={16} />
-            </button>
-          </div>
-        </div>
-        
-        {!collapsed && (
-          <div style={{
-            padding: '0 8px',
-            fontSize: '0.65rem',
-            color: 'var(--text-muted)',
-            fontWeight: '500',
-            letterSpacing: '0.04em',
-            textTransform: 'uppercase',
-            marginBottom: '16px',
-          }}>
-            {(tenantName || 'SYSTEM').toUpperCase()}
-          </div>
-        )}
+                </span>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 scrollbar-hide">
+              <div className="flex flex-col gap-1">
+                {isSuperAdmin && (
+                  <NavGroup title="Platform" isHovered={isHovered} isFirst={true}>
+                    <NavItem to="/superadmin" exact label="Kelola Tenant" icon={Building2}  isHovered={isHovered} index={1} />
+                    <NavItem to="/superadmin/templates" label="POS Templates" icon={Layout}  isHovered={isHovered} index={2} />
+                    <NavItem to="/superadmin/logs" label="Audit Logs" icon={History}  isHovered={isHovered} index={3} />
+                  </NavGroup>
+                )}
 
-        <motion.div
-          className="nav-links"
-          style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}
-          variants={{
-            visible: { transition: { staggerChildren: 0.04, delayChildren: 0.08 } }
-          }}
-          initial="hidden"
-          whileInView="visible"
-        >
-          {isSuperAdmin && (
-            <NavGroup title="Platform" defaultOpen={true} collapsed={collapsed}>
-              <NavItem to="/superadmin" exact label="Kelola Tenant" icon={Building2} collapsed={collapsed} />
-              <NavItem to="/superadmin/templates" label="POS Templates" icon={Layout} collapsed={collapsed} />
-              <NavItem to="/superadmin/logs" label="Audit Logs" icon={History} collapsed={collapsed} />
-            </NavGroup>
-          )}
-
-          {(isOwner || isStaff) && (
-            <>
-              <NavGroup title="Menu Utama" defaultOpen={true} collapsed={collapsed}>
-                <NavItem to={basePath} exact label="Dashboard" icon={LayoutDashboard} collapsed={collapsed} />
-                <NavItem to={`${basePath}/pos-terminal`} label="Kasir (POS)" icon={MonitorSmartphone} collapsed={collapsed} />
-                <NavItem to={`${basePath}/stock`} label="Stock Ledger" icon={BookOpen} collapsed={collapsed} />
-                <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" icon={ClipboardList} collapsed={collapsed} />
-                <NavItem to={`${basePath}/pos`} label="Upload POS Sales" icon={UploadCloud} collapsed={collapsed} />
-                <NavItem to={`${basePath}/recipes`} label="F&B Recipes" icon={Utensils} collapsed={collapsed} />
-                <NavItem to={`${basePath}/pricing`} label="Menu Pricing" icon={Tag} collapsed={collapsed} />
-              </NavGroup>
-
-              {isOwner && (
-                <NavGroup title="Operasional" defaultOpen={true} collapsed={collapsed}>
-                  <NavItem to={`${basePath}/purchasing`} label="Pembelian & Supplier" icon={ShoppingCart} collapsed={collapsed} />
-                  <NavItem to={`${basePath}/invoicing`} label="Invoicing / PO" icon={FileText} collapsed={collapsed} />
-                  <NavItem to={`${basePath}/opname`} label="Stock Opname" icon={Boxes} collapsed={collapsed} />
-                  <NavItem to={`${basePath}/physical-check`} label="Cek Fisik & Waste" icon={Trash2} collapsed={collapsed} />
-                  <NavItem to={`${basePath}/assets`} label="Asset & Equipment" icon={Package} collapsed={collapsed} />
-                  <NavItem to={`${basePath}/cost-control`} label="Cost Control" icon={Calculator} collapsed={collapsed} />
-                </NavGroup>
-              )}
-
-              <NavGroup title="System" defaultOpen={false} collapsed={collapsed}>
-                {isOwner && (
+                {(isOwner || isStaff) && (
                   <>
-                    <NavItem to={`${basePath}/audit`} label="Audit Logs" icon={History} collapsed={collapsed} />
-                    <NavItem to={`${basePath}/settings`} label="Tenant Settings" icon={Settings} collapsed={collapsed} />
-                    <NavItem to={`${basePath}/backup`} label="Backup & Restore" icon={Archive} collapsed={collapsed} />
+                    <NavGroup title="Menu Utama" isHovered={isHovered} isFirst={!isSuperAdmin}>
+                      <NavItem to={basePath} exact label="Dashboard" icon={LayoutDashboard}  isHovered={isHovered} index={4} />
+                      {currentTenant?.is_pos_enabled && (
+                        <NavItem to={`${basePath}/pos-terminal`} label="Kasir (POS)" icon={MonitorSmartphone}  isHovered={isHovered} index={5} />
+                      )}
+                      <NavItem to={`${basePath}/stock`} label="Stock Ledger" icon={BookOpen}  isHovered={isHovered} index={6} />
+                      <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" icon={ClipboardList}  isHovered={isHovered} index={7} />
+                      <NavItem to={`${basePath}/pos`} label="Upload POS Sales" icon={UploadCloud}  isHovered={isHovered} index={8} />
+                      <NavItem to={`${basePath}/recipes`} label="F&B Recipes" icon={Utensils}  isHovered={isHovered} index={9} />
+                      <NavItem to={`${basePath}/pricing`} label="Menu Pricing" icon={Tag}  isHovered={isHovered} index={10} />
+                    </NavGroup>
+
+                    {isOwner && (
+                      <NavGroup title="Operasional" isHovered={isHovered}>
+                        <NavItem to={`${basePath}/purchasing`} label="Pembelian & Supplier" icon={ShoppingCart}  isHovered={isHovered} index={11} />
+                        <NavItem to={`${basePath}/invoicing`} label="Invoicing / PO" icon={FileText}  isHovered={isHovered} index={12} />
+                        <NavItem to={`${basePath}/opname`} label="Stock Opname" icon={Boxes}  isHovered={isHovered} index={13} />
+                        <NavItem to={`${basePath}/physical-check`} label="Cek Fisik & Waste" icon={Trash2}  isHovered={isHovered} index={14} />
+                        <NavItem to={`${basePath}/assets`} label="Asset & Equipment" icon={Package}  isHovered={isHovered} index={0} />
+                        <NavItem to={`${basePath}/cost-control`} label="Cost Control" icon={Calculator}  isHovered={isHovered} index={1} />
+                      </NavGroup>
+                    )}
+
+                    <NavGroup title="System" isHovered={isHovered}>
+                      {isOwner && (
+                        <>
+                          <NavItem to={`${basePath}/audit`} label="Audit Logs" icon={History}  isHovered={isHovered} index={2} />
+                          <NavItem to={`${basePath}/settings`} label="Tenant Settings" icon={Settings}  isHovered={isHovered} index={3} />
+                          <NavItem to={`${basePath}/backup`} label="Backup & Restore" icon={Archive}  isHovered={isHovered} index={4} />
+                        </>
+                      )}
+                      <NavItem to={`${basePath}/maintenance`} label="Maintenance" icon={Wrench}  isHovered={isHovered} index={5} />
+                    </NavGroup>
                   </>
                 )}
-                <NavItem to={`${basePath}/maintenance`} label="Maintenance" icon={Wrench} collapsed={collapsed} />
-              </NavGroup>
-            </>
-          )}
-        </motion.div>
+              </div>
+            </div>
 
-        <div 
-          className="user-widget" 
-          ref={userMenuRef}
-          style={{ 
-            flexDirection: collapsed ? 'column' : 'row',
-            justifyContent: collapsed ? 'center' : 'flex-start', 
-            padding: collapsed ? '10px 4px' : '10px 12px',
-            gap: collapsed ? '12px' : '10px',
-            cursor: 'pointer',
-            position: 'relative'
-          }}
-          onClick={() => setShowUserMenu(!showUserMenu)}
-        >
-          <div className="user-avatar" title={collapsed ? `${userName} · ${userRole}` : undefined} style={{ width: collapsed ? '28px' : '32px', height: collapsed ? '28px' : '32px', fontSize: collapsed ? '0.65rem' : '0.75rem', flexShrink: 0 }}>{userAvatar}</div>
-          <AnimatePresence>
-            {!collapsed && (
-              <motion.div
-                className="user-info"
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: 'auto' }}
-                exit={{ opacity: 0, width: 0 }}
-                transition={{ duration: 0.2 }}
-                style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}
-              >
-                <span className="user-name">{userName}</span>
-                <span className="user-role">{userRole}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          
-          <AnimatePresence>
-            {showUserMenu && (
-              <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                transition={{ duration: 0.15 }}
-                style={{
-                  position: 'absolute',
-                  bottom: 'calc(100% + 10px)',
-                  left: collapsed ? '10px' : '0',
-                  right: collapsed ? 'auto' : '0',
-                  minWidth: collapsed ? '180px' : '100%',
-                  background: 'var(--bg-primary)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-md)',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                  overflow: 'hidden',
-                  zIndex: 100
-                }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div 
-                  style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
-                  onClick={openProfileModal}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                >
-                  <Edit size={14} color="var(--text-secondary)" />
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 500 }}>Edit Profile</span>
+            <div 
+              className="mt-auto border-t border-[var(--border)] p-4 cursor-pointer relative"
+              ref={userMenuRef}
+              onClick={() => setShowUserMenu(!showUserMenu)}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center font-bold text-sm flex-shrink-0">
+                  {userAvatar}
                 </div>
                 <div 
-                  style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
-                  onClick={logout}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  className="overflow-hidden whitespace-nowrap flex-1"
+                  style={{
+                    opacity: isHovered ? 1 : 0,
+                    transition: 'opacity 0.3s ease'
+                  }}
                 >
-                  <LogOut size={14} color="var(--danger)" />
-                  <span style={{ fontSize: '0.85rem', color: 'var(--danger)', fontWeight: 500 }}>Log Out</span>
+                  <div className="text-sm font-bold text-[var(--text-primary)] mb-0.5">{activeUser?.name || 'User'}</div>
+                  <div className="text-xs text-[var(--text-muted)] font-medium">{tenantName || 'Tenant'}</div>
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              </div>
+
+              <AnimatePresence>
+                {showUserMenu && isHovered && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute bottom-full left-4 right-4 mb-2 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg shadow-lg overflow-hidden z-50"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div 
+                      className="px-4 py-3 flex items-center gap-3 cursor-pointer border-b border-[var(--border)] hover:bg-[var(--bg-secondary)] transition-colors"
+                      onClick={openProfileModal}
+                    >
+                      <Edit size={14} className="text-[var(--text-secondary)]" />
+                      <span className="text-sm font-medium">Edit Profile</span>
+                    </div>
+                    <div 
+                      className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-[var(--bg-secondary)] transition-colors text-red-500"
+                      onClick={logout}
+                    >
+                      <LogOut size={14} />
+                      <span className="text-sm font-medium">Log Out</span>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+      {/* Mobile Sidebar Backdrop */}
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+            onClick={() => setIsSidebarOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+      {/* Mobile Sidebar (Slide-over) */}
+      <motion.div 
+        className="fixed inset-y-0 left-0 w-[280px] bg-[var(--bg-secondary)] shadow-2xl z-50 lg:hidden flex flex-col"
+        drag="x"
+        dragConstraints={{ left: -280, right: 0 }}
+        dragElastic={0.05}
+        onDragEnd={(e, info) => { if (info.offset.x < -75 || info.velocity.x < -500) setIsSidebarOpen(false); }}
+        initial={{ x: '-100%' }}
+        animate={{ x: isSidebarOpen ? 0 : '-100%' }}
+        transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
+      >
+        <div className="flex items-center justify-between p-5 mb-2">
+          <div className="flex items-center gap-3">
+            <img src={barventisIcon} alt="Barventis" className="w-8 h-8" />
+            <span className="font-bold text-lg tracking-wide">BARVENTIS</span>
+          </div>
+          <button onClick={() => setIsSidebarOpen(false)} className="text-[var(--text-muted)] hover:text-white p-1">
+            <X size={20} />
+          </button>
         </div>
-      </motion.nav>
+        
+        <div className="flex-1 overflow-y-auto px-3">
+          <div className="flex flex-col gap-1">
+            {isSuperAdmin && (
+              <NavGroup title="Platform" isHovered={true} isFirst={true}>
+                <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin" exact label="Kelola Tenant" icon={Building2}  isHovered={true} index={6} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin/templates" label="POS Templates" icon={Layout}  isHovered={true} index={7} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin/logs" label="Audit Logs" icon={History}  isHovered={true} index={8} />
+              </NavGroup>
+            )}
+
+            {(isOwner || isStaff) && (
+              <>
+                <NavGroup title="Menu Utama" isHovered={true} isFirst={!isSuperAdmin}>
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" icon={LayoutDashboard}  isHovered={true} index={9} />
+                  {currentTenant?.is_pos_enabled && (
+                    <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos-terminal`} label="Kasir (POS)" icon={MonitorSmartphone}  isHovered={true} index={10} />
+                  )}
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/stock`} label="Stock Ledger" icon={BookOpen}  isHovered={true} index={11} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory" icon={ClipboardList}  isHovered={true} index={12} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos`} label="Upload POS Sales" icon={UploadCloud}  isHovered={true} index={13} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/recipes`} label="F&B Recipes" icon={Utensils}  isHovered={true} index={14} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pricing`} label="Menu Pricing" icon={Tag}  isHovered={true} index={0} />
+                </NavGroup>
+
+                {isOwner && (
+                  <NavGroup title="Operasional" isHovered={true}>
+                    <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/purchasing`} label="Pembelian & Supplier" icon={ShoppingCart}  isHovered={true} index={1} />
+                    <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/invoicing`} label="Invoicing / PO" icon={FileText}  isHovered={true} index={2} />
+                    <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/opname`} label="Stock Opname" icon={Boxes}  isHovered={true} index={3} />
+                    <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/physical-check`} label="Cek Fisik & Waste" icon={Trash2}  isHovered={true} index={4} />
+                    <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/assets`} label="Asset & Equipment" icon={Package}  isHovered={true} index={5} />
+                    <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/cost-control`} label="Cost Control" icon={Calculator}  isHovered={true} index={6} />
+                  </NavGroup>
+                )}
+
+                <NavGroup title="System" isHovered={true}>
+                  {isOwner && (
+                    <>
+                      <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/audit`} label="Audit Logs" icon={History}  isHovered={true} index={7} />
+                      <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/settings`} label="Tenant Settings" icon={Settings}  isHovered={true} index={8} />
+                      <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/backup`} label="Backup & Restore" icon={Archive}  isHovered={true} index={9} />
+                    </>
+                  )}
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/maintenance`} label="Maintenance" icon={Wrench}  isHovered={true} index={10} />
+                </NavGroup>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-auto border-t border-[var(--border)] p-4">
+           <div className="flex items-center gap-3 cursor-pointer" onClick={openProfileModal}>
+              <div className="w-8 h-8 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center font-bold text-sm">
+                {userAvatar}
+              </div>
+              <div className="flex-1 overflow-hidden">
+                 <div className="text-sm font-bold truncate">{activeUser?.name || 'User'}</div>
+                 <div className="text-xs text-[var(--text-muted)] truncate">{activeUser?.role || 'Role'}</div>
+              </div>
+           </div>
+           <button onClick={logout} className="mt-4 w-full flex items-center justify-center gap-2 py-2 rounded-md border border-red-500/20 text-red-400 hover:bg-red-500/10 transition-colors">
+              <LogOut size={16} />
+              <span className="text-sm font-semibold">Log Out</span>
+           </button>
+        </div>
+      </motion.div>
 
       {/* Main Content Area */}
-      <main className="main-content">
-        <header className="content-header">
-          <div className="header-title-sec" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-[var(--bg-primary)]">
+        <header className="flex flex-row items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--bg-primary)]/80 backdrop-blur-md z-30 shrink-0 px-4 py-3 md:px-8 md:py-4">
+          <div className="header-title-sec flex items-center gap-2 md:gap-4 flex-1 min-w-0">
             <button 
               className="btn btn-secondary mobile-menu-btn" 
-              style={{ padding: '8px', borderRadius: 'var(--radius-md)', display: 'none' }}
+              style={{ padding: '6px', borderRadius: 'var(--radius-sm)' }}
               onClick={() => setIsSidebarOpen(true)}
             >
-              <Menu size={20} />
+              <Menu size={18} />
             </button>
             <div>
-              <h1 style={{ marginBottom: '4px' }}>
+              <h1 className="text-sm md:text-xl font-bold truncate m-0">
                 {isSuperAdmin && location.pathname === '/superadmin' && "Platform Tenants Management"}
                 {isSuperAdmin && location.pathname === '/superadmin/templates' && "Global POS Excel Templates"}
                 {isSuperAdmin && location.pathname === '/superadmin/logs' && "Global System Audit Trail"}
@@ -531,7 +495,7 @@ export default function DashboardLayout() {
                   </>
                 )}
               </h1>
-            <p>
+            <p className="hidden md:block text-xs md:text-sm text-[var(--text-secondary)]">
               {isSuperAdmin && location.pathname === '/superadmin' && "Manage client databases, licenses, active/inactive statuses, and seed metrics."}
               {isSuperAdmin && location.pathname === '/superadmin/templates' && "Define global Excel sheet mappings for Moka, Pawoon, Olsera, and other POS engines."}
               {isSuperAdmin && location.pathname === '/superadmin/logs' && "Consolidated platform-wide security audit trails and log tracking."}
@@ -558,175 +522,71 @@ export default function DashboardLayout() {
             </p>
           </div>
           </div>
-          <div className="header-actions" style={{ flexWrap: 'wrap' }}>
+          <div className="header-actions flex items-center gap-2">
             {currentTenant?.is_pos_enabled && (
               <button
-                className="btn"
+                className="btn hover:opacity-80 transition-opacity flex items-center justify-center gap-1.5"
                 onClick={handleOpenPos}
                 title="Buka POS Terminal"
                 style={{
                   background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: 'var(--radius-md)',
-                  padding: '7px 12px', color: '#3b82f6', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, transition: 'all var(--ease)',
+                  padding: '6px 10px', color: '#3b82f6',
+                  fontSize: '0.85rem', fontWeight: 600,
                   flexShrink: 0
                 }}
-                onMouseOver={e => { e.currentTarget.style.background = '#3b82f6'; e.currentTarget.style.color = '#fff'; }}
-                onMouseOut={e => { e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)'; e.currentTarget.style.color = '#3b82f6'; }}
               >
-                <MonitorSmartphone size={15} /> <span className="hide-mobile">POS Terminal</span>
+                <MonitorSmartphone size={16} /> <span className="hidden md:inline">POS Terminal</span>
               </button>
             )}
             <button
-              className="btn"
+              className="btn hover:opacity-80 transition-opacity flex items-center justify-center gap-1.5"
               onClick={() => setShowGuidebook(true)}
               title="Buku Panduan Sistem"
               style={{
                 background: 'var(--accent-glow)', border: '1px solid var(--accent)', borderRadius: 'var(--radius-md)',
-                padding: '7px 12px', color: 'var(--accent)', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, transition: 'all var(--ease)',
+                padding: '6px 10px', color: 'var(--accent)', 
+                fontSize: '0.85rem', fontWeight: 600,
                 flexShrink: 0
               }}
-              onMouseOver={e => { e.currentTarget.style.background = 'var(--accent)'; e.currentTarget.style.color = '#fff'; }}
-              onMouseOut={e => { e.currentTarget.style.background = 'var(--accent-glow)'; e.currentTarget.style.color = 'var(--accent)'; }}
             >
-              <BookOpen size={15} /> <span className="hide-mobile">Buku Panduan</span>
+              <BookOpen size={16} /> <span className="hidden md:inline">Panduan</span>
             </button>
-            {/* Refresh Button */}
+            
             {(isOwner || isStaff) && (
               <button
-                className="btn"
+                className="btn hover:bg-[var(--bg-tertiary)] transition-colors flex items-center justify-center"
                 onClick={refreshData}
                 disabled={loadingData}
                 title="Sinkronisasi ulang data"
                 style={{
                   background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
-                  padding: '7px 10px', color: 'var(--text-secondary)', cursor: loadingData ? 'not-allowed' : 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all var(--ease)',
+                  padding: '6px 8px', color: 'var(--text-secondary)',
                   flexShrink: 0
                 }}
-                onMouseOver={e => e.currentTarget.style.color = 'var(--accent)'}
-                onMouseOut={e => e.currentTarget.style.color = 'var(--text-secondary)'}
               >
-                <RefreshCw size={15} style={{ animation: loadingData ? 'spin 0.8s linear infinite' : 'none' }} />
+                <RefreshCw size={16} style={{ animation: loadingData ? 'spin 0.8s linear infinite' : 'none' }} />
               </button>
             )}
 
-            {/* Notification Bell */}
-            {(isOwner || isStaff) && (
-              <div ref={notifRef} style={{ position: 'relative' }}>
-                <button
-                  onClick={() => setShowNotifications(v => !v)}
-                  title="Notifikasi"
-                  style={{
-                    background: showNotifications ? 'var(--accent-glow)' : 'none',
-                    border: `1px solid ${showNotifications ? 'var(--border-focus)' : 'var(--border)'}`,
-                    borderRadius: 'var(--radius-md)', padding: '7px 10px',
-                    color: notifCount > 0 ? 'var(--danger)' : 'var(--text-secondary)',
-                    cursor: 'pointer', position: 'relative', display: 'flex', alignItems: 'center',
-                    transition: 'all var(--ease)',
-                  }}
-                >
-                  <Bell size={17} />
-                  {notifCount > 0 && (
-                    <span style={{
-                      position: 'absolute', top: '-6px', right: '-6px',
-                      background: 'var(--danger)',                        color: 'var(--text-inverse)',
-                      fontSize: '0.6rem', fontWeight: '800',
-                      borderRadius: 'var(--radius-lg)', minWidth: '16px', height: '16px',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      padding: '0 4px', boxShadow: '0 0 0 2px var(--bg-primary)',
-                    }}>{notifCount > 9 ? '9+' : notifCount}</span>
-                  )}
-                </button>
-
-                {/* Notification Dropdown Panel */}
-                {showNotifications && (
-                  <div style={{
-                    position: 'absolute', top: 'calc(100% + 10px)', right: 0,
-                    width: '340px', maxWidth: 'calc(100vw - 32px)', background: 'var(--bg-secondary)',
-                    border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',
-                    boxShadow: 'var(--shadow-lg)', zIndex: 1000,
-                    overflow: 'hidden',
-                  }}>
-                    <div style={{
-                      padding: '14px 16px', borderBottom: '1px solid var(--border)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    }}>
-                      <span style={{ fontWeight: '700', fontSize: '0.88rem' }}>Notifikasi</span>
-                      <button onClick={() => setShowNotifications(false)}
-                        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                        <X size={14} />
-                      </button>
-                    </div>
-
-                    <div style={{ maxHeight: '360px', overflowY: 'auto' }}>
-                      {lowStockItems.length === 0 ? (
-                        <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                          <span style={{ fontSize: '2rem', display: 'block', marginBottom: '8px' }}>✓</span>
-                          Semua stok dalam kondisi aman
-                        </div>
-                      ) : (
-                        <>
-                          {criticalItems.length > 0 && (
-                            <div style={{ padding: '8px 16px 4px', fontSize: '0.7rem', fontWeight: '700', color: 'var(--danger)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                              Stok Habis ({criticalItems.length})
-                            </div>
-                          )}
-                          {lowStockItems.map(item => {
-                            const totalQty = (item.qty_resto || 0) + (item.qty_central || 0);
-                            const isCritical = totalQty === 0;
-                            return (
-                              <div
-                                key={item.id || item.name}
-                                onClick={() => { navigate(`${basePath}/stock`); setShowNotifications(false); }}
-                                style={{
-                                  display: 'flex', alignItems: 'center', gap: '10px',
-                                  padding: '10px 16px', cursor: 'pointer', transition: 'background 0.15s',
-                                  borderBottom: '1px solid var(--border)',
-                                }}
-                                onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
-                                onMouseOut={e => e.currentTarget.style.background = 'transparent'}
-                              >
-                                <AlertTriangle size={15} style={{ color: isCritical ? 'var(--danger)' : 'var(--warning)', flexShrink: 0 }} />
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontSize: '0.82rem', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {item.name}
-                                  </div>
-                                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                                    {item.category} · Sisa: {totalQty.toFixed(1)} {item.unit}
-                                  </div>
-                                </div>
-                                <span style={{
-                                  fontSize: '0.68rem', fontWeight: '700',
-                                  color: isCritical ? 'var(--danger)' : 'var(--warning)',
-                                  background: isCritical ? 'rgba(255,107,107,0.1)' : 'rgba(252,196,25,0.1)',
-                                  padding: '2px 7px', borderRadius: 'var(--radius-sm)', flexShrink: 0,
-                                }}>
-                                  {isCritical ? 'HABIS' : 'RENDAH'}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </>
-                      )}
-                    </div>
-
-                    <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', textAlign: 'center' }}>
-                      <button
-                        onClick={() => { navigate(`${basePath}/stock`); setShowNotifications(false); }}
-                        style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '0.78rem', cursor: 'pointer', fontWeight: '600' }}
-                      >
-                        Lihat semua stok →
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            <button
+              className="btn hover:bg-[var(--bg-tertiary)] transition-colors flex items-center justify-center relative"
+              onClick={() => setShowNotifications(!showNotifications)}
+              title="Notifikasi Sistem"
+              style={{
+                background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+                padding: '6px 8px', color: 'var(--text-secondary)',
+                flexShrink: 0
+              }}
+            >
+              <Bell size={16} />
+              {notifCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-[var(--bg-primary)]"></span>
+              )}
+            </button>
           </div>
         </header>
 
-        <section>
+        <section className="flex-1 overflow-y-auto relative p-3 md:p-8">
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
@@ -734,6 +594,7 @@ export default function DashboardLayout() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+              className="h-full"
             >
               <Outlet />
             </motion.div>
@@ -772,6 +633,34 @@ export default function DashboardLayout() {
       )}
       
       {/* Onboarding Modal for new tenants */}
+      {/* POS Notification Modal */}
+      {showPosNotif && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(6, 9, 19, 0.88)', backdropFilter: 'blur(8px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div className="glass-card animate-slide-up" style={{ width: '100%', maxWidth: '400px', padding: '32px', textAlign: 'center', position: 'relative' }}>
+            <button onClick={() => setShowPosNotif(false)} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+              <X size={20} />
+            </button>
+            <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+              <MonitorSmartphone size={32} />
+            </div>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '12px' }}>POS Terminal Aktif!</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: '24px' }}>
+              Modul Point of Sale (Kasir) internal kini telah aktif dan tersedia di sidebar kiri. Anda dapat langsung menggunakannya untuk mencatat transaksi penjualan.
+            </p>
+            <button 
+              className="btn premium-btn-primary" 
+              style={{ width: '100%', padding: '12px', fontSize: '0.9rem', justifyContent: 'center', color: '#ffffff', borderRadius: 'var(--radius-md)' }}
+              onClick={() => {
+                setShowPosNotif(false);
+                navigate(`/${activeUser?.role === 'Super Admin' ? 'superadmin' : 'dashboard'}/pos-terminal`);
+              }}
+            >
+              Buka POS Terminal
+            </button>
+          </div>
+        </div>
+      )}
+
       {showOnboarding && (
         <Onboarding
           tenantName={tenantName}

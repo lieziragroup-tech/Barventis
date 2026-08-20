@@ -181,10 +181,13 @@ export default function BackupCenter() {
       return;
     }
 
-    // BUG-BC-04: api.restoreBackup() does not exist in the API service.
-    // Restore from Supabase JSON backup is a destructive multi-table operation that
-    // must be implemented as a server-side RPC function to be safe and atomic.
-    // For now we surface a clear error rather than silently calling an undefined function.
+    // BUG-BC-04 (merged from barventis-vercel-repo): restore from a Supabase
+    // JSON backup is a destructive multi-table operation that needs a
+    // server-side RPC (`restore_tenant_backup_atomic`) to be atomic and safe.
+    // That RPC does not exist yet in this project's database (confirmed
+    // against the current schema — not in sql_migrations/, not in the live
+    // schema dump). Calling api.restoreBackup() here would just throw at
+    // runtime. Surface a clear message instead of a broken/dangerous action.
     toast.showInfo(
       "Fitur Restore belum tersedia.\n" +
       "Pemulihan dari backup JSON memerlukan fungsi RPC server-side agar atomik dan aman.\n" +
