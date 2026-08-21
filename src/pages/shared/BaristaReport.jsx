@@ -11,7 +11,7 @@ import {
   downloadWorkbook, downloadPDF
 } from '../../services/reportGenerator';
 import {
-  validateMenuMapping, validateRecipeCompleteness, validateUnitConversion
+  validateMenuMapping, validateRecipeCompleteness, validateUnitConversion, validateMaterialPricing
 } from '../../services/validationService';
 
 let _XLSX;
@@ -132,6 +132,7 @@ export default function BaristaReport() {
         menuMapping: validateMenuMapping(filtered.sales || [], data.recipes || []),
         recipeCompleteness: validateRecipeCompleteness(data.recipes || []),
         unitConversion: validateUnitConversion(data.recipes || [], unitConversionMap),
+        materialPricing: validateMaterialPricing(data.materials || []),
       });
     } catch (e) {
       setError(`Gagal memuat data: ${e.message}`);
@@ -470,6 +471,7 @@ export default function BaristaReport() {
               { key: 'menuMapping', title: 'Pemetaan Menu ke Resep', result: validationResults.menuMapping },
               { key: 'recipeCompleteness', title: 'Kelengkapan Bahan Resep', result: validationResults.recipeCompleteness },
               { key: 'unitConversion', title: 'Kecocokan Satuan Resep vs Bahan', result: validationResults.unitConversion },
+              { key: 'materialPricing', title: 'Harga Per-Unit Bahan Baku', result: validationResults.materialPricing },
             ].filter(i => i.result && i.result.level !== 'info');
             if (items.length === 0) {
               return (

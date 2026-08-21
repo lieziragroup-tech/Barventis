@@ -316,7 +316,6 @@ export default function App() {
         <div className="flex items-center gap-2 cursor-pointer shrink-0" onClick={() => setActiveTab("landing")}>
           <img src={barventisIcon} alt="Barventis" className="w-8 h-8 object-contain shrink-0" />
           <span className="text-xl font-serif font-extrabold text-primary tracking-tight whitespace-nowrap">Barventis</span>
-          <span className="hidden xl:inline bg-primary-light text-primary px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">Playground 2.0</span>
         </div>
 
         <nav className="hidden lg:flex items-center gap-4 xl:gap-7 shrink-0">

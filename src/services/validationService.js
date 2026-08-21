@@ -9,6 +9,8 @@
 // hasil validasi terstruktur { level, code, message, meta }.
 // ═══════════════════════════════════════════════════════════════════
 
+import { getUnitPrice } from './costUtils';
+
 const LEVEL = { INFO: 'info', WARNING: 'warning', ERROR: 'error' };
 
 /**
@@ -185,6 +187,36 @@ export function validateDataCompleteness({ daysInMonth, dailyInventories, purcha
   return issues.length === 0
     ? [{ level: LEVEL.INFO, code: 'DATA_COMPLETE', message: 'Semua data manual bulan ini lengkap.' }]
     : issues;
+}
+
+/**
+ * Rule: setiap bahan baku aktif harus punya harga per-unit yang bisa dihitung
+ * (Full Pack terbaca & konsisten dengan Unit-nya — lihat getUnitPrice() di
+ * costUtils.js). Sebelum rule ini ada, bahan dengan Full Pack rusak/tidak
+ * terbaca (misal "1 Carton" tanpa tahu isinya berapa botol) diam-diam
+ * dihitung sebagai Rp 0 di semua HPP resep & laporan yang memakainya, tanpa
+ * peringatan apapun ke user — calculateIngredientCost() sudah menyiapkan
+ * `reason` untuk kasus ini tapi sebelumnya tidak ada pemanggil yang
+ * benar-benar menampilkannya.
+ */
+export function validateMaterialPricing(materials) {
+  const unresolved = [];
+  for (const m of materials || []) {
+    if (m.is_active === false) continue;
+    const { resolved, reason } = getUnitPrice(m);
+    if (!resolved) {
+      unresolved.push({ id: m.id, name: m.name, full_pack: m.full_pack, unit: m.unit, reason });
+    }
+  }
+  if (unresolved.length === 0) {
+    return { level: LEVEL.INFO, code: 'MATERIAL_PRICING_OK', message: 'Semua bahan baku aktif punya harga per-unit yang valid.' };
+  }
+  return {
+    level: LEVEL.ERROR,
+    code: 'MATERIAL_PRICING_UNRESOLVED',
+    message: `${unresolved.length} bahan baku HPP-nya dihitung Rp 0 karena Full Pack tidak terbaca/tidak cocok Unit: ${unresolved.slice(0, 5).map(u => u.name).join(', ')}${unresolved.length > 5 ? ', ...' : ''}. Perbaiki kolom Full Pack (mis. "Carton = 24 pcs") di Database Bahan Baku.`,
+    meta: { unresolved },
+  };
 }
 
 export const ValidationLevel = LEVEL;

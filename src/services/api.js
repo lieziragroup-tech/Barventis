@@ -17,7 +17,7 @@ let activeWhatsappToken = null;
 let activeWhatsappEnabled = false;
 
 // Helper to sanitize search strings for PostgREST .or() filters to prevent injection
-const sanitizePostgrest = (str) => String(str).replace(/[,\.\(\)\"\'\\]/g, ' ').trim();
+const sanitizePostgrest = (str) => String(str).replace(/[,.()"'\\]/g, ' ').trim();
 
 // Helper to get active tenant info — uses cached memory first, falls back to Supabase session (KRITIS-01 fix)
 const getActiveTenantId = async () => {

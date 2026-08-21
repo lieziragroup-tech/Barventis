@@ -117,12 +117,14 @@ export function getUnitPrice(material, unitConversionMap) {
  * parameter used to be).
  */
 export function calculateIngredientCost(material, qtyInUse, recipeUnit, unitConversionMap) {
-  const { unitPrice, resolved, reason } = getUnitPrice(material, unitConversionMap);
+  const { unitPrice, resolved } = getUnitPrice(material, unitConversionMap);
   const qty = parseFloat(qtyInUse ?? 0);
   if (!resolved) {
-    // Fail loud in dev, but never crash a report/import over one bad material —
-    // return 0 and let the caller's validation layer (validationService.js) surface it.
-    // if (typeof console !== 'undefined' && reason) console.warn('[calculateIngredientCost]', reason);
+    // Never crash a report/import over one bad material — return 0. The
+    // human-readable reason is available via getUnitPrice() directly for
+    // callers that want it; validationService.js's validateMaterialPricing()
+    // is the place that actually surfaces this to the user (BaristaReport.jsx's
+    // "Data Quality Validation" panel), so this silent 0 is no longer a dead end.
     return 0;
   }
   return qty * unitPrice;

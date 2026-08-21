@@ -38,7 +38,6 @@ export default function TenantAdminPanel() {
     if (currentTenant) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCompanyName(currentTenant.company_name || '');
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsPosEnabled(!!currentTenant.is_pos_enabled);
     }
     fetchUsers();
@@ -352,7 +351,12 @@ export default function TenantAdminPanel() {
                 {invitations.map(inv => {
                   const isExpired = new Date(inv.expires_at) < new Date();
                   const isActive = !inv.is_used && !isExpired;
-                  const linkUrl = `${window.location.origin}/login?token=${inv.token}&role=Staff`;
+                  // SEC-FIX 2026-08: role is now resolved server-side from
+                  // invitations.invite_role (see api.js registerWithToken),
+                  // so this link no longer needs (or should carry) a &role=
+                  // query param — it was previously hardcoded to 'Staff'
+                  // regardless of what role the invite was actually for.
+                  const linkUrl = `${window.location.origin}/login?token=${inv.token}`;
                   
                   return (
                     <div key={inv.id} style={{

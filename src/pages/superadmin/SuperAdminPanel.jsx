@@ -191,7 +191,6 @@ export default function SuperAdminPanel({ tab }) {
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);

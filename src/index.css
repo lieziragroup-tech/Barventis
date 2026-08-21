@@ -7,9 +7,9 @@
   --font-handwriting: "Caveat", cursive;
   --font-mono: "JetBrains Mono", monospace;
 
-  --color-primary: var(--accent, #2563eb);
-  --color-primary-hover: var(--accent-hover, #1d4ed8);
-  --color-primary-light: var(--accent-glow, rgba(37, 99, 235, 0.08));
+  --color-primary: var(--accent, #059669);
+  --color-primary-hover: var(--accent-hover, #047857);
+  --color-primary-light: var(--accent-glow, rgba(5, 150, 105, 0.08));
   --color-cream: #FDFBF7;
   --color-warm-white: #FAFAF8;
   --color-tertiary: #825100;
@@ -44,11 +44,11 @@ input[type="number"] {
   --text-muted: #8a8580;
   --text-inverse: #ffffff;
 
-  /* ═══ Accent — vibrant blue ═══ */
-  --accent: #2563eb;
-  --accent-glow: rgba(37, 99, 235, 0.08);
-  --accent-hover: #1d4ed8;
-  --accent-text: #1d4ed8;
+  /* ═══ Accent — vibrant green ═══ */
+  --accent: #059669;
+  --accent-glow: rgba(5, 150, 105, 0.08);
+  --accent-hover: #047857;
+  --accent-text: #047857;
 
   /* ═══ Semantic — muted, not neon ═══ */
   --success: #059669;
@@ -70,7 +70,7 @@ input[type="number"] {
   /* ═══ Borders ═══ */
   --border: #e8e5e0;
   --border-light: #f5f3ef;
-  --border-focus: rgba(37, 99, 235, 0.3);
+  --border-focus: rgba(5, 150, 105, 0.3);
 
   /* ═══ Radii ═══ */
   --radius-sm: 8px;

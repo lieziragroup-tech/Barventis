@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { api } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
@@ -15,9 +15,15 @@ export default function AuthScreen({ onAuthSuccess }) {
   // Invite Token States
   const queryParams = new URLSearchParams(window.location.search);
   const inviteToken = queryParams.get('token');
-  const roleFromUrl = queryParams.get('role') || 'Staff';
   const [tokenStatus, setTokenStatus] = React.useState(inviteToken ? 'checking' : 'none');
-  const [inviteRole, setInviteRole] = React.useState(roleFromUrl);
+  // SEC-FIX 2026-08: previously read straight from the URL's `?role=` query
+  // param, which anyone can edit in the address bar. registerWithToken() on
+  // the backend already ignores this and uses the server-side `invite_role`
+  // column instead (see api.js SEC fix), but the UI here still displayed
+  // whatever the URL said — misleading, even though harmless server-side.
+  // Now sourced from the same validated invitation row, so what's shown
+  // always matches what actually gets assigned.
+  const [inviteRole, setInviteRole] = React.useState(null);
 
   React.useEffect(() => {
     if (!inviteToken) return;
@@ -25,7 +31,7 @@ export default function AuthScreen({ onAuthSuccess }) {
       try {
         const { data, error } = await supabase
           .from('invitations')
-          .select('is_used, expires_at')
+          .select('is_used, expires_at, invite_role')
           .eq('token', inviteToken)
           .single();
           
@@ -42,14 +48,14 @@ export default function AuthScreen({ onAuthSuccess }) {
           return;
         }
         
-        setInviteRole(roleFromUrl);
+        setInviteRole(data.invite_role || 'Staff');
         setTokenStatus('valid');
       } catch {
         setTokenStatus('invalid');
       }
     }
     validateToken();
-  }, [inviteToken, roleFromUrl]);
+  }, [inviteToken]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -58,13 +64,14 @@ export default function AuthScreen({ onAuthSuccess }) {
 
     try {
       if (inviteToken) {
-        // Register flow
-        await api.registerWithToken(name, email, password, inviteToken, inviteRole);
+        // Register flow. Role is resolved server-side from the invitation
+        // record (see api.js registerWithToken) — not passed from here.
+        await api.registerWithToken(name, email, password, inviteToken);
         // Clean URL to remove token so reload doesn't trigger register again
         window.history.replaceState({}, document.title, window.location.pathname);
         // Supabase auto-logins after signup if email verification is off
         // But the profile might not be perfectly fetched immediately. We can just alert success.
-        toast.showSuccess(`Registrasi berhasil! Anda sekarang terdaftar sebagai ${inviteRole}.`);
+        toast.showSuccess(`Registrasi berhasil! Anda sekarang terdaftar sebagai ${inviteRole || 'Staff'}.`);
         setTimeout(() => window.location.reload(), 1500);
       } else {
         // Login flow
@@ -123,7 +130,7 @@ export default function AuthScreen({ onAuthSuccess }) {
             letterSpacing: '1px',
             transition: 'all 0.5s ease'
           }}>
-            {inviteToken ? (tokenStatus === 'valid' ? `REGISTRASI ${inviteRole.toUpperCase()}` : 'UNDANGAN TIDAK VALID') : 'BARVENTIS'}
+            {inviteToken ? (tokenStatus === 'valid' ? `REGISTRASI ${(inviteRole || 'STAFF').toUpperCase()}` : 'UNDANGAN TIDAK VALID') : 'BARVENTIS'}
           </h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '6px' }}>
             {inviteToken 

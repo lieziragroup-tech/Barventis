@@ -129,7 +129,7 @@ export default function Invoicing() {
       <style>
         body { font-family: 'Inter', Arial, sans-serif; padding: 40px; color: #1a1a1a; max-width: 800px; margin: 0 auto; }
         .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
-        .brand h1 { font-size: 28px; margin: 0; color: #2563eb; letter-spacing: -0.5px; }
+        .brand h1 { font-size: 28px; margin: 0; color: #059669; letter-spacing: -0.5px; }
         .brand p { margin: 5px 0 0 0; color: #64748b; font-size: 14px; }
         .invoice-details { text-align: right; }
         .invoice-details h2 { margin: 0 0 5px 0; font-size: 20px; color: #0f172a; }

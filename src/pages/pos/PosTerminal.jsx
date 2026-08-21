@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -150,7 +150,7 @@ export default function PosTerminal() {
   };
 
   
-  const loadHistory = async () => {
+  const loadHistory = useCallback(async () => {
     setLoadingHistory(true);
     try {
       const data = await api.getPOSOrders();
@@ -160,7 +160,7 @@ export default function PosTerminal() {
     } finally {
       setLoadingHistory(false);
     }
-  };
+  }, [showError]);
 
   useEffect(() => {
     let isMounted = true;
@@ -170,7 +170,7 @@ export default function PosTerminal() {
       }, 0);
     }
     return () => { isMounted = false; };
-  }, [showHistoryModal]);
+  }, [showHistoryModal, loadHistory]);
 
   
   const handleViewOrder = async (order) => {
@@ -481,7 +481,7 @@ export default function PosTerminal() {
                 
                 
                 <div className="menu-card-info">
-                  <div className="text-[10px] font-bold text-blue-600 mb-1">{menu.category || 'Lainnya'}</div>
+                  <div className="text-[10px] font-bold text-emerald-600 mb-1">{menu.category || 'Lainnya'}</div>
                   <h4 className="menu-name">{menu.menu_name}</h4>
                   <div className="menu-price">{formatPrice(menu.selling_price)}</div>
                   <button className="btn-check-stock" onClick={(e) => { e.stopPropagation(); handleCheckStock(menu); }}>
@@ -612,7 +612,7 @@ export default function PosTerminal() {
               </div>
 
               {loadingHistory ? (
-                <div className="flex justify-center p-8"><Loader2 size={30} className="spin text-blue-500" /></div>
+                <div className="flex justify-center p-8"><Loader2 size={30} className="spin text-emerald-500" /></div>
               ) : filteredHistory.length === 0 ? (
                 <p className="text-center text-gray-500 py-8">Belum ada riwayat transaksi hari ini.</p>
               ) : (
@@ -628,8 +628,8 @@ export default function PosTerminal() {
                           <div className="text-sm text-gray-500">{new Date(order.created_at).toLocaleString('id-ID')} - {order.payment_method}</div>
                         </div>
                         <div className="flex items-center gap-4">
-                          <div className="font-bold text-blue-600">{formatPrice(order.total_amount)}</div>
-                          <button className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded" onClick={(e) => { e.stopPropagation(); handleViewOrder(order); }}>Detail</button>
+                          <div className="font-bold text-emerald-600">{formatPrice(order.total_amount)}</div>
+                          <button className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded" onClick={(e) => { e.stopPropagation(); handleViewOrder(order); }}>Detail</button>
                         </div>
                       </div>
                       
@@ -668,7 +668,7 @@ export default function PosTerminal() {
                                   </tr>
                                   <tr>
                                     <td colSpan="2" className="py-1 text-right font-bold">Total</td>
-                                    <td className="py-1 text-right font-bold text-blue-600">{formatPrice(order.total_amount)}</td>
+                                    <td className="py-1 text-right font-bold text-emerald-600">{formatPrice(order.total_amount)}</td>
                                   </tr>
                                 </tfoot>
 
@@ -706,7 +706,7 @@ export default function PosTerminal() {
                   type="number" 
                   value={taxRate}
                   onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
-                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-blue-500"
+                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-emerald-500"
                   min="0"
                   max="100"
                 />
@@ -717,13 +717,13 @@ export default function PosTerminal() {
                   type="number" 
                   value={serviceCharge}
                   onChange={(e) => setServiceCharge(parseFloat(e.target.value) || 0)}
-                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-blue-500"
+                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-emerald-500"
                   min="0"
                   max="100"
                 />
               </div>
               <button 
-                className={`w-full bg-blue-600 text-white font-bold py-3 rounded-lg flex justify-center items-center gap-2 ${isSavingSettings ? 'opacity-70' : 'hover:bg-blue-700'}`}
+                className={`w-full bg-emerald-600 text-white font-bold py-3 rounded-lg flex justify-center items-center gap-2 ${isSavingSettings ? 'opacity-70' : 'hover:bg-emerald-700'}`}
                 onClick={handleSaveSettings}
                 disabled={isSavingSettings}
               >
@@ -804,7 +804,7 @@ export default function PosTerminal() {
                                 id={`stock-input-${item.id}`}
                               />
                               <button 
-                                className="bg-blue-600 text-white px-2 py-1 rounded text-xs"
+                                className="bg-emerald-600 text-white px-2 py-1 rounded text-xs"
                                 onClick={() => {
                                   const val = document.getElementById(`stock-input-${item.id}`).value;
                                   handleUpdateStockManual(item.id, val);
@@ -849,7 +849,7 @@ export default function PosTerminal() {
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                   placeholder="Opsional"
-                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-blue-500"
+                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-emerald-500"
                 />
               </div>
               <div className="payment-methods">
