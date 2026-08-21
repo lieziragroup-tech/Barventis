@@ -634,8 +634,7 @@ export default function DashboardLayout() {
     )}
   </AnimatePresence>
 </div>           
-          </div>
-        </header>
+</header>
 
         <section className="flex-1 overflow-y-auto relative p-3 md:p-8">
           <AnimatePresence mode="wait">
