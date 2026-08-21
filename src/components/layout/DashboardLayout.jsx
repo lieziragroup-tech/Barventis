@@ -569,72 +569,79 @@ export default function DashboardLayout() {
               </button>
             )}
 
-            <button
-              className="btn hover:bg-[var(--bg-tertiary)] transition-colors flex items-center justify-center relative"
-              onClick={() => setShowNotifications(!showNotifications)}
-              title="Notifikasi Sistem"
-              style={{
-                background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
-                padding: '6px 8px', color: 'var(--text-secondary)',
-                flexShrink: 0
-              }}
-            >
-              <Bell size={16} />
-              {notifCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-[var(--bg-primary)]"></span>
-              )}
-            </button>
-             <AnimatePresence>
-    {showNotifications && (
-      <motion.div
-        initial={{ opacity: 0, y: 10, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 10, scale: 0.95 }}
-        transition={{ duration: 0.15 }}
-        className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden"
-      >
-        {/* Header Notifikasi */}
-        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-sm font-bold text-gray-800">Notifikasi</h3>
-          {notifCount > 0 && (
-            <span className="text-xs font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
-              {notifCount} Baru
-            </span>
-          )}
-        </div>
-        
-        {/* Isi List Notifikasi */}
-        <div className="max-h-[300px] overflow-y-auto">
-          {lowStockItems && lowStockItems.length > 0 ? (
-            <ul className="divide-y divide-gray-100">
-              {lowStockItems.map((item) => (
-                <li key={item.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5 text-red-500">
-                      <Bell size={16} />
+            {/* Bell button + dropdown now share a dedicated `relative` wrapper
+                (with notifRef attached) so the dropdown's `absolute right-0`
+                anchors to this wrapper instead of drifting up to whichever
+                ancestor happens to have positioning — that's what was
+                pinning the panel to the top-right of the whole page. */}
+            <div className="relative" ref={notifRef}>
+              <button
+                className="btn hover:bg-[var(--bg-tertiary)] transition-colors flex items-center justify-center relative"
+                onClick={() => setShowNotifications(!showNotifications)}
+                title="Notifikasi Sistem"
+                style={{
+                  background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+                  padding: '6px 8px', color: 'var(--text-secondary)',
+                  flexShrink: 0
+                }}
+              >
+                <Bell size={16} />
+                {notifCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-[var(--bg-primary)]"></span>
+                )}
+              </button>
+              <AnimatePresence>
+                {showNotifications && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden"
+                  >
+                    {/* Header Notifikasi */}
+                    <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                      <h3 className="text-sm font-bold text-gray-800">Notifikasi</h3>
+                      {notifCount > 0 && (
+                        <span className="text-xs font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                          {notifCount} Baru
+                        </span>
+                      )}
                     </div>
-                    <div>
-                      <p className="text-sm text-gray-800 font-medium">Stok Menipis: {item.name}</p>
-                      <p className="text-xs text-red-600 mt-1">
-                        Sisa {item.qty_resto} {item.unit} (Min: {item.min_stock})
-                      </p>
+                    
+                    {/* Isi List Notifikasi */}
+                    <div className="max-h-[300px] overflow-y-auto">
+                      {lowStockItems && lowStockItems.length > 0 ? (
+                        <ul className="divide-y divide-gray-100">
+                          {lowStockItems.map((item) => (
+                            <li key={item.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+                              <div className="flex items-start gap-3">
+                                <div className="mt-0.5 text-red-500">
+                                  <Bell size={16} />
+                                </div>
+                                <div>
+                                  <p className="text-sm text-gray-800 font-medium">Stok Menipis: {item.name}</p>
+                                  <p className="text-xs text-red-600 mt-1">
+                                    Sisa {item.qty_resto} {item.unit} (Min: {item.min_stock})
+                                  </p>
+                                </div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="px-4 py-8 text-center">
+                          <Bell size={32} className="mx-auto text-gray-300 mb-2" />
+                          <p className="text-sm text-gray-500">Tidak ada notifikasi baru</p>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="px-4 py-8 text-center">
-              <Bell size={32} className="mx-auto text-gray-300 mb-2" />
-              <p className="text-sm text-gray-500">Tidak ada notifikasi baru</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-          )}
-        </div>
-      </motion.div>
-    )}
-  </AnimatePresence>
-</div>           
-</header>
+          </div>
+        </header>
 
         <section className="flex-1 overflow-y-auto relative p-3 md:p-8">
           <AnimatePresence mode="wait">
