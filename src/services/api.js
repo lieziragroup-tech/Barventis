@@ -3429,10 +3429,18 @@ export const api = {
     };
   },
 
-  async factoryReset(tenantId, options = {}) {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) throw new Error('Not authenticated');
+  // SEC-FIX 2026-08: factoryReset() (direct execution) has been removed.
+  // The underlying `factory_reset_atomic` RPC is now REVOKEd from client
+  // roles entirely (see FEATURE_reset_approval_workflow.sql) — it can only
+  // be invoked from inside approve_tenant_reset(), and only after a Super
+  // Admin approves. This closes a real hole: previously any authenticated
+  // user of any role could call factory_reset_atomic directly (e.g. via
+  // devtools) with an arbitrary tenant_id, since the RPC itself never
+  // checked who was calling it or which tenant they belonged to.
 
+  // Owner: submit a reset request (inserts a 'pending' row — nothing is
+  // deleted at this point; requires Super Admin approval).
+  async requestTenantReset(tenantId, options = {}) {
     const {
       resetPos = true,
       resetStockHistory = true,
@@ -3441,7 +3449,7 @@ export const api = {
       resetMaterials = false
     } = options;
 
-    const { error } = await supabase.rpc('factory_reset_atomic', {
+    const { data, error } = await supabase.rpc('request_tenant_reset', {
       p_tenant_id: tenantId,
       p_reset_pos: resetPos,
       p_reset_stock_history: resetStockHistory,
@@ -3451,11 +3459,51 @@ export const api = {
     });
 
     if (error) {
-      console.error('Factory Reset RPC failed:', error);
       if (error.code === 'PGRST202' || error.message.includes('Could not find the function')) {
-        throw new Error('SYSTEM_UPDATE_REQUIRED: Fitur reset memerlukan update database. Silakan jalankan script SQL yang diberikan oleh AI untuk mengaktifkan fungsi ini.');
+        throw new Error('SYSTEM_UPDATE_REQUIRED: Fitur ini memerlukan update database. Jalankan FEATURE_reset_approval_workflow.sql terlebih dahulu.');
       }
-      throw new Error(`Gagal mereset data: ${error.message}`);
+      throw new Error(error.message.replace('AUTH: ', ''));
     }
+    return data; // request id
+  },
+
+  // Owner: list this tenant's own reset requests (pending + history).
+  async getTenantResetRequests(tenantId) {
+    const { data, error } = await supabase
+      .from('tenant_reset_requests')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .order('requested_at', { ascending: false })
+      .limit(20);
+    if (error) throw error;
+    return data || [];
+  },
+
+  // Super Admin: list all reset requests across every tenant.
+  async getAllResetRequests() {
+    const { data, error } = await supabase
+      .from('tenant_reset_requests')
+      .select('*, tenants(company_name, name), requester:requested_by(name, email)')
+      .order('requested_at', { ascending: false })
+      .limit(100);
+    if (error) throw error;
+    return data || [];
+  },
+
+  // Super Admin: approve or reject a pending request. Only on approve does
+  // the actual data deletion happen (server-side, inside the RPC).
+  async reviewTenantResetRequest(requestId, approve, rejectionReason = null) {
+    const { data, error } = await supabase.rpc('approve_tenant_reset', {
+      p_request_id: requestId,
+      p_approve: approve,
+      p_rejection_reason: rejectionReason
+    });
+    if (error) {
+      if (error.code === 'PGRST202' || error.message.includes('Could not find the function')) {
+        throw new Error('SYSTEM_UPDATE_REQUIRED: Fitur ini memerlukan update database. Jalankan FEATURE_reset_approval_workflow.sql terlebih dahulu.');
+      }
+      throw new Error(error.message.replace('AUTH: ', ''));
+    }
+    return data;
   }
 };

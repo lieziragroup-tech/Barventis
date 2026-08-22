@@ -108,7 +108,6 @@ body {
   line-height: 1.6;
 }
 
-
 /* Add subtle noise to the dashboard background to match landing page */
 body::before {
   content: ''; position: fixed; inset: 0; opacity: 0.02;

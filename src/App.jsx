@@ -116,6 +116,7 @@ export default function App() {
           <Route index element={<RouteErrorBoundary><SuperAdminPanel tab="tenants" activeUser={activeUser} /></RouteErrorBoundary>} />
           <Route path="templates" element={<RouteErrorBoundary><SuperAdminPanel tab="templates" activeUser={activeUser} /></RouteErrorBoundary>} />
           <Route path="logs" element={<RouteErrorBoundary><SuperAdminPanel tab="logs" activeUser={activeUser} /></RouteErrorBoundary>} />
+          <Route path="reset-approvals" element={<RouteErrorBoundary><SuperAdminPanel tab="reset-approvals" activeUser={activeUser} /></RouteErrorBoundary>} />
         </Route>
 
         {/* OWNER */}

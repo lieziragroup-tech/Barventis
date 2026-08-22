@@ -24,6 +24,8 @@ export default function TenantAdminPanel() {
     resetRecipes: false,
     resetMaterials: false
   });
+  const [resetRequests, setResetRequests] = useState([]);
+  const [loadingResetRequests, setLoadingResetRequests] = useState(false);
 
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmActionState, setConfirmActionState] = useState(null);
@@ -42,6 +44,7 @@ export default function TenantAdminPanel() {
     }
     fetchUsers();
     fetchInvitations();
+    fetchResetRequests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, currentTenant]);
 
@@ -78,6 +81,19 @@ export default function TenantAdminPanel() {
       setInvitations(data || []);
     } catch (err) {
       console.error(err);
+    }
+  }
+
+  async function fetchResetRequests() {
+    if (!currentTenant) return;
+    try {
+      setLoadingResetRequests(true);
+      const data = await api.getTenantResetRequests(currentTenant.id);
+      setResetRequests(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingResetRequests(false);
     }
   }
 
@@ -143,19 +159,16 @@ export default function TenantAdminPanel() {
   const executeFactoryReset = async () => {
     setShowResetModal(false);
     requestConfirmation(
-      'Konfirmasi Reset Data',
-      `Apakah Anda YAKIN ingin melakukan reset permanen pada data terpilih untuk resto "${currentTenant?.company_name}"? Aksi ini tidak dapat dibatalkan!`,
+      'Ajukan Permintaan Reset Data',
+      `Anda akan MENGAJUKAN reset data terpilih untuk resto "${currentTenant?.company_name}" ke Super Admin. Data BELUM akan terhapus sekarang — baru terhapus setelah Super Admin menyetujui permintaan ini.`,
       async () => {
         try {
           setIsSaving(true);
-          await api.factoryReset(currentTenant.id, resetOptions);
-
-          displayToast('Data berhasil di-reset sesuai opsi.', 'success');
-          setTimeout(() => {
-            window.location.reload();
-          }, 1500);
+          await api.requestTenantReset(currentTenant.id, resetOptions);
+          displayToast('Permintaan reset sudah dikirim. Menunggu persetujuan Super Admin — data belum terhapus.', 'success');
+          fetchResetRequests();
         } catch (err) {
-          displayToast('Gagal mereset data: ' + err.message, 'error');
+          displayToast('Gagal mengajukan reset: ' + err.message, 'error');
         } finally {
           setIsSaving(false);
         }
@@ -671,8 +684,43 @@ export default function TenantAdminPanel() {
             
             <div className="p-5 overflow-y-auto">
               <p className="text-sm text-[var(--text-secondary)] mb-4">
-                Pilih kategori data yang ingin Anda hapus. Ini akan mereset statistik yang bersangkutan menjadi 0.
+                Pilih kategori data yang ingin Anda ajukan untuk dihapus. Permintaan ini akan dikirim ke <strong>Super Admin untuk disetujui</strong> — data Anda <strong>tidak langsung terhapus</strong> saat Anda klik tombol di bawah.
               </p>
+
+              {resetRequests.some(r => r.status === 'pending') && (
+                <div className="mb-4 p-3 rounded-lg border border-[var(--warning)] bg-[rgba(217,119,6,0.08)] flex items-start gap-2">
+                  <Clock size={16} className="text-[var(--warning)] mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-[var(--text-primary)] m-0">
+                    Sudah ada permintaan reset yang masih <strong>menunggu persetujuan Super Admin</strong>. Anda perlu menunggu itu diproses (disetujui/ditolak) sebelum bisa mengajukan permintaan baru.
+                  </p>
+                </div>
+              )}
+
+              {resetRequests.length > 0 && (
+                <div className="mb-4">
+                  <h5 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wide mb-2">
+                    Riwayat Permintaan Terakhir{loadingResetRequests ? ' (memuat...)' : ''}
+                  </h5>
+                  <div className="flex flex-col gap-2">
+                    {resetRequests.slice(0, 5).map(r => (
+                      <div key={r.id} className="flex items-center justify-between p-2 rounded-lg border border-[var(--border)] text-xs">
+                        <span className="text-[var(--text-secondary)]">
+                          {new Date(r.requested_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
+                        </span>
+                        <span className={
+                          r.status === 'pending' ? 'text-[var(--warning)] font-bold' :
+                          r.status === 'executed' ? 'text-[var(--success)] font-bold' :
+                          r.status === 'rejected' ? 'text-[var(--danger)] font-bold' :
+                          r.status === 'failed' ? 'text-[var(--danger)] font-bold' :
+                          'text-[var(--text-muted)]'
+                        }>
+                          {{ pending: 'Menunggu Persetujuan', executed: 'Disetujui & Dieksekusi', rejected: 'Ditolak', failed: 'Gagal Dieksekusi' }[r.status] || r.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="flex flex-col gap-3">
                 <label className="flex items-start gap-3 p-3 rounded-lg border border-[var(--border)] cursor-pointer hover:bg-[var(--bg-tertiary)] transition-colors">
@@ -729,9 +777,10 @@ export default function TenantAdminPanel() {
                 type="button" 
                 className="btn premium-btn-danger px-4"
                 onClick={executeFactoryReset}
-                disabled={!Object.values(resetOptions).some(v => v)}
+                disabled={!Object.values(resetOptions).some(v => v) || resetRequests.some(r => r.status === 'pending')}
+                title={resetRequests.some(r => r.status === 'pending') ? 'Masih ada permintaan yang menunggu persetujuan' : undefined}
               >
-                Eksekusi Reset Terpilih
+                Ajukan Reset ke Super Admin
               </button>
             </div>
           </div>

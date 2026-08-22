@@ -5,7 +5,7 @@ import {
   Play, Pause, Edit3, Plus,
   Trash2, Search, FileSpreadsheet, CheckCircle,
   AlertCircle, Lock, Link as LinkIcon, Users,
-  Database, Activity, ShieldAlert, Eye, Calendar, Percent
+  Database, Activity, ShieldAlert, Eye, Calendar, Percent, Clock
 } from 'lucide-react';
 import { api } from '../../services/api';
 import Pagination from '../../components/shared/Pagination';
@@ -65,6 +65,10 @@ export default function SuperAdminPanel({ tab }) {
   const [templates, setTemplates] = useState([]);
   const [logs, setLogs] = useState([]);
   const [totalLogs, setTotalLogs] = useState(0);
+  const [resetRequests, setResetRequests] = useState([]);
+  const [rejectingRequestId, setRejectingRequestId] = useState(null);
+  const [rejectionReasonInput, setRejectionReasonInput] = useState('');
+  const [processingRequestId, setProcessingRequestId] = useState(null);
 
   // Filter States
   const [tenantFilter, setTenantFilter] = useState('');
@@ -181,6 +185,9 @@ export default function SuperAdminPanel({ tab }) {
         const { data, error } = await supabase.from('pos_templates').select('*').order('created_at', { ascending: false });
         if (error) throw error;
         setTemplates(data || []);
+      } else if (tab === 'reset-approvals') {
+        const data = await api.getAllResetRequests();
+        setResetRequests(data);
       }
     } catch (err) {
       console.error(err);
@@ -441,6 +448,58 @@ export default function SuperAdminPanel({ tab }) {
     }
   };
 
+  // 3b. Factory Reset approval flow — approving is a genuinely destructive,
+  // irreversible action, so it gets an explicit double confirmation
+  // (typed tenant name) rather than a plain window.confirm.
+  const handleApproveReset = async (request) => {
+    const tenantLabel = request.tenants?.company_name || request.tenants?.name || request.tenant_id;
+    const typed = window.prompt(
+      `Anda akan MENYETUJUI penghapusan data untuk resto "${tenantLabel}". Tindakan ini PERMANEN dan TIDAK BISA dibatalkan.\n\nKetik ulang nama resto di atas untuk melanjutkan:`
+    );
+    if (typed === null) return; // cancelled
+    if (typed.trim() !== tenantLabel) {
+      displayToast('Nama resto tidak cocok — persetujuan dibatalkan demi keamanan.', 'error');
+      return;
+    }
+    try {
+      setProcessingRequestId(request.id);
+      const result = await api.reviewTenantResetRequest(request.id, true);
+      if (result?.status === 'executed') {
+        const parts = Object.entries(result.result || {})
+          .filter(([, count]) => count > 0)
+          .map(([table, count]) => `${table}: ${count}`);
+        displayToast(
+          parts.length > 0
+            ? `Reset untuk "${tenantLabel}" berhasil dieksekusi. Baris terhapus — ${parts.join(', ')}.`
+            : `Reset untuk "${tenantLabel}" dieksekusi, tapi tidak ada baris yang terhapus (data mungkin sudah kosong).`,
+          'success'
+        );
+      } else {
+        displayToast(`Reset untuk "${tenantLabel}" GAGAL dieksekusi: ${result?.error || 'unknown error'}`, 'error');
+      }
+      fetchData();
+    } catch (err) {
+      displayToast('Gagal memproses persetujuan: ' + err.message, 'error');
+    } finally {
+      setProcessingRequestId(null);
+    }
+  };
+
+  const handleRejectReset = async (requestId) => {
+    try {
+      setProcessingRequestId(requestId);
+      await api.reviewTenantResetRequest(requestId, false, rejectionReasonInput.trim() || null);
+      displayToast('Permintaan reset ditolak.', 'success');
+      setRejectingRequestId(null);
+      setRejectionReasonInput('');
+      fetchData();
+    } catch (err) {
+      displayToast('Gagal menolak permintaan: ' + err.message, 'error');
+    } finally {
+      setProcessingRequestId(null);
+    }
+  };
+
   // 4. Log Filters and Search
   const filteredLogs = logs; // Filtering is now done server-side
 
@@ -465,6 +524,14 @@ export default function SuperAdminPanel({ tab }) {
     const logins = logs.filter(l => l.action === 'LOGIN').length; // logins on current page
     return { total, logins };
   }, [totalLogs, logs]);
+
+  const resetRequestStats = useMemo(() => {
+    const pending = resetRequests.filter(r => r.status === 'pending').length;
+    const executed = resetRequests.filter(r => r.status === 'executed').length;
+    const rejected = resetRequests.filter(r => r.status === 'rejected').length;
+    const failed = resetRequests.filter(r => r.status === 'failed').length;
+    return { pending, executed, rejected, failed };
+  }, [resetRequests]);
 
   return (
     <div style={{ fontFamily: 'var(--font-sans)', color: colors.textPrimary }}>
@@ -593,6 +660,43 @@ export default function SuperAdminPanel({ tab }) {
             </div>
             <div style={{ fontSize: '1.45rem', fontWeight: 800, color: colors.warning, lineHeight: 1.2 }}>{logStats.logins}</div>
             <div style={{ fontSize: '0.7rem', color: colors.textMuted, marginTop: '2px' }}>Autentikasi sesi aktif tenant</div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'reset-approvals' && (
+        <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+          <div style={{ ...glassCardStyle, padding: '12px 16px', background: 'linear-gradient(135deg, rgba(255,253,250,0.9) 0%, rgba(217,119,6,0.08) 100%)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: colors.textMuted, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Menunggu Persetujuan</span>
+              <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: 'rgba(217,119,6,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Clock size={15} style={{ color: colors.warning }} />
+              </div>
+            </div>
+            <div style={{ fontSize: '1.45rem', fontWeight: 800, color: colors.warning, lineHeight: 1.2 }}>{resetRequestStats.pending}</div>
+            <div style={{ fontSize: '0.7rem', color: colors.textMuted, marginTop: '2px' }}>Butuh tindakan Anda</div>
+          </div>
+
+          <div style={{ ...glassCardStyle, padding: '12px 16px', background: 'linear-gradient(135deg, rgba(255,253,250,0.9) 0%, rgba(5,150,105,0.05) 100%)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: colors.textMuted, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Disetujui & Dieksekusi</span>
+              <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: 'rgba(5,150,105,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <CheckCircle size={15} style={{ color: colors.success }} />
+              </div>
+            </div>
+            <div style={{ fontSize: '1.45rem', fontWeight: 800, color: colors.success, lineHeight: 1.2 }}>{resetRequestStats.executed}</div>
+            <div style={{ fontSize: '0.7rem', color: colors.textMuted, marginTop: '2px' }}>Sepanjang waktu</div>
+          </div>
+
+          <div style={{ ...glassCardStyle, padding: '12px 16px', background: 'linear-gradient(135deg, rgba(255,253,250,0.9) 0%, rgba(220,38,38,0.05) 100%)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: colors.textMuted, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Ditolak / Gagal</span>
+              <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: 'rgba(220,38,38,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <AlertCircle size={15} style={{ color: colors.danger }} />
+              </div>
+            </div>
+            <div style={{ fontSize: '1.45rem', fontWeight: 800, color: colors.danger, lineHeight: 1.2 }}>{resetRequestStats.rejected + resetRequestStats.failed}</div>
+            <div style={{ fontSize: '0.7rem', color: colors.textMuted, marginTop: '2px' }}>Ditolak Super Admin atau error eksekusi</div>
           </div>
         </div>
       )}
@@ -1026,6 +1130,157 @@ export default function SuperAdminPanel({ tab }) {
                   pageSize={PAGE_SIZE} 
                   onPageChange={(newPage) => setPage(newPage)} 
                 />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 4: RESET APPROVALS */}
+        {tab === 'reset-approvals' && (
+          <div>
+            <div style={{ marginBottom: '14px' }}>
+              <h3 style={{ margin: 0, color: colors.primary, fontSize: '1.05rem', fontWeight: 800, letterSpacing: '-0.02em' }}>Persetujuan Reset Data Tenant</h3>
+              <p style={{ margin: '2px 0 12px 0', fontSize: '0.78rem', color: colors.textSecondary }}>
+                Owner mengajukan reset dari panel mereka; data baru benar-benar terhapus setelah Anda menyetujui di sini. Menyetujui adalah tindakan permanen dan tidak bisa dibatalkan.
+              </p>
+            </div>
+
+            {loading && <div style={{ padding: '30px', textAlign: 'center', color: colors.textMuted, fontSize: '0.85rem' }}>Memuat data...</div>}
+
+            {!loading && resetRequests.length === 0 && (
+              <div style={{ padding: '30px', textAlign: 'center', color: colors.textMuted, fontSize: '0.85rem' }}>
+                Belum ada permintaan reset dari tenant manapun.
+              </div>
+            )}
+
+            {!loading && resetRequests.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {resetRequests.map(r => {
+                  const tenantLabel = r.tenants?.company_name || r.tenants?.name || r.tenant_id;
+                  const optionLabels = {
+                    reset_pos: 'Data Kasir (POS)',
+                    reset_stock_history: 'Riwayat Penyesuaian Stok',
+                    reset_purchasing: 'Pembelian & Supplier',
+                    reset_recipes: 'F&B Recipes (HPP)',
+                    reset_materials: 'Master Bahan Baku'
+                  };
+                  const selectedOptions = Object.entries(r.reset_options || {})
+                    .filter(([, v]) => v)
+                    .map(([k]) => optionLabels[k] || k);
+
+                  const statusStyle = {
+                    pending: { bg: colors.warningGlow, fg: colors.warning, label: 'Menunggu Persetujuan' },
+                    executed: { bg: colors.successGlow, fg: colors.success, label: 'Disetujui & Dieksekusi' },
+                    rejected: { bg: colors.dangerGlow, fg: colors.danger, label: 'Ditolak' },
+                    failed: { bg: colors.dangerGlow, fg: colors.danger, label: 'Gagal Dieksekusi' },
+                  }[r.status] || { bg: 'rgba(0,0,0,0.05)', fg: colors.textMuted, label: r.status };
+
+                  return (
+                    <div key={r.id} style={{ ...glassCardStyle, padding: '14px 16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+                        <div style={{ flex: 1, minWidth: '200px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                            <span style={{ fontWeight: 800, color: colors.textPrimary, fontSize: '0.9rem' }}>{tenantLabel}</span>
+                            <span style={{
+                              fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: '999px',
+                              background: statusStyle.bg, color: statusStyle.fg, textTransform: 'uppercase', letterSpacing: '0.03em'
+                            }}>
+                              {statusStyle.label}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: colors.textMuted, marginBottom: '6px' }}>
+                            Diajukan {new Date(r.requested_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
+                            {r.requester?.name ? ` oleh ${r.requester.name}` : ''}
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                            {selectedOptions.map(label => (
+                              <span key={label} style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(0,104,95,0.06)', color: colors.primary, fontWeight: 600 }}>
+                                {label}
+                              </span>
+                            ))}
+                          </div>
+
+                          {r.status === 'executed' && r.result_summary && (
+                            <div style={{ marginTop: '8px', fontSize: '0.7rem', color: colors.textSecondary }}>
+                              Baris terhapus: {
+                                Object.entries(r.result_summary).filter(([, c]) => c > 0).map(([t, c]) => `${t}: ${c}`).join(', ') || 'tidak ada (data sudah kosong)'
+                              }
+                            </div>
+                          )}
+                          {r.status === 'rejected' && r.rejection_reason && (
+                            <div style={{ marginTop: '8px', fontSize: '0.7rem', color: colors.textSecondary, fontStyle: 'italic' }}>
+                              Alasan penolakan: {r.rejection_reason}
+                            </div>
+                          )}
+                          {r.status === 'failed' && r.error_message && (
+                            <div style={{ marginTop: '8px', fontSize: '0.7rem', color: colors.danger }}>
+                              Error: {r.error_message}
+                            </div>
+                          )}
+                        </div>
+
+                        {r.status === 'pending' && (
+                          <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                            <button
+                              onClick={() => handleApproveReset(r)}
+                              disabled={processingRequestId === r.id}
+                              style={{
+                                padding: '7px 14px', borderRadius: '8px', border: 'none',
+                                background: colors.danger, color: '#fff', fontSize: '0.75rem', fontWeight: 700,
+                                cursor: processingRequestId === r.id ? 'wait' : 'pointer', opacity: processingRequestId === r.id ? 0.6 : 1
+                              }}
+                            >
+                              Setujui & Hapus
+                            </button>
+                            <button
+                              onClick={() => { setRejectingRequestId(r.id); setRejectionReasonInput(''); }}
+                              disabled={processingRequestId === r.id}
+                              style={{
+                                padding: '7px 14px', borderRadius: '8px', border: `1px solid ${colors.border}`,
+                                background: 'transparent', color: colors.textSecondary, fontSize: '0.75rem', fontWeight: 700,
+                                cursor: processingRequestId === r.id ? 'wait' : 'pointer'
+                              }}
+                            >
+                              Tolak
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {rejectingRequestId === r.id && (
+                        <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${colors.border}` }}>
+                          <textarea
+                            placeholder="Alasan penolakan (opsional)..."
+                            value={rejectionReasonInput}
+                            onChange={(e) => setRejectionReasonInput(e.target.value)}
+                            style={{ ...inputStyle, minHeight: '60px', resize: 'vertical', marginBottom: '8px' }}
+                          />
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              onClick={() => handleRejectReset(r.id)}
+                              disabled={processingRequestId === r.id}
+                              style={{
+                                padding: '6px 12px', borderRadius: '8px', border: 'none',
+                                background: colors.danger, color: '#fff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
+                              }}
+                            >
+                              Kirim Penolakan
+                            </button>
+                            <button
+                              onClick={() => setRejectingRequestId(null)}
+                              style={{
+                                padding: '6px 12px', borderRadius: '8px', border: `1px solid ${colors.border}`,
+                                background: 'transparent', color: colors.textSecondary, fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
+                              }}
+                            >
+                              Batal
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
