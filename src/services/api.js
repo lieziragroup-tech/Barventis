@@ -1283,8 +1283,15 @@ export const api = {
 
   deleteRecipe: async (id) => {
     const { data: recipe } = await supabase.from('recipes').select('*').eq('id', id).single();
+
+    // Harus hapus dependencies dulu karena tidak ada ON DELETE CASCADE
+    await supabase.from('recipe_ingredients').delete().eq('recipe_id', id);
+    await supabase.from('pos_order_items').delete().eq('recipe_id', id);
+    await supabase.from('pos_transaction_items').delete().eq('recipe_id', id);
+    await supabase.from('recipe_versions').delete().eq('recipe_id', id);
+
     const { error } = await supabase.from('recipes').delete().eq('id', id);
-    
+
     if (error) throw new Error("Gagal menghapus resep: " + error.message);
     await logAudit('DELETE_RECIPE', `Menghapus resep menu: "${recipe.menu_name}" dari database COGS.`);
     return true;
@@ -2714,11 +2721,13 @@ export const api = {
     return { backup };
   },
 
-  deleteBackup: async (filename) => {
+  deleteBackup: async (id) => {
     const tenantId = await getActiveTenantId();
-    const { error } = await supabase.from('backups').delete().eq('filename', filename).eq('tenant_id', tenantId);
+    const { data: backup } = await supabase.from('backups').select('filename').eq('id', id).eq('tenant_id', tenantId).single();
+    if (!backup) throw new Error("Cadangan tidak ditemukan.");
+    const { error } = await supabase.from('backups').delete().eq('id', id).eq('tenant_id', tenantId);
     if (error) throw new Error("Gagal menghapus cadangan: " + error.message);
-    await logAudit('DELETE_BACKUP', `Menghapus arsip cadangan: "${filename}".`);
+    await logAudit('DELETE_BACKUP', `Menghapus arsip cadangan: "${backup.filename}".`);
     return true;
   },
 

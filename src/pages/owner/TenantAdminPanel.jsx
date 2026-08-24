@@ -144,8 +144,13 @@ export default function TenantAdminPanel() {
             .from('users')
             .delete()
             .eq('id', user.id);
-            
-          if (error) throw error;
+
+          if (error) {
+            if (error.code === '23503') {
+              throw new Error('Tidak dapat menghapus pengguna ini karena sudah memiliki riwayat aktivitas (transaksi, opname, dll).');
+            }
+            throw error;
+          }
           displayToast('Pengguna berhasil dihapus.', 'success');
           fetchUsers();
         } catch (err) {
