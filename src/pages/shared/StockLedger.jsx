@@ -9,8 +9,66 @@ import Pagination from '../../components/shared/Pagination';
 let _XLSX;
 const getXLSX = async () => { if (!_XLSX) _XLSX = await import('xlsx'); return _XLSX; };
 import { useData } from '../../contexts/DataContext';
-import { formatIDR } from '../../services/costUtils';
+import { formatIDR, parsePackSize, getPackUnitInfo, parseStructuredFullPack } from '../../services/costUtils';
 import { api } from '../../services/api';
+
+// MANUAL UNIT CONVERSION (2026-08): lets a user say e.g. "1 Carton = 24 pcs"
+// directly in the Add/Edit Material form instead of typing a free-text Full
+// Pack string by hand. Composes `full_pack` into the structured "PackLabel =
+// Qty Unit" form costUtils.js already parses (see getPackUnitInfo/
+// parseStructuredFullPack) — once saved, this reaches Recipe Builder, Cost
+// Control, and Waste (Daily Inventory) automatically, since all of them
+// already read `full_pack`/`unit` off the same material row. Left blank,
+// nothing changes: the plain "Full Pack Size" field below still works
+// exactly as before for materials that don't need a pack/content split.
+function KonversiSatuanFields({ packUnit, fullPack, price, onChangeFullPack }) {
+  const structured = parseStructuredFullPack(fullPack);
+  const isi = structured ? String(structured.contentQty) : '';
+  const satuanIsi = structured ? structured.contentUnit : '';
+  const label = (packUnit || '').trim() || 'Pack';
+
+  const compose = (nextIsi, nextSatuan) => {
+    const qty = parseFloat(nextIsi);
+    if (nextIsi === '' || isNaN(qty) || qty <= 0) {
+      onChangeFullPack('');
+      return;
+    }
+    onChangeFullPack(`${label} = ${nextIsi}${nextSatuan ? ' ' + nextSatuan : ''}`);
+  };
+
+  const priceNum = parseFloat(price || 0);
+  const pricePerContent = structured && structured.contentQty > 0 ? priceNum / structured.contentQty : null;
+
+  return (
+    <div className="form-group">
+      <label className="form-label">Konversi Isi (opsional)</label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>1 {label} =</span>
+        <input
+          type="number" min="0" step="any" className="form-control" style={{ width: '90px' }}
+          placeholder="mis. 24"
+          value={isi}
+          onChange={e => compose(e.target.value, satuanIsi)}
+        />
+        <input
+          type="text" list="satuan-isi-list" className="form-control" style={{ width: '110px' }}
+          placeholder="pcs / gr / ml"
+          value={satuanIsi}
+          onChange={e => compose(isi || '1', e.target.value)}
+        />
+        <datalist id="satuan-isi-list">
+          <option value="pcs" /><option value="gr" /><option value="ml" />
+        </datalist>
+      </div>
+      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+        Isi kalau 1 {label} berisi beberapa satuan kecil (mis. 1 Carton = 24 pcs) — supaya resep bisa pakai "pcs" langsung dan HPP-nya tetap benar.
+        {pricePerContent != null && (
+          <> &nbsp;→ {formatIDR(pricePerContent)} / {satuanIsi || 'unit'}.</>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function StockLedger() {
   "use no memo";
@@ -117,15 +175,16 @@ export default function StockLedger() {
   const uniqueSuppliersInStock = useMemo(() => ['ALL', ...new Set(stock.map(item => item.supplier).filter(Boolean))], [stock]);
 
 
-  // Parse full_pack to get conversion
-  const parseFullPack = (fullPack) => {
-    if (!fullPack) return { size: 1, unit: 'pcs' };
-    const match = fullPack.match(/(\d+\.?\d*)\s*(.*)/);
-    if (!match) return { size: 1, unit: 'pcs' };
-    let u = (match[2] || 'pcs').trim().toLowerCase();
-    if (u === 'grm' || u === 'gram') u = 'gr';
-    if (u === 'l' || u === 'liter') u = 'ml';
-    return { size: parseFloat(match[1]), unit: u };
+  // Parse full_pack to get conversion — delegates to the shared costUtils
+  // helpers (same ones the actual HPP/Cost Control math uses) instead of a
+  // separately-maintained regex, so this "Stock (Converted)" display column
+  // can never disagree with what a material's real conversion factor is.
+  // MANUAL UNIT CONVERSION (2026-08): supports the structured "Carton = 24 pcs"
+  // full_pack format, showing e.g. "336 PCS" for 14 Cartons in stock.
+  const parseFullPack = (fullPack, materialUnit) => {
+    const size = parsePackSize(fullPack);
+    const { contentUnit } = getPackUnitInfo(fullPack, materialUnit);
+    return { size: size > 0 ? size : 1, unit: contentUnit || 'pcs' };
   };
 
   // Filtered stock
@@ -285,7 +344,7 @@ export default function StockLedger() {
                   const cQty = item.qty_central || 0;
                   const total = rQty + cQty;
                   const min = item.min_stock || 15;
-                  const pack = parseFullPack(item.full_pack);
+                  const pack = parseFullPack(item.full_pack, item.unit);
                   const convertedTotal = total * pack.size;
                   const convertedUnit = pack.unit.toUpperCase();
 
@@ -493,15 +552,36 @@ export default function StockLedger() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div className="form-group">
                   <label className="form-label">Pack Unit</label>
-                  <select className="form-control" value={editItem.unit} onChange={e => setEditItem({ ...editItem, unit: e.target.value })}>
-                    {['pck', 'Btl', 'Crtn', 'kaleng', 'pcs', 'Galon', 'Kg'].map(u => <option key={u} value={u}>{u}</option>)}
-                  </select>
+                  <input
+                    type="text" list="pack-unit-list-edit" className="form-control"
+                    placeholder="mis. Carton, pck, kaleng"
+                    value={editItem.unit || ''}
+                    onChange={e => {
+                      const newUnit = e.target.value;
+                      // Keep the pack-label side of a structured "X = Y unit"
+                      // Full Pack in sync with this field, so they never disagree.
+                      const structured = parseStructuredFullPack(editItem.full_pack);
+                      const newFullPack = structured
+                        ? `${newUnit} = ${structured.contentQty}${structured.contentUnit ? ' ' + structured.contentUnit : ''}`
+                        : editItem.full_pack;
+                      setEditItem({ ...editItem, unit: newUnit, full_pack: newFullPack });
+                    }}
+                  />
+                  <datalist id="pack-unit-list-edit">
+                    {['pck', 'Btl', 'Carton', 'kaleng', 'pcs', 'Galon', 'Kg', 'gr', 'ml'].map(u => <option key={u} value={u} />)}
+                  </datalist>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Full Pack Size</label>
                   <input type="text" className="form-control" placeholder="e.g. 1000 grm" value={editItem.full_pack || ''} onChange={e => setEditItem({ ...editItem, full_pack: e.target.value })} />
                 </div>
               </div>
+              <KonversiSatuanFields
+                packUnit={editItem.unit}
+                fullPack={editItem.full_pack}
+                price={editItem.new_price ?? editItem.price}
+                onChangeFullPack={fp => setEditItem({ ...editItem, full_pack: fp })}
+              />
               <div className="form-group">
                 <label className="form-label">Min Stock</label>
                 <input type="number" className="form-control" value={editItem.min_stock || 15} onChange={e => setEditItem({ ...editItem, min_stock: parseInt(e.target.value) || 15 })} />
@@ -554,15 +634,34 @@ export default function StockLedger() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div className="form-group">
                   <label className="form-label">Pack Unit</label>
-                  <select className="form-control" value={newItem.unit} onChange={e => setNewItem({ ...newItem, unit: e.target.value })}>
-                    {['pck', 'Btl', 'Crtn', 'kaleng', 'pcs', 'Galon', 'Kg'].map(u => <option key={u} value={u}>{u}</option>)}
-                  </select>
+                  <input
+                    type="text" list="pack-unit-list-add" className="form-control"
+                    placeholder="mis. Carton, pck, kaleng"
+                    value={newItem.unit}
+                    onChange={e => {
+                      const newUnit = e.target.value;
+                      const structured = parseStructuredFullPack(newItem.full_pack);
+                      const newFullPack = structured
+                        ? `${newUnit} = ${structured.contentQty}${structured.contentUnit ? ' ' + structured.contentUnit : ''}`
+                        : newItem.full_pack;
+                      setNewItem({ ...newItem, unit: newUnit, full_pack: newFullPack });
+                    }}
+                  />
+                  <datalist id="pack-unit-list-add">
+                    {['pck', 'Btl', 'Carton', 'kaleng', 'pcs', 'Galon', 'Kg', 'gr', 'ml'].map(u => <option key={u} value={u} />)}
+                  </datalist>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Full Pack Size</label>
                   <input type="text" className="form-control" placeholder="e.g. 1000 grm" value={newItem.full_pack} onChange={e => setNewItem({ ...newItem, full_pack: e.target.value })} />
                 </div>
               </div>
+              <KonversiSatuanFields
+                packUnit={newItem.unit}
+                fullPack={newItem.full_pack}
+                price={newItem.price}
+                onChangeFullPack={fp => setNewItem({ ...newItem, full_pack: fp })}
+              />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div className="form-group">
                   <label className="form-label">Min Stock</label>
@@ -601,7 +700,7 @@ export default function StockLedger() {
           { key: 'category', label: 'Kategori', required: true, type: 'string', description: 'Kategori (Coffee, Milk, dll)', sample: 'Coffee & Tea' },
           { key: 'supplier', label: 'SUPPLIER', required: false, type: 'string', description: 'Nama supplier', sample: 'Vendor A' },
           { key: 'unit', label: 'UNIT', required: true, type: 'string', description: 'Satuan beli (pck, btl, ltr, dll)', sample: 'kg' },
-          { key: 'full_pack', label: 'Full', required: false, type: 'string', description: 'Isi per pack (1000 gr)', sample: '1000 gr' },
+          { key: 'full_pack', label: 'Full', required: false, type: 'string', description: 'Isi per pack. Format bebas (1000 gr) untuk kasus sederhana, atau format terstruktur "PackLabel = Qty Satuan" (mis. "Carton = 24 pcs") kalau 1 pack berisi beberapa satuan kecil — sama dengan kolom Konversi Isi di halaman Materials.', sample: 'Carton = 24 pcs' },
           { key: 'price', label: 'Price', required: true, type: 'number', description: 'Harga beli (angka)', sample: 120000 },
           { key: 'min_stock', label: 'Min Stock', required: false, type: 'number', description: 'Batas alert stok minimum', sample: 5 },
           { key: 'qty_resto', label: 'Stok Awal', required: false, type: 'number', description: 'Stok awal gudang/resto (opsional)', sample: 10 }

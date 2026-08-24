@@ -14,6 +14,7 @@ export default function DailyInventory() {
   const [search, setSearch] = useState('');
   
   const [materials, setMaterials] = useState([]);
+  const [unitConversionMap, setUnitConversionMap] = useState(new Map());
   const [inventoryId, setInventoryId] = useState(null);
   const [itemsData, setItemsData] = useState({});
   const [notification, setNotification] = useState(null);
@@ -37,6 +38,7 @@ export default function DailyInventory() {
         filteredMats = filteredMats.filter(m => !(m.category || '').toLowerCase().includes('beer') && !(m.name || '').toLowerCase().includes('bintang') && !(m.name || '').toLowerCase().includes('bali hai'));
       }
       setMaterials(filteredMats);
+      setUnitConversionMap(await api._loadUnitConversionMap(tenantId));
 
       // 2. Fetch or create inventory record
       const { data: invRecord, error: invErr } = await supabase
@@ -217,7 +219,7 @@ export default function DailyInventory() {
 
         const wasteTxRows = wasteRows.map(({ mat, d }) => {
           const wasteQty = parseFloat(d.waste_qty) || 0;
-          const wasteAmount = calculateIngredientCost(mat, wasteQty, mat.unit);
+          const wasteAmount = calculateIngredientCost(mat, wasteQty, mat.unit, unitConversionMap);
           return {
             tenant_id: tenantId,
             date,
@@ -355,7 +357,7 @@ export default function DailyInventory() {
                       // price, not per-base-unit. That inflated this value by the pack-size
                       // factor for every gr/ml-tracked material. Route through the shared,
                       // pack-size-aware calculator instead (single source of truth in costUtils).
-                      const rp = calculateIngredientCost({ ...mat, price: mat.new_price ?? mat.price }, terpakai, mat.unit);
+                      const rp = calculateIngredientCost({ ...mat, price: mat.new_price ?? mat.price }, terpakai, mat.unit, unitConversionMap);
 
                       return (
                         <tr key={mat.id}>

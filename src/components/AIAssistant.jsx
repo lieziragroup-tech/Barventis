@@ -4,7 +4,7 @@ import { useData } from '../contexts/DataContext';
 import { calculateIngredientCost } from '../services/costUtils';
 
 // Context-aware response engine using real stock/recipe/transaction data
-function buildAIResponse(input, { stock, recipes, transactions }) {
+function buildAIResponse(input, { stock, recipes, transactions, unitConversionMap }) {
   const q = input.toLowerCase().trim();
 
   // --- DATA CONTEXT CALCULATIONS ---
@@ -12,7 +12,7 @@ function buildAIResponse(input, { stock, recipes, transactions }) {
   const criticalStock = stock.filter(i => ((i.qty_resto || 0) + (i.qty_central || 0)) === 0);
   // BUG-FIX 2026-08: was `qty * material.price` directly (per-pack price), same
   // inflation bug as Dashboard.jsx's stockValuation — route through the shared calculator.
-  const stockValuation = stock.reduce((s, i) => s + calculateIngredientCost(i, (i.qty_resto || 0) + (i.qty_central || 0), i.unit), 0);
+  const stockValuation = stock.reduce((s, i) => s + calculateIngredientCost(i, (i.qty_resto || 0) + (i.qty_central || 0), i.unit, unitConversionMap), 0);
 
   const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
   const monthSales = (transactions || [])
@@ -65,8 +65,8 @@ function buildAIResponse(input, { stock, recipes, transactions }) {
   // Valuasi stok
   if (/nilai.*stok|stok.*nilai|valuas|inventory.*value|aset/.test(q)) {
     // BUG-FIX 2026-08: same pack-size issue as stockValuation above.
-    const restoVal = stock.reduce((s, i) => s + calculateIngredientCost(i, i.qty_resto || 0, i.unit), 0);
-    const centralVal = stock.reduce((s, i) => s + calculateIngredientCost(i, i.qty_central || 0, i.unit), 0);
+    const restoVal = stock.reduce((s, i) => s + calculateIngredientCost(i, i.qty_resto || 0, i.unit, unitConversionMap), 0);
+    const centralVal = stock.reduce((s, i) => s + calculateIngredientCost(i, i.qty_central || 0, i.unit, unitConversionMap), 0);
     return `📦 **Valuasi Stok Saat Ini:**\n\n• RESTO: ${fmtIDR(restoVal)}\n• CENTRAL: ${fmtIDR(centralVal)}\n• **Total: ${fmtIDR(stockValuation)}**\n\nTotal ${stock.length} jenis bahan baku aktif terdaftar.`;
   }
 
@@ -132,7 +132,7 @@ const QUICK_CHIPS = [
 ];
 
 export default function AIAssistant() {
-  const { stock = [], recipes = [], transactions = [] } = useData() || {};
+  const { stock = [], recipes = [], transactions = [], unitConversionMap } = useData() || {};
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     { role: 'assistant', text: 'Halo! 👋 Saya asisten AI Barventis yang terkoneksi dengan data inventory Anda secara real-time. Tanya saya tentang stok, HPP, cost control, atau cara kerja sistem.' }
@@ -154,7 +154,7 @@ export default function AIAssistant() {
 
     // Simulate brief "thinking" delay then respond with context-aware answer
     setTimeout(() => {
-      const response = buildAIResponse(text, { stock, recipes, transactions });
+      const response = buildAIResponse(text, { stock, recipes, transactions, unitConversionMap });
       setMessages(prev => [...prev, { role: 'assistant', text: response }]);
       setIsTyping(false);
     }, 700);

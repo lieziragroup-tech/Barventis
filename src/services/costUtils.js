@@ -9,6 +9,17 @@
 // getCostControlReport, reportGenerator) must import `calculateIngredientCost` /
 // `getUnitPrice` from here instead of doing `qty * material.price` inline.
 //
+// MANUAL UNIT CONVERSION (2026-08): materials.full_pack now supports a structured
+// "PackLabel = Qty Unit" form (e.g. "Carton = 24 pcs"), editable via StockLedger.jsx's
+// "Konversi Satuan" fields, on top of the free-text form ("1000 gr") it already
+// supported. getPackUnitInfo() is the single place that reads which side is the
+// purchase/pack unit vs. the recipe-facing content unit; calculateIngredientCost()
+// and convertQtyToStockUnit() both use it so a recipe can express usage in EITHER
+// unit ("1 Carton" or "24 pcs") and get the same cost / stock deduction either way.
+// Because every call site already reads `full_pack`/`unit` off the material object
+// it's handed (from getMaterials()/getRecipes(), which both select('*')), this reaches
+// Recipe Builder, Cost Control, and Waste (Daily Inventory) with no other wiring.
+//
 // ponytail: extract more domain services from api.js when new code needs them
 
 /**
@@ -71,39 +82,104 @@ export function isPackUnitConsistent(unit, fullPack) {
   return hasWeightVolInFullPack;
 }
 
+const normalizeUnitToken = (u) => {
+  let x = (u || '').toString().toLowerCase().trim();
+  if (x === 'grm' || x === 'gram' || x === 'grams') x = 'gr';
+  if (x === 'l' || x === 'liter' || x === 'ltr' || x === 'litre') x = 'ml';
+  return x;
+};
+
 /**
- * Resolve the price-per-base-unit for a material, in this priority order:
+ * MANUAL UNIT CONVERSION (2026-08): parse the structured "PackLabel = Qty Unit"
+ * `full_pack` format (e.g. "Carton = 24 pcs") into its two sides, so callers can
+ * tell apart the PURCHASE/pack-level unit ("Carton" — what `materials.unit` is
+ * normally set to today) from the CONTENT/base unit recipes actually consume in
+ * ("pcs"). Returns null when `fullPack` isn't in the structured form.
+ */
+export function parseStructuredFullPack(fullPack) {
+  const str = String(fullPack || '').trim();
+  if (!str.includes('=')) return null;
+  const [left, right] = str.split('=');
+  const packLabel = left.trim();
+  const rightTrim = right.trim();
+  const m = rightTrim.match(/^([\d.]+)\s*(\D+)?/);
+  if (!m) return null;
+  const contentQty = parseFloat(m[1]);
+  if (isNaN(contentQty) || contentQty <= 0) return null;
+  return { packLabel, contentQty, contentUnit: m[2] ? m[2].trim() : '' };
+}
+
+/**
+ * MANUAL UNIT CONVERSION (2026-08): resolve, for any material, which unit
+ * label is the PACK-level one (what "materials.unit" holds, e.g. "Carton")
+ * and which is the CONTENT/base unit recipes should be able to enter usage
+ * quantities in (e.g. "pcs") — read from the structured `full_pack` format
+ * above when present ("Carton = 24 pcs" -> pack "carton", content "pcs").
+ * Falls back to `materialUnit` for both when `full_pack` is the older
+ * free-text form ("1000 gr") — matching the app's existing single-unit
+ * behavior exactly, so nothing regresses for materials not yet re-entered
+ * with the structured format. This is the ONE place that decides what a
+ * material's "1 Carton = X pcs"-style conversion means — StockLedger.jsx's
+ * Konversi Satuan fields and Recipes.jsx's ingredient-unit dropdown both
+ * read it from here so they never disagree.
+ */
+export function getPackUnitInfo(fullPack, materialUnit) {
+  const structured = parseStructuredFullPack(fullPack);
+  if (structured) {
+    return {
+      packUnitLabel: normalizeUnitToken(structured.packLabel) || normalizeUnitToken(materialUnit),
+      contentUnit: normalizeUnitToken(structured.contentUnit) || normalizeUnitToken(materialUnit)
+    };
+  }
+  const u = normalizeUnitToken(materialUnit);
+  return { packUnitLabel: u, contentUnit: u };
+}
+
+/**
+ * Resolve the price-per-CONTENT-unit for a material, in this priority order:
  *  1. Explicit override from the `unit_conversions` table (unitConversionMap), if supplied.
- *     This is the recommended long-term fix per validationService.js's own design note —
- *     lets a human specify "1 pcs Ice Cube = 5000 gr" explicitly instead of relying on
- *     regex-parsing a free-text Full Pack string.
- *  2. Parsed `full_pack` string, only if dimensionally consistent with `material.unit`.
+ *     Kept for callers/tests that already build this map directly; the manual
+ *     conversion UI added 2026-08 (StockLedger.jsx "Konversi Satuan") instead writes
+ *     the structured `full_pack` format below, since that already reaches every
+ *     call site in the app without any extra plumbing.
+ *  2. Parsed `full_pack` string (structured "PackLabel = Qty Unit" preferred, legacy
+ *     free-text as fallback), only if dimensionally consistent with `material.unit`.
  *  3. Unresolvable -> returns { unitPrice: 0, resolved: false, reason } so callers can
  *     surface a warning instead of silently computing a wrong (or silently zero) cost.
  *
  * @param {object} material - material row (price, full_pack, unit, id)
  * @param {Map<number, number>=} unitConversionMap - optional Map<material_id, factor>
- *        where factor = how many base units (gr/ml/pcs) are in ONE pack, sourced from
- *        the `unit_conversions` table (from_unit = material.unit, to_unit = pack unit).
+ *        where factor = how many content units are in ONE pack.
  */
 export function getUnitPrice(material, unitConversionMap) {
   const price = parseFloat(material?.price ?? 0);
 
   if (unitConversionMap && material?.id != null && unitConversionMap.has(material.id)) {
     const factor = unitConversionMap.get(material.id);
-    if (factor > 0) return { unitPrice: price / factor, resolved: true, source: 'unit_conversions' };
+    if (factor > 0) {
+      return {
+        unitPrice: price / factor,
+        resolved: true,
+        source: 'unit_conversions',
+        packSize: factor,
+        packUnitLabel: normalizeUnitToken(material?.unit),
+        contentUnit: null // unknown from a bare factor — pack-vs-content scaling stays off for this path
+      };
+    }
   }
 
   const packSize = parsePackSize(material?.full_pack);
   const consistent = isPackUnitConsistent(material?.unit, material?.full_pack);
   if (packSize > 0 && consistent) {
-    return { unitPrice: price / packSize, resolved: true, source: 'full_pack' };
+    const { packUnitLabel, contentUnit } = getPackUnitInfo(material?.full_pack, material?.unit);
+    return { unitPrice: price / packSize, resolved: true, source: 'full_pack', packSize, packUnitLabel, contentUnit };
   }
 
   return {
     unitPrice: 0,
     resolved: false,
     source: 'unresolved',
+    packSize: 0,
     reason: !packSize
       ? `Full Pack "${material?.full_pack ?? ''}" pada bahan "${material?.name ?? material?.id}" tidak bisa dibaca (kosong/format tidak dikenali).`
       : `Full Pack "${material?.full_pack}" pada bahan "${material?.name ?? material?.id}" tidak cocok satuannya dengan Unit "${material?.unit}".`,
@@ -111,14 +187,19 @@ export function getUnitPrice(material, unitConversionMap) {
 }
 
 /**
- * Total cost of using `qtyInUse` of `material` in a recipe/transaction, in the
- * material's base unit (should match recipeUnit — mismatches are now flagged via
- * isPackUnitConsistent above rather than silently ignored like the old `recipeUnit`
- * parameter used to be).
+ * Total cost of using `qtyInUse` of `material` in a recipe/transaction.
+ *
+ * MANUAL UNIT CONVERSION (2026-08): `recipeUnit` used to be accepted but never
+ * actually used — `qtyInUse` was always assumed to already be in the material's
+ * CONTENT unit, so picking the PACK-level unit in the ingredient dropdown (e.g.
+ * "Carton" instead of "pcs") silently produced a cost far too low. Now, when
+ * `recipeUnit` matches the material's pack-level label (from getPackUnitInfo,
+ * e.g. materials.full_pack = "Carton = 24 pcs"), qty is scaled up by the pack
+ * size first, so "1 Carton" and "24 pcs" of the same ingredient cost the same.
  */
 export function calculateIngredientCost(material, qtyInUse, recipeUnit, unitConversionMap) {
-  const { unitPrice, resolved } = getUnitPrice(material, unitConversionMap);
-  const qty = parseFloat(qtyInUse ?? 0);
+  const { unitPrice, resolved, packSize, packUnitLabel, contentUnit } = getUnitPrice(material, unitConversionMap);
+  let qty = parseFloat(qtyInUse ?? 0);
   if (!resolved) {
     // Never crash a report/import over one bad material — return 0. The
     // human-readable reason is available via getUnitPrice() directly for
@@ -127,7 +208,42 @@ export function calculateIngredientCost(material, qtyInUse, recipeUnit, unitConv
     // "Data Quality Validation" panel), so this silent 0 is no longer a dead end.
     return 0;
   }
+  const ru = (recipeUnit || '').toString().toLowerCase().trim();
+  if (packUnitLabel && contentUnit && ru && ru === packUnitLabel && ru !== contentUnit) {
+    qty = qty * (packSize || 1);
+  }
   return qty * unitPrice;
+}
+
+/**
+ * MANUAL UNIT CONVERSION (2026-08): convert a usage quantity expressed in
+ * `fromUnit` into the unit `material`'s own stock quantity (qty_resto /
+ * qty_central) is tracked in — needed when DEDUCTING physical stock (as
+ * opposed to calculateIngredientCost(), which only needs a price). Generalizes
+ * the old hardcoded "gr/ml usage against a kg/l-tracked material -> divide by
+ * 1000" special case (previously duplicated ad-hoc in api.js processPosCheckout)
+ * to also cover the new pack/content conversion (e.g. "pcs" usage against a
+ * "Carton"-tracked material via full_pack "Carton = 24 pcs" -> divide by 24).
+ * Returns `{ qty, resolved }`; `resolved:false` means the units couldn't be
+ * related, so the caller should fall back to deducting the raw qty as-is.
+ */
+export function convertQtyToStockUnit(material, qty, fromUnit) {
+  const q = parseFloat(qty ?? 0);
+  const from = normalizeUnitToken(fromUnit);
+  const matUnit = normalizeUnitToken(material?.unit);
+  if (!from || from === matUnit) return { qty: q, resolved: true };
+
+  const { packUnitLabel, contentUnit } = getPackUnitInfo(material?.full_pack, material?.unit);
+  const packSize = parsePackSize(material?.full_pack);
+  if (packSize > 0 && contentUnit && packUnitLabel && from === contentUnit && matUnit === packUnitLabel) {
+    return { qty: q / packSize, resolved: true };
+  }
+
+  const isFromGramMl = ['gr', 'ml'].includes(from);
+  const isMatKgL = ['kg', 'l'].includes(matUnit) || ['kg', 'liter', 'ltr'].includes((material?.unit || '').toLowerCase().trim());
+  if (isFromGramMl && isMatKgL) return { qty: q / 1000, resolved: true };
+
+  return { qty: q, resolved: false };
 }
 
 export const formatIDR = (value) => {

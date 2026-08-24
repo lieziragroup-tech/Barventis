@@ -11,7 +11,7 @@ let _confetti;
 const getConfetti = async () => { if (!_confetti) _confetti = (await import('canvas-confetti')).default; return _confetti; };
 
 export default function StockOpname() {
-  const { stock, showToast, handleCompleteOpname: onCompleteOpname } = useData();
+  const { stock, showToast, handleCompleteOpname: onCompleteOpname, unitConversionMap } = useData();
   const [step, setStep] = useState(1); // 1: Init, 2: Count, 3: Reconcile, 4: Approve & Sign
   const [location, setLocation] = useState('RESTO'); // RESTO, CENTRAL
   const [opnameItems, setOpnameItems] = useState([]);
@@ -159,7 +159,7 @@ export default function StockOpname() {
           variance,
           // BUG-FIX 2026-08: was `variance * price` with price as per-pack — route
           // through the shared calculator (display-only, never persisted; see completeOpname).
-          valAdjustment: calculateIngredientCost(item, variance, item.unit)
+          valAdjustment: calculateIngredientCost(item, variance, item.unit, unitConversionMap)
         };
       });
 
@@ -344,7 +344,7 @@ export default function StockOpname() {
                   const pQty = parseFloat(item.physical_qty);
                   const variance = pQty - item.book_qty;
                   // BUG-FIX 2026-08: same pack-size fix as handleCommitOpname above.
-                  const valAdjustment = calculateIngredientCost(item, variance, item.unit);
+                  const valAdjustment = calculateIngredientCost(item, variance, item.unit, unitConversionMap);
 
                   return (
                     <tr key={item.name}>

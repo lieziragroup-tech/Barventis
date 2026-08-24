@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parsePackSize, isPackUnitConsistent, getUnitPrice, calculateIngredientCost } from '../costUtils';
+import { parsePackSize, isPackUnitConsistent, getUnitPrice, calculateIngredientCost, getPackUnitInfo, convertQtyToStockUnit } from '../costUtils';
 
 describe('parsePackSize', () => {
   it('parses grams', () => {
@@ -128,5 +128,58 @@ describe('calculateIngredientCost', () => {
   it('parses the new structured "X = Y unit" full_pack format end-to-end', () => {
     const material = { price: 240000, unit: 'Carton', full_pack: 'Carton = 24 pcs' };
     expect(calculateIngredientCost(material, 1, 'pcs')).toBe(10000); // 240000 / 24
+  });
+
+  // MANUAL UNIT CONVERSION (2026-08): a recipe can now pick EITHER side of a
+  // structured "Carton = 24 pcs" conversion as its ingredient unit, and both
+  // must price the same physical quantity identically.
+  it('costs the same whether a recipe uses the pack unit or the content unit', () => {
+    const material = { price: 240000, unit: 'Carton', full_pack: 'Carton = 24 pcs' };
+    const costForOneCarton = calculateIngredientCost(material, 1, 'Carton');
+    const costFor24Pcs = calculateIngredientCost(material, 24, 'pcs');
+    expect(costForOneCarton).toBe(240000); // the whole pack's price
+    expect(costForOneCarton).toBe(costFor24Pcs);
+  });
+
+  it('a partial pack-unit qty scales proportionally', () => {
+    const material = { price: 240000, unit: 'Carton', full_pack: 'Carton = 24 pcs' };
+    expect(calculateIngredientCost(material, 0.5, 'carton')).toBe(120000); // half a carton
+  });
+
+  it('legacy (non-structured) materials are unaffected by the pack/content distinction', () => {
+    // No structured "=" in full_pack -> packUnitLabel and contentUnit both
+    // resolve to the same (material.unit) value, so the new pack-vs-content
+    // scaling branch never fires and behavior is byte-for-byte what it was
+    // before this fix.
+    const material = { price: 50000, unit: 'kg', full_pack: '1000 gr' };
+    expect(calculateIngredientCost(material, 500, 'gr')).toBe(25000);
+  });
+});
+
+describe('getPackUnitInfo', () => {
+  it('splits a structured full_pack into pack label and content unit', () => {
+    expect(getPackUnitInfo('Carton = 24 pcs', 'Carton')).toEqual({ packUnitLabel: 'carton', contentUnit: 'pcs' });
+    expect(getPackUnitInfo('Jerigen = 5000 ml', 'Jerigen')).toEqual({ packUnitLabel: 'jerigen', contentUnit: 'ml' });
+  });
+
+  it('falls back to the material unit for both sides on legacy free-text full_pack', () => {
+    expect(getPackUnitInfo('1000 gr', 'gr')).toEqual({ packUnitLabel: 'gr', contentUnit: 'gr' });
+  });
+});
+
+describe('convertQtyToStockUnit', () => {
+  it('converts a content-unit usage qty down to the pack-tracked stock unit', () => {
+    const material = { unit: 'Carton', full_pack: 'Carton = 24 pcs' };
+    expect(convertQtyToStockUnit(material, 24, 'pcs')).toEqual({ qty: 1, resolved: true });
+  });
+
+  it('keeps the legacy gr/ml -> kg/l divide-by-1000 behavior', () => {
+    const material = { unit: 'kg', full_pack: '1000 gr' };
+    expect(convertQtyToStockUnit(material, 500, 'gr')).toEqual({ qty: 0.5, resolved: true });
+  });
+
+  it('is a no-op when the usage unit already matches the stock unit', () => {
+    const material = { unit: 'pcs', full_pack: '1 pcs' };
+    expect(convertQtyToStockUnit(material, 3, 'pcs')).toEqual({ qty: 3, resolved: true });
   });
 });

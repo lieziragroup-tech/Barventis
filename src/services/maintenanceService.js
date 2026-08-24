@@ -63,10 +63,12 @@ export const maintenanceService = {
   // Returns an array of issues: { key, severity, title, detail, count }
   runIntegrityCheck: async () => {
     const issues = [];
+    const { tenantId } = await getSessionContext();
 
-    const [materials, recipes] = await Promise.all([
+    const [materials, recipes, unitConversionMap] = await Promise.all([
       api.getMaterials().catch(() => []),
-      api.getRecipes().catch(() => [])
+      api.getRecipes().catch(() => []),
+      tenantId ? api._loadUnitConversionMap(tenantId) : Promise.resolve(new Map())
     ]);
     const materialMap = new Map(materials.map(m => [m.id, m]));
 
@@ -91,7 +93,7 @@ export const maintenanceService = {
           orphanCount++;
           continue;
         }
-        subtotal += calculateIngredientCost(mat, parseFloat(ing.qty_in_use), ing.unit);
+        subtotal += calculateIngredientCost(mat, parseFloat(ing.qty_in_use), ing.unit, unitConversionMap);
       }
 
       // 2. HPP drift — stored basic_cost differs from freshly recomputed value

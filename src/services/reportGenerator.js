@@ -120,7 +120,7 @@ function formatDateStr(d) {
 }
 
 // ── Generate all report sheets ──
-export async function generateReports(salesData, dbData, XLSX) {
+export async function generateReports(salesData, dbData, XLSX, unitConversionMap = new Map()) {
   const { period } = dbData;
   const daysInMonth = period.lastDay;
   const sheets = {};
@@ -129,13 +129,13 @@ export async function generateReports(salesData, dbData, XLSX) {
   sheets['Penjualan Beverage(ESB)'] = buildPenjualanSheet(salesData, period, XLSX);
 
   // 2. Daily Inventory Barang
-  sheets['Daily Iventory Bahan '] = buildDailyInventorySheet(dbData, daysInMonth, XLSX);
+  sheets['Daily Iventory Bahan '] = buildDailyInventorySheet(dbData, daysInMonth, XLSX, unitConversionMap);
 
   // 3. Daily Inventory Beer
-  sheets['Daily Iventory Beer'] = buildDailyInventoryBeerSheet(salesData, dbData, daysInMonth, XLSX);
+  sheets['Daily Iventory Beer'] = buildDailyInventoryBeerSheet(salesData, dbData, daysInMonth, XLSX, unitConversionMap);
 
   // 4. Pemakaian Harian
-  sheets['Pemakaian Harian'] = buildPemakaianHarianSheet(salesData, dbData, daysInMonth, XLSX);
+  sheets['Pemakaian Harian'] = buildPemakaianHarianSheet(salesData, dbData, daysInMonth, XLSX, unitConversionMap);
 
   // 5. Pembelian Harian
   sheets['Pembelian Harian'] = buildPembelianHarianSheet(dbData, XLSX);
@@ -150,10 +150,10 @@ export async function generateReports(salesData, dbData, XLSX) {
   sheets['COGS All Beverage '] = buildCOGSSheet(dbData, XLSX);
 
   // 9. Stock Opname RESTO
-  sheets['STOCK OPNAME RESTO'] = buildStockOpnameSheet(dbData, 'RESTO', period, XLSX);
+  sheets['STOCK OPNAME RESTO'] = buildStockOpnameSheet(dbData, 'RESTO', period, XLSX, unitConversionMap);
 
   // 10. Stock Opname CENTRAL
-  sheets['STOCK OPNAME CENTRAL'] = buildStockOpnameSheet(dbData, 'CENTRAL', period, XLSX);
+  sheets['STOCK OPNAME CENTRAL'] = buildStockOpnameSheet(dbData, 'CENTRAL', period, XLSX, unitConversionMap);
 
   // 11. SO Glass & Tool
   sheets['SO Glass & Tool'] = buildSOGlassToolSheet(dbData, XLSX);
@@ -162,7 +162,7 @@ export async function generateReports(salesData, dbData, XLSX) {
   sheets['Proses Produksi Bahan'] = buildProsesProduksiSheet(dbData, XLSX);
 
   // 13. Cost Control
-  sheets['COST CONTROL'] = buildCostControlSheet(salesData, dbData, daysInMonth, period, XLSX);
+  sheets['COST CONTROL'] = buildCostControlSheet(salesData, dbData, daysInMonth, period, XLSX, unitConversionMap);
 
   return sheets;
 }
@@ -188,7 +188,7 @@ export function buildIndividualWorkbooks(sheets, XLSX) {
 }
 
 // ── Generate PDF from sheets data ──
-export async function generatePDF(salesData, dbData) {
+export async function generatePDF(salesData, dbData, unitConversionMap = new Map()) {
   const { default: jsPDF } = await import('jspdf');
   await import('jspdf-autotable');
 
@@ -315,7 +315,7 @@ export async function generatePDF(salesData, dbData) {
   // 7. Pemakaian Harian
   {
     const y = addPage('Pemakaian Harian');
-    const dailyUsage = computeDailyUsage(salesData, dbData);
+    const dailyUsage = computeDailyUsage(salesData, dbData, unitConversionMap);
     const rows = Object.entries(dailyUsage).sort().map(([date, u]) => [
       date, fmtNum(u.bahan), fmtNum(u.beer), fmtNum(u.bahan + u.beer)
     ]);
@@ -522,7 +522,7 @@ function buildPenjualanSheet(salesData, period, XLSX) {
   return XLSX.utils.aoa_to_sheet(rows);
 }
 
-function buildDailyInventorySheet(dbData, daysInMonth, XLSX) {
+function buildDailyInventorySheet(dbData, daysInMonth, XLSX, unitConversionMap) {
   const rows = [];
   // Build header spanning all days
   const dateHeaders = ['DATE', '', '', ''];
@@ -580,7 +580,7 @@ function buildDailyInventorySheet(dbData, daysInMonth, XLSX) {
           const terpakai = item.terpakai_qty || 0;
           // BUG-FIX 2026-07: `terpakai * mat.price` used a per-PACK price as if it
           // were per-base-unit. Same root cause as the other 5 fixes in this pass.
-          const price = calculateIngredientCost(mat, terpakai, mat.unit);
+          const price = calculateIngredientCost(mat, terpakai, mat.unit, unitConversionMap);
           row.push(item.in_qty || '', item.out_qty || '', item.full_qty || '', item.broken_qty || '', item.waste_qty || '', terpakai, price);
           totalPakai += terpakai;
         } else {
@@ -595,7 +595,7 @@ function buildDailyInventorySheet(dbData, daysInMonth, XLSX) {
   return XLSX.utils.aoa_to_sheet(rows);
 }
 
-function buildDailyInventoryBeerSheet(salesData, dbData, daysInMonth, XLSX) {
+function buildDailyInventoryBeerSheet(salesData, dbData, daysInMonth, XLSX, unitConversionMap) {
   const rows = [];
 
   // Get beer sales grouped by menu and day
@@ -620,7 +620,7 @@ function buildDailyInventoryBeerSheet(salesData, dbData, daysInMonth, XLSX) {
       // BUG-FIX 2026-08: was `m.price` (per-CARTON) used directly as the fallback
       // per-bottle price — route through the shared calculator to get the price
       // per base unit, same convention as every other fallback in this file.
-      if (!beerMenus[m.name]) beerMenus[m.name] = { price: calculateIngredientCost(m, 1, m.unit) };
+      if (!beerMenus[m.name]) beerMenus[m.name] = { price: calculateIngredientCost(m, 1, m.unit, unitConversionMap) };
     }
   });
 
@@ -668,13 +668,13 @@ function buildDailyInventoryBeerSheet(salesData, dbData, daysInMonth, XLSX) {
   return XLSX.utils.aoa_to_sheet(rows);
 }
 
-function buildPemakaianHarianSheet(salesData, dbData, daysInMonth, XLSX) {
+function buildPemakaianHarianSheet(salesData, dbData, daysInMonth, XLSX, unitConversionMap) {
   const rows = [];
   rows.push(['', 'Data Harga Pemakaian Bahan Beverage ']);
   rows.push(['']);
   rows.push(['', 'Tanggal', 'Pemakaian Bahan', 'Pemakaian Beer', 'Total Pemakaian']);
 
-  const dailyUsage = computeDailyUsage(salesData, dbData);
+  const dailyUsage = computeDailyUsage(salesData, dbData, unitConversionMap);
   let totalBahan = 0, totalBeer = 0;
 
   for (let d = 1; d <= daysInMonth; d++) {
@@ -873,7 +873,7 @@ function buildCOGSSheet(dbData, XLSX) {
   return XLSX.utils.aoa_to_sheet(rows);
 }
 
-function buildStockOpnameSheet(dbData, location, period, XLSX) {
+function buildStockOpnameSheet(dbData, location, period, XLSX, unitConversionMap) {
   const rows = [];
   rows.push(['UMATIS RESTO AND VENUE']);
   rows.push(['BSD CITY, KAVLING TAMAN KOTA BARAT LOT No.II.6, SAMPORA, KEC.CISAUK, KABUPATEN TANGERANG, BANTEN 15345']);
@@ -904,7 +904,7 @@ function buildStockOpnameSheet(dbData, location, period, XLSX) {
       // computeOpnameValue() above but for the STOCK OPNAME sheet's own "Total Price"
       // column specifically — fixing computeOpnameValue alone would NOT have fixed
       // this sheet, since it's a separate inline calculation.
-      const total = calculateIngredientCost(item.materials, qty, item.materials?.unit);
+      const total = calculateIngredientCost(item.materials, qty, item.materials?.unit, unitConversionMap);
       grandTotal += total;
       rows.push([no, item.materials?.name || '', item.materials?.unit || '', price, qty, total]);
     }
@@ -970,7 +970,7 @@ function buildProsesProduksiSheet(dbData, XLSX) {
   return XLSX.utils.aoa_to_sheet(rows);
 }
 
-function buildCostControlSheet(salesData, dbData, daysInMonth, period, XLSX) {
+function buildCostControlSheet(salesData, dbData, daysInMonth, period, XLSX, unitConversionMap) {
   const rows = [];
   rows.push(['']);
 
@@ -1024,10 +1024,10 @@ function buildCostControlSheet(salesData, dbData, daysInMonth, period, XLSX) {
   rows.push([]);
 
   // Stock Opname values
-  const prevRestoVal = computeOpnameValue(dbData.prevOpnameResto);
-  const prevCentralVal = computeOpnameValue(dbData.prevOpnameCentral);
-  const curRestoVal = computeOpnameValue(dbData.opnameResto);
-  const curCentralVal = computeOpnameValue(dbData.opnameCentral);
+  const prevRestoVal = computeOpnameValue(dbData.prevOpnameResto, unitConversionMap);
+  const prevCentralVal = computeOpnameValue(dbData.prevOpnameCentral, unitConversionMap);
+  const curRestoVal = computeOpnameValue(dbData.opnameResto, unitConversionMap);
+  const curCentralVal = computeOpnameValue(dbData.opnameCentral, unitConversionMap);
 
   const prevMonthName = MONTHS_ID[period.month === 1 ? 12 : period.month - 1];
   const curMonthName = MONTHS_ID[period.month];
@@ -1066,7 +1066,7 @@ function groupSalesByDate(sales) {
   return byDate;
 }
 
-function computeDailyUsage(salesData, dbData) {
+function computeDailyUsage(salesData, dbData, unitConversionMap) {
   const result = {};
 
   // From daily inventory items: sum terpakai * price per day
@@ -1078,7 +1078,7 @@ function computeDailyUsage(salesData, dbData) {
       // BUG-FIX 2026-07: `terpakai * price` used a per-PACK price directly — same root
       // cause as the other fixes in this pass. materials.price needs to go through
       // parsePackSize(full_pack) first.
-      const value = calculateIngredientCost(item.materials, terpakai, item.materials?.unit);
+      const value = calculateIngredientCost(item.materials, terpakai, item.materials?.unit, unitConversionMap);
       const cat = (item.materials?.category || '').toLowerCase();
       const isBeer = cat.includes('beer') || cat.includes('bir') || cat.includes('alkohol');
       if (isBeer) {
@@ -1112,7 +1112,7 @@ function computeDailyUsage(salesData, dbData) {
   return result;
 }
 
-function computeOpnameValue(opname) {
+function computeOpnameValue(opname, unitConversionMap) {
   if (!opname?.stock_opname_items) return 0;
   // BUG-FIX 2026-07: `qty * price` treated materials.price as a per-base-unit price —
   // it's actually a per-PACK price. This function feeds Opening/Closing stock valuation
@@ -1121,7 +1121,7 @@ function computeOpnameValue(opname) {
   // pack-size-aware calculator (same one Recipe Builder already used correctly).
   return opname.stock_opname_items.reduce((sum, item) => {
     const qty = item.physical_qty ?? item.book_qty ?? 0;
-    return sum + calculateIngredientCost(item.materials, qty, item.materials?.unit);
+    return sum + calculateIngredientCost(item.materials, qty, item.materials?.unit, unitConversionMap);
   }, 0);
 }
 

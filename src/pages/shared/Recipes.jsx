@@ -4,7 +4,7 @@ import BulkImport from '../../components/BulkImport';
 import Pagination from '../../components/shared/Pagination';
 import { useData } from '../../contexts/DataContext';
 import { api } from '../../services/api';
-import { formatIDR, calculateIngredientCost, parsePackSize, isPackUnitConsistent } from '../../services/costUtils';
+import { formatIDR, calculateIngredientCost, parsePackSize, isPackUnitConsistent, getPackUnitInfo } from '../../services/costUtils';
 
 // Stable client-side id for editable ingredient rows so React keys don't rely on the
 // array index (preserves input focus/state across add/remove/reorder). (LOW #19)
@@ -12,7 +12,7 @@ const rowUid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUU
 const ensureUids = (arr = []) => arr.map(x => ({ ...x, _uid: x._uid ?? rowUid() }));
 
 export default function Recipes() {
-  const { stock, recipes, handleSaveRecipe: onSaveRecipe, handleAddRecipe: onAddRecipe, handleDeleteRecipe: onDeleteRecipe, refreshData, showToast } = useData();
+  const { stock, recipes, handleSaveRecipe: onSaveRecipe, handleAddRecipe: onAddRecipe, handleDeleteRecipe: onDeleteRecipe, refreshData, showToast, unitConversionMap } = useData();
   const [recalculating, setRecalculating] = useState(false);
   const [activeRecipe, setActiveRecipe] = useState(recipes[0] || null);
   const [search, setSearch] = useState('');
@@ -33,19 +33,17 @@ export default function Recipes() {
 
   // Parse full_pack field to extract numeric value and unit.
   // BUG-FIX 2026-07: this used to be a SECOND, separately-maintained regex parser
-  // (diverged from costUtils.parsePackSize on cases like "2 kg" — this one used to
-  // keep the unit as literal 'kg' instead of normalizing to gr, which could make the
-  // unit dropdown below offer the wrong usage unit). Now delegates the numeric parse
-  // to the shared parsePackSize(), and takes the *content* unit from the material's
-  // own `unit` column (gr/ml/pcs) — a much more reliable signal than trying to guess
-  // it back out of the free-text Full Pack string.
+  // (diverged from costUtils.parsePackSize on cases like "2 kg").
+  // MANUAL UNIT CONVERSION (2026-08): now delegates BOTH the numeric size (via
+  // parsePackSize) AND the content-unit determination (via getPackUnitInfo) to
+  // costUtils — the same shared logic calculateIngredientCost() itself uses to
+  // decide pack-vs-content scaling — so this dropdown and the actual HPP math can
+  // never disagree about what "1 Carton = 24 pcs" means for a given material.
   const parseFullPack = (fullPack, materialUnit) => {
     const size = parsePackSize(fullPack);
     const consistent = isPackUnitConsistent(materialUnit, fullPack);
-    let unit = (materialUnit || 'pcs').toLowerCase().trim();
-    if (unit === 'grm' || unit === 'gram' || unit === 'grams') unit = 'gr';
-    if (unit === 'l' || unit === 'liter' || unit === 'ltr') unit = 'ml';
-    return { size: size > 0 && consistent ? size : 0, unit, consistent };
+    const { contentUnit } = getPackUnitInfo(fullPack, materialUnit);
+    return { size: size > 0 && consistent ? size : 0, unit: contentUnit, consistent };
   };
 
   // Build a mapping of inventory items with their pack size info for smart unit selection
@@ -53,26 +51,18 @@ export default function Recipes() {
     const map = {};
     stock.forEach(item => {
       const packInfo = parseFullPack(item.full_pack, item.unit);
-      // Determine available usage units for this item
-      let usageUnits;
-      const packUnit = item.unit?.toLowerCase() || 'pck';
-
-      if (['gr', 'ml'].includes(packInfo.unit)) {
-        // Item's pack converts to gr or ml — you can use it in gr/ml or per pack
-        usageUnits = [packInfo.unit, packUnit];
-      } else if (packInfo.unit === 'pcs') {
-        // Item is counted in pcs per pack — use pcs or per pack
-        usageUnits = ['pcs', packUnit];
-      } else {
-        usageUnits = [packInfo.unit, packUnit];
-      }
-      // Remove duplicates
-      usageUnits = [...new Set(usageUnits)];
+      // Determine available usage units for this item: the CONTENT unit
+      // (e.g. "pcs", from a structured "Carton = 24 pcs" full_pack) and the
+      // PACK/purchase unit (item.unit, e.g. "Carton") — a recipe can use
+      // either one and get an identical cost (see costUtils.calculateIngredientCost).
+      const { packUnitLabel } = getPackUnitInfo(item.full_pack, item.unit);
+      const usageUnits = [...new Set([packInfo.unit, packUnitLabel])];
 
       map[item.name] = {
         ...item,
         packSize: packInfo.size,
         packContentUnit: packInfo.unit,
+        packUnitLabel,
         packDataInconsistent: !packInfo.consistent,
         usageUnits,
         // Price per smallest unit (e.g., per gram, per ml, per pcs)
@@ -144,14 +134,34 @@ export default function Recipes() {
       if (ing.amount && ing.amount > 0) return ing.amount;
       return 0;
     }
-    return calculateIngredientCost(info, ing.qty_in_use, ing.unit);
+    return calculateIngredientCost(info, ing.qty_in_use, ing.unit, unitConversionMap);
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const subtotal = useMemo(() => editedIngredients.reduce((acc, ing) => acc + calcRowAmount(ing), 0), [editedIngredients, stockMap]);
+  const subtotal = useMemo(() => editedIngredients.reduce((acc, ing) => acc + calcRowAmount(ing), 0), [editedIngredients, stockMap, unitConversionMap]);
   const fixCost = useMemo(() => subtotal * 0.05, [subtotal]);
   const basicCost = useMemo(() => subtotal + fixCost, [subtotal, fixCost]);
   const foodCostPct = useMemo(() => editedSellingPrice > 0 ? (basicCost / editedSellingPrice) : 0, [basicCost, editedSellingPrice]);
+
+  // BUG-FIX 2026-08: the recipe LIST used to show `r.basic_cost`/`r.food_cost_pct`
+  // straight from the DB — but those columns only get refreshed when a human opens
+  // + saves that specific recipe, or via "Hitung Ulang Semua". Any recipe imported
+  // while a material's price/full_pack was still wrong (or simply not yet re-saved
+  // after a material price change) showed a stale/blank "HPP: Rp0" in the list even
+  // though the ingredient list itself was populated — the exact mismatch between
+  // the list and the opened detail panel. Instead of trusting the stored columns,
+  // compute the same live number for every recipe in the list, using the identical
+  // formula/stockMap the detail panel already uses — so the list can never go stale
+  // relative to current material prices, and "HPP: Rp0" only ever shows for a recipe
+  // that genuinely has no priced ingredients yet.
+  const computeLiveRecipeCost = (recipe) => {
+    const liveSubtotal = (recipe.ingredients || []).reduce((acc, ing) => acc + calcRowAmount(ing), 0);
+    const liveFixCost = liveSubtotal * 0.05;
+    const liveBasicCost = liveSubtotal + liveFixCost;
+    const sellingPrice = Number(recipe.selling_price) || 0;
+    const liveFoodCostPct = sellingPrice > 0 ? liveBasicCost / sellingPrice : 0;
+    return { liveBasicCost, liveFoodCostPct };
+  };
 
   // Ingredient actions
   const handleQtyChange = (idx, val) => {
@@ -358,7 +368,8 @@ export default function Recipes() {
         <div className="glass-scrollbar" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', paddingRight: '4px' }}>
           {paginatedRecipes.map(r => {
             const isActive = activeRecipe && activeRecipe.menu_name === r.menu_name;
-            const pct = r.food_cost_pct || 0;
+            const { liveBasicCost, liveFoodCostPct } = computeLiveRecipeCost(r);
+            const pct = liveFoodCostPct;
             const pctDisplay = ((Number(pct) || 0) * 100).toFixed(0); // M-5: pct is always a fraction
             return (
               <div
@@ -374,7 +385,7 @@ export default function Recipes() {
                       {r.menu_name}
                     </div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      HPP: {formatIDR(r.basic_cost || 0)}
+                      HPP: {formatIDR(liveBasicCost || 0)}
                     </div>
                   </div>
                 </div>

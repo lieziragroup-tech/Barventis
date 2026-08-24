@@ -40,6 +40,14 @@ export default function Maintenance() {
   const [staffLoading, setStaffLoading] = useState(false);
   const [savingUserId, setSavingUserId] = useState(null);
 
+  // Unit Conversions (Settings) GUI States
+  const [conversions, setConversions] = useState([]);
+  const [conversionsLoading, setConversionsLoading] = useState(false);
+  const [materialsForConversion, setMaterialsForConversion] = useState([]);
+  const [newConversion, setNewConversion] = useState({ material_id: '', to_unit: '', factor: '' });
+  const [savingConversion, setSavingConversion] = useState(false);
+  const [editingConversionId, setEditingConversionId] = useState(null);
+
   // Tenant Settings GUI States
   const [settings, setSettings] = useState({
     company_name: '',
@@ -79,6 +87,69 @@ export default function Maintenance() {
       flash('error', e.message);
     } finally {
       setStaffLoading(false);
+    }
+  };
+
+  const loadConversions = async () => {
+    setConversionsLoading(true);
+    try {
+      const [convData, matData] = await Promise.all([
+        api.getUnitConversions(),
+        api.getMaterials()
+      ]);
+      setConversions(convData);
+      setMaterialsForConversion(matData);
+    } catch (e) {
+      flash('error', 'Gagal memuat konversi satuan: ' + e.message);
+    } finally {
+      setConversionsLoading(false);
+    }
+  };
+
+  const resetConversionForm = () => {
+    setNewConversion({ material_id: '', to_unit: '', factor: '' });
+    setEditingConversionId(null);
+  };
+
+  const handleEditConversion = (c) => {
+    setEditingConversionId(c.id);
+    setNewConversion({ material_id: String(c.material_id), to_unit: c.to_unit, factor: c.factor });
+  };
+
+  const handleSaveConversion = async (e) => {
+    e.preventDefault();
+    const mat = materialsForConversion.find(m => String(m.id) === String(newConversion.material_id));
+    if (!mat || !newConversion.to_unit.trim() || !newConversion.factor || parseFloat(newConversion.factor) <= 0) {
+      flash('error', 'Lengkapi bahan, nama kemasan (mis. "Carton"), dan faktor (harus > 0).');
+      return;
+    }
+    setSavingConversion(true);
+    try {
+      await api.upsertUnitConversion({
+        id: editingConversionId,
+        material_id: mat.id,
+        from_unit: mat.unit,
+        to_unit: newConversion.to_unit.trim(),
+        factor: newConversion.factor
+      });
+      flash('success', `Konversi disimpan: 1 ${newConversion.to_unit.trim()} = ${newConversion.factor} ${mat.unit}.`);
+      resetConversionForm();
+      await loadConversions();
+    } catch (e) {
+      flash('error', 'Gagal menyimpan konversi: ' + e.message);
+    } finally {
+      setSavingConversion(false);
+    }
+  };
+
+  const handleDeleteConversion = async (id) => {
+    if (!window.confirm('Hapus konversi ini? Bahan terkait akan kembali mengandalkan kolom Full Pack di Stock Ledger untuk menghitung harga per-unit.')) return;
+    try {
+      await api.deleteUnitConversion(id);
+      flash('success', 'Konversi dihapus.');
+      await loadConversions();
+    } catch (e) {
+      flash('error', 'Gagal menghapus konversi: ' + e.message);
     }
   };
 
@@ -132,6 +203,7 @@ export default function Maintenance() {
     if (isOwner) {
       loadStaff();
       loadSettings();
+      loadConversions();
     }
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
@@ -292,7 +364,7 @@ export default function Maintenance() {
               <div style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',
                 padding: '12px 14px', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '16px', display: 'flex', gap: '10px', alignItems: 'center' }}>
                 <Info size={15} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-                Menggunakan formula HPP kanonik yang sama dengan editor resep (subtotal + {(parseFloat(settings?.overhead_pct || 0.05) * 100).toFixed(0)}% fixed cost).
+                Dipakai sebagai Fix Cost % <em>default</em> untuk resep baru — resep yang sudah ada tetap pakai Fix Cost %-nya masing-masing (bisa diatur per-resep di Recipe Builder).
               </div>
               <button className="btn btn-primary" onClick={handleRecalc} disabled={recalcLoading}
                 style={{ marginTop: 'auto', padding: '11px', borderRadius: 'var(--radius-lg)', fontWeight: 700, display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
@@ -476,6 +548,112 @@ export default function Maintenance() {
                         </tr>
                       );
                     })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Unit Conversions — manual pack/content conversion overrides */}
+          <div className="glass-card" style={{ padding: '0', overflow: 'hidden' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                  <Package size={18} style={{ color: 'var(--accent)' }} /> Konversi Satuan Kemasan
+                </h3>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
+                  Cara utama mengatur konversi kemasan (mis. 1 Carton = 24 pcs) tetap lewat kolom <strong>Full Pack</strong> di form edit bahan (Stock Ledger) — otomatis kebaca di seluruh sistem. Daftar di sini untuk kasus khusus: melihat semua konversi sekaligus, atau menimpa Full Pack tanpa mengubah teksnya.
+                </p>
+              </div>
+              <button className="btn btn-secondary" onClick={loadConversions} disabled={conversionsLoading}
+                style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <RefreshCw size={12} style={conversionsLoading ? spinStyle : undefined} /> Segarkan
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveConversion} style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div style={{ flex: '1 1 220px' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Bahan Baku</label>
+                <select
+                  value={newConversion.material_id}
+                  onChange={(e) => setNewConversion({ ...newConversion, material_id: e.target.value })}
+                  disabled={!!editingConversionId}
+                  style={{ width: '100%', padding: '8px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
+                >
+                  <option value="">— Pilih bahan —</option>
+                  {materialsForConversion.map(m => (
+                    <option key={m.id} value={m.id}>{m.name} (unit: {m.unit})</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ flex: '0 1 140px' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Nama Kemasan</label>
+                <input type="text" placeholder="mis. Carton"
+                  value={newConversion.to_unit}
+                  onChange={(e) => setNewConversion({ ...newConversion, to_unit: e.target.value })}
+                  style={{ width: '100%', padding: '8px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
+                />
+              </div>
+              <div style={{ flex: '0 1 120px' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                  = Berapa {materialsForConversion.find(m => String(m.id) === String(newConversion.material_id))?.unit || 'unit'}?
+                </label>
+                <input type="number" min="0.0001" step="any" placeholder="24"
+                  value={newConversion.factor}
+                  onChange={(e) => setNewConversion({ ...newConversion, factor: e.target.value })}
+                  style={{ width: '100%', padding: '8px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button type="submit" className="btn btn-primary" disabled={savingConversion}
+                  style={{ padding: '9px 16px', fontWeight: 700 }}>
+                  {savingConversion ? 'Menyimpan…' : editingConversionId ? 'Update' : 'Tambah'}
+                </button>
+                {editingConversionId && (
+                  <button type="button" className="btn btn-secondary" onClick={resetConversionForm} style={{ padding: '9px 16px' }}>
+                    Batal
+                  </button>
+                )}
+              </div>
+            </form>
+
+            {conversionsLoading ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Memuat konversi satuan…</div>
+            ) : conversions.length === 0 ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                Belum ada override manual. Kebanyakan bahan cukup diatur lewat kolom Full Pack di Stock Ledger.
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)', background: 'var(--bg-tertiary)' }}>
+                      {['Bahan', 'Konversi', 'Aksi'].map((h, i) => (
+                        <th key={h} style={{ padding: '14px 20px', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', textAlign: i === 2 ? 'right' : 'left' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {conversions.map(c => (
+                      <tr key={c.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '14px 20px', fontSize: '0.875rem', fontWeight: 600 }}>
+                          {c.materials?.name || `Bahan #${c.material_id}`}
+                        </td>
+                        <td style={{ padding: '14px 20px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                          1 {c.to_unit} = {c.factor} {c.from_unit}
+                        </td>
+                        <td style={{ padding: '14px 20px', textAlign: 'right' }}>
+                          <button onClick={() => handleEditConversion(c)}
+                            style={{ padding: '6px 10px', fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent)', background: 'transparent', border: 'none', cursor: 'pointer' }}>
+                            Edit
+                          </button>
+                          <button onClick={() => handleDeleteConversion(c.id)}
+                            style={{ padding: '6px 10px', fontSize: '0.75rem', fontWeight: 700, color: 'var(--danger, #dc2626)', background: 'transparent', border: 'none', cursor: 'pointer' }}>
+                            Hapus
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>

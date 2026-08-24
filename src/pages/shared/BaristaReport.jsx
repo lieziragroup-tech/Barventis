@@ -148,7 +148,13 @@ export default function BaristaReport() {
     setError(null);
     try {
       const XLSX = await getXLSX();
-      const sheets = await generateReports(salesData, dbData, XLSX);
+      // Same shape calculateIngredientCost()/getUnitPrice() expect — Map<material_id,
+      // factor> — distinct from the `material_id:from_unit:to_unit` keyed Map built
+      // above for validateUnitConversion(), which serves a different check.
+      const costUnitConversionMap = new Map(
+        (dbData.unitConversions || []).map(uc => [uc.material_id, parseFloat(uc.factor)])
+      );
+      const sheets = await generateReports(salesData, dbData, XLSX, costUnitConversionMap);
       setGeneratedSheets(sheets);
       setStep(3);
     } catch (e) {
@@ -178,7 +184,10 @@ export default function BaristaReport() {
     if (!salesData || !dbData) return;
     setGenerating(true);
     try {
-      const doc = await generatePDF(salesData, dbData);
+      const costUnitConversionMap = new Map(
+        (dbData.unitConversions || []).map(uc => [uc.material_id, parseFloat(uc.factor)])
+      );
+      const doc = await generatePDF(salesData, dbData, costUnitConversionMap);
       const monthName = MONTHS[periodMonth] || '';
       downloadPDF(doc, `SO BARISTA ${monthName} ${periodYear}.pdf`);
     } catch (e) {

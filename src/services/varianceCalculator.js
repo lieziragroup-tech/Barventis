@@ -23,10 +23,11 @@ import { calculateIngredientCost } from './costUtils';
  * @param {Array} dailyInventories   - daily_inventories + daily_inventory_items
  *   (period berjalan), bentuk: [{ date, daily_inventory_items: [{ material_id, terpakai_qty }] }]
  * @param {Array} materials          - master materials [{ id, name, price, unit }]
+ * @param {Map<number, number>=} unitConversionMap - lihat costUtils.js getUnitPrice()
  * @returns {Array} variance per material, diurutkan dari variance value
  *   absolut terbesar (paling perlu diperhatikan duluan)
  */
-export function calculateUsageVariance(expectedUsageRows, dailyInventories, materials) {
+export function calculateUsageVariance(expectedUsageRows, dailyInventories, materials, unitConversionMap) {
   const materialMap = new Map((materials || []).map(m => [m.id, m]));
 
   const theoretical = new Map(); // material_id -> qty
@@ -62,7 +63,7 @@ export function calculateUsageVariance(expectedUsageRows, dailyInventories, mate
       // BUG-FIX 2026-07: `varianceQty * price` used material.price as if it were
       // already a per-base-unit price — same root cause as the other fixes in this
       // pass. Route through the shared, pack-size-aware calculator.
-      variance_value: round2(material ? calculateIngredientCost(material, varianceQty, material.unit) : 0),
+      variance_value: round2(material ? calculateIngredientCost(material, varianceQty, material.unit, unitConversionMap) : 0),
       // Interpretasi cepat: actual > theoretical => pemakaian fisik lebih besar
       // dari yang "seharusnya" dari resep (indikasi waste/porsi berlebih/pencurian
       // kalau konsisten). actual < theoretical => lebih hemat dari resep, atau

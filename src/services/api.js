@@ -1,6 +1,6 @@
 // UMATIS Serverless API Service Client for Supabase Backend Integration
 import { supabase } from '../lib/supabase';
-import { parsePackSize, calculateIngredientCost, getUnitPrice, computeRecipeCosts, DEFAULT_ROUNDING_DIRECTION, DEFAULT_ROUNDING_INCREMENT, DEFAULT_PRICE_ADJUSTMENT } from './costUtils';
+import { parsePackSize, calculateIngredientCost, getUnitPrice, computeRecipeCosts, convertQtyToStockUnit, DEFAULT_ROUNDING_DIRECTION, DEFAULT_ROUNDING_INCREMENT, DEFAULT_PRICE_ADJUSTMENT } from './costUtils';
 // NOTE: DEFAULT_FIX_COST_PCT intentionally NOT imported here — per PRD §4.2
 // Opsi B, a new recipe's fix_cost_pct falls back to the tenant's existing
 // `overhead_pct` setting (activeOverheadPct below), not a hardcoded 5%.
@@ -288,7 +288,8 @@ export const api = {
     if (diErr) throw diErr;
     if (matErr) throw matErr;
 
-    return calculateUsageVariance(expectedUsageRows || [], dailyInventories || [], materials || []);
+    const unitConversionMap = await api._loadUnitConversionMap(tenantId);
+    return calculateUsageVariance(expectedUsageRows || [], dailyInventories || [], materials || [], unitConversionMap);
   },
 
   // Set memory cache to avoid async locks in browser
@@ -1114,13 +1115,14 @@ export const api = {
     const matIds = recipeData.ingredients.map(i => i.material_id);
     const { data: materials } = await supabase.from('materials').select('*').in('id', matIds);
     const materialsMap = new Map(materials.map(m => [m.id, m]));
+    const unitConversionMap = await api._loadUnitConversionMap(tenantId);
 
     for (const ing of recipeData.ingredients) {
       const material = materialsMap.get(ing.material_id);
       if (!material) continue;
 
       const unitPrice = parseFloat(material.new_price ?? material.price ?? 0);
-      const amount = calculateIngredientCost(material, parseFloat(ing.qty_in_use), ing.unit);
+      const amount = calculateIngredientCost(material, parseFloat(ing.qty_in_use), ing.unit, unitConversionMap);
       subtotal += amount;
 
       ingredientRows.push({
@@ -1197,6 +1199,7 @@ export const api = {
   },
 
   updateRecipe: async (id, recipeData) => {
+    const tenantId = await getActiveTenantId();
     // 1. Process calculations
     let subtotal = 0.00;
     const ingredientRows = [];
@@ -1204,13 +1207,14 @@ export const api = {
     const matIds = recipeData.ingredients.map(i => i.material_id);
     const { data: materials } = await supabase.from('materials').select('*').in('id', matIds);
     const materialsMap = new Map(materials.map(m => [m.id, m]));
+    const unitConversionMap = await api._loadUnitConversionMap(tenantId);
 
     for (const ing of recipeData.ingredients) {
       const material = materialsMap.get(ing.material_id);
       if (!material) continue;
 
       const unitPrice = parseFloat(material.new_price ?? material.price ?? 0);
-      const amount = calculateIngredientCost(material, parseFloat(ing.qty_in_use), ing.unit);
+      const amount = calculateIngredientCost(material, parseFloat(ing.qty_in_use), ing.unit, unitConversionMap);
       subtotal += amount;
 
       ingredientRows.push({
@@ -1309,30 +1313,65 @@ export const api = {
       .eq('tenant_id', tenantId);
     if (error) throw new Error("Gagal memuat resep: " + error.message);
 
+    const unitConversionMap = await api._loadUnitConversionMap(tenantId);
+
     const results = [];
     for (const r of (recipes || [])) {
       const ings = r.recipe_ingredients || [];
       const subtotal = ings.reduce((sum, ing) => {
         const mat = ing.materials;
         const unit = ing.unit || mat?.unit || 'gr';
-        return sum + calculateIngredientCost(mat, parseFloat(ing.qty_in_use || 0), unit);
+        return sum + calculateIngredientCost(mat, parseFloat(ing.qty_in_use || 0), unit, unitConversionMap);
       }, 0);
-      // Fix cost % stays whatever was last set on this recipe (food_cost_pct field
-      // doubles as both "target %" input and "actual %" output pre-save in the UI —
-      // here we only refresh cost figures, not the target the user chose).
-      const fixCostPct = 0.05;
-      const fixCost = subtotal * fixCostPct;
-      const basicCost = subtotal + fixCost;
-      const sellingPrice = parseFloat(r.selling_price || 0);
+
+      // BUG-FIX 2026-08: this used to hardcode fixCostPct=0.05 and derive
+      // food_cost_pct as basic_cost/selling_price directly — ignoring this
+      // recipe's own fix_cost_pct/rounding_direction/rounding_increment/
+      // price_adjustment columns entirely, and reusing the SAME formula
+      // createRecipe/updateRecipe/bulkImportRecipes all funnel through
+      // computeRecipeCosts() for. That mismatch meant "Hitung Ulang Semua"
+      // could silently override a recipe's custom Fix Cost % back to 5%.
+      // It also never fixed `selling_price` — so a recipe imported while
+      // basic_cost was still 0 (see the bulkImportRecipes full_pack fix
+      // below) recalculated a correct basic_cost here, but selling_price
+      // stayed stuck at 0 and food_cost_pct got overwritten to 0 right
+      // along with it (worse than before: the badge used to at least show
+      // the original FOOD COST % TARGET from the import).
+      const fixCostPct = r.fix_cost_pct != null ? parseFloat(r.fix_cost_pct) : activeOverheadPct;
+      const roundingDirection = r.rounding_direction || DEFAULT_ROUNDING_DIRECTION;
+      const roundingIncrement = r.rounding_increment != null ? parseFloat(r.rounding_increment) : DEFAULT_ROUNDING_INCREMENT;
+      const priceAdjustment = r.price_adjustment != null ? parseFloat(r.price_adjustment) : DEFAULT_PRICE_ADJUSTMENT;
+      // `food_cost_pct` as stored is this recipe's TARGET at the time it was
+      // priced (same convention bulkImportRecipes/createRecipe/updateRecipe
+      // use to derive an initial selling price) — reuse it ONLY to fill in a
+      // selling_price that's still missing; a selling_price that's already
+      // set (manual or previously computed) is a business decision and is
+      // never overwritten here.
+      const targetPct = parseFloat(r.food_cost_pct || 0);
+
+      const { fixCost, basicCost, sellingPriceFinal } = computeRecipeCosts({
+        subtotal, fixCostPct, foodCostPct: targetPct,
+        roundingDirection, roundingIncrement, priceAdjustment
+      });
+
+      const currentSellingPrice = parseFloat(r.selling_price || 0);
+      const sellingPrice = currentSellingPrice > 0 ? currentSellingPrice : (sellingPriceFinal || 0);
+      // Once a selling price exists, food_cost_pct going forward represents
+      // the ACTUAL ratio at that price — matching how Recipes.jsx's own
+      // "M-5" badge/list logic already interprets this field.
       const foodCostPct = sellingPrice > 0 ? basicCost / sellingPrice : 0;
 
-      const before = { subtotal: parseFloat(r.subtotal || 0), basic_cost: parseFloat(r.basic_cost || 0) };
-      const changed = Math.abs(before.basic_cost - basicCost) > 1;
+      const before = {
+        subtotal: parseFloat(r.subtotal || 0),
+        basic_cost: parseFloat(r.basic_cost || 0),
+        selling_price: currentSellingPrice
+      };
+      const changed = Math.abs(before.basic_cost - basicCost) > 1 || Math.abs(before.selling_price - sellingPrice) > 1;
 
       if (changed) {
         const { error: updErr } = await supabase
           .from('recipes')
-          .update({ subtotal, fix_cost: fixCost, basic_cost: basicCost, food_cost_pct: foodCostPct, updated_at: new Date().toISOString() })
+          .update({ subtotal, fix_cost: fixCost, basic_cost: basicCost, selling_price: sellingPrice, food_cost_pct: foodCostPct, updated_at: new Date().toISOString() })
           .eq('id', r.id);
         if (updErr) {
           results.push({ menu_name: r.menu_name, status: 'error', message: updErr.message });
@@ -1345,8 +1384,8 @@ export const api = {
           const mat = ing.materials;
           const unit = ing.unit || mat?.unit || 'gr';
           const qty = parseFloat(ing.qty_in_use || 0);
-          const amount = calculateIngredientCost(mat, qty, unit);
-          const { unitPrice } = getUnitPrice(mat);
+          const amount = calculateIngredientCost(mat, qty, unit, unitConversionMap);
+          const { unitPrice } = getUnitPrice(mat, unitConversionMap);
           await supabase.from('recipe_ingredients').update({ unit_price: unitPrice, amount }).eq('id', ing.id);
         }
       }
@@ -1739,7 +1778,8 @@ export const api = {
 
     for (let i = 0; i < deductionEntries.length; i += BATCH_SIZE) {
       const batch = deductionEntries.slice(i, i + BATCH_SIZE);
-      
+      const unitConversionMap = await api._loadUnitConversionMap(tenantId);
+
       await Promise.all(batch.map(async ([, data]) => {
         const material = data.material;
         const deductQty = data.totalDeduct;
@@ -1766,7 +1806,7 @@ export const api = {
         // price, so this inflated every POS_DEDUCTION amount by the pack-size factor.
         // deduct_stock_atomic itself is fine (deducts qty_resto in base units correctly);
         // only the Rupiah valuation here was wrong. Route through the shared calculator.
-        const deductionAmount = calculateIngredientCost(material, deductQty, material.unit);
+        const deductionAmount = calculateIngredientCost(material, deductQty, material.unit, unitConversionMap);
         const datesArray = Array.from(data.saleDates).sort();
         const primaryDate = datesArray[datesArray.length - 1] || nowStr;
 
@@ -1880,7 +1920,7 @@ export const api = {
     const recipeIds = cartItems.map(item => item.id);
     const { data: recipes } = await supabase
       .from('recipes')
-      .select('id, menu_name, selling_price, recipe_ingredients(material_id, qty_in_use, unit, materials(id, name, unit, qty_resto, price, new_price))')
+      .select('id, menu_name, selling_price, recipe_ingredients(material_id, qty_in_use, unit, materials(id, name, unit, full_pack, qty_resto, price, new_price))')
       .in('id', recipeIds);
 
     const recipeMap = new Map((recipes || []).map(r => [r.id, r]));
@@ -1927,20 +1967,14 @@ export const api = {
         const material = ing.materials;
         if (!material) continue;
 
-        const matUnit = (material.unit || '').toLowerCase().trim();
-        const ingUnit = (ing.unit || '').toLowerCase().trim();
-        
-        let factor = 1.00;
-        if (ingUnit !== matUnit) {
-          const isIngGramMl = (ingUnit === 'gr' || ingUnit === 'ml' || ingUnit === 'grm');
-          const isMatKgL = (matUnit === 'kg' || matUnit === 'l' || matUnit === 'liter' || matUnit === 'ltr');
-          if (isIngGramMl && isMatKgL) {
-            factor = 1000.00;
-          }
-        }
-
-        const deductQty = (parseFloat(ing.qty_in_use) * cartItem.qty) / factor;
-        
+        // BUG-FIX 2026-08: replaced the ad hoc "gr/ml usage vs kg/l-tracked material
+        // -> divide by 1000" special case (a duplicate, narrower reimplementation of
+        // a unit conversion that lived here only) with the shared
+        // convertQtyToStockUnit() from costUtils.js. Same behavior for the legacy
+        // kg/l case, PLUS it now also understands the manual "Carton = 24 pcs"
+        // pack/content conversion (StockLedger.jsx "Konversi Isi"), so a recipe
+        // using "pcs" against a Carton-tracked material deducts stock correctly too.
+        const { qty: deductQty } = convertQtyToStockUnit(material, parseFloat(ing.qty_in_use) * cartItem.qty, ing.unit);
         if (!deductionMap[material.id]) {
           deductionMap[material.id] = { material, totalDeduct: 0 };
         }
@@ -1952,6 +1986,7 @@ export const api = {
     const transactionRows = [];
     const deductionsPayload = [];
     const negativeWarnings = [];
+    const unitConversionMap = await api._loadUnitConversionMap(tenantId);
 
     // Revenue transaction
     transactionRows.push({
@@ -1982,7 +2017,7 @@ export const api = {
       });
 
       // FIX: jangan kali lurus deductQty (bisa dalam gram) dengan unitPrice (harga per pack)
-      const exactCost = calculateIngredientCost(material, deductQty, material.unit);
+      const exactCost = calculateIngredientCost(material, deductQty, material.unit, unitConversionMap);
 
       transactionRows.push({
         date: nowStr,
@@ -2146,6 +2181,7 @@ export const api = {
     const m = parseInt(parts[1]);
     const lastDay = new Date(year, m, 0).getDate();
     const endDate = `${month}-${String(lastDay).padStart(2, '0')}`;
+    const unitConversionMap = await api._loadUnitConversionMap(tenantId);
 
     // 1. Fetch closing valuation from this month's opnames if they exist (RESTO + CENTRAL)
     const { data: thisOpnames } = await supabase
@@ -2180,7 +2216,7 @@ export const api = {
           // per-base-unit price — but materials.price is a per-PACK price. This is the
           // core reason monthly Cost Control HPP was inflated even when Recipe Builder
           // looked fine. Route through the shared, pack-size-aware calculator.
-          const val = calculateIngredientCost(item.materials, physicalQty, item.materials?.unit);
+          const val = calculateIngredientCost(item.materials, physicalQty, item.materials?.unit, unitConversionMap);
           const cat = item.materials?.category || 'Lain-lain';
 
           if (!matValuationMap[matId]) {
@@ -2237,7 +2273,7 @@ export const api = {
         const price = parseFloat(mat.price ?? 0);
         const qtySistem = parseFloat(mat.qty_resto) + parseFloat(mat.qty_central);
         // BUG-FIX 2026-07: same pack-size issue as above — route through the shared calculator.
-        const val = calculateIngredientCost(mat, qtySistem, mat.unit);
+        const val = calculateIngredientCost(mat, qtySistem, mat.unit, unitConversionMap);
         closingValuation += val;
 
         const cat = mat.category || 'Lain-lain';
@@ -2314,7 +2350,7 @@ export const api = {
       if (prevOpnameItems && prevOpnameItems.length > 0) {
         // BUG-FIX 2026-07: same pack-size issue as the closing-stock valuation above.
         openingValuation = prevOpnameItems.reduce((sum, item) => {
-          return sum + calculateIngredientCost(item.materials, parseFloat(item.physical_qty || 0), item.materials?.unit);
+          return sum + calculateIngredientCost(item.materials, parseFloat(item.physical_qty || 0), item.materials?.unit, unitConversionMap);
         }, 0);
       }
     }
@@ -2965,6 +3001,8 @@ export const api = {
 
   bulkImportRecipes: async (rows) => {
     const tenantId = await getActiveTenantId();
+    const unitConversionMap = await api._loadUnitConversionMap(tenantId);
+
     let success = 0;
     let failed = 0;
     const errors = [];
@@ -2975,7 +3013,7 @@ export const api = {
     // by code when given, instead of relying purely on exact name matching.
     const { data: allMaterials } = await supabase
       .from('materials')
-      .select('id, name, sku, unit, price, new_price')
+      .select('id, name, sku, unit, full_pack, price, new_price')
       .eq('tenant_id', tenantId)
       .eq('is_active', true);
 
@@ -3050,7 +3088,7 @@ export const api = {
             const mat = resolveMaterial(ing.item_code, ing.item_name);
             if (mat) {
               const unit = ing.unit || mat.unit || 'gr';
-              return sum + calculateIngredientCost(mat, parseFloat(ing.qty_in_use || 0), unit);
+              return sum + calculateIngredientCost(mat, parseFloat(ing.qty_in_use || 0), unit, unitConversionMap);
             }
             return sum;
           }, 0);
@@ -3191,7 +3229,7 @@ export const api = {
                 new_price: 0,
                 min_stock: 15,
                 is_active: true
-              }).select('id, name, sku, unit, price, new_price').single();
+              }).select('id, name, sku, unit, full_pack, price, new_price').single();
               
               if (!newMatErr && newMat) {
                 materialsMap.set(newName.toLowerCase(), newMat);
@@ -3204,7 +3242,7 @@ export const api = {
             if (mat) {
               const unit = ing.unit || mat.unit || 'gr';
               const unitPrice = parseFloat(mat.new_price ?? mat.price ?? 0);
-              const amount = calculateIngredientCost(mat, parseFloat(ing.qty_in_use || 0), unit);
+              const amount = calculateIngredientCost(mat, parseFloat(ing.qty_in_use || 0), unit, unitConversionMap);
               
               ingredientsToInsert.push({
                 recipe_id: recipeData.id,
@@ -3438,8 +3476,65 @@ export const api = {
   // devtools) with an arbitrary tenant_id, since the RPC itself never
   // checked who was calling it or which tenant they belonged to.
 
-  // Owner: submit a reset request (inserts a 'pending' row — nothing is
-  // deleted at this point; requires Super Admin approval).
+  // --- UNIT CONVERSIONS (manual pack-size overrides) ---
+  // Secondary/optional path — the PRIMARY way to set a material's pack/content
+  // conversion is now the structured `full_pack` field ("Carton = 24 pcs",
+  // see costUtils.js getPackUnitInfo()/StockLedger.jsx's "Konversi Isi"
+  // fields), which every call site already reads with zero extra wiring.
+  // This table exists for the Settings page's central list/override view and
+  // for any material where editing Full Pack directly isn't wanted. getUnitPrice()
+  // checks this FIRST, then falls back to parsing full_pack.
+  getUnitConversions: async () => {
+    const tenantId = await getActiveTenantId();
+    const { data, error } = await supabase
+      .from('unit_conversions')
+      .select('*, materials(id, name, unit, full_pack)')
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+
+  // Internal helper — builds the Map<material_id, factor> shape that
+  // getUnitPrice()/calculateIngredientCost() expect. Used by every other
+  // function in this file that computes a Rupiah cost from a material, so a
+  // conversion saved here actually takes effect everywhere, not just in the
+  // Settings page that lists it.
+  async _loadUnitConversionMap(tenantId) {
+    const { data, error } = await supabase
+      .from('unit_conversions')
+      .select('material_id, factor')
+      .eq('tenant_id', tenantId);
+    if (error) { console.warn('Gagal memuat unit_conversions:', error.message); return new Map(); }
+    return new Map((data || []).map(c => [c.material_id, parseFloat(c.factor)]));
+  },
+
+  upsertUnitConversion: async ({ id, material_id, from_unit, to_unit, factor }) => {
+    const tenantId = await getActiveTenantId();
+    const payload = {
+      tenant_id: tenantId,
+      material_id,
+      from_unit,
+      to_unit,
+      factor: parseFloat(factor)
+    };
+    if (id) {
+      const { error } = await supabase.from('unit_conversions').update(payload).eq('id', id).eq('tenant_id', tenantId);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('unit_conversions').insert(payload);
+      if (error) throw error;
+    }
+    await logAudit('UPSERT_UNIT_CONVERSION', `Konversi satuan disimpan: 1 ${to_unit} = ${factor} ${from_unit}.`);
+  },
+
+  deleteUnitConversion: async (id) => {
+    const tenantId = await getActiveTenantId();
+    const { error } = await supabase.from('unit_conversions').delete().eq('id', id).eq('tenant_id', tenantId);
+    if (error) throw error;
+    await logAudit('DELETE_UNIT_CONVERSION', `Konversi satuan (id: ${id}) dihapus.`);
+  },
+
   async requestTenantReset(tenantId, options = {}) {
     const {
       resetPos = true,

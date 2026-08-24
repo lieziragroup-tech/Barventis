@@ -18,6 +18,7 @@ export const DataProvider = ({ children }) => {
   const [transactions, setTransactions] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
+  const [unitConversions, setUnitConversions] = useState([]);
 
   const fetchAllData = useCallback(async () => {
     if (!isAuthenticated || !activeUser || activeUser.role === 'Super Admin' || activeUser.role === 'SuperAdmin') return;
@@ -31,11 +32,12 @@ export const DataProvider = ({ children }) => {
 
     setLoadingData(true);
     try {
-      const [materialsData, recipesData, invoicesData, transactionsData] = await Promise.all([
+      const [materialsData, recipesData, invoicesData, transactionsData, conversionsData] = await Promise.all([
         api.getMaterials().catch(e => { console.error('Materials:', e); return []; }),
         api.getRecipes().catch(e => { console.error('Recipes:', e); return []; }),
         api.getInvoices().catch(e => { console.error('Invoices:', e); return []; }),
-        api.getTransactions().catch(e => { console.error('Transactions:', e); return []; })
+        api.getTransactions().catch(e => { console.error('Transactions:', e); return []; }),
+        api.getUnitConversions().catch(e => { console.error('UnitConversions:', e); return []; })
       ]);
 
       // Skip state updates if a newer fetch has been initiated
@@ -70,6 +72,7 @@ export const DataProvider = ({ children }) => {
 
       const txData = Array.isArray(transactionsData) ? transactionsData : (transactionsData.data || []);
       setTransactions(txData);
+      setUnitConversions(conversionsData || []);
     } catch (e) {
       console.error('fetchAllData error:', e);
     } finally {
@@ -251,11 +254,22 @@ export const DataProvider = ({ children }) => {
     await fetchAllData();
   }, [invoices, fetchAllData]);
 
+  // Build a Map<material_id, factor> from unit_conversions for costUtils
+  const unitConversionMap = useMemo(() => {
+    const map = new Map();
+    for (const uc of unitConversions) {
+      if (uc.material_id && uc.factor > 0) map.set(uc.material_id, uc.factor);
+    }
+    return map;
+  }, [unitConversions]);
+
   const value = useMemo(() => ({
     stock,
     recipes,
     transactions,
     invoices,
+    unitConversions,
+    unitConversionMap,
     loadingData,
     refreshData: fetchAllData,
     showToast,
@@ -282,7 +296,7 @@ export const DataProvider = ({ children }) => {
     handleCreateInvoice,
     handleReceiveInvoice,
     handleCancelInvoice
-  }), [stock, recipes, transactions, invoices, loadingData, fetchAllData, showToast, activeUser, handleAdjustStock, handleUpdateItem, handleAddItem, handleDeleteItem, handleProcessPosSales, handleSaveRecipe, handleAddRecipe, handleDeleteRecipe, handleCompleteOpname, handleCreateInvoice, handleReceiveInvoice, handleCancelInvoice]);
+  }), [stock, recipes, transactions, invoices, unitConversions, unitConversionMap, loadingData, fetchAllData, showToast, activeUser, handleAdjustStock, handleUpdateItem, handleAddItem, handleDeleteItem, handleProcessPosSales, handleSaveRecipe, handleAddRecipe, handleDeleteRecipe, handleCompleteOpname, handleCreateInvoice, handleReceiveInvoice, handleCancelInvoice]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 };

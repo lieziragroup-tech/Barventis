@@ -6,7 +6,6 @@ import Pagination from '../../components/shared/Pagination';
 import { api } from '../../services/api';
 import { formatIDR } from '../../services/costUtils';
 
-// Stable client-side id for editable line-item rows (stable React keys vs array index). (LOW #19)
 const rowUid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `r${Date.now()}${Math.random()}`);
 const blankLineItem = () => ({ item_name: '', qty: 1, unit_price: 0, unit: 'pck', _uid: rowUid() });
 
@@ -23,8 +22,6 @@ export default function Invoicing() {
   const [invNotes, setInvNotes] = useState('');
   const [invItems, setInvItems] = useState([blankLineItem()]);
   const [itemDropdown, setItemDropdown] = useState(null);
-
-
 
   // Unique suppliers from stock
   const suppliers = useMemo(() => [...new Set(stock.map(s => s.supplier).filter(Boolean))].sort(), [stock]);

@@ -11,15 +11,8 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, R
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { stock, transactions } = useData();
-
-
-  // KPI Calculations
-  // BUG-FIX 2026-08: was `qty * material.price` directly — material.price is a
-  // per-PACK price, so this inflated the KPI by the pack-size factor (e.g. 2000x
-  // for a 2000gr pack). Route through the shared calculator, same as
-  // getCostControlReport's fallback branch.
-  const stockValuation = useMemo(() => stock.reduce((acc, item) => acc + calculateIngredientCost(item, (item.qty_resto || 0) + (item.qty_central || 0), item.unit), 0), [stock]);
+  const { stock, transactions, unitConversionMap } = useData();
+  const stockValuation = useMemo(() => stock.reduce((acc, item) => acc + calculateIngredientCost(item, (item.qty_resto || 0) + (item.qty_central || 0), item.unit, unitConversionMap), 0), [stock, unitConversionMap]);
   const lowStockItems = useMemo(() => stock.filter(item => ((item.qty_resto || 0) + (item.qty_central || 0)) < (item.min_stock || 15)), [stock]);
 
   // Calculate real metrics from live transaction data
@@ -69,12 +62,12 @@ export default function Dashboard() {
       .map(item => ({
         name: item.name,
         // BUG-FIX 2026-08: same pack-size issue as stockValuation above.
-        cost: calculateIngredientCost(item, (item.qty_resto || 0) + (item.qty_central || 0), item.unit)
+        cost: calculateIngredientCost(item, (item.qty_resto || 0) + (item.qty_central || 0), item.unit, unitConversionMap)
       }))
       .filter(item => item.cost > 0)
       .sort((a, b) => b.cost - a.cost)
       .slice(0, 5);
-  }, [stock]);
+  }, [stock, unitConversionMap]);
 
   const totalSalesBeverage = realSalesRevenue;
   const currentCostPct = realCostPct;
@@ -86,11 +79,11 @@ export default function Dashboard() {
     const categoryVals = {};
     stock.forEach(item => {
       // BUG-FIX 2026-08: same pack-size issue as stockValuation above.
-      const val = calculateIngredientCost(item, (item.qty_resto || 0) + (item.qty_central || 0), item.unit);
+      const val = calculateIngredientCost(item, (item.qty_resto || 0) + (item.qty_central || 0), item.unit, unitConversionMap);
       categoryVals[item.category] = (categoryVals[item.category] || 0) + val;
     });
     return Object.entries(categoryVals).map(([name, value]) => ({ name, value: Math.round(value) })).sort((a, b) => b.value - a.value).slice(0, 6);
-  }, [stock]);
+  }, [stock, unitConversionMap]);
   const COLORS = ['#3b82f6', '#059669', '#d97706', '#7c3aed', '#dc2626', '#0d9488'];
 
   const tooltipStyle = { background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', boxShadow: 'var(--card-shadow)' };
