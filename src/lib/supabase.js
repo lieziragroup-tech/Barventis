@@ -19,12 +19,6 @@ if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes('your-supabase-proj
 }
 
 export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co', 
-  supabaseAnonKey || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder',
-  {
-    auth: {
-      // Custom no-op lock to completely bypass browser navigator.locks deadlocks (stuck loading screen)
-      lock: async (name, acquireTimeout, fn) => fn(),
-    }
-  }
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder'
 );

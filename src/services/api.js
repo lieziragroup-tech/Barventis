@@ -368,50 +368,9 @@ export const api = {
       .maybeSingle();
 
     if (!userProfile) {
-      // Auto-recover profile from auth metadata if it was wiped by a migration drop
-      const md = authData.user.user_metadata || {};
-      const fallbackRole = md.role || 'Admin / Owner';
-      
-      // Find tenant ID from name if tenant_id not in metadata
-      let tId = md.tenant_id;
-      if (!tId && md.tenant_name) {
-         // Fix 400 error by removing empty query or wrong mapping. 
-         // Fallback directly to manual check if need be, or fix the query.
-         const cleanTenantName = md.tenant_name.toLowerCase().replace(/[^a-z0-9]/g, '');
-         if (cleanTenantName) {
-            const { data: tData, error: tErr } = await supabase.from('tenants').select('id').eq('name', cleanTenantName).maybeSingle();
-            if (!tErr && tData) tId = tData.id;
-         }
-      }
-      
-      // If we STILL don't have a tId and not superadmin, let's just make one so we don't break.
-      if (!tId && fallbackRole.toLowerCase().replace(/\s+/g, '') !== 'superadmin') {
-         const dummyName = 'recovered_' + Date.now().toString().slice(-6);
-         const { data: fallbackTenant } = await supabase.from('tenants').insert({
-            name: dummyName,
-            company_name: md.company_name || dummyName,
-            status: 'active'
-         }).select('id').single();
-         if (fallbackTenant) tId = fallbackTenant.id;
-      }
-
-      if (tId || fallbackRole.toLowerCase().replace(/\s+/g, '') === 'superadmin') {
-         const { data: newProfile, error: insErr } = await supabase.from('users').insert({
-            id: authData.user.id,
-            tenant_id: tId || null,
-            name: md.name || 'Recovered User',
-            email: email,
-            role: fallbackRole
-         }).select('*').single();
-         
-         if (!insErr && newProfile) {
-            userProfile = newProfile;
-            profileErr = null;
-         } else if (insErr) {
-            console.error("Auto-recovery insert failed:", insErr);
-            profileErr = insErr;
-         }
-      }
+      // SEC-001 Fix: Removed unsafe auto-recovery that trusted client metadata and created phantom tenants.
+      // If profile is missing, it means registration failed halfway or was deleted. Must re-register or fix in DB.
+      throw new Error("Profile pengguna tidak ditemukan. Silakan hubungi admin atau daftar ulang.");
     }
 
     if (profileErr || !userProfile) {
@@ -477,7 +436,7 @@ export const api = {
   register: async (name, companyName, adminName, email, password) => {
     const formattedTenantName = name.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-    // 1. Verify if tenant already exists
+    // 1. Cek duplikasi tenant terlebih dahulu
     const { data: existingTenant } = await supabase
       .from('tenants')
       .select('id')
@@ -488,22 +447,7 @@ export const api = {
       throw new Error('Nama ID Resto / Tenant ini sudah digunakan. Coba nama lain.');
     }
 
-    // 2. Create the tenant first (to get UUID)
-    const { data: newTenant, error: createTenantErr } = await supabase
-      .from('tenants')
-      .insert({
-        name: formattedTenantName,
-        company_name: companyName,
-        status: 'active'
-      })
-      .select('*')
-      .single();
-
-    if (createTenantErr || !newTenant) {
-      throw new Error('Gagal mendaftarkan tenant baru: ' + createTenantErr.message);
-    }
-
-    // 3. Register user with Supabase auth (providing metadata for profile synchronization)
+    // 2. Buat akun Auth DULU! (mencegah unauthenticated table pollution - SEC-002)
     const { data: authData, error: signupErr } = await supabase.auth.signUp({
       email,
       password,
@@ -518,35 +462,26 @@ export const api = {
     });
 
     if (signupErr || !authData.user) {
-      // Cleanup created tenant
-      await supabase.from('tenants').delete().eq('id', newTenant.id);
       throw new Error('Gagal mendaftarkan admin: ' + (signupErr?.message || 'Menunggu verifikasi email'));
     }
 
-    // 4. Trigger database profile insertion manually in case of slow DB trigger sync
-    const { data: profileCheck } = await supabase.from('users').select('id').eq('id', authData.user.id).maybeSingle();
-    if (!profileCheck) {
-      const { error: profileInsertErr } = await supabase.from('users').insert({
-        id: authData.user.id,
-        tenant_id: newTenant.id,
-        name: adminName,
-        email: email,
-        role: 'Admin / Owner'
-      });
-      if (profileInsertErr) {
-        // Don't silently succeed: without this row the account can authenticate
-        // but will never be able to load a profile (permanent login failure).
-        throw new Error('Akun auth berhasil dibuat, tapi gagal menyimpan profil ke database: ' + profileInsertErr.message + '. Kemungkinan RLS policy INSERT pada tabel users memblokir ini — cek Supabase.');
-      }
+    // 3. Panggil RPC untuk membentuk Tenant dan menautkan Profile (atomic operation)
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('register_new_tenant_with_profile', {
+      p_name: formattedTenantName,
+      p_company_name: companyName,
+      p_admin_name: adminName
+    });
+
+    if (rpcErr) {
+      throw new Error('Auth berhasil, tetapi gagal setup data Resto: ' + rpcErr.message + '. Anda mungkin butuh eksekusi script FEATURE_register_tenant_rpc.sql di server.');
     }
 
-    // 5. Session managed by Supabase Auth — no localStorage writes
     try { await logAudit('REGISTER', `Pendaftaran akun resto baru ${companyName} berhasil oleh ${adminName}.`); } catch { /* ignore: best-effort */ }
 
     return {
       token: authData.session?.access_token,
-      tenant: { name: newTenant.name, company_name: newTenant.company_name },
-      user: { id: authData.user.id, name: adminName, email: email, role: 'Admin / Owner', tenant_id: newTenant.id, tenant_name: newTenant.name }
+      tenant: { name: rpcData.tenant_name, company_name: rpcData.company_name },
+      user: { id: rpcData.user_id, name: adminName, email: email, role: 'Admin / Owner', tenant_id: rpcData.tenant_id, tenant_name: rpcData.tenant_name }
     };
   },
 
@@ -939,77 +874,26 @@ export const api = {
 
   adjustStock: async (id, adjustData) => {
     const tenantId = await getActiveTenantId();
-    const { data: material, error: matErr } = await supabase.from('materials').select('*').eq('id', id).eq('tenant_id', tenantId).single();
-    if (matErr || !material) throw new Error("Bahan baku tidak ditemukan.");
-
     const { location, type, qty, notes } = adjustData;
-    const unitPrice = parseFloat(material.new_price ?? material.price ?? 0);
-    const parsedQty = parseFloat(qty);
 
-    let finalQty;
-    let newQtyResto = parseFloat(material.qty_resto);
-    let newQtyCentral = parseFloat(material.qty_central);
+    // Call RPC to guarantee atomic stock updates (prevent TOCTOU race conditions)
+    const { data, error } = await supabase.rpc('adjust_material_stock', {
+      p_material_id: id,
+      p_tenant_id: tenantId,
+      p_type: type,
+      p_location: location,
+      p_qty: parseFloat(qty),
+      p_notes: notes
+    });
 
-    const outTypes = ['OUT', 'WASTE', 'BREAKAGE', 'EXPIRED', 'COMP'];
-
-    if (type === 'IN') {
-      finalQty = parsedQty;
-      if (location === 'RESTO') {
-        newQtyResto += parsedQty;
-      } else {
-        newQtyCentral += parsedQty;
-      }
-    } else if (outTypes.includes(type)) {
-      finalQty = -parsedQty;
-      if (location === 'RESTO') {
-        newQtyResto = Math.max(0, newQtyResto - parsedQty);
-      } else {
-        newQtyCentral = Math.max(0, newQtyCentral - parsedQty);
-      }
-    } else { // TRANSFER (Central -> Resto)
-      if (location !== 'CENTRAL') {
-        throw new Error('Transfer stock harus berasal dari gudang CENTRAL.');
-      }
-      if (newQtyCentral < parsedQty) {
-        throw new Error('Stok di gudang CENTRAL tidak cukup.');
-      }
-      newQtyCentral -= parsedQty;
-      newQtyResto += parsedQty;
-      finalQty = parsedQty;
+    if (error) {
+      throw new Error("Gagal adjust stok: " + error.message);
     }
 
-    // Perform updates in Supabase
-    const { data: updatedMaterial, error: updateErr } = await supabase
-      .from('materials')
-      .update({ qty_resto: newQtyResto, qty_central: newQtyCentral })
-      .eq('id', id)
-      .select('*')
-      .single();
-
-    if (updateErr) throw new Error("Gagal update stok: " + updateErr.message);
-
-    // Save transaction
-    const { data: transaction, error: txErr } = await supabase
-      .from('transactions')
-      .insert({
-        tenant_id: tenantId,
-        date: new Date().toISOString().split('T')[0],
-        material_id: id,
-        type,
-        location,
-        qty: finalQty,
-        amount: finalQty * unitPrice,
-        notes: notes || `Manual ${type} adjustment`
-      })
-      .select('*')
-      .single();
-
-    if (txErr) console.warn("Gagal mencatat ledger transaksi:", txErr);
-
     const actionLabel = type === 'TRANSFER' ? 'Transfer' : (type === 'IN' ? 'Stock In' : 'Stock Out');
-    await logAudit('ADJUST_STOCK', `Menyesuaikan stok "${material.name}" (${actionLabel}) sebesar ${qty} ${material.unit} di ${location}. Catatan: "${notes || 'Tidak ada'}".`);
+    await logAudit('ADJUST_STOCK', `Menyesuaikan stok (${actionLabel}) sebesar ${qty} di ${location}. Catatan: "${notes || 'Tidak ada'}".`);
 
-    return { material: updatedMaterial, transaction };
+    return data;
   },
 
   // --- RECIPES ---
@@ -3588,7 +3472,7 @@ export const api = {
     const { data, error } = await supabase
       .from('tenant_reset_requests')
       .select('*, tenants(company_name, name), requester:requested_by(name, email)')
-      .order('requested_at', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(100);
     if (error) throw error;
     return data || [];

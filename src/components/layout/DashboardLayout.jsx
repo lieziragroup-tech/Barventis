@@ -154,6 +154,40 @@ export default function DashboardLayout() {
   const isSuperAdmin = activeUser?.role === 'Super Admin' || activeUser?.role === 'SuperAdmin';
   const isOwner = activeUser?.role === 'Admin / Owner';
   const isStaff = activeUser?.role === 'Staff';
+
+  // ==========================================
+  // SUPERADMIN NOTIFICATIONS (Reset Requests)
+  // ==========================================
+  const [adminNotifs, setAdminNotifs] = useState([]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function fetchAdminNotifs() {
+      if (!isSuperAdmin) return;
+      try {
+        const data = await api.getAllResetRequests();
+        const pending = (data || []).filter(req => req.status === 'PENDING');
+        if (mounted) setAdminNotifs(pending);
+      } catch (err) {
+        console.error('Failed to fetch admin notifications:', err);
+      }
+    }
+
+    fetchAdminNotifs();
+
+    // Polling setiap 30 detik untuk superadmin
+    let interval;
+    if (isSuperAdmin) {
+      interval = setInterval(fetchAdminNotifs, 30000);
+    }
+
+    return () => {
+      mounted = false;
+      if (interval) clearInterval(interval);
+    };
+  }, [isSuperAdmin]);
+
   // Fallback kept as '/staff' (rar's original behavior) rather than vercel's
   // '' for any unrecognized role value, so navigation links never silently
   // break if a role string doesn't match any of the three above.
@@ -161,12 +195,15 @@ export default function DashboardLayout() {
 
   const userAvatar = activeUser?.name ? activeUser.name.charAt(0).toUpperCase() : 'U';
 
+  // ==========================================
+  // TENANT NOTIFICATIONS (Low Stock)
+  // ==========================================
   const lowStockItems = stock?.filter(item => {
     const totalQty = (item.qty_resto || 0) + (item.qty_central || 0);
     return totalQty <= (item.min_stock || 5);
   }) || [];
 
-  const notifCount = lowStockItems.length;
+  const notifCount = isSuperAdmin ? adminNotifs.length : lowStockItems.length;
 
   const openProfileModal = () => {
     setEditProfileName(activeUser?.name || '');
@@ -611,29 +648,59 @@ export default function DashboardLayout() {
                     
                     {/* Isi List Notifikasi */}
                     <div className="max-h-[300px] overflow-y-auto">
-                      {lowStockItems && lowStockItems.length > 0 ? (
-                        <ul className="divide-y divide-gray-100">
-                          {lowStockItems.map((item) => (
-                            <li key={item.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
-                              <div className="flex items-start gap-3">
-                                <div className="mt-0.5 text-red-500">
-                                  <Bell size={16} />
+                      {isSuperAdmin ? (
+                        adminNotifs.length > 0 ? (
+                          <ul className="divide-y divide-gray-100">
+                            {adminNotifs.map((req) => (
+                              <li key={req.id} className="px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => {
+                                setShowNotifications(false);
+                                navigate('/superadmin?tab=reset-approvals');
+                              }}>
+                                <div className="flex items-start gap-3">
+                                  <div className="mt-0.5 text-amber-500">
+                                    <Bell size={16} />
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-gray-800 font-medium">Permintaan Reset Data</p>
+                                    <p className="text-xs text-gray-600 mt-1">
+                                      Dari tenant: <span className="font-semibold">{req.tenants?.company_name || req.tenant_id}</span>
+                                    </p>
+                                  </div>
                                 </div>
-                                <div>
-                                  <p className="text-sm text-gray-800 font-medium">Stok Menipis: {item.name}</p>
-                                  <p className="text-xs text-red-600 mt-1">
-                                    Sisa {item.qty_resto} {item.unit} (Min: {item.min_stock})
-                                  </p>
-                                </div>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div className="px-4 py-8 text-center">
+                            <Bell size={32} className="mx-auto text-gray-300 mb-2" />
+                            <p className="text-sm text-gray-500">Tidak ada pending requests</p>
+                          </div>
+                        )
                       ) : (
-                        <div className="px-4 py-8 text-center">
-                          <Bell size={32} className="mx-auto text-gray-300 mb-2" />
-                          <p className="text-sm text-gray-500">Tidak ada notifikasi baru</p>
-                        </div>
+                        lowStockItems && lowStockItems.length > 0 ? (
+                          <ul className="divide-y divide-gray-100">
+                            {lowStockItems.map((item) => (
+                              <li key={item.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+                                <div className="flex items-start gap-3">
+                                  <div className="mt-0.5 text-red-500">
+                                    <Bell size={16} />
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-gray-800 font-medium">Stok Menipis: {item.name}</p>
+                                    <p className="text-xs text-red-600 mt-1">
+                                      Sisa {item.qty_resto} {item.unit} (Min: {item.min_stock})
+                                    </p>
+                                  </div>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div className="px-4 py-8 text-center">
+                            <Bell size={32} className="mx-auto text-gray-300 mb-2" />
+                            <p className="text-sm text-gray-500">Tidak ada notifikasi baru</p>
+                          </div>
+                        )
                       )}
                     </div>
                   </motion.div>
