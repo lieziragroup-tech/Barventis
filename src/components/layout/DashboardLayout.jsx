@@ -2,10 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  LogOut, Bell, X, RefreshCw, Menu, 
-  LayoutDashboard, ClipboardList, UploadCloud, 
-  Utensils, Tag, ShoppingCart, FileText, Boxes, Trash2, Package, 
-  Calculator, History, Settings, Archive, Wrench, Building2, Layout, Edit, MonitorSmartphone, BookOpen
+  LogOut, Bell, X, RefreshCw, Menu,
+  LayoutDashboard, ClipboardList, UploadCloud,
+  Utensils, Tag, ShoppingCart, FileText, Boxes, Trash2, Package,
+  Calculator, History, Settings, Archive, Wrench, Building2, Layout, Edit, MonitorSmartphone, BookOpen, Clock
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useData } from '../../contexts/DataContext';
@@ -299,6 +299,7 @@ export default function DashboardLayout() {
                     <NavItem to="/superadmin" exact label="Kelola Tenant" icon={Building2}  isHovered={isHovered} index={1} />
                     <NavItem to="/superadmin/templates" label="POS Templates" icon={Layout}  isHovered={isHovered} index={2} />
                     <NavItem to="/superadmin/logs" label="Audit Logs" icon={History}  isHovered={isHovered} index={3} />
+                    <NavItem to="/superadmin?tab=reset-approvals" label="History Permintaan" icon={Clock}  isHovered={isHovered} index={4} />
                   </NavGroup>
                 )}
 
@@ -435,6 +436,7 @@ export default function DashboardLayout() {
                 <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin" exact label="Kelola Tenant" icon={Building2}  isHovered={true} index={6} />
                 <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin/templates" label="POS Templates" icon={Layout}  isHovered={true} index={7} />
                 <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin/logs" label="Audit Logs" icon={History}  isHovered={true} index={8} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin?tab=reset-approvals" label="History Permintaan" icon={Clock}  isHovered={true} index={9} />
               </NavGroup>
             )}
 
