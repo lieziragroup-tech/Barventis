@@ -299,7 +299,7 @@ export default function DashboardLayout() {
                     <NavItem to="/superadmin" exact label="Kelola Tenant" icon={Building2}  isHovered={isHovered} index={1} />
                     <NavItem to="/superadmin/templates" label="POS Templates" icon={Layout}  isHovered={isHovered} index={2} />
                     <NavItem to="/superadmin/logs" label="Audit Logs" icon={History}  isHovered={isHovered} index={3} />
-                    <NavItem to="/superadmin?tab=reset-approvals" label="History Permintaan" icon={Clock}  isHovered={isHovered} index={4} />
+                    <NavItem to="/superadmin/reset-approvals" label="History Permintaan" icon={Clock}  isHovered={isHovered} index={4} />
                   </NavGroup>
                 )}
 
@@ -436,7 +436,7 @@ export default function DashboardLayout() {
                 <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin" exact label="Kelola Tenant" icon={Building2}  isHovered={true} index={6} />
                 <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin/templates" label="POS Templates" icon={Layout}  isHovered={true} index={7} />
                 <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin/logs" label="Audit Logs" icon={History}  isHovered={true} index={8} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin?tab=reset-approvals" label="History Permintaan" icon={Clock}  isHovered={true} index={9} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin/reset-approvals" label="History Permintaan" icon={Clock}  isHovered={true} index={9} />
               </NavGroup>
             )}
 
@@ -656,7 +656,7 @@ export default function DashboardLayout() {
                             {adminNotifs.map((req) => (
                               <li key={req.id} className="px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => {
                                 setShowNotifications(false);
-                                navigate('/superadmin?tab=reset-approvals');
+                                navigate('/superadmin/reset-approvals');
                               }}>
                                 <div className="flex items-start gap-3">
                                   <div className="mt-0.5 text-amber-500">
