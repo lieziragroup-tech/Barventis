@@ -4,10 +4,12 @@ import BulkImport from '../../components/BulkImport';
 import Pagination from '../../components/shared/Pagination';
 import { useData } from '../../contexts/DataContext';
 import { api } from '../../services/api';
-import { formatIDR, calculateIngredientCost, parsePackSize, isPackUnitConsistent, getPackUnitInfo } from '../../services/costUtils';
+import {
+  formatIDR, calculateIngredientCost, parsePackSize, isPackUnitConsistent, getPackUnitInfo,
+  computeRecipeCosts, DEFAULT_ROUNDING_DIRECTION, DEFAULT_ROUNDING_INCREMENT, DEFAULT_PRICE_ADJUSTMENT
+} from '../../services/costUtils';
 
-// Stable client-side id for editable ingredient rows so React keys don't rely on the
-// array index (preserves input focus/state across add/remove/reorder). (LOW #19)
+
 const rowUid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `r${Date.now()}${Math.random()}`);
 const ensureUids = (arr = []) => arr.map(x => ({ ...x, _uid: x._uid ?? rowUid() }));
 
@@ -18,6 +20,12 @@ export default function Recipes() {
   const [search, setSearch] = useState('');
   const [editedIngredients, setEditedIngredients] = useState(activeRecipe ? ensureUids(activeRecipe.ingredients) : []);
   const [editedSellingPrice, setEditedSellingPrice] = useState(activeRecipe ? Math.round(activeRecipe.selling_price) : 0);
+  
+  const [editedFixCostPct, setEditedFixCostPct] = useState(
+    activeRecipe?.fix_cost_pct != null ? (parseFloat(activeRecipe.fix_cost_pct) * 100) : (api.getOverheadPct() * 100)
+  );
+
+  const [editedFoodCostTarget, setEditedFoodCostTarget] = useState('');
   const [editedCategory, setEditedCategory] = useState(activeRecipe?.category || 'NON-KOPI');
   const [editedImageUrl, setEditedImageUrl] = useState(activeRecipe?.image_url || '');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -31,14 +39,7 @@ export default function Recipes() {
 
 
 
-  // Parse full_pack field to extract numeric value and unit.
-  // BUG-FIX 2026-07: this used to be a SECOND, separately-maintained regex parser
-  // (diverged from costUtils.parsePackSize on cases like "2 kg").
-  // MANUAL UNIT CONVERSION (2026-08): now delegates BOTH the numeric size (via
-  // parsePackSize) AND the content-unit determination (via getPackUnitInfo) to
-  // costUtils — the same shared logic calculateIngredientCost() itself uses to
-  // decide pack-vs-content scaling — so this dropdown and the actual HPP math can
-  // never disagree about what "1 Carton = 24 pcs" means for a given material.
+
   const parseFullPack = (fullPack, materialUnit) => {
     const size = parsePackSize(fullPack);
     const consistent = isPackUnitConsistent(materialUnit, fullPack);
@@ -51,10 +52,7 @@ export default function Recipes() {
     const map = {};
     stock.forEach(item => {
       const packInfo = parseFullPack(item.full_pack, item.unit);
-      // Determine available usage units for this item: the CONTENT unit
-      // (e.g. "pcs", from a structured "Carton = 24 pcs" full_pack) and the
-      // PACK/purchase unit (item.unit, e.g. "Carton") — a recipe can use
-      // either one and get an identical cost (see costUtils.calculateIngredientCost).
+
       const { packUnitLabel } = getPackUnitInfo(item.full_pack, item.unit);
       const usageUnits = [...new Set([packInfo.unit, packUnitLabel])];
 
@@ -77,15 +75,14 @@ export default function Recipes() {
     setActiveRecipe(r);
     setEditedIngredients(ensureUids(r.ingredients || []));
     setEditedSellingPrice(Math.round(r.selling_price));
+    setEditedFixCostPct(r.fix_cost_pct != null ? (parseFloat(r.fix_cost_pct) * 100) : (api.getOverheadPct() * 100));
+    setEditedFoodCostTarget('');
     setEditedCategory(r.category || 'NON-KOPI');
     setEditedImageUrl(r.image_url || '');
     setOpenDropdown(null);
   };
 
-  // M-1: recipes arrive asynchronously. If none is selected yet (or the selected one
-  // disappeared after a refetch), auto-select the first so the editor isn't stuck blank.
-  // Selecting on data-arrival is intentional, so the related hooks rules are scoped off.
-  /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
+
   useEffect(() => {
     if (recipes.length === 0) return;
     const stillExists = activeRecipe && recipes.some(r => r.menu_name === activeRecipe.menu_name);
@@ -125,9 +122,7 @@ export default function Recipes() {
     }
   };
 
-  // Calculate amount for a single ingredient row
-  // amount = qty_in_use * pricePerUnit (if using the pack's content unit like gr/ml)
-  // amount = qty_in_use * full_pack_price (if using per-pack unit like pck/btl)
+
   const calcRowAmount = (ing) => {
     const info = stockMap[ing.item_name];
     if (!info) {
@@ -139,24 +134,29 @@ export default function Recipes() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const subtotal = useMemo(() => editedIngredients.reduce((acc, ing) => acc + calcRowAmount(ing), 0), [editedIngredients, stockMap, unitConversionMap]);
-  const fixCost = useMemo(() => subtotal * 0.05, [subtotal]);
+
+  const fixCostPctFraction = (parseFloat(editedFixCostPct) || 0) / 100;
+  const fixCost = useMemo(() => subtotal * fixCostPctFraction, [subtotal, fixCostPctFraction]);
   const basicCost = useMemo(() => subtotal + fixCost, [subtotal, fixCost]);
   const foodCostPct = useMemo(() => editedSellingPrice > 0 ? (basicCost / editedSellingPrice) : 0, [basicCost, editedSellingPrice]);
 
-  // BUG-FIX 2026-08: the recipe LIST used to show `r.basic_cost`/`r.food_cost_pct`
-  // straight from the DB — but those columns only get refreshed when a human opens
-  // + saves that specific recipe, or via "Hitung Ulang Semua". Any recipe imported
-  // while a material's price/full_pack was still wrong (or simply not yet re-saved
-  // after a material price change) showed a stale/blank "HPP: Rp0" in the list even
-  // though the ingredient list itself was populated — the exact mismatch between
-  // the list and the opened detail panel. Instead of trusting the stored columns,
-  // compute the same live number for every recipe in the list, using the identical
-  // formula/stockMap the detail panel already uses — so the list can never go stale
-  // relative to current material prices, and "HPP: Rp0" only ever shows for a recipe
-  // that genuinely has no priced ingredients yet.
+
+  const foodCostTargetFraction = (parseFloat(editedFoodCostTarget) || 0) / 100;
+  const targetPricing = useMemo(() => computeRecipeCosts({
+    subtotal,
+    fixCostPct: fixCostPctFraction,
+    foodCostPct: foodCostTargetFraction,
+    roundingDirection: DEFAULT_ROUNDING_DIRECTION,
+    roundingIncrement: DEFAULT_ROUNDING_INCREMENT,
+    priceAdjustment: DEFAULT_PRICE_ADJUSTMENT
+  }), [subtotal, fixCostPctFraction, foodCostTargetFraction]);
+
+
   const computeLiveRecipeCost = (recipe) => {
     const liveSubtotal = (recipe.ingredients || []).reduce((acc, ing) => acc + calcRowAmount(ing), 0);
-    const liveFixCost = liveSubtotal * 0.05;
+ 
+    const liveFixCostPct = recipe.fix_cost_pct != null ? parseFloat(recipe.fix_cost_pct) : api.getOverheadPct();
+    const liveFixCost = liveSubtotal * liveFixCostPct;
     const liveBasicCost = liveSubtotal + liveFixCost;
     const sellingPrice = Number(recipe.selling_price) || 0;
     const liveFoodCostPct = sellingPrice > 0 ? liveBasicCost / sellingPrice : 0;
@@ -204,10 +204,7 @@ export default function Recipes() {
     setOpenDropdown(null);
   };
 
-  // Save recipe — persist all calculations to database
-  // BUG-RCP-01: Ingredients from DB already carry material_id. Pass it through so
-  // App.jsx handleSaveRecipe can use it directly without a slow name-based lookup
-  // that fails when stock names have changed since the recipe was created.
+
   const handleSaveRecipe = () => {
     if (!activeRecipe) return;
     if (!window.confirm(`Konfirmasi simpan perubahan resep "${activeRecipe.menu_name}"?`)) return;
@@ -229,17 +226,18 @@ export default function Recipes() {
       category: editedCategory,
       selling_price: editedSellingPrice,
       image_url: editedImageUrl,
-      subtotal, fix_cost: fixCost, basic_cost: basicCost, food_cost_pct: foodCostPct,
+      subtotal, fix_cost: fixCost, basic_cost: basicCost,
+
+      fix_cost_pct: fixCostPctFraction,
+  
+      food_cost_pct: foodCostTargetFraction > 0 ? foodCostTargetFraction : foodCostPct,
       total_cost: basicCost,
       ingredients: savedIngredients
     };
     onSaveRecipe(updatedRecipe);
   };
 
-  // GAP-FIX 2026-07: recipes' stored basic_cost/food_cost_pct only refresh when a
-  // human opens+saves each one individually. After fixing master-data pack sizes
-  // (e.g. Ice Cube), every recipe's stored number stays stale until re-saved. This
-  // lets the user refresh all of them in one action instead of opening all 56.
+
   const handleRecalculateAll = async () => {
     if (!window.confirm('Hitung ulang HPP & Food Cost% untuk SEMUA resep berdasarkan harga bahan terbaru? Resep yang datanya berubah akan otomatis tersimpan.')) return;
     setRecalculating(true);
@@ -280,9 +278,7 @@ export default function Recipes() {
     setEditedImageUrl(newImageUrl);
   };
 
-  // Cost badge color. food_cost_pct is ALWAYS stored as a fraction (basic_cost /
-  // selling_price), so convert to percent unconditionally. The previous `< 1` guess
-  // mis-handled food costs >= 100% (e.g. 1.2 shown/treated as ~1%). (M-5)
+
   const getCostBadge = (pct) => {
     const p = (Number(pct) || 0) * 100;
     if (p < 27) return 'badge-success';
@@ -537,6 +533,57 @@ export default function Recipes() {
                 onChange={e => setEditedSellingPrice(parseInt(e.target.value) || 0)} 
               />
             </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                Fix Cost (%)
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                className="form-control premium-input"
+                style={{ height: '40px' }}
+                value={editedFixCostPct}
+                onChange={e => setEditedFixCostPct(e.target.value)}
+              />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                Target Food Cost % (opsional)
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                placeholder="Isi utk hitung saran Harga Jual"
+                className="form-control premium-input"
+                style={{ height: '40px' }}
+                value={editedFoodCostTarget}
+                onChange={e => setEditedFoodCostTarget(e.target.value)}
+              />
+            </div>
+            {foodCostTargetFraction > 0 && (
+              <div style={{
+                gridColumn: '1 / -1', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                gap: '12px', flexWrap: 'wrap', background: 'var(--accent-glow)', border: '1px solid rgba(79,110,247,0.15)',
+                borderRadius: 'var(--radius-md)', padding: '10px 14px', fontSize: '0.8rem'
+              }}>
+                <span style={{ color: 'var(--text-secondary)' }}>
+                  Dari HPP {formatIDR(basicCost)} ÷ Target Food Cost {editedFoodCostTarget}% → saran Harga Jual:{' '}
+                  <strong style={{ color: 'var(--accent)', fontSize: '0.9rem' }}>{formatIDR(targetPricing.sellingPriceFinal)}</strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setEditedSellingPrice(targetPricing.sellingPriceFinal)}
+                  style={{
+                    background: 'var(--accent)', color: '#fff', border: 'none', padding: '7px 14px',
+                    borderRadius: 'var(--radius-md)', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', flexShrink: 0
+                  }}
+                >
+                  Pakai Harga Ini →
+                </button>
+              </div>
+            )}
             <div className="form-group" style={{ marginBottom: 0, gridColumn: '1 / -1' }}>
               <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>URL Gambar Menu</label>
               <input 
@@ -724,7 +771,7 @@ export default function Recipes() {
             <div style={{ display: 'flex', gap: '24px', fontSize: '0.825rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
               <span>Subtotal: <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatIDR(subtotal)}</strong></span>
               <span style={{ width: 1, background: 'var(--border)', height: '14px', alignSelf: 'center' }} />
-              <span>Fix Cost (5%): <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatIDR(fixCost)}</strong></span>
+              <span>Fix Cost ({parseFloat(editedFixCostPct) || 0}%): <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatIDR(fixCost)}</strong></span>
               <span style={{ width: 1, background: 'var(--border)', height: '14px', alignSelf: 'center' }} />
               <span>HPP Gabungan: <strong style={{ color: 'var(--accent)', fontWeight: 800 }}>{formatIDR(basicCost)}</strong></span>
             </div>
@@ -844,14 +891,7 @@ export default function Recipes() {
         title="Bulk Import Resep & Harga Jual"
         description="Upload data menu, harga jual, dan resep sekaligus dari file Excel."
         onCommit={async (rows) => {
-          // Excel uses human-friendly percent numbers (5 = 5%, matching the
-          // FIX COST %/FOOD COST % TARGET column labels) and Indonesian rounding
-          // labels ('ke bawah'/'ke atas') — convert to the fraction (0.05) and
-          // enum ('down'/'up') values costUtils.computeRecipeCosts() and the DB
-          // CHECK constraint on rounding_direction expect, same convention as
-          // the Overhead % field in Maintenance.jsx. Blank cells stay blank
-          // (not 0) so api.js's "not provided -> use tenant default" fallback
-          // still applies correctly.
+
           const normalizedRows = rows.map(row => {
             const out = { ...row };
             if (row.fix_cost_pct_input !== undefined && row.fix_cost_pct_input !== '') {
