@@ -1,8 +1,9 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Plus, Edit2, Search, Trash2, Calendar, ShoppingCart, User, MapPin } from 'lucide-react';
+import { Plus, Edit2, Search, Trash2, Calendar, ShoppingCart, User, UploadCloud } from 'lucide-react';
 import { api } from '../../services/api';
 import Pagination from '../../components/shared/Pagination';
+import BulkImport from '../../components/BulkImport';
 import { useAuth } from '../../contexts/AuthContext';
 
 const PAGE_SIZE = 15;
@@ -44,6 +45,9 @@ export default function Purchasing() {
     }, 250); // 250ms debounce
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  // Bulk Import
+  const [showBulkImport, setShowBulkImport] = useState(false);
 
   // New Material Modal
   const [showNewMaterialModal, setShowNewMaterialModal] = useState(false);
@@ -169,6 +173,21 @@ export default function Purchasing() {
     }
   };
 
+  const handleDeleteHistory = async (txId, itemName) => {
+    if (!window.confirm(`Hapus dan batalkan data pembelian harian "${itemName}"? Stok akan ditarik kembali secara otomatis.`)) return;
+    setLoading(true);
+    try {
+      await api.deleteTransactionAndReverseStock(txId);
+      setNotification({ type: 'success', text: `Pembelian "${itemName}" berhasil dibatalkan.` });
+      fetchHistory(page, search);
+      fetchMasterData(); // Refresh current stock levels globally
+    } catch (err) {
+      setNotification({ type: 'error', text: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCreateMaterial = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -234,7 +253,14 @@ export default function Purchasing() {
         <div className="glass-card" style={{ padding: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Daftar Supplier</h3>
-            <button className="btn btn-primary" onClick={() => setEditSupplier({ name: '', phone: '', address: '', contact_person: '' })}><Plus size={16} style={{ marginRight: '8px' }}/> Tambah Supplier</button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button className="btn btn-secondary" onClick={() => setShowBulkImport(true)}>
+                <UploadCloud size={16} style={{ marginRight: '8px' }}/> Import Excel
+              </button>
+              <button className="btn btn-primary" onClick={() => setEditSupplier({ name: '', phone: '', address: '', contact_person: '' })}>
+                <Plus size={16} style={{ marginRight: '8px' }}/> Tambah Supplier
+              </button>
+            </div>
           </div>
           <div className="table-container">
             <table className="custom-table">
@@ -471,6 +497,7 @@ export default function Purchasing() {
                     <th>Supplier</th>
                     <th style={{ textAlign: 'right' }}>Qty</th>
                     <th style={{ textAlign: 'right' }}>Total</th>
+                    <th style={{ textAlign: 'center', width: '60px' }}>Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -481,9 +508,14 @@ export default function Purchasing() {
                       <td style={{ fontSize: '0.85rem' }}>{p.suppliers?.name || '-'}</td>
                       <td style={{ textAlign: 'right' }}>{p.qty} {p.unit}</td>
                       <td style={{ textAlign: 'right', fontWeight: 600 }}>Rp {(p.qty * p.unit_price).toLocaleString('id-ID')}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button className="btn" style={{ padding: '4px', color: 'var(--danger)', background: 'transparent' }} onClick={() => handleDeleteHistory(p.id, p.materials?.name)}>
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
-                  {purchases.length === 0 && !historyLoading && <tr><td colSpan="5" style={{ textAlign: 'center' }}>{search ? 'Tidak ada hasil untuk pencarian ini.' : 'Belum ada data pembelian harian.'}</td></tr>}
+                  {purchases.length === 0 && !historyLoading && <tr><td colSpan="6" style={{ textAlign: 'center' }}>{search ? 'Tidak ada hasil untuk pencarian ini.' : 'Belum ada data pembelian harian.'}</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -563,6 +595,47 @@ export default function Purchasing() {
           </div>
         </div>
       )}
+      {/* Bulk Import Modal */}
+      <BulkImport
+        isOpen={showBulkImport}
+        onClose={() => setShowBulkImport(false)}
+        type="suppliers"
+        title="Bulk Import Data Supplier"
+        description="Upload data supplier dari file Excel. Kolom nama wajib diisi."
+        currentData={[]}
+        onCommit={async (rows) => {
+          let success = 0;
+          let failed = 0;
+
+          for (const row of rows) {
+            const name = row.name || row['NAMA SUPPLIER'];
+            if (!name) {
+              failed++; continue;
+            }
+            try {
+              await api.saveSupplier({
+                name: name,
+                contact_person: row.contact_person || row['KONTAK'] || '',
+                phone: row.phone || row['NO HP'] || '',
+                address: row.address || row['ALAMAT'] || ''
+              });
+              success++;
+            } catch (err) {
+              console.warn("Failed to import supplier:", err);
+              failed++;
+            }
+          }
+
+          fetchMasterData();
+          return { success, failed };
+        }}
+        expectedColumns={[
+          { key: 'NAMA SUPPLIER', label: 'NAMA SUPPLIER', required: true, type: 'string', description: 'Nama Toko/Supplier', sample: 'Toko Kopi ABC' },
+          { key: 'KONTAK', label: 'KONTAK (PERSON)', required: false, type: 'string', description: 'Nama PIC', sample: 'Budi' },
+          { key: 'NO HP', label: 'NO HP', required: false, type: 'string', description: 'Nomor telepon/WA', sample: '08123456789' },
+          { key: 'ALAMAT', label: 'ALAMAT', required: false, type: 'string', description: 'Alamat lengkap', sample: 'Jl. Merdeka No 1' }
+        ]}
+      />
     </div>
   );
 }

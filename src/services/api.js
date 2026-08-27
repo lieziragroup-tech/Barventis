@@ -3540,21 +3540,70 @@ export const api = {
   getInvoicesStats: async () => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { total: 0, pending: 0, received: 0, totalValue: 0 };
-    
+
     // Quick query for stats
     const { data } = await supabase
       .from('invoices')
       .select('status, total')
       .eq('tenant_id', tenantId);
-      
+
     if (!data) return { total: 0, pending: 0, received: 0, totalValue: 0 };
-    
+
     return {
       total: data.length,
       pending: data.filter(i => i.status === 'DRAFT' || i.status === 'SENT').length,
       received: data.filter(i => i.status === 'RECEIVED').length,
       totalValue: data.reduce((sum, i) => sum + parseFloat(i.total || 0), 0)
     };
+  },
+
+  // Delete a transaction and reverse its stock impact atomically.
+  // PURCHASE_IN (qty > 0): stock was added → reversal deducts same qty.
+  // WASTE (qty < 0): stock was deducted → reversal adds back (deduct_stock_atomic with negative qty adds stock).
+  deleteTransactionAndReverseStock: async (txId) => {
+    const tenantId = await getActiveTenantId();
+
+    // Fetch raw id (txId may be prefixed with 'tx-' from getTransactions mapper)
+    const rawId = String(txId).replace(/^tx-/, '');
+
+    const { data: tx, error: fetchErr } = await supabase
+      .from('transactions')
+      .select('id, type, qty, material_id, amount, notes, date')
+      .eq('id', rawId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+
+    if (fetchErr) throw new Error('Gagal mengambil data transaksi: ' + fetchErr.message);
+    if (!tx) throw new Error('Transaksi tidak ditemukan.');
+
+    // Reverse stock if material is linked
+    if (tx.material_id) {
+      const { error: rpcErr } = await supabase.rpc('deduct_stock_atomic', {
+        p_material_id: tx.material_id,
+        p_deduct_qty: parseFloat(tx.qty) // Positive = deduct, Negative = add back
+      });
+      if (rpcErr) throw new Error('Gagal membalikkan stok: ' + rpcErr.message);
+    }
+
+    // Try to also delete from purchase_entries if applicable
+    if (tx.type === 'PURCHASE_IN') {
+      await supabase.from('purchase_entries').delete()
+        .eq('tenant_id', tenantId)
+        .eq('date', tx.date)
+        .eq('material_id', tx.material_id);
+    }
+
+    // Delete the transaction row
+    const { error: delErr } = await supabase
+      .from('transactions')
+      .delete()
+      .eq('id', rawId)
+      .eq('tenant_id', tenantId);
+
+    if (delErr) throw new Error('Gagal menghapus transaksi: ' + delErr.message);
+
+    await logAudit('DELETE_TRANSACTION', `Menghapus dan membalikkan transaksi tipe "${tx.type}" tgl ${tx.date}. Stok disesuaikan kembali.`);
+    return true;
   }
 };
 

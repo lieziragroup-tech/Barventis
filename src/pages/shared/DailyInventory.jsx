@@ -133,6 +133,21 @@ export default function DailyInventory() {
     setCart(prev => prev.filter(item => item.cart_id !== cartId));
   };
 
+  const handleDeleteWasteHistory = async (txId, itemName) => {
+    if (!window.confirm(`Hapus dan batalkan data waste "${itemName}"? Stok akan dikembalikan secara otomatis.`)) return;
+    setLoading(true);
+    try {
+      await api.deleteTransactionAndReverseStock(txId);
+      setNotification({ type: 'success', text: `Data waste "${itemName}" berhasil dibatalkan.` });
+      fetchHistory(historyPage);
+      fetchMasters(); // Refresh stock
+    } catch (err) {
+      setNotification({ type: 'error', text: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCreateMaterial = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -383,6 +398,7 @@ export default function DailyInventory() {
                 <th>Tipe Kerusakan</th>
                 <th style={{ textAlign: 'right' }}>Qty Rusak</th>
                 <th>Catatan</th>
+                <th style={{ textAlign: 'center', width: '60px' }}>Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -398,6 +414,11 @@ export default function DailyInventory() {
                     <td><span className="badge badge-danger" style={{ fontSize: '0.65rem' }}>{wasteType}</span></td>
                     <td style={{ textAlign: 'right', color: 'var(--danger)', fontWeight: 600 }}>{Math.abs(h.qty).toFixed(2)} {h.materials?.unit}</td>
                     <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{notesClean || '-'}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <button className="btn" style={{ padding: '4px', color: 'var(--danger)', background: 'transparent' }} onClick={() => handleDeleteWasteHistory(h.id, h.materials?.name)}>
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
                   </tr>
                 );
               })}

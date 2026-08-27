@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, CheckCircle, Database, Trash2, X } from 'lucide-react';
+import { Plus, Edit2, CheckCircle, Database, Trash2, X, UploadCloud } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
+import BulkImport from '../../components/BulkImport';
 
 export default function AssetManagement() {
   const [loading, setLoading] = useState(true);
   const [assets, setAssets] = useState([]);
   const [editingAsset, setEditAsset] = useState(null);
   const [showOpnameModal, setShowOpnameModal] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
   const [opnameItems, setOpnameItems] = useState({});
   const [notification, setNotification] = useState(null);
 
@@ -145,6 +147,9 @@ export default function AssetManagement() {
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Kelola aset restoran (mesin, gelas, tools) dan opname kerusakan.</p>
         </div>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary" onClick={() => setShowBulkImport(true)}>
+            <UploadCloud size={16} style={{ marginRight: '8px' }}/> Import Excel
+          </button>
           <button className="btn btn-secondary" onClick={openOpnameModal} disabled={loading || assets.length === 0}>
             <Database size={16} style={{ marginRight: '8px' }}/> Stock Opname Aset
           </button>
@@ -262,6 +267,53 @@ export default function AssetManagement() {
           </div>
         </div>
       )}
+      {/* Bulk Import Modal */}
+      <BulkImport
+        isOpen={showBulkImport}
+        onClose={() => setShowBulkImport(false)}
+        type="assets"
+        title="Bulk Import Data Aset"
+        description="Upload data aset dari Excel. Pastikan header sesuai dengan format di bawah."
+        currentData={[]}
+        onCommit={async (rows) => {
+          const tenantId = await api.getActiveTenantId();
+          let success = 0;
+          let failed = 0;
+
+          const payloads = rows.map(row => {
+            if (!row.name && !row['NAMA ASET']) {
+              failed++; return null;
+            }
+            success++;
+            return {
+              tenant_id: tenantId,
+              name: row.name || row['NAMA ASET'],
+              category: 'ASSET',
+              supplier: row.supplier || row['GRUP'] || '-',
+              unit: 'pcs',
+              full_pack: '1 pcs',
+              price: parseFloat(row.price || row['NILAI SATUAN']) || 0,
+              new_price: parseFloat(row.price || row['NILAI SATUAN']) || 0,
+              qty_resto: parseFloat(row.qty_resto || row['STOK FISIK']) || 0,
+              qty_central: parseFloat(row.qty_central) || 0,
+              min_stock: parseFloat(row.min_stock) || 0,
+              is_active: true
+            };
+          }).filter(p => p !== null);
+
+          if (payloads.length > 0) {
+            await supabase.from('materials').insert(payloads);
+            fetchAssets();
+          }
+          return { success, failed };
+        }}
+        expectedColumns={[
+          { key: 'NAMA ASET', label: 'NAMA ASET', required: true, type: 'string', description: 'Nama Aset', sample: 'Mesin Espresso' },
+          { key: 'GRUP', label: 'GRUP (KATEGORI SUB)', required: false, type: 'string', description: 'Kelompok/Grup aset', sample: 'Mesin' },
+          { key: 'NILAI SATUAN', label: 'NILAI SATUAN (RP)', required: true, type: 'number', description: 'Harga Beli Satuan', sample: 15000000 },
+          { key: 'STOK FISIK', label: 'STOK FISIK', required: true, type: 'number', description: 'Total jumlah fisik', sample: 2 }
+        ]}
+      />
     </div>
   );
 }
