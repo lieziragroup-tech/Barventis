@@ -1,31 +1,54 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit2, Search } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Plus, Edit2, Search, Trash2, Calendar, ShoppingCart, User, MapPin } from 'lucide-react';
 import { api } from '../../services/api';
 import Pagination from '../../components/shared/Pagination';
+import { useAuth } from '../../contexts/AuthContext';
 
 const PAGE_SIZE = 15;
 
 export default function Purchasing() {
+  const { activeUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('PURCHASES'); // 'PURCHASES' or 'SUPPLIERS'
 
-  // Supplier State (small list, loaded in full)
+  // Supplier State
   const [suppliers, setSuppliers] = useState([]);
   const [editingSupplier, setEditSupplier] = useState(null);
 
-  // Materials (for the form dropdown, small list, loaded in full)
+  // Materials Master
   const [materials, setMaterials] = useState([]);
 
-  // Purchase Entry history — paginated + searchable
+  // Purchase Entry history
   const [purchases, setPurchases] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [historyLoading, setHistoryLoading] = useState(false);
-
-  const [newPurchase, setNewPurchase] = useState({ date: new Date().toISOString().split('T')[0], material_id: '', supplier_id: '', qty: '', unit: 'pck', unit_price: '', notes: '' });
   const [notification, setNotification] = useState(null);
+
+  // --- CART STATES ---
+  const [cart, setCart] = useState([]);
+  const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().split('T')[0]);
+
+  // Search Autocomplete
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const searchInputRef = useRef(null);
+
+  // Debounce effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 250); // 250ms debounce
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // New Material Modal
+  const [showNewMaterialModal, setShowNewMaterialModal] = useState(false);
+  const [newMaterialData, setNewMaterialData] = useState({ name: '', category: 'Bahan Baku Dasar', unit: 'pcs', price: '', min_stock: 15 });
+
   const fetchHistory = useCallback(async (targetPage, targetSearch) => {
     setHistoryLoading(true);
     try {
@@ -47,7 +70,7 @@ export default function Purchasing() {
         api.getMaterials()
       ]);
       setSuppliers(supData || []);
-      setMaterials((matData || []).map(m => ({ id: m.id, name: m.name, unit: m.unit, new_price: m.new_price })));
+      setMaterials((matData || []).map(m => ({ id: m.id, name: m.name, unit: m.unit, price: m.new_price || 0 })));
     } catch (err) {
       setNotification({ type: 'error', text: err.message });
     } finally {
@@ -63,7 +86,18 @@ export default function Purchasing() {
     fetchHistory(page, search);
   }, [page, search, fetchHistory]);
 
-  // --- Supplier Handlers ---
+  // Click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (searchInputRef.current && !searchInputRef.current.contains(event.target)) {
+        setShowSearchDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // --- Handlers ---
   const handleSaveSupplier = async (e) => {
     e.preventDefault();
     if (!window.confirm(`Konfirmasi simpan data supplier ${editingSupplier.name}?`)) return;
@@ -77,31 +111,101 @@ export default function Purchasing() {
     }
   };
 
-  // --- Purchase Entry Handlers ---
-  const handleMaterialSelect = (e) => {
-    const matId = e.target.value;
-    const mat = materials.find(m => m.id.toString() === matId);
-    setNewPurchase({
-      ...newPurchase,
-      material_id: matId,
-      unit: mat ? mat.unit : 'pck',
-      unit_price: mat ? mat.new_price : ''
-    });
+  const addToCart = (material) => {
+    setCart(prev => [...prev, {
+      cart_id: Date.now() + Math.random(),
+      material_id: material.id,
+      name: material.name,
+      unit: material.unit,
+      qty: 1,
+      unit_price: material.price,
+      supplier_id: ''
+    }]);
+    setSearchQuery('');
+    setShowSearchDropdown(false);
   };
 
-  const handleSavePurchase = async (e) => {
-    e.preventDefault();
-    if (!window.confirm(`Konfirmasi penambahan pembelian baru?`)) return;
+  const updateCartItem = (cartId, field, value) => {
+    setCart(prev => prev.map(item => item.cart_id === cartId ? { ...item, [field]: value } : item));
+  };
+
+  const removeCartItem = (cartId) => {
+    setCart(prev => prev.filter(item => item.cart_id !== cartId));
+  };
+
+  const handleSavePurchases = async () => {
+    if (cart.length === 0) return setNotification({ type: 'error', text: 'Keranjang pembelian kosong.' });
+
+    // Validation
+    for (const item of cart) {
+      if (!item.qty || parseFloat(item.qty) <= 0) return setNotification({ type: 'error', text: `Kuantitas untuk ${item.name} harus lebih dari 0.` });
+      if (item.unit_price === '' || parseFloat(item.unit_price) < 0) return setNotification({ type: 'error', text: `Harga untuk ${item.name} tidak valid.` });
+    }
+
+    if (!window.confirm(`Simpan ${cart.length} item pembelian ini?`)) return;
+
+    setLoading(true);
     try {
-      await api.createPurchaseEntry({ ...newPurchase, qty: parseFloat(newPurchase.qty), unit_price: parseFloat(newPurchase.unit_price) });
-      setNewPurchase({ date: new Date().toISOString().split('T')[0], material_id: '', supplier_id: '', qty: '', unit: 'pck', unit_price: '', notes: '' });
-      setNotification({ type: 'success', text: 'Pembelian berhasil dicatat.' });
+      await Promise.all(cart.map(item => api.createPurchaseEntry({
+        date: purchaseDate,
+        material_id: item.material_id,
+        supplier_id: item.supplier_id || null,
+        qty: parseFloat(item.qty),
+        unit: item.unit,
+        unit_price: parseFloat(item.unit_price),
+        notes: `Pembelian Multi-Cart by ${activeUser?.name || 'Sistem'}`
+      })));
+
+      setCart([]);
+      setNotification({ type: 'success', text: `${cart.length} item berhasil disimpan ke gudang.` });
       setPage(1);
       fetchHistory(1, search);
     } catch (err) {
       setNotification({ type: 'error', text: err.message });
+    } finally {
+      setLoading(false);
     }
   };
+
+  const handleCreateMaterial = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const payload = {
+        name: newMaterialData.name,
+        category: newMaterialData.category,
+        unit: newMaterialData.unit,
+        price: parseFloat(newMaterialData.price) || 0,
+        min_stock: parseFloat(newMaterialData.min_stock) || 15
+      };
+      const created = await api.createMaterial(payload);
+
+      // Auto add to cart
+      addToCart({
+        id: created.id,
+        name: created.name,
+        unit: created.unit,
+        price: created.price
+      });
+
+      setShowNewMaterialModal(false);
+      setNotification({ type: 'success', text: `Bahan ${created.name} berhasil dibuat & dimasukkan ke keranjang.` });
+      fetchMasterData(); // Refresh the list in the background
+    } catch (err) {
+      setNotification({ type: 'error', text: err.message });
+      setLoading(false); // Reset loading if error, otherwise it resets when fetching
+    }
+  };
+
+  const filteredSearch = useMemo(() => {
+    const q = debouncedQuery.trim().toLowerCase();
+    if (q === '') return [];
+    return materials.filter(m => m.name.toLowerCase().includes(q)).slice(0, 8);
+  }, [debouncedQuery, materials]);
+
+  const cartTotal = useMemo(() => {
+    return cart.reduce((sum, item) => sum + ((parseFloat(item.qty) || 0) * (parseFloat(item.unit_price) || 0)), 0);
+  }, [cart]);
 
   return (
     <div className="fade-in">
@@ -155,59 +259,201 @@ export default function Purchasing() {
       )}
 
       {tab === 'PURCHASES' && (
-        <div className="purchasing-layout" style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
-          {/* Form */}
-          <div className="glass-card purchasing-form-panel" style={{ flex: '1', padding: '24px' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '20px' }}>Input Pembelian Harian</h3>
-            <form onSubmit={handleSavePurchase} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div className="form-group">
-                <label className="form-label">Tanggal</label>
-                <input type="date" required className="form-control" value={newPurchase.date} onChange={e => setNewPurchase({...newPurchase, date: e.target.value})} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+
+          {/* Top Form: Cart & Search */}
+          <div className="glass-card" style={{ padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '20px', marginBottom: '20px' }}>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Keranjang Pembelian Harian</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Cari bahan baku, atur jumlah dan harga, lalu simpan semua dalam satu klik.</p>
               </div>
-              <div className="form-group">
-                <label className="form-label">Bahan Baku</label>
-                <select required className="form-control" value={newPurchase.material_id} onChange={handleMaterialSelect}>
-                  <option value="">Pilih Bahan...</option>
-                  {materials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Supplier</label>
-                <select className="form-control" value={newPurchase.supplier_id} onChange={e => setNewPurchase({...newPurchase, supplier_id: e.target.value})}>
-                  <option value="">Tanpa Supplier / Tunai</option>
-                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div className="form-group">
-                  <label className="form-label">Qty ({newPurchase.unit})</label>
-                  <input type="number" step="any" required className="form-control" value={newPurchase.qty} onChange={e => setNewPurchase({...newPurchase, qty: e.target.value})} />
+
+              {/* Global Cart Info (Date & Recorder) */}
+              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-tertiary)', padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+                  <User size={16} style={{ color: 'var(--accent)' }} />
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Oleh: <strong style={{ color: 'var(--text-primary)' }}>{activeUser?.name || '-'}</strong></span>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Harga per Unit</label>
-                  <input type="number" step="any" required className="form-control" value={newPurchase.unit_price} onChange={e => setNewPurchase({...newPurchase, unit_price: e.target.value})} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-tertiary)', padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+                  <Calendar size={16} style={{ color: 'var(--accent)' }} />
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Tanggal Pembelian:</span>
+                  <input
+                    type="date"
+                    className="form-control"
+                    style={{ padding: '2px 6px', height: 'auto', background: 'transparent', border: 'none', width: '130px', fontWeight: 600 }}
+                    value={purchaseDate}
+                    onChange={e => setPurchaseDate(e.target.value)}
+                  />
                 </div>
               </div>
-              <div className="form-group">
-                <label className="form-label">Total Harga</label>
-                <div style={{ padding: '12px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)', fontWeight: 700 }}>
-                  Rp {((parseFloat(newPurchase.qty) || 0) * (parseFloat(newPurchase.unit_price) || 0)).toLocaleString('id-ID')}
-                </div>
+            </div>
+
+            {/* Smart Search Bar */}
+            <div style={{ position: 'relative', marginBottom: '24px', zIndex: 10 }}>
+              <div style={{ position: 'relative' }}>
+                <Search size={18} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  className="form-control"
+                  style={{ padding: '14px 16px 14px 44px', fontSize: '1rem', background: 'var(--bg-tertiary)', borderColor: showSearchDropdown ? 'var(--accent)' : 'var(--border)' }}
+                  placeholder="Ketik nama bahan baku untuk menambah ke keranjang..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setShowSearchDropdown(true);
+                  }}
+                  onFocus={() => setShowSearchDropdown(true)}
+                />
               </div>
-              <button type="submit" className="btn btn-primary" style={{ marginTop: '8px' }} disabled={loading}>Simpan Pembelian</button>
-            </form>
+
+              {/* Dropdown Results */}
+              {showSearchDropdown && searchQuery.trim() !== '' && (
+                <div className="glass-card" style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '8px', padding: '8px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', border: '1px solid var(--border-focus)' }}>
+                  {filteredSearch.length > 0 ? (
+                    filteredSearch.map(m => (
+                      <div
+                        key={m.id}
+                        style={{ padding: '10px 12px', cursor: 'pointer', borderRadius: 'var(--radius-sm)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-tertiary)'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                        onClick={() => addToCart(m)}
+                      >
+                        <span style={{ fontWeight: 600 }}>{m.name}</span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Tap untuk tambah</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ padding: '12px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                      Bahan "{searchQuery}" tidak ditemukan.
+                    </div>
+                  )}
+
+                  <div style={{ borderTop: '1px solid var(--border)', marginTop: '4px', paddingTop: '4px' }}>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ width: '100%', justifyContent: 'center', color: 'var(--accent)', border: 'none', background: 'transparent' }}
+                      onClick={() => {
+                        setNewMaterialData({ ...newMaterialData, name: searchQuery });
+                        setShowSearchDropdown(false);
+                        setShowNewMaterialModal(true);
+                      }}
+                    >
+                      <Plus size={16} style={{ marginRight: '6px' }} /> Tambah "{searchQuery}" ke Master Data
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Cart Table */}
+            <div className="table-container" style={{ minHeight: '150px' }}>
+              <table className="custom-table">
+                <thead>
+                  <tr>
+                    <th>Bahan Baku</th>
+                    <th style={{ width: '120px' }}>Supplier</th>
+                    <th style={{ width: '100px', textAlign: 'right' }}>Qty</th>
+                    <th style={{ width: '60px' }}>Unit</th>
+                    <th style={{ width: '140px', textAlign: 'right' }}>Harga Satuan</th>
+                    <th style={{ width: '140px', textAlign: 'right' }}>Total Harga</th>
+                    <th style={{ width: '50px', textAlign: 'center' }}>Hapus</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cart.map(item => (
+                    <tr key={item.cart_id}>
+                      <td style={{ fontWeight: 600 }}>{item.name}</td>
+                      <td>
+                        <select
+                          className="form-control"
+                          style={{ padding: '6px 8px', fontSize: '0.8rem' }}
+                          value={item.supplier_id}
+                          onChange={(e) => updateCartItem(item.cart_id, 'supplier_id', e.target.value)}
+                        >
+                          <option value="">(Tunai / Tidak ada)</option>
+                          {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          step="any"
+                          className="form-control"
+                          style={{ padding: '6px 8px', textAlign: 'right', fontSize: '0.85rem' }}
+                          value={item.qty}
+                          onChange={(e) => updateCartItem(item.cart_id, 'qty', e.target.value)}
+                        />
+                      </td>
+                      <td style={{ color: 'var(--text-muted)' }}>{item.unit}</td>
+                      <td>
+                        <input
+                          type="number"
+                          step="any"
+                          className="form-control"
+                          style={{ padding: '6px 8px', textAlign: 'right', fontSize: '0.85rem' }}
+                          value={item.unit_price}
+                          onChange={(e) => updateCartItem(item.cart_id, 'unit_price', e.target.value)}
+                        />
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--accent)' }}>
+                        Rp {((parseFloat(item.qty) || 0) * (parseFloat(item.unit_price) || 0)).toLocaleString('id-ID')}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button className="btn" style={{ padding: '4px', color: 'var(--danger)', background: 'transparent' }} onClick={() => removeCartItem(item.cart_id)}>
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+
+                  {cart.length === 0 && (
+                    <tr>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted)' }}>
+                        <ShoppingCart size={32} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
+                        <div>Keranjang kosong. Cari bahan baku di atas.</div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+                {cart.length > 0 && (
+                  <tfoot>
+                    <tr style={{ background: 'var(--bg-tertiary)' }}>
+                      <td colSpan="5" style={{ textAlign: 'right', fontWeight: 700 }}>Total Estimasi Pembelian:</td>
+                      <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--success)', fontSize: '1.1rem' }}>
+                        Rp {cartTotal.toLocaleString('id-ID')}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px' }}>
+              <button
+                className="btn btn-primary"
+                style={{ display: 'flex', gap: '8px', padding: '12px 24px', fontSize: '0.95rem' }}
+                onClick={handleSavePurchases}
+                disabled={loading || cart.length === 0}
+              >
+                <ShoppingCart size={18} /> {loading ? 'Menyimpan...' : `Simpan ${cart.length} Item ke Database`}
+              </button>
+            </div>
           </div>
 
-          {/* History */}
-          <div className="glass-card purchasing-history-panel" style={{ flex: '2', padding: '24px' }}>
+          {/* History Panel */}
+          <div className="glass-card purchasing-history-panel" style={{ padding: '24px' }}>
             <div className="paged-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Riwayat Pembelian Harian</h3>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Log Riwayat Pembelian</h3>
               <div style={{ position: 'relative', width: '250px' }}>
                 <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="Cari bahan/supplier..."
+                  placeholder="Cari histori (bahan/supplier)..."
                   style={{ paddingLeft: '36px' }}
                   value={search}
                   onChange={e => { setSearch(e.target.value); setPage(1); }}
@@ -218,8 +464,8 @@ export default function Purchasing() {
               <table className="custom-table">
                 <thead>
                   <tr>
-                    <th>Tanggal</th>
-                    <th>Nama Item</th>
+                    <th>Tanggal Input</th>
+                    <th>Nama Bahan Baku</th>
                     <th>Supplier</th>
                     <th style={{ textAlign: 'right' }}>Qty</th>
                     <th style={{ textAlign: 'right' }}>Total</th>
@@ -264,6 +510,52 @@ export default function Purchasing() {
               <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
                 <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setEditSupplier(null)}>Batal</button>
                 <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Simpan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* New Material Modal */}
+      {showNewMaterialModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="glass-card modal-card" style={{ width: '400px', maxWidth: 'calc(100vw - 32px)', maxHeight: '90vh', overflowY: 'auto', padding: '24px' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '20px' }}>Tambah Material Baru</h3>
+            <form onSubmit={handleCreateMaterial} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="form-group">
+                <label className="form-label">Nama Material</label>
+                <input type="text" required className="form-control" value={newMaterialData.name} onChange={e => setNewMaterialData({...newMaterialData, name: e.target.value})} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Kategori</label>
+                <select className="form-control" required value={newMaterialData.category} onChange={e => setNewMaterialData({...newMaterialData, category: e.target.value})}>
+                  <option value="Bahan Baku Dasar">Bahan Baku Dasar</option>
+                  <option value="Packaging">Packaging</option>
+                  <option value="Syrup & Flavor">Syrup & Flavor</option>
+                  <option value="Dairy & Milk">Dairy & Milk</option>
+                  <option value="Coffee Beans">Coffee Beans</option>
+                  <option value="Lainnya">Lainnya</option>
+                </select>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group">
+                  <label className="form-label">Satuan (Unit)</label>
+                  <input type="text" required className="form-control" placeholder="Contoh: pcs, kg, ltr" value={newMaterialData.unit} onChange={e => setNewMaterialData({...newMaterialData, unit: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Minimal Stok</label>
+                  <input type="number" required className="form-control" value={newMaterialData.min_stock} onChange={e => setNewMaterialData({...newMaterialData, min_stock: e.target.value})} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Harga Estimasi (Opsional)</label>
+                <input type="number" className="form-control" value={newMaterialData.price} onChange={e => setNewMaterialData({...newMaterialData, price: e.target.value})} />
+              </div>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+                <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setShowNewMaterialModal(false)}>Batal</button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={loading}>
+                  {loading ? 'Menyimpan...' : 'Simpan & Tambah'}
+                </button>
               </div>
             </form>
           </div>
