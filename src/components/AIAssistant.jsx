@@ -132,7 +132,7 @@ const QUICK_CHIPS = [
 ];
 
 export default function AIAssistant() {
-  const { stock = [], recipes = [], transactions = [], unitConversionMap } = useData() || {};
+  const { stock = [], recipes = [], transactions = [], unitConversionMap } = useData();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     { role: 'assistant', text: 'Halo! 👋 Saya asisten AI Barventis yang terkoneksi dengan data inventory Anda secara real-time. Tanya saya tentang stok, HPP, cost control, atau cara kerja sistem.' }

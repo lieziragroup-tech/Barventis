@@ -75,6 +75,12 @@ async function flushToServer(entries) {
   const tenantId = userProfile?.tenant_id;
   const userId = session.user.id;
 
+  // If user has no tenant (e.g., Super Admin), we cannot insert into audit_logs.
+  // Return entries.length to clear them from localStorage and prevent build up.
+  if (!tenantId) {
+    return entries.length;
+  }
+
   const payload = entries.map(e => ({
     tenant_id: tenantId,
     user_id: userId,

@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { api } from '../../services/api';
+import { useMemo, useState, useEffect } from 'react';
 import { 
   Package, ArrowRight, AlertTriangle,
   TrendingDown, DollarSign, CheckCircle
@@ -11,7 +12,12 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, R
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { stock, transactions, unitConversionMap } = useData();
+  const { stock, unitConversionMap } = useData();
+  const [transactions, setTransactions] = useState([]);
+  useEffect(() => {
+    const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    api.getTransactions(currentMonth).then(setTransactions).catch(console.error);
+  }, []);
   const stockValuation = useMemo(() => stock.reduce((acc, item) => acc + calculateIngredientCost(item, (item.qty_resto || 0) + (item.qty_central || 0), item.unit, unitConversionMap), 0), [stock, unitConversionMap]);
   const lowStockItems = useMemo(() => stock.filter(item => ((item.qty_resto || 0) + (item.qty_central || 0)) < (item.min_stock || 15)), [stock]);
 

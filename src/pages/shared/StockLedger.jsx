@@ -72,7 +72,7 @@ function KonversiSatuanFields({ packUnit, fullPack, price, onChangeFullPack }) {
 
 export default function StockLedger() {
   "use no memo";
-  const { stock, transactions, handleAdjustStock, handleUpdateItem, handleAddItem, handleDeleteItem, refreshData } = useData();
+  const { stock, handleAdjustStock, handleUpdateItem, handleAddItem, handleDeleteItem, refreshData } = useData();
   const onAdjustStock = handleAdjustStock;
   const onUpdateItem = handleUpdateItem;
   const onAddItem = handleAddItem;
@@ -262,9 +262,15 @@ export default function StockLedger() {
     XLSX.writeFile(wb, `SO BARISTA_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const itemHistory = useMemo(() => selectedItem
-    ? transactions.filter(tx => tx.item_name === selectedItem.name).sort((a, b) => new Date(b.date) - new Date(a.date))
-    : [], [selectedItem, transactions]);
+  const [itemHistory, setItemHistory] = useState([]);
+  useEffect(() => {
+    if (selectedItem && historyTab === 'LEDGER') {
+      api.getTransactionsPaged({ materialName: selectedItem.name, pageSize: 50 }).then(res => setItemHistory(res.data)).catch(console.error);
+    }
+  }, [selectedItem, historyTab]);
+  // 
+    
+    
 
   return (
     <div className="stock-ledger-layout fade-in" style={{ display: 'flex', gap: '24px', position: 'relative' }}>

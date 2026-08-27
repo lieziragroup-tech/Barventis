@@ -14,6 +14,8 @@ export default function StockOpname() {
   const { stock, showToast, handleCompleteOpname: onCompleteOpname, unitConversionMap } = useData();
   const [step, setStep] = useState(1); // 1: Init, 2: Count, 3: Reconcile, 4: Approve & Sign
   const [location, setLocation] = useState('RESTO'); // RESTO, CENTRAL
+  const [periodMonth, setPeriodMonth] = useState(() => (new Date().getMonth() + 1).toString());
+  const [periodYear, setPeriodYear] = useState(() => new Date().getFullYear().toString());
   const [opnameItems, setOpnameItems] = useState([]);
   const [, setSignatureData] = useState(null);
   const isDrawing = useRef(false);
@@ -80,11 +82,13 @@ export default function StockOpname() {
   }, [step]);
 
   const startDrawing = (e) => {
+    if (e.cancelable) e.preventDefault();
     isDrawing.current = true;
     draw(e);
   };
 
-  const stopDrawing = () => {
+  const stopDrawing = (e) => {
+    if (e && e.cancelable) e.preventDefault();
     isDrawing.current = false;
     if (canvasRef.current) {
       const canvas = canvasRef.current;
@@ -94,17 +98,23 @@ export default function StockOpname() {
   };
 
   const draw = (e) => {
+    if (e.cancelable) e.preventDefault();
     if (!isDrawing.current || !canvasRef.current) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
-    
+
     // Get mouse/touch position relative to canvas. Pick the touch point when present,
     // otherwise the mouse event itself — avoids NaN when clientX is a legitimate 0
     // (left edge) on a mouse event, where the old `||` fell through to undefined. (LOW #17)
     const rect = canvas.getBoundingClientRect();
-    const point = (e.touches && e.touches[0]) ? e.touches[0] : e;
-    const x = point.clientX - rect.left;
-    const y = point.clientY - rect.top;
+
+    const clientX = (e.touches && e.touches.length > 0) ? e.touches[0].clientX : e.clientX;
+    const clientY = (e.touches && e.touches.length > 0) ? e.touches[0].clientY : e.clientY;
+
+    if (clientX == null) return;
+
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
 
     ctx.lineTo(x, y);
     ctx.stroke();
@@ -163,7 +173,7 @@ export default function StockOpname() {
         };
       });
 
-      await onCompleteOpname(location, reconciliation, currentSignature);
+      await onCompleteOpname(location, reconciliation, currentSignature, periodMonth, periodYear);
 
       confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
 
@@ -215,6 +225,37 @@ export default function StockOpname() {
               <option value="RESTO">Resto Bar (Main Outlet)</option>
               <option value="CENTRAL">Central Warehouse (Storage)</option>
             </select>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+            <div className="form-group">
+              <label className="form-label">Bulan SO</label>
+              <select className="form-control" value={periodMonth} onChange={e => setPeriodMonth(e.target.value)}>
+                <option value="1">Januari</option>
+                <option value="2">Februari</option>
+                <option value="3">Maret</option>
+                <option value="4">April</option>
+                <option value="5">Mei</option>
+                <option value="6">Juni</option>
+                <option value="7">Juli</option>
+                <option value="8">Agustus</option>
+                <option value="9">September</option>
+                <option value="10">Oktober</option>
+                <option value="11">November</option>
+                <option value="12">Desember</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Tahun SO</label>
+              <input 
+                type="number" 
+                className="form-control" 
+                value={periodYear} 
+                onChange={e => setPeriodYear(e.target.value)} 
+                min="2020" 
+                max="2100" 
+              />
+            </div>
           </div>
 
           <button className="btn btn-primary" style={{ width: '100%', marginTop: '16px', display: 'flex', justifyContent: 'center' }} onClick={handleStartOpname}>
@@ -406,11 +447,12 @@ export default function StockOpname() {
 
           {/* Drawing Canvas */}
           <div className="signature-canvas-container">
-            <canvas 
+            <canvas
               ref={canvasRef}
               className="signature-canvas"
               width={456}
               height={200}
+              style={{ touchAction: 'none' }}
               onMouseDown={startDrawing}
               onMouseUp={stopDrawing}
               onMouseOut={stopDrawing}

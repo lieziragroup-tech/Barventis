@@ -300,8 +300,8 @@ export const api = {
         .from('pos_orders')
         .select('*')
         .eq('tenant_id', tenantId)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
+        ;
+      if (error) { console.error("DB Error:", error); throw error; }
       return data;
     } catch (err) {
       console.error('getPOSOrders error:', err);
@@ -319,7 +319,7 @@ export const api = {
         .from('pos_order_items')
         .select('*, recipes(menu_name)')
         .eq('order_id', orderId);
-      if (error) throw error;
+      if (error) { console.error("DB Error:", error); throw error; }
       return data;
     } catch (err) {
       console.error('getPOSOrderItems error:', err);
@@ -695,15 +695,21 @@ export const api = {
   },
 
   // --- LEDGER TRANSACTIONS ---
-  getTransactions: async () => {
+  getTransactions: async (period = null) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return []; // H-2: Super Admin / no-tenant — avoid malformed .eq('tenant_id', null) query
-    const { data, error } = await supabase
+    let query = supabase
       .from('transactions')
       .select('*, materials(name)')
-      .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false })
-      .limit(500);
+      .eq('tenant_id', tenantId);
+    
+    if (period) {
+      query = query.gte('date', `${period}-01`).lte('date', `${period}-31`);
+    } else {
+      query = query.limit(500);
+    }
+    
+    const { data, error } = await query;
 
     if (error) throw new Error("Gagal mengambil transaksi: " + error.message);
 
@@ -743,7 +749,7 @@ export const api = {
     }
 
     const { data, error, count } = await query
-      .order('created_at', { ascending: false })
+      
       .range(from, to);
 
     if (error) throw new Error("Gagal mengambil transaksi: " + error.message);
@@ -1332,7 +1338,7 @@ export const api = {
       .from('invoices')
       .select('*, invoice_items(*, materials(*))')
       .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false });
+      ;
 
     if (error) throw new Error("Gagal memuat invoices: " + error.message);
 
@@ -1358,7 +1364,7 @@ export const api = {
 
   // Paginated + searchable (by invoice no / supplier) version for
   // the Invoicing list page.
-  getInvoicesPaged: async ({ page = 1, pageSize = 15, search = '' } = {}) => {
+  getInvoicesPaged: async ({ page = 1, pageSize = 15, search = '', status = 'ALL' } = {}) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { data: [], totalCount: 0 };
     const from = (page - 1) * pageSize;
@@ -1374,8 +1380,12 @@ export const api = {
       query = query.or(`invoice_no.ilike.%${s}%,supplier.ilike.%${s}%`);
     }
 
+    if (status && status !== 'ALL') {
+      query = query.eq('status', status);
+    }
+
     const { data, error, count } = await query
-      .order('created_at', { ascending: false })
+      
       .range(from, to);
 
     if (error) throw new Error("Gagal memuat invoices: " + error.message);
@@ -1552,7 +1562,7 @@ export const api = {
       .gte('date', startDate)
       .lte('date', endDate);
       
-    if (error) throw error;
+    if (error) { console.error("DB Error:", error); throw error; }
     if (count > 0) {
       return { isDuplicate: true, message: `AI mendeteksi kemungkinan duplikat: Terdapat ${count} transaksi POS Sale pada periode ${month}/${year}. Apakah Anda yakin ingin mengunggah file ini (Data akan di-Append / Ditambahkan)?` };
     }
@@ -2291,6 +2301,7 @@ export const api = {
 
     return {
       month,
+      transactions,
       period: { start_date: startDate, end_date: endDate },
       metrics: {
         opening_stock: parseFloat(openingValuation.toFixed(2)),
@@ -2459,7 +2470,7 @@ export const api = {
       .from('audit_logs')
       .select('*, users(name, role)')
       .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false })
+      
       .limit(100);
 
     if (error) throw new Error("Gagal mengambil log audit: " + error.message);
@@ -2504,7 +2515,7 @@ export const api = {
     }
 
     const { data, error, count } = await query
-      .order('created_at', { ascending: false })
+      
       .range(from, to);
 
     if (error) throw new Error("Gagal mengambil log audit superadmin: " + error.message);
@@ -2553,7 +2564,7 @@ export const api = {
     }
 
     const { data, error, count } = await query
-      .order('created_at', { ascending: false })
+      
       .range(from, to);
 
     if (error) throw new Error("Gagal mengambil log audit: " + error.message);
@@ -2579,7 +2590,7 @@ export const api = {
       .from('backups')
       .select('id, filename, size_bytes, size_formatted, created_at')
       .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false });
+      ;
 
     if (error) throw new Error("Gagal mengambil cadangan: " + error.message);
     return data;
@@ -3414,8 +3425,8 @@ export const api = {
       .from('unit_conversions')
       .select('*, materials(id, name, unit, full_pack)')
       .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false });
-    if (error) throw error;
+      ;
+    if (error) { console.error("DB Error:", error); throw error; }
     return data || [];
   },
 
@@ -3444,10 +3455,10 @@ export const api = {
     };
     if (id) {
       const { error } = await supabase.from('unit_conversions').update(payload).eq('id', id).eq('tenant_id', tenantId);
-      if (error) throw error;
+      if (error) { console.error("DB Error:", error); throw error; }
     } else {
       const { error } = await supabase.from('unit_conversions').insert(payload);
-      if (error) throw error;
+      if (error) { console.error("DB Error:", error); throw error; }
     }
     await logAudit('UPSERT_UNIT_CONVERSION', `Konversi satuan disimpan: 1 ${to_unit} = ${factor} ${from_unit}.`);
   },
@@ -3455,7 +3466,7 @@ export const api = {
   deleteUnitConversion: async (id) => {
     const tenantId = await getActiveTenantId();
     const { error } = await supabase.from('unit_conversions').delete().eq('id', id).eq('tenant_id', tenantId);
-    if (error) throw error;
+    if (error) { console.error("DB Error:", error); throw error; }
     await logAudit('DELETE_UNIT_CONVERSION', `Konversi satuan (id: ${id}) dihapus.`);
   },
 
@@ -3492,9 +3503,9 @@ export const api = {
       .from('tenant_reset_requests')
       .select('*')
       .eq('tenant_id', tenantId)
-      .order('requested_at', { ascending: false })
+      
       .limit(20);
-    if (error) throw error;
+    if (error) { console.error("DB Error:", error); throw error; }
     return data || [];
   },
 
@@ -3503,9 +3514,9 @@ export const api = {
     const { data, error } = await supabase
       .from('tenant_reset_requests')
       .select('*, tenants(company_name, name), requester:requested_by(name, email)')
-      .order('created_at', { ascending: false })
+      
       .limit(100);
-    if (error) throw error;
+    if (error) { console.error("DB Error:", error); throw error; }
     return data || [];
   },
 
@@ -3524,5 +3535,27 @@ export const api = {
       throw new Error(error.message.replace('AUTH: ', ''));
     }
     return data;
+  },
+
+  getInvoicesStats: async () => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return { total: 0, pending: 0, received: 0, totalValue: 0 };
+    
+    // Quick query for stats
+    const { data } = await supabase
+      .from('invoices')
+      .select('status, total')
+      .eq('tenant_id', tenantId);
+      
+    if (!data) return { total: 0, pending: 0, received: 0, totalValue: 0 };
+    
+    return {
+      total: data.length,
+      pending: data.filter(i => i.status === 'DRAFT' || i.status === 'SENT').length,
+      received: data.filter(i => i.status === 'RECEIVED').length,
+      totalValue: data.reduce((sum, i) => sum + parseFloat(i.total || 0), 0)
+    };
   }
 };
+
+

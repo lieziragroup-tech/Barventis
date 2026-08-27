@@ -692,7 +692,7 @@ export default function TenantAdminPanel() {
                 Pilih kategori data yang ingin Anda ajukan untuk dihapus. Permintaan ini akan dikirim ke <strong>Super Admin untuk disetujui</strong> — data Anda <strong>tidak langsung terhapus</strong> saat Anda klik tombol di bawah.
               </p>
 
-              {resetRequests.some(r => r.status === 'pending') && (
+              {resetRequests.some(r => r.status?.toLowerCase() === 'pending') && (
                 <div className="mb-4 p-3 rounded-lg border border-[var(--warning)] bg-[rgba(217,119,6,0.08)] flex items-start gap-2">
                   <Clock size={16} className="text-[var(--warning)] mt-0.5 flex-shrink-0" />
                   <p className="text-xs text-[var(--text-primary)] m-0">
@@ -710,16 +710,16 @@ export default function TenantAdminPanel() {
                     {resetRequests.slice(0, 5).map(r => (
                       <div key={r.id} className="flex items-center justify-between p-2 rounded-lg border border-[var(--border)] text-xs">
                         <span className="text-[var(--text-secondary)]">
-                          {new Date(r.requested_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
+                          {new Date(r.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
                         </span>
                         <span className={
-                          r.status === 'pending' ? 'text-[var(--warning)] font-bold' :
-                          r.status === 'executed' ? 'text-[var(--success)] font-bold' :
-                          r.status === 'rejected' ? 'text-[var(--danger)] font-bold' :
-                          r.status === 'failed' ? 'text-[var(--danger)] font-bold' :
+                          r.status?.toLowerCase() === 'pending' ? 'text-[var(--warning)] font-bold' :
+                          r.status?.toLowerCase() === 'executed' ? 'text-[var(--success)] font-bold' :
+                          r.status?.toLowerCase() === 'rejected' ? 'text-[var(--danger)] font-bold' :
+                          r.status?.toLowerCase() === 'failed' ? 'text-[var(--danger)] font-bold' :
                           'text-[var(--text-muted)]'
                         }>
-                          {{ pending: 'Menunggu Persetujuan', executed: 'Disetujui & Dieksekusi', rejected: 'Ditolak', failed: 'Gagal Dieksekusi' }[r.status] || r.status}
+                          {{ pending: 'Menunggu Persetujuan', executed: 'Disetujui & Dieksekusi', rejected: 'Ditolak', failed: 'Gagal Dieksekusi' }[r.status?.toLowerCase()] || r.status}
                         </span>
                       </div>
                     ))}
@@ -782,8 +782,8 @@ export default function TenantAdminPanel() {
                 type="button" 
                 className="btn premium-btn-danger px-4"
                 onClick={executeFactoryReset}
-                disabled={!Object.values(resetOptions).some(v => v) || resetRequests.some(r => r.status === 'pending')}
-                title={resetRequests.some(r => r.status === 'pending') ? 'Masih ada permintaan yang menunggu persetujuan' : undefined}
+                disabled={!Object.values(resetOptions).some(v => v) || resetRequests.some(r => r.status?.toLowerCase() === 'pending')}
+                title={resetRequests.some(r => r.status?.toLowerCase() === 'pending') ? 'Masih ada permintaan yang menunggu persetujuan' : undefined}
               >
                 Ajukan Reset ke Super Admin
               </button>

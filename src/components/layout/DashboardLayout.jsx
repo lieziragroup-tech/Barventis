@@ -167,7 +167,7 @@ export default function DashboardLayout() {
       if (!isSuperAdmin) return;
       try {
         const data = await api.getAllResetRequests();
-        const pending = (data || []).filter(req => req.status === 'PENDING');
+        const pending = (data || []).filter(req => req.status?.toLowerCase() === 'pending');
         if (mounted) setAdminNotifs(pending);
       } catch (err) {
         console.error('Failed to fetch admin notifications:', err);
@@ -215,12 +215,13 @@ export default function DashboardLayout() {
     if (!editProfileName.trim()) return;
     setIsUpdatingProfile(true);
     try {
-      await api.updateProfile(activeUser?.id, { name: editProfileName });
+      await api.updateProfileName(editProfileName);
       showToast('Profil berhasil diperbarui', 'success');
       setShowProfileModal(false);
       setTimeout(() => window.location.reload(), 1000);
-    } catch {
-      showToast('Gagal memperbarui profil', 'error');
+    } catch (error) {
+      console.error(error);
+      showToast('Gagal memperbarui profil: ' + error.message, 'error');
     } finally {
       setIsUpdatingProfile(false);
     }
@@ -927,6 +928,37 @@ export default function DashboardLayout() {
               </div>
 
               <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Role</label>
+                <div style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-tertiary)',
+                  color: 'var(--text-muted)',
+                  fontSize: '0.9rem',
+                  fontWeight: 500,
+                  cursor: 'not-allowed'
+                }}>
+                  {activeUser?.role || 'User'}
+                </div>
+              </div>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Email</label>
+                <div style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-tertiary)',
+                  color: 'var(--text-muted)',
+                  fontSize: '0.9rem',
+                  cursor: 'not-allowed'
+                }}>
+                  {activeUser?.email || '-'}
+                </div>
+              </div>
+              <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Display Name</label>
                 <input
                   type="text"
@@ -967,7 +999,7 @@ export default function DashboardLayout() {
                   style={{
                     padding: '8px 16px',
                     borderRadius: 'var(--radius-md)',
-                    background: 'var(--primary)',
+                    background: 'var(--accent)',
                     border: 'none',
                     color: 'white',
                     cursor: (isUpdatingProfile || !editProfileName.trim()) ? 'not-allowed' : 'pointer',

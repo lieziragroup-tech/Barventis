@@ -11,7 +11,7 @@ const getXLSX = async () => { if (!_XLSX) _XLSX = await import('xlsx'); return _
 import { useData } from '../../contexts/DataContext';
 
 export default function CostControl() {
-  const { stock, transactions, invoices } = useData();
+  const { stock } = useData();
   const [period, setPeriod] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -39,7 +39,7 @@ export default function CostControl() {
       }
     };
     fetchReport();
-  }, [period, transactions, stock, invoices]); // Reload if any crucial state updates
+  }, [period, stock]); // Reload if any crucial state updates
 
   // Map API metrics
   const openingStock = reportData?.metrics?.opening_stock ?? 0;
@@ -55,9 +55,10 @@ export default function CostControl() {
   // The daily breakdown must also count OUT transactions with POS Sync notes as COGS.
   const dailyColumns = useMemo(() => {
     const dailyMap = {};
+    const txs = reportData?.transactions || [];
 
     // Group POS OUT deductions (stock consumed from POS sync) by date
-    (transactions || [])
+    txs
       .filter(tx => (tx.type === 'POS_SALE' || (tx.type === 'OUT' && (tx.notes || '').startsWith('POS Sync:'))) && (tx.date || '').startsWith(period))
       .forEach(tx => {
         const day = (tx.date || '').substring(5).replace('-', '/');
@@ -66,7 +67,7 @@ export default function CostControl() {
       });
 
     // Group PURCHASE_IN (stock received from invoices) by date
-    (transactions || [])
+    txs
       .filter(tx => tx.type === 'PURCHASE_IN' && (tx.date || '').startsWith(period))
       .forEach(tx => {
         const day = (tx.date || '').substring(5).replace('-', '/');
@@ -77,7 +78,7 @@ export default function CostControl() {
     const result = Object.values(dailyMap);
     result.sort((a, b) => a.date.localeCompare(b.date));
     return result;
-  }, [transactions, period]);
+  }, [reportData?.transactions, period]);
 
   // Generate last 18 months dynamically
   const periodOptions = useMemo(() => {

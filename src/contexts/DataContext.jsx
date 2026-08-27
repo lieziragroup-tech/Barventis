@@ -35,8 +35,8 @@ export const DataProvider = ({ children }) => {
       const [materialsData, recipesData, invoicesData, transactionsData, conversionsData] = await Promise.all([
         api.getMaterials().catch(e => { console.error('Materials:', e); return []; }),
         api.getRecipes().catch(e => { console.error('Recipes:', e); return []; }),
-        api.getInvoices().catch(e => { console.error('Invoices:', e); return []; }),
-        api.getTransactions().catch(e => { console.error('Transactions:', e); return []; }),
+        Promise.resolve([]),
+        Promise.resolve([]),
         api.getUnitConversions().catch(e => { console.error('UnitConversions:', e); return []; })
       ]);
 

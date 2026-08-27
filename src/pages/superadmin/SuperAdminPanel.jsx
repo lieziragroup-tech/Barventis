@@ -526,10 +526,10 @@ export default function SuperAdminPanel({ tab }) {
   }, [totalLogs, logs]);
 
   const resetRequestStats = useMemo(() => {
-    const pending = resetRequests.filter(r => r.status === 'pending').length;
-    const executed = resetRequests.filter(r => r.status === 'executed').length;
-    const rejected = resetRequests.filter(r => r.status === 'rejected').length;
-    const failed = resetRequests.filter(r => r.status === 'failed').length;
+    const pending = resetRequests.filter(r => r.status?.toLowerCase() === 'pending').length;
+    const executed = resetRequests.filter(r => r.status?.toLowerCase() === 'executed').length;
+    const rejected = resetRequests.filter(r => r.status?.toLowerCase() === 'rejected').length;
+    const failed = resetRequests.filter(r => r.status?.toLowerCase() === 'failed').length;
     return { pending, executed, rejected, failed };
   }, [resetRequests]);
 
@@ -1173,7 +1173,7 @@ export default function SuperAdminPanel({ tab }) {
                     executed: { bg: colors.successGlow, fg: colors.success, label: 'Disetujui & Dieksekusi' },
                     rejected: { bg: colors.dangerGlow, fg: colors.danger, label: 'Ditolak' },
                     failed: { bg: colors.dangerGlow, fg: colors.danger, label: 'Gagal Dieksekusi' },
-                  }[r.status] || { bg: 'rgba(0,0,0,0.05)', fg: colors.textMuted, label: r.status };
+                  }[r.status?.toLowerCase()] || { bg: 'rgba(0,0,0,0.05)', fg: colors.textMuted, label: r.status };
 
                   return (
                     <div key={r.id} style={{ ...glassCardStyle, padding: '14px 16px' }}>
@@ -1189,7 +1189,7 @@ export default function SuperAdminPanel({ tab }) {
                             </span>
                           </div>
                           <div style={{ fontSize: '0.72rem', color: colors.textMuted, marginBottom: '6px' }}>
-                            Diajukan {new Date(r.requested_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
+                            Diajukan {new Date(r.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
                             {r.requester?.name ? ` oleh ${r.requester.name}` : ''}
                           </div>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
@@ -1200,26 +1200,26 @@ export default function SuperAdminPanel({ tab }) {
                             ))}
                           </div>
 
-                          {r.status === 'executed' && r.result_summary && (
+                          {r.status?.toLowerCase() === 'executed' && r.result_summary && (
                             <div style={{ marginTop: '8px', fontSize: '0.7rem', color: colors.textSecondary }}>
                               Baris terhapus: {
                                 Object.entries(r.result_summary).filter(([, c]) => c > 0).map(([t, c]) => `${t}: ${c}`).join(', ') || 'tidak ada (data sudah kosong)'
                               }
                             </div>
                           )}
-                          {r.status === 'rejected' && r.rejection_reason && (
+                          {r.status?.toLowerCase() === 'rejected' && r.rejection_reason && (
                             <div style={{ marginTop: '8px', fontSize: '0.7rem', color: colors.textSecondary, fontStyle: 'italic' }}>
                               Alasan penolakan: {r.rejection_reason}
                             </div>
                           )}
-                          {r.status === 'failed' && r.error_message && (
+                          {r.status?.toLowerCase() === 'failed' && r.error_message && (
                             <div style={{ marginTop: '8px', fontSize: '0.7rem', color: colors.danger }}>
                               Error: {r.error_message}
                             </div>
                           )}
                         </div>
 
-                        {r.status === 'pending' && (
+                        {r.status?.toLowerCase() === 'pending' && (
                           <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                             <button
                               onClick={() => handleApproveReset(r)}

@@ -1,45 +1,66 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Plus, X, FileText, CheckCircle, XCircle, Clock, Package, Search, Download, Eye, UploadCloud } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import BulkImport from '../../components/BulkImport';
 import Pagination from '../../components/shared/Pagination';
 import { api } from '../../services/api';
 import { formatIDR } from '../../services/costUtils';
+import useDebounce from '../../hooks/useDebounce';
 
 const rowUid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `r${Date.now()}${Math.random()}`);
 const blankLineItem = () => ({ item_name: '', qty: 1, unit_price: 0, unit: 'pck', _uid: rowUid() });
 
 export default function Invoicing() {
-  const { stock, invoices, showToast: toast, handleCreateInvoice: onCreateInvoice, handleReceiveInvoice: onReceiveInvoice, handleCancelInvoice: onCancelInvoice, refreshData } = useData();
+  const { stock, showToast: toast, handleCreateInvoice: onCreateInvoice, handleReceiveInvoice: onReceiveInvoice, handleCancelInvoice: onCancelInvoice, refreshData } = useData();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [viewInvoice, setViewInvoice] = useState(null);
+  
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
-
-  // New invoice form state
   const [invSupplier, setInvSupplier] = useState('');
   const [invNotes, setInvNotes] = useState('');
   const [invItems, setInvItems] = useState([blankLineItem()]);
   const [itemDropdown, setItemDropdown] = useState(null);
 
-  // Unique suppliers from stock
-  const suppliers = useMemo(() => [...new Set(stock.map(s => s.supplier).filter(Boolean))].sort(), [stock]);
-
-  // Filtered invoices
-  const filteredInvoices = useMemo(() => invoices.filter(inv => {
-    const matchSearch = inv.invoice_no.toLowerCase().includes(search.toLowerCase()) ||
-      inv.supplier.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === 'ALL' || inv.status === statusFilter;
-    return matchSearch && matchStatus;
-  }), [invoices, search, statusFilter]);
-
+  const debouncedSearch = useDebounce(search, 300);
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  
   const INVOICES_PAGE_SIZE = 15;
   const [invoicesPage, setInvoicesPage] = useState(1);
-  const paginatedInvoices = useMemo(() => {
-    const start = (invoicesPage - 1) * INVOICES_PAGE_SIZE;
-    return filteredInvoices.slice(start, start + INVOICES_PAGE_SIZE);
-  }, [filteredInvoices, invoicesPage]);
+  const [paginatedInvoices, setPaginatedInvoices] = useState([]);
+  const [totalInvoices, setTotalInvoices] = useState(0);
+  const [kpis, setKpis] = useState({ total: 0, pending: 0, received: 0, totalValue: 0 });
+  
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setInvoicesPage(1);
+  }, [debouncedSearch, statusFilter]);
+
+  useEffect(() => {
+    const fetchInvoices = async () => {
+      try {
+        const { data, totalCount } = await api.getInvoicesPaged({ page: invoicesPage, pageSize: INVOICES_PAGE_SIZE, search: debouncedSearch, status: statusFilter });
+        setPaginatedInvoices(data);
+        setTotalInvoices(totalCount);
+      } catch (err) {
+        console.error('Failed to fetch invoices:', err);
+      }
+    };
+    fetchInvoices();
+  }, [invoicesPage, debouncedSearch, statusFilter]);
+
+  useEffect(() => {
+    const fetchKpis = async () => {
+      try {
+        const stats = await api.getInvoicesStats();
+        setKpis(stats);
+      } catch (err) {
+        console.error('Failed to fetch invoice stats:', err);
+      }
+    };
+    fetchKpis();
+  }, []);
 
   // Add line item
   const addLineItem = () => {
@@ -200,9 +221,9 @@ export default function Invoicing() {
     w.print();
   };
 
-  const pendingCount = useMemo(() => invoices.filter(i => i.status === 'DRAFT' || i.status === 'SENT').length, [invoices]);
-  const receivedCount = useMemo(() => invoices.filter(i => i.status === 'RECEIVED').length, [invoices]);
-  const totalValue = useMemo(() => invoices.reduce((a, i) => a + (i.total || 0), 0), [invoices]);
+  const pendingCount = kpis.pending;
+  const receivedCount = kpis.received;
+  const totalValue = kpis.totalValue;
 
   return (
     <div className="fade-in">
@@ -211,7 +232,7 @@ export default function Invoicing() {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
           <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
             <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-            <input type="text" placeholder="Search invoices..." className="form-control" style={{ paddingLeft: '44px' }} value={search} onChange={e => { setSearch(e.target.value); setInvoicesPage(1); }} />
+            <input type="text" placeholder="Search invoices..." className="form-control" style={{ paddingLeft: '44px' }} value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           <select className="form-control" style={{ width: '160px' }} value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setInvoicesPage(1); }}>
             <option value="ALL">All Status</option>
@@ -236,7 +257,7 @@ export default function Invoicing() {
             <span className="kpi-title">Total Invoices</span>
             <div className="kpi-icon-wrap" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}><FileText size={18} /></div>
           </div>
-          <div className="kpi-value">{invoices.length}</div>
+          <div className="kpi-value">{kpis.total}</div>
         </div>
         <div className="glass-card kpi-card">
           <div className="kpi-header">
@@ -311,7 +332,7 @@ export default function Invoicing() {
                   </td>
                 </tr>
               ))}
-              {filteredInvoices.length === 0 && (
+              {totalInvoices === 0 && (
                 <tr><td colSpan="7" style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>
                   Belum ada invoice. Klik "Buat Invoice Baru" untuk memulai.
                 </td></tr>
@@ -323,7 +344,7 @@ export default function Invoicing() {
           <Pagination
             page={invoicesPage}
             pageSize={INVOICES_PAGE_SIZE}
-            totalCount={filteredInvoices.length}
+            totalCount={totalInvoices}
             onPageChange={setInvoicesPage}
             itemLabel="invoice"
           />
@@ -395,7 +416,7 @@ export default function Invoicing() {
                   <label className="form-label">Supplier</label>
                   <select className="form-control" value={invSupplier} onChange={e => setInvSupplier(e.target.value)} required>
                     <option value="">-- Pilih Supplier --</option>
-                    {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
+                    {stock.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
               </div>
