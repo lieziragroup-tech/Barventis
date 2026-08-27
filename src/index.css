@@ -551,6 +551,9 @@ body::before {
   letter-spacing: 0.4px;
   background: var(--bg-tertiary);
   white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .custom-table td {
@@ -747,6 +750,7 @@ body::before {
   height: 100%;
   display: block;
   cursor: crosshair;
+  touch-action: none;
 }
 
 /* Tab menu */
@@ -805,10 +809,11 @@ body::before {
   transition: background var(--ease);
   font-size: 0.85rem;
   color: var(--text-primary);
+  background: var(--bg-secondary);
 }
 
 .search-results-item:hover {
-  background: var(--bg-primary);
+  background: rgba(59, 130, 246, 0.08);
   color: var(--accent);
 }
 
@@ -1050,6 +1055,7 @@ input[type='number']::-webkit-outer-spin-button {
   gap: 10px;
   padding: 10px 12px;
   color: var(--text-secondary);
+  background: var(--bg-secondary);
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1058,7 +1064,7 @@ input[type='number']::-webkit-outer-spin-button {
 
 .recipe-nav-item:hover {
   color: var(--text-primary);
-  background: var(--bg-tertiary);
+  background: rgba(59, 130, 246, 0.08);
   transform: translateX(3px);
 }
 
@@ -1529,3 +1535,80 @@ input[type='number']::-webkit-outer-spin-button {
 }
 .spin { animation: spin-anim 0.8s linear infinite; }
 @keyframes spin-anim { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* ==========================================================================
+   TABLET & MOBILE POLISH — floating AI button, recipe summary bar,
+   menu pricing toolbar
+   ========================================================================== */
+
+/* Reserve bottom clearance on every page so the floating AI button never
+   sits on top of the last row/card/action bar in the scroll area */
+.page-scroll-area {
+  padding-bottom: 24px;
+}
+
+@media (max-width: 1024px) {
+  .page-scroll-area {
+    padding-bottom: 96px;
+  }
+
+  .ai-fab-btn {
+    width: 48px !important;
+    height: 48px !important;
+    bottom: 16px !important;
+    right: 16px !important;
+  }
+}
+
+/* Recipe Builder — bottom calculation bar */
+@media (max-width: 1024px) {
+  .recipe-summary-bar {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 14px;
+  }
+
+  .recipe-summary-actions {
+    width: 100%;
+  }
+
+  .recipe-summary-actions .btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .recipe-summary-info {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 6px !important;
+  }
+
+  .recipe-summary-divider {
+    display: none;
+  }
+}
+
+/* Menu Pricing Simulator — filter toolbar */
+.menu-pricing-fc-group {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .menu-pricing-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .menu-pricing-search,
+  .menu-pricing-category {
+    width: 100% !important;
+  }
+
+  .menu-pricing-fc-group {
+    width: 100%;
+    margin-left: 0 !important;
+    justify-content: space-between;
+  }
+}

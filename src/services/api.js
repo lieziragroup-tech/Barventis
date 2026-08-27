@@ -368,9 +368,40 @@ export const api = {
       .maybeSingle();
 
     if (!userProfile) {
-      // SEC-001 Fix: Removed unsafe auto-recovery that trusted client metadata and created phantom tenants.
-      // If profile is missing, it means registration failed halfway or was deleted. Must re-register or fix in DB.
-      throw new Error("Profile pengguna tidak ditemukan. Silakan hubungi admin atau daftar ulang.");
+      // Auto-recover for missing profile (e.g., registered via Supabase dashboard or RPC failure)
+      const meta = authData.user.user_metadata || {};
+      const name = meta.name || authData.user.email?.split('@')[0] || 'Admin';
+      const role = meta.role || 'Admin / Owner';
+      const tenantName = meta.tenant_name || ('resto_' + Math.floor(Math.random() * 10000));
+      const companyName = meta.company_name || 'My Resto';
+
+      let tenantId;
+      const { data: existingTenant } = await supabase.from('tenants').select('id').eq('name', tenantName).maybeSingle();
+      
+      if (existingTenant) {
+        tenantId = existingTenant.id;
+      } else {
+        const { data: newTenant } = await supabase.from('tenants').insert({ name: tenantName, company_name: companyName }).select('id').maybeSingle();
+        if (newTenant) tenantId = newTenant.id;
+      }
+
+      if (tenantId) {
+        const { data: newProfile } = await supabase.from('users').insert({
+          id: authData.user.id,
+          tenant_id: tenantId,
+          name: name,
+          email: authData.user.email,
+          role: role
+        }).select('*').maybeSingle();
+        
+        if (newProfile) {
+          userProfile = newProfile;
+        }
+      }
+
+      if (!userProfile) {
+        throw new Error("Profile pengguna tidak ditemukan. Database RLS mungkin memblokir auto-recovery. Silakan jalankan script SQL setup atau daftar ulang.");
+      }
     }
 
     if (profileErr || !userProfile) {

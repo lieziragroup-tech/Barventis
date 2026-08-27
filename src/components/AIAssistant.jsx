@@ -171,6 +171,7 @@ export default function AIAssistant() {
       <button
         onClick={() => setIsOpen(true)}
         title="Barventis AI Assistant"
+        className="ai-fab-btn"
         style={{
           position: 'fixed',
           bottom: '24px',

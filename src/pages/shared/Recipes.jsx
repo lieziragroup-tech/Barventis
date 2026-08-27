@@ -1,12 +1,12 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Search, Plus, Trash2, Save, X, UploadCloud, Coins, AlertTriangle, CheckCircle, ChefHat, RefreshCw } from 'lucide-react';
 import BulkImport from '../../components/BulkImport';
 import Pagination from '../../components/shared/Pagination';
 import { useData } from '../../contexts/DataContext';
 import { api } from '../../services/api';
 import {
-  formatIDR, calculateIngredientCost, parsePackSize, isPackUnitConsistent, getPackUnitInfo,
-  computeRecipeCosts, DEFAULT_ROUNDING_DIRECTION, DEFAULT_ROUNDING_INCREMENT, DEFAULT_PRICE_ADJUSTMENT
+  formatIDR, calculateIngredientCost, parsePackSize, isPackUnitConsistent, getPackUnitInfo
 } from '../../services/costUtils';
 
 
@@ -14,6 +14,7 @@ const rowUid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUU
 const ensureUids = (arr = []) => arr.map(x => ({ ...x, _uid: x._uid ?? rowUid() }));
 
 export default function Recipes() {
+  const location = useLocation();
   const { stock, recipes, handleSaveRecipe: onSaveRecipe, handleAddRecipe: onAddRecipe, handleDeleteRecipe: onDeleteRecipe, refreshData, showToast, unitConversionMap } = useData();
   const [recalculating, setRecalculating] = useState(false);
   const [activeRecipe, setActiveRecipe] = useState(recipes[0] || null);
@@ -25,7 +26,6 @@ export default function Recipes() {
     activeRecipe?.fix_cost_pct != null ? (parseFloat(activeRecipe.fix_cost_pct) * 100) : (api.getOverheadPct() * 100)
   );
 
-  const [editedFoodCostTarget, setEditedFoodCostTarget] = useState('');
   const [editedCategory, setEditedCategory] = useState(activeRecipe?.category || 'NON-KOPI');
   const [editedImageUrl, setEditedImageUrl] = useState(activeRecipe?.image_url || '');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -76,7 +76,6 @@ export default function Recipes() {
     setEditedIngredients(ensureUids(r.ingredients || []));
     setEditedSellingPrice(Math.round(r.selling_price));
     setEditedFixCostPct(r.fix_cost_pct != null ? (parseFloat(r.fix_cost_pct) * 100) : (api.getOverheadPct() * 100));
-    setEditedFoodCostTarget('');
     setEditedCategory(r.category || 'NON-KOPI');
     setEditedImageUrl(r.image_url || '');
     setOpenDropdown(null);
@@ -85,12 +84,24 @@ export default function Recipes() {
 
   useEffect(() => {
     if (recipes.length === 0) return;
+    
+    // Check if we navigated here from another page wanting a specific recipe
+    if (location.state?.targetRecipeId) {
+      const target = recipes.find(r => r.id === location.state.targetRecipeId);
+      if (target) {
+        setTimeout(() => handleSelectRecipe(target), 0);
+        // Clear the state so it doesn't trigger again on subsequent renders
+        window.history.replaceState({}, document.title);
+        return;
+      }
+    }
+
     const stillExists = activeRecipe && recipes.some(r => r.menu_name === activeRecipe.menu_name);
     if (!stillExists) {
-      handleSelectRecipe(recipes[0]);
+      setTimeout(() => handleSelectRecipe(recipes[0]), 0);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recipes]);
-  /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
   // Filter recipe list
   const filteredRecipes = useMemo(() => recipes.filter(r => r.menu_name.toLowerCase().includes(search.toLowerCase())), [recipes, search]);
@@ -139,18 +150,6 @@ export default function Recipes() {
   const fixCost = useMemo(() => subtotal * fixCostPctFraction, [subtotal, fixCostPctFraction]);
   const basicCost = useMemo(() => subtotal + fixCost, [subtotal, fixCost]);
   const foodCostPct = useMemo(() => editedSellingPrice > 0 ? (basicCost / editedSellingPrice) : 0, [basicCost, editedSellingPrice]);
-
-
-  const foodCostTargetFraction = (parseFloat(editedFoodCostTarget) || 0) / 100;
-  const targetPricing = useMemo(() => computeRecipeCosts({
-    subtotal,
-    fixCostPct: fixCostPctFraction,
-    foodCostPct: foodCostTargetFraction,
-    roundingDirection: DEFAULT_ROUNDING_DIRECTION,
-    roundingIncrement: DEFAULT_ROUNDING_INCREMENT,
-    priceAdjustment: DEFAULT_PRICE_ADJUSTMENT
-  }), [subtotal, fixCostPctFraction, foodCostTargetFraction]);
-
 
   const computeLiveRecipeCost = (recipe) => {
     const liveSubtotal = (recipe.ingredients || []).reduce((acc, ing) => acc + calcRowAmount(ing), 0);
@@ -229,8 +228,7 @@ export default function Recipes() {
       subtotal, fix_cost: fixCost, basic_cost: basicCost,
 
       fix_cost_pct: fixCostPctFraction,
-  
-      food_cost_pct: foodCostTargetFraction > 0 ? foodCostTargetFraction : foodCostPct,
+      food_cost_pct: foodCostPct,
       total_cost: basicCost,
       ingredients: savedIngredients
     };
@@ -274,6 +272,7 @@ export default function Recipes() {
     setActiveRecipe(newRecipe);
     setEditedIngredients([]);
     setEditedSellingPrice(parseInt(newMenuPrice) || 0);
+    setEditedFixCostPct(api.getOverheadPct() * 100);
     setEditedCategory(newMenuCategory);
     setEditedImageUrl(newImageUrl);
   };
@@ -547,43 +546,6 @@ export default function Recipes() {
                 onChange={e => setEditedFixCostPct(e.target.value)}
               />
             </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                Target Food Cost % (opsional)
-              </label>
-              <input
-                type="number"
-                step="0.1"
-                min="0"
-                placeholder="Isi utk hitung saran Harga Jual"
-                className="form-control premium-input"
-                style={{ height: '40px' }}
-                value={editedFoodCostTarget}
-                onChange={e => setEditedFoodCostTarget(e.target.value)}
-              />
-            </div>
-            {foodCostTargetFraction > 0 && (
-              <div style={{
-                gridColumn: '1 / -1', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                gap: '12px', flexWrap: 'wrap', background: 'var(--accent-glow)', border: '1px solid rgba(79,110,247,0.15)',
-                borderRadius: 'var(--radius-md)', padding: '10px 14px', fontSize: '0.8rem'
-              }}>
-                <span style={{ color: 'var(--text-secondary)' }}>
-                  Dari HPP {formatIDR(basicCost)} ÷ Target Food Cost {editedFoodCostTarget}% → saran Harga Jual:{' '}
-                  <strong style={{ color: 'var(--accent)', fontSize: '0.9rem' }}>{formatIDR(targetPricing.sellingPriceFinal)}</strong>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setEditedSellingPrice(targetPricing.sellingPriceFinal)}
-                  style={{
-                    background: 'var(--accent)', color: '#fff', border: 'none', padding: '7px 14px',
-                    borderRadius: 'var(--radius-md)', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', flexShrink: 0
-                  }}
-                >
-                  Pakai Harga Ini →
-                </button>
-              </div>
-            )}
             <div className="form-group" style={{ marginBottom: 0, gridColumn: '1 / -1' }}>
               <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>URL Gambar Menu</label>
               <input 
@@ -612,8 +574,8 @@ export default function Recipes() {
           </div>
 
           {/* Ingredients Table */}
-          <div className="table-container glass-scrollbar" style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', marginBottom: '16px', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)', background: 'rgba(0,0,0,0.1)' }}>
-            <table className="custom-table premium-table" style={{ width: '100%', minWidth: '750px' }}>
+          <div className="table-container glass-scrollbar" style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', minHeight: '380px', maxHeight: '480px', marginBottom: '24px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
+            <table className="custom-table premium-table" style={{ width: '100%', minWidth: '750px', marginBottom: '220px' }}>
               <thead>
                 <tr>
                   <th style={{ width: '28%' }}>Bahan Baku</th>
@@ -652,11 +614,10 @@ export default function Recipes() {
                         />
                         {openDropdown === idx && (
                           <ul className="search-results-list glass-scrollbar" style={{ 
-                            background: '#161922', 
-                            border: '1px solid rgba(255,255,255,0.1)', 
+                            background: 'var(--bg-secondary)', 
+                            border: '1px solid var(--border)', 
                             borderRadius: 'var(--radius-lg)',
-                            boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
-                            backdropFilter: 'blur(10px)',
+                            boxShadow: 'var(--shadow-lg)',
                             zIndex: 1000,
                             padding: '4px',
                             marginTop: '2px'
@@ -756,7 +717,7 @@ export default function Recipes() {
           </div>
 
           {/* Bottom Calculation Bar - sticky */}
-          <div style={{ 
+          <div className="recipe-summary-bar" style={{ 
             display: 'flex', 
             justifyContent: 'space-between', 
             alignItems: 'center', 
@@ -768,14 +729,14 @@ export default function Recipes() {
             boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
             backdropFilter: 'blur(10px)'
           }}>
-            <div style={{ display: 'flex', gap: '24px', fontSize: '0.825rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
+            <div className="recipe-summary-info" style={{ display: 'flex', gap: '24px', fontSize: '0.825rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
               <span>Subtotal: <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatIDR(subtotal)}</strong></span>
-              <span style={{ width: 1, background: 'var(--border)', height: '14px', alignSelf: 'center' }} />
+              <span className="recipe-summary-divider" style={{ width: 1, background: 'var(--border)', height: '14px', alignSelf: 'center' }} />
               <span>Fix Cost ({parseFloat(editedFixCostPct) || 0}%): <strong style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{formatIDR(fixCost)}</strong></span>
-              <span style={{ width: 1, background: 'var(--border)', height: '14px', alignSelf: 'center' }} />
+              <span className="recipe-summary-divider" style={{ width: 1, background: 'var(--border)', height: '14px', alignSelf: 'center' }} />
               <span>HPP Gabungan: <strong style={{ color: 'var(--accent)', fontWeight: 800 }}>{formatIDR(basicCost)}</strong></span>
             </div>
-            <div style={{ display: 'flex', gap: '12px' }}>
+            <div className="recipe-summary-actions" style={{ display: 'flex', gap: '12px' }}>
               {activeRecipe && activeRecipe.id && (
                 <button 
                   className="btn premium-btn premium-btn-danger" 

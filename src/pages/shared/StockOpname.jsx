@@ -16,7 +16,7 @@ export default function StockOpname() {
   const [location, setLocation] = useState('RESTO'); // RESTO, CENTRAL
   const [opnameItems, setOpnameItems] = useState([]);
   const [, setSignatureData] = useState(null);
-  const [isDrawing, setIsDrawing] = useState(false);
+  const isDrawing = useRef(false);
   const [activeCategory, setActiveCategory] = useState('');
   const [showBulkImport, setShowBulkImport] = useState(false);
   
@@ -80,12 +80,12 @@ export default function StockOpname() {
   }, [step]);
 
   const startDrawing = (e) => {
-    setIsDrawing(true);
+    isDrawing.current = true;
     draw(e);
   };
 
   const stopDrawing = () => {
-    setIsDrawing(false);
+    isDrawing.current = false;
     if (canvasRef.current) {
       const canvas = canvasRef.current;
       const ctx = canvas.getContext('2d');
@@ -94,7 +94,7 @@ export default function StockOpname() {
   };
 
   const draw = (e) => {
-    if (!isDrawing || !canvasRef.current) return;
+    if (!isDrawing.current || !canvasRef.current) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     
