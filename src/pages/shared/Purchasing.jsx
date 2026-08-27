@@ -86,11 +86,13 @@ export default function Purchasing() {
     fetchHistory(page, search);
   }, [page, search, fetchHistory]);
 
-  // Click outside to close dropdown
+  // Click outside to close dropdown — use mousedown on the wrapper so the
+  // dropdown is still alive when any child receives a click event
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (searchInputRef.current && !searchInputRef.current.contains(event.target)) {
-        setShowSearchDropdown(false);
+        // Delay so click handlers inside the dropdown fire first
+        setTimeout(() => setShowSearchDropdown(false), 150);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);

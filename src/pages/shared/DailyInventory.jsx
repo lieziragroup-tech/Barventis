@@ -1,418 +1,464 @@
-import React, { useState, useEffect } from 'react';
-import { RefreshCw, Search, Calendar, ChevronLeft, ChevronRight, CheckCircle, Database } from 'lucide-react';
+/* Waste / Barang Rusak Daily Report — Cart-Based Input */
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Search, Trash2, Calendar, User, AlertTriangle, Plus, PackageX } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { calculateIngredientCost } from '../../services/costUtils';
 
+const WASTE_CATEGORIES = ['Spoilage (Basi)', 'Broken (Rusak Fisik)', 'Expired (Kadaluarsa)', 'Contaminated', 'Over-portion', 'Lainnya'];
+const PAGE_SIZE = 30;
+
 export default function DailyInventory() {
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [location, setLocation] = useState('RESTO');
-  const [tab, setTab] = useState('BARANG'); // 'BARANG' or 'BEER'
-  const [search, setSearch] = useState('');
-  
-  const [materials, setMaterials] = useState([]);
-  const [unitConversionMap, setUnitConversionMap] = useState(new Map());
-  const [inventoryId, setInventoryId] = useState(null);
-  const [itemsData, setItemsData] = useState({});
-  const [notification, setNotification] = useState(null);
   const { activeUser } = useAuth();
 
-  const fetchInventory = async () => {
-    setLoading(true);
+  // Masters
+  const [materials, setMaterials] = useState([]);
+  const [unitConversionMap, setUnitConversionMap] = useState(new Map());
+
+  // Cart
+  const [cart, setCart] = useState([]);
+  const [wasteDate, setWasteDate] = useState(() => new Date().toISOString().split('T')[0]);
+
+  // Search
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const searchInputRef = useRef(null);
+
+  // New Material Modal
+  const [showNewMaterialModal, setShowNewMaterialModal] = useState(false);
+  const [newMaterialData, setNewMaterialData] = useState({ name: '', category: 'Bahan Baku Dasar', unit: 'pcs', price: '', min_stock: 15 });
+
+  // History (waste transactions)
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyTotal, setHistoryTotal] = useState(0);
+
+  // UI State
+  const [loading, setLoading] = useState(false);
+  const [notification, setNotification] = useState(null);
+
+  // Debounce
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(searchQuery), 250);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  // Click outside dropdown
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (searchInputRef.current && !searchInputRef.current.contains(e.target)) {
+        setTimeout(() => setShowSearchDropdown(false), 150);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const fetchMasters = async () => {
     try {
       const tenantId = await api.getActiveTenantId();
-
-      // 1. Fetch materials filtered by tab
-      let query = supabase.from('materials').select('*').eq('tenant_id', tenantId).eq('is_active', true);
-      
-      const { data: allMats, error: matErr } = await query.order('category').order('name');
-      if (matErr) throw matErr;
-
-      let filteredMats = allMats || [];
-      if (tab === 'BEER') {
-        filteredMats = filteredMats.filter(m => (m.category || '').toLowerCase().includes('beer') || (m.name || '').toLowerCase().includes('bintang') || (m.name || '').toLowerCase().includes('bali hai'));
-      } else {
-        filteredMats = filteredMats.filter(m => !(m.category || '').toLowerCase().includes('beer') && !(m.name || '').toLowerCase().includes('bintang') && !(m.name || '').toLowerCase().includes('bali hai'));
-      }
-      setMaterials(filteredMats);
-      setUnitConversionMap(await api._loadUnitConversionMap(tenantId));
-
-      // 2. Fetch or create inventory record
-      const { data: invRecord, error: invErr } = await supabase
-        .from('daily_inventories')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .eq('date', date)
-        .eq('location', location)
-        .maybeSingle();
-
-      if (invErr) throw invErr;
-
-      let currentInvId = null;
-      let existingItems = [];
-
-      if (invRecord) {
-        currentInvId = invRecord.id;
-        // Fetch items
-        const { data: items } = await supabase
-          .from('daily_inventory_items')
-          .select('*')
-          .eq('inventory_id', currentInvId);
-        existingItems = items || [];
-      }
-
-      // Populate state
-      const newItemsData = {};
-      
-      for (const mat of filteredMats) {
-        const existing = existingItems.find(i => i.material_id === mat.id);
-        
-        let prevFull = 0;
-        // If not existing, try to find yesterday's full_qty
-        if (!existing && !invRecord) {
-          const yesterday = new Date(new Date(date).getTime() - 86400000).toISOString().split('T')[0];
-          const { data: prevInv } = await supabase
-            .from('daily_inventories')
-            .select('id')
-            .eq('tenant_id', tenantId)
-            .eq('date', yesterday)
-            .eq('location', location)
-            .maybeSingle();
-
-          if (prevInv) {
-            const { data: prevItem } = await supabase
-              .from('daily_inventory_items')
-              .select('full_qty')
-              .eq('inventory_id', prevInv.id)
-              .eq('material_id', mat.id)
-              .maybeSingle();
-            if (prevItem) prevFull = prevItem.full_qty;
-          } else {
-             // Fallback to current system qty
-             prevFull = location === 'RESTO' ? parseFloat(mat.qty_resto) : parseFloat(mat.qty_central);
-          }
-        } else if (existing) {
-          prevFull = existing.prev_full_qty;
-        } else {
-          // Exists record but no item (new material added today)
-          prevFull = location === 'RESTO' ? parseFloat(mat.qty_resto) : parseFloat(mat.qty_central);
-        }
-
-        newItemsData[mat.id] = {
-          id: existing ? existing.id : null,
-          prev_full_qty: prevFull,
-          in_qty: existing ? existing.in_qty : 0,
-          out_qty: existing ? existing.out_qty : 0,
-          full_qty: existing ? existing.full_qty : prevFull, // default full to prev full
-          broken_qty: existing ? existing.broken_qty : 0,
-          waste_qty: existing ? existing.waste_qty : 0,
-          notes: existing ? existing.notes : ''
-        };
-      }
-
-      setInventoryId(currentInvId);
-      setItemsData(newItemsData);
-
+      const [{ data: mats }, ucMap] = await Promise.all([
+        supabase.from('materials').select('*').eq('tenant_id', tenantId).eq('is_active', true).order('name'),
+        api._loadUnitConversionMap(tenantId)
+      ]);
+      setMaterials(mats || []);
+      setUnitConversionMap(ucMap);
     } catch (err) {
-      console.error(err);
+      setNotification({ type: 'error', text: err.message });
+    }
+  };
+
+  const fetchHistory = useCallback(async (page = 1) => {
+    setHistoryLoading(true);
+    try {
+      const tenantId = await api.getActiveTenantId();
+      const from = (page - 1) * PAGE_SIZE;
+      const { data, count, error } = await supabase
+        .from('transactions')
+        .select('*, materials(name, unit)', { count: 'exact' })
+        .eq('tenant_id', tenantId)
+        .eq('type', 'WASTE')
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
+      if (error) throw error;
+      setHistory(data || []);
+      setHistoryTotal(count || 0);
+    } catch (err) {
+      setNotification({ type: 'error', text: err.message });
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMasters();
+  }, []);
+
+  useEffect(() => {
+    fetchHistory(historyPage);
+  }, [historyPage, fetchHistory]);
+
+  const filteredSearch = useMemo(() => {
+    const q = debouncedQuery.trim().toLowerCase();
+    if (!q) return [];
+    return materials.filter(m => m.name.toLowerCase().includes(q)).slice(0, 8);
+  }, [debouncedQuery, materials]);
+
+  const addToCart = (material) => {
+    setCart(prev => [...prev, {
+      cart_id: Date.now() + Math.random(),
+      material_id: material.id,
+      name: material.name,
+      unit: material.unit,
+      category: material.category,
+      price: material.new_price || material.price || 0,
+      full_pack: material.full_pack,
+      qty: 1,
+      waste_category: 'Spoilage (Basi)',
+      notes: ''
+    }]);
+    setSearchQuery('');
+    setShowSearchDropdown(false);
+  };
+
+  const updateCart = (cartId, field, value) => {
+    setCart(prev => prev.map(item => item.cart_id === cartId ? { ...item, [field]: value } : item));
+  };
+
+  const removeFromCart = (cartId) => {
+    setCart(prev => prev.filter(item => item.cart_id !== cartId));
+  };
+
+  const handleCreateMaterial = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const created = await api.createMaterial({
+        name: newMaterialData.name,
+        category: newMaterialData.category,
+        unit: newMaterialData.unit,
+        price: parseFloat(newMaterialData.price) || 0,
+        min_stock: parseFloat(newMaterialData.min_stock) || 15
+      });
+      addToCart(created);
+      setShowNewMaterialModal(false);
+      setNotification({ type: 'success', text: `Bahan "${created.name}" berhasil ditambahkan.` });
+      fetchMasters();
+    } catch (err) {
       setNotification({ type: 'error', text: err.message });
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchInventory();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, location, tab]);
-
-  const handleDateChange = (days) => {
-    const d = new Date(date);
-    d.setDate(d.getDate() + days);
-    setDate(d.toISOString().split('T')[0]);
-  };
-
-  const handleInputChange = (matId, field, value) => {
-    const num = parseFloat(value);
-    setItemsData(prev => ({
-      ...prev,
-      [matId]: {
-        ...prev[matId],
-        [field]: isNaN(num) ? value : num // keep string for notes, num for others
-      }
-    }));
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    setNotification(null);
+  const handleSaveWaste = async () => {
+    if (cart.length === 0) return setNotification({ type: 'error', text: 'Daftar barang rusak kosong.' });
+    for (const item of cart) {
+      if (!item.qty || parseFloat(item.qty) <= 0) return setNotification({ type: 'error', text: `Qty untuk "${item.name}" harus lebih dari 0.` });
+    }
+    if (!window.confirm(`Simpan ${cart.length} item waste/barang rusak?`)) return;
+    setLoading(true);
     try {
       const tenantId = await api.getActiveTenantId();
       const userId = await api.getActiveUserId();
 
-      let targetInvId = inventoryId;
-
-      // 1. Create inventory record if not exists
-      if (!targetInvId) {
-        const { data: newInv, error: newInvErr } = await supabase
-          .from('daily_inventories')
-          .insert({
-            tenant_id: tenantId,
-            date: date,
-            location: location,
-            checked_by: userId
-          })
-          .select()
-          .single();
-
-        if (newInvErr) throw newInvErr;
-        targetInvId = newInv.id;
-        setInventoryId(targetInvId);
-      }
-
-      // 2. Prepare items for upsert
-      const upsertRows = materials.map(mat => {
-        const d = itemsData[mat.id];
+      const rows = cart.map(item => {
+        const qty = parseFloat(item.qty);
+        const matSnap = { ...item, price: item.price };
+        const amount = calculateIngredientCost(matSnap, qty, item.unit, unitConversionMap);
         return {
-          inventory_id: targetInvId,
-          material_id: mat.id,
-          in_qty: parseFloat(d.in_qty) || 0,
-          out_qty: parseFloat(d.out_qty) || 0,
-          full_qty: parseFloat(d.full_qty) || 0,
-          broken_qty: parseFloat(d.broken_qty) || 0,
-          waste_qty: parseFloat(d.waste_qty) || 0,
-          prev_full_qty: parseFloat(d.prev_full_qty) || 0,
-          notes: d.notes || ''
+          tenant_id: tenantId,
+          date: wasteDate,
+          material_id: item.material_id,
+          type: 'WASTE',
+          location: 'RESTO',
+          qty: -qty,
+          amount: -amount,
+          notes: `[${item.waste_category}] ${item.notes || ''}`.trim() + ` — Dicatat oleh: ${activeUser?.name || 'Sistem'}`,
+          created_by: userId
         };
       });
 
-      // 3. Upsert items
-      for (let i = 0; i < upsertRows.length; i += 500) {
-        const { error } = await supabase.from('daily_inventory_items').upsert(upsertRows.slice(i, i + 500), { onConflict: 'inventory_id, material_id' });
-        if (error) throw error;
-      }
+      const { error } = await supabase.from('transactions').insert(rows);
+      if (error) throw error;
 
-      // 4. GAP-FIX 2026-07: recorded waste_qty never used to flow anywhere beyond this
-      // table — getCostControlReport()'s `waste_valuation` metric sums transactions of
-      // type WASTE/BREAKAGE/EXPIRED/COMP, but nothing ever inserted one, so that metric
-      // was always 0 regardless of what staff entered here. Mirror waste_qty into a
-      // WASTE transaction so it actually surfaces in the monthly Cost Control / SO
-      // Barista-style report. Delete-then-insert per (tenant, date, material) keeps this
-      // idempotent across repeated saves of the same day.
-      const wasteRows = materials
-        .map(mat => ({ mat, d: itemsData[mat.id] }))
-        .filter(({ d }) => parseFloat(d?.waste_qty) > 0);
-
-      if (wasteRows.length > 0) {
-        const materialIds = wasteRows.map(({ mat }) => mat.id);
-        await supabase
-          .from('transactions')
-          .delete()
-          .eq('tenant_id', tenantId)
-          .eq('date', date)
-          .eq('type', 'WASTE')
-          .in('material_id', materialIds);
-
-        const wasteTxRows = wasteRows.map(({ mat, d }) => {
-          const wasteQty = parseFloat(d.waste_qty) || 0;
-          const wasteAmount = calculateIngredientCost(mat, wasteQty, mat.unit, unitConversionMap);
-          return {
-            tenant_id: tenantId,
-            date,
-            material_id: mat.id,
-            type: 'WASTE',
-            location,
-            qty: -wasteQty,
-            amount: -wasteAmount,
-            notes: `Waste tercatat via Daily Inventory (${location}, ${date})`,
-            created_by: userId
-          };
-        });
-        const { error: wasteErr } = await supabase.from('transactions').insert(wasteTxRows);
-        if (wasteErr) throw wasteErr;
-      }
-
-      setNotification({ type: 'success', text: 'Daily inventory saved successfully!' });
+      setCart([]);
+      setNotification({ type: 'success', text: `${rows.length} item waste berhasil disimpan.` });
+      setHistoryPage(1);
+      fetchHistory(1);
     } catch (err) {
-      console.error(err);
       setNotification({ type: 'error', text: err.message });
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
   };
 
-  const filteredMaterials = materials.filter(m => 
-    m.name.toLowerCase().includes(search.toLowerCase()) || 
-    m.category.toLowerCase().includes(search.toLowerCase())
-  );
-
-  // Group by category
-  const grouped = filteredMaterials.reduce((acc, mat) => {
-    if (!acc[mat.category]) acc[mat.category] = [];
-    acc[mat.category].push(mat);
-    return acc;
-  }, {});
+  const totalPages = Math.ceil(historyTotal / PAGE_SIZE);
 
   return (
     <div className="fade-in">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
-        <div style={{ minWidth: 0 }}>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Daily Inventory Sheet</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Pencatatan stok harian (In/Out/Full/Waste).</p>
-        </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <select className="form-control" style={{ width: '150px' }} value={location} onChange={e => setLocation(e.target.value)}>
-            <option value="RESTO">Resto Bar</option>
-            <option value="CENTRAL">Central</option>
-          </select>
-          <button className="btn btn-secondary" onClick={fetchInventory} disabled={loading}>
-            <RefreshCw size={16} className={loading ? 'spin' : ''} />
-          </button>
-        </div>
+      <div style={{ marginBottom: '24px' }}>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>
+          Daily Waste & Barang Rusak
+        </h2>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+          Catat barang basi, rusak, kadaluarsa, atau waste harian. Data ini masuk ke kalkulasi Cost Control.
+        </p>
       </div>
 
       {notification && (
         <div style={{
           padding: '14px 20px', borderRadius: 'var(--radius-lg)', marginBottom: '20px',
-          display: 'flex', alignItems: 'center', gap: '12px',
           background: notification.type === 'success' ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)',
           border: `1px solid ${notification.type === 'success' ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}`
         }}>
-          {notification.type === 'success' && <CheckCircle size={18} style={{ color: 'var(--success)' }} />}
-          <span style={{ flex: 1, fontSize: '0.875rem', color: 'var(--text-primary)' }}>{notification.text}</span>
+          <span style={{ fontSize: '0.875rem', color: 'var(--text-primary)' }}>{notification.text}</span>
         </div>
       )}
 
+      {/* Input Card */}
       <div className="glass-card" style={{ padding: '24px', marginBottom: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '16px' }}>
-          
-          {/* Tabs */}
-          <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-tertiary)', padding: '4px', borderRadius: 'var(--radius-md)' }}>
-            <button 
-              className={`btn ${tab === 'BARANG' ? 'btn-primary' : ''}`} 
-              style={{ padding: '6px 16px', background: tab === 'BARANG' ? '' : 'transparent', color: tab === 'BARANG' ? '' : 'var(--text-secondary)' }}
-              onClick={() => setTab('BARANG')}
-            >Bahan Baku</button>
-            <button 
-              className={`btn ${tab === 'BEER' ? 'btn-primary' : ''}`} 
-              style={{ padding: '6px 16px', background: tab === 'BEER' ? '' : 'transparent', color: tab === 'BEER' ? '' : 'var(--text-secondary)' }}
-              onClick={() => setTab('BEER')}
-            >Grup Beer</button>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '20px', marginBottom: '20px' }}>
+          <div>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Keranjang Waste Harian</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Cari bahan, pilih tipe kerusakan, masukkan qty, lalu simpan.</p>
           </div>
-
-          {/* Date Navigator */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--bg-secondary)', padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-            <button className="btn" style={{ padding: '4px' }} onClick={() => handleDateChange(-1)}><ChevronLeft size={18} /></button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}>
-              <Calendar size={16} style={{ color: 'var(--accent)' }}/>
-              <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', outline: 'none', fontWeight: 600 }} />
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-tertiary)', padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+              <User size={16} style={{ color: 'var(--accent)' }} />
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Oleh: <strong style={{ color: 'var(--text-primary)' }}>{activeUser?.name || '-'}</strong></span>
             </div>
-            <button className="btn" style={{ padding: '4px' }} onClick={() => handleDateChange(1)}><ChevronRight size={18} /></button>
-          </div>
-
-          <div style={{ position: 'relative', width: '250px' }}>
-            <Search size={16} style={{ position: 'absolute', left: '12px', top: '10px', color: 'var(--text-muted)' }} />
-            <input 
-              type="text" className="form-control" placeholder="Cari item..." 
-              style={{ paddingLeft: '36px' }} value={search} onChange={e => setSearch(e.target.value)}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-tertiary)', padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+              <Calendar size={16} style={{ color: 'var(--accent)' }} />
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Tanggal:</span>
+              <input
+                type="date"
+                className="form-control"
+                style={{ padding: '2px 6px', height: 'auto', background: 'transparent', border: 'none', width: '130px', fontWeight: 600 }}
+                value={wasteDate}
+                onChange={e => setWasteDate(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>Memuat form inventory...</div>
-        ) : (
-          <div className="table-container" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
-            <table className="custom-table" style={{ minWidth: '1000px' }}>
-              <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
-                <tr>
-                  <th style={{ width: '250px' }}>Nama Item</th>
-                  <th style={{ width: '80px', textAlign: 'center' }}>Unit</th>
-                  <th style={{ width: '100px', textAlign: 'center' }} title="Full (Awal/Kemarin)">FULL(Awl)</th>
-                  <th style={{ width: '100px', textAlign: 'center' }}>IN</th>
-                  <th style={{ width: '100px', textAlign: 'center' }}>OUT</th>
-                  <th style={{ width: '100px', textAlign: 'center' }} title="Full (Sisa Hari Ini)">FULL(Akh)</th>
-                  <th style={{ width: '100px', textAlign: 'center' }}>BROKEN</th>
-                  <th style={{ width: '100px', textAlign: 'center' }}>WASTE</th>
-                  <th style={{ width: '100px', textAlign: 'center' }} title="Terpakai = (FULL_AWAL + IN) - FULL_AKHIR">TERPAKAI</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Object.entries(grouped).map(([category, mats]) => (
-                  <React.Fragment key={category}>
-                    <tr style={{ background: 'var(--bg-tertiary)' }}>
-                      <td colSpan="9" style={{ fontWeight: 800, color: 'var(--accent)', textTransform: 'uppercase', fontSize: '0.8rem', padding: '12px' }}>
-                        {category}
-                      </td>
-                    </tr>
-                    {mats.map(mat => {
-                      const d = itemsData[mat.id] || {};
-                      const terpakai = (parseFloat(d.prev_full_qty || 0) + parseFloat(d.in_qty || 0)) - parseFloat(d.full_qty || 0);
-                      // BUG-FIX 2026-07: previously `unitPrice = mat.new_price ?? mat.price` was
-                      // multiplied directly by terpakai — but mat.price/new_price is a per-PACK
-                      // price, not per-base-unit. That inflated this value by the pack-size
-                      // factor for every gr/ml-tracked material. Route through the shared,
-                      // pack-size-aware calculator instead (single source of truth in costUtils).
-                      const rp = calculateIngredientCost({ ...mat, price: mat.new_price ?? mat.price }, terpakai, mat.unit, unitConversionMap);
-
-                      return (
-                        <tr key={mat.id}>
-                          <td style={{ fontWeight: 600 }}>{mat.name}</td>
-                          <td style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{mat.unit}</td>
-                          <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
-                            {parseFloat(d.prev_full_qty || 0).toFixed(2)}
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            <input type="number" step="any" className="form-control" style={{ textAlign: 'center', padding: '4px' }} 
-                              value={d.in_qty === 0 ? '' : d.in_qty} onChange={e => handleInputChange(mat.id, 'in_qty', e.target.value)} />
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            <input type="number" step="any" className="form-control" style={{ textAlign: 'center', padding: '4px' }} 
-                              value={d.out_qty === 0 ? '' : d.out_qty} onChange={e => handleInputChange(mat.id, 'out_qty', e.target.value)} />
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            <input type="number" step="any" className="form-control" style={{ textAlign: 'center', padding: '4px', border: '1px solid var(--accent)' }} 
-                              value={d.full_qty === 0 && d.prev_full_qty === 0 ? '' : d.full_qty} onChange={e => handleInputChange(mat.id, 'full_qty', e.target.value)} />
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            <input type="number" step="any" className="form-control" style={{ textAlign: 'center', padding: '4px', color: 'var(--danger)' }} 
-                              value={d.broken_qty === 0 ? '' : d.broken_qty} onChange={e => handleInputChange(mat.id, 'broken_qty', e.target.value)} />
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            <input type="number" step="any" className="form-control" style={{ textAlign: 'center', padding: '4px', color: 'var(--danger)' }} 
-                              value={d.waste_qty === 0 ? '' : d.waste_qty} onChange={e => handleInputChange(mat.id, 'waste_qty', e.target.value)} />
-                          </td>
-                          <td style={{ textAlign: 'center', fontWeight: 700, color: terpakai > 0 ? 'var(--warning)' : 'var(--text-primary)' }} title={`Rp ${rp.toLocaleString('id-ID')}`}>
-                            {terpakai.toFixed(2)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </React.Fragment>
-                ))}
-                {filteredMaterials.length === 0 && (
-                  <tr><td colSpan="9" style={{ textAlign: 'center', padding: '20px' }}>Tidak ada item di kategori ini.</td></tr>
-                )}
-              </tbody>
-            </table>
+        {/* Search */}
+        <div style={{ position: 'relative', marginBottom: '24px', zIndex: 10 }} ref={searchInputRef}>
+          <div style={{ position: 'relative' }}>
+            <Search size={18} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <input
+              type="text"
+              className="form-control"
+              style={{ padding: '14px 16px 14px 44px', fontSize: '1rem', background: 'var(--bg-tertiary)', borderColor: showSearchDropdown ? 'var(--accent)' : 'var(--border)' }}
+              placeholder="Ketik nama bahan rusak/waste untuk ditambahkan..."
+              value={searchQuery}
+              onChange={e => { setSearchQuery(e.target.value); setShowSearchDropdown(true); }}
+              onFocus={() => setShowSearchDropdown(true)}
+            />
           </div>
-        )}
-
-        <div className="daily-inv-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', borderTop: '1px solid var(--border)', paddingTop: '20px', flexWrap: 'wrap', gap: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              Checked by: <strong>{activeUser?.name}</strong>
+          {showSearchDropdown && searchQuery.trim() !== '' && (
+            <div className="glass-card" style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '8px', padding: '8px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', border: '1px solid var(--border-focus)' }}>
+              {filteredSearch.length > 0 ? filteredSearch.map(m => (
+                <div
+                  key={m.id}
+                  style={{ padding: '10px 12px', cursor: 'pointer', borderRadius: 'var(--radius-sm)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-tertiary)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  onClick={() => addToCart(m)}
+                >
+                  <span style={{ fontWeight: 600 }}>{m.name}</span>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{m.category} · {m.unit}</span>
+                </div>
+              )) : (
+                <div style={{ padding: '12px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                  Bahan "{searchQuery}" tidak ditemukan.
+                </div>
+              )}
+              <div style={{ borderTop: '1px solid var(--border)', marginTop: '4px', paddingTop: '4px' }}>
+                <button
+                  className="btn btn-secondary"
+                  style={{ width: '100%', justifyContent: 'center', color: 'var(--accent)', border: 'none', background: 'transparent' }}
+                  onClick={() => { setNewMaterialData({ ...newMaterialData, name: searchQuery }); setShowSearchDropdown(false); setShowNewMaterialModal(true); }}
+                >
+                  <Plus size={16} style={{ marginRight: '6px' }} /> Tambah "{searchQuery}" ke Master Data
+                </button>
+              </div>
             </div>
-          </div>
-          <button className="btn btn-primary" onClick={handleSave} disabled={loading || saving}>
-            <Database size={16} style={{ marginRight: '8px' }}/> {saving ? 'Menyimpan...' : 'Simpan Pencatatan Harian'}
+          )}
+        </div>
+
+        {/* Cart Table */}
+        <div className="table-container" style={{ minHeight: '150px' }}>
+          <table className="custom-table">
+            <thead>
+              <tr>
+                <th>Nama Bahan</th>
+                <th style={{ width: '180px' }}>Tipe Kerusakan</th>
+                <th style={{ width: '100px', textAlign: 'right' }}>Qty</th>
+                <th style={{ width: '60px' }}>Unit</th>
+                <th>Catatan Tambahan</th>
+                <th style={{ width: '40px', textAlign: 'center' }}>Hapus</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cart.map(item => (
+                <tr key={item.cart_id}>
+                  <td style={{ fontWeight: 600 }}>{item.name}</td>
+                  <td>
+                    <select
+                      className="form-control"
+                      style={{ padding: '6px 8px', fontSize: '0.8rem' }}
+                      value={item.waste_category}
+                      onChange={e => updateCart(item.cart_id, 'waste_category', e.target.value)}
+                    >
+                      {WASTE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      step="any"
+                      className="form-control"
+                      style={{ padding: '6px 8px', textAlign: 'right', fontSize: '0.85rem' }}
+                      value={item.qty}
+                      onChange={e => updateCart(item.cart_id, 'qty', e.target.value)}
+                    />
+                  </td>
+                  <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{item.unit}</td>
+                  <td>
+                    <input
+                      type="text"
+                      className="form-control"
+                      style={{ padding: '6px 8px', fontSize: '0.8rem' }}
+                      placeholder="Opsional..."
+                      value={item.notes}
+                      onChange={e => updateCart(item.cart_id, 'notes', e.target.value)}
+                    />
+                  </td>
+                  <td style={{ textAlign: 'center' }}>
+                    <button className="btn" style={{ padding: '4px', color: 'var(--danger)', background: 'transparent' }} onClick={() => removeFromCart(item.cart_id)}>
+                      <Trash2 size={16} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {cart.length === 0 && (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted)' }}>
+                    <PackageX size={32} style={{ margin: '0 auto 8px', opacity: 0.4 }} />
+                    <div>Belum ada item. Cari bahan di atas.</div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px' }}>
+          <button
+            className="btn btn-warning"
+            style={{ display: 'flex', gap: '8px', padding: '12px 24px', fontSize: '0.95rem', alignItems: 'center' }}
+            onClick={handleSaveWaste}
+            disabled={loading || cart.length === 0}
+          >
+            <AlertTriangle size={18} /> {loading ? 'Menyimpan...' : `Simpan ${cart.length} Item Waste`}
           </button>
         </div>
       </div>
+
+      {/* History */}
+      <div className="glass-card" style={{ padding: '24px' }}>
+        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '16px' }}>Log Riwayat Waste / Barang Rusak</h3>
+        <div className="table-container" style={{ opacity: historyLoading ? 0.5 : 1, transition: 'opacity 0.15s' }}>
+          <table className="custom-table">
+            <thead>
+              <tr>
+                <th>Tanggal</th>
+                <th>Nama Bahan</th>
+                <th>Tipe Kerusakan</th>
+                <th style={{ textAlign: 'right' }}>Qty Rusak</th>
+                <th>Catatan</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map(h => {
+                const notesRaw = h.notes || '';
+                const typeMatch = notesRaw.match(/\[([^\]]+)\]/);
+                const wasteType = typeMatch ? typeMatch[1] : '-';
+                const notesClean = notesRaw.replace(/\[[^\]]+\]\s?/, '').replace(/— Dicatat oleh:.*$/, '').trim();
+                return (
+                  <tr key={h.id}>
+                    <td>{h.date}</td>
+                    <td style={{ fontWeight: 600 }}>{h.materials?.name || 'Bahan Terhapus'}</td>
+                    <td><span className="badge badge-danger" style={{ fontSize: '0.65rem' }}>{wasteType}</span></td>
+                    <td style={{ textAlign: 'right', color: 'var(--danger)', fontWeight: 600 }}>{Math.abs(h.qty).toFixed(2)} {h.materials?.unit}</td>
+                    <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{notesClean || '-'}</td>
+                  </tr>
+                );
+              })}
+              {history.length === 0 && !historyLoading && (
+                <tr><td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>Belum ada riwayat waste tercatat.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '16px' }}>
+            <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => setHistoryPage(p => Math.max(1, p - 1))} disabled={historyPage === 1}>Prev</button>
+            <span style={{ display: 'flex', alignItems: 'center', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{historyPage} / {totalPages}</span>
+            <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => setHistoryPage(p => Math.min(totalPages, p + 1))} disabled={historyPage === totalPages}>Next</button>
+          </div>
+        )}
+      </div>
+
+      {/* New Material Modal */}
+      {showNewMaterialModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="glass-card modal-card" style={{ width: '400px', maxWidth: 'calc(100vw - 32px)', maxHeight: '90vh', overflowY: 'auto', padding: '24px' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '20px' }}>Tambah Material Baru</h3>
+            <form onSubmit={handleCreateMaterial} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="form-group">
+                <label className="form-label">Nama Material</label>
+                <input type="text" required className="form-control" value={newMaterialData.name} onChange={e => setNewMaterialData({ ...newMaterialData, name: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Kategori</label>
+                <select className="form-control" value={newMaterialData.category} onChange={e => setNewMaterialData({ ...newMaterialData, category: e.target.value })}>
+                  <option>Bahan Baku Dasar</option>
+                  <option>Packaging</option>
+                  <option>Syrup & Flavor</option>
+                  <option>Dairy & Milk</option>
+                  <option>Coffee Beans</option>
+                  <option>Lainnya</option>
+                </select>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group">
+                  <label className="form-label">Unit</label>
+                  <input type="text" required className="form-control" placeholder="pcs, kg, ltr" value={newMaterialData.unit} onChange={e => setNewMaterialData({ ...newMaterialData, unit: e.target.value })} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Min Stok</label>
+                  <input type="number" required className="form-control" value={newMaterialData.min_stock} onChange={e => setNewMaterialData({ ...newMaterialData, min_stock: e.target.value })} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Harga Estimasi (Opsional)</label>
+                <input type="number" className="form-control" value={newMaterialData.price} onChange={e => setNewMaterialData({ ...newMaterialData, price: e.target.value })} />
+              </div>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
+                <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setShowNewMaterialModal(false)}>Batal</button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={loading}>{loading ? 'Menyimpan...' : 'Simpan & Tambah'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
