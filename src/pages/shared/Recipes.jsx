@@ -103,8 +103,18 @@ export default function Recipes() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recipes]);
 
+  const [activeTab, setActiveTab] = useState('BEVERAGE');
+
   // Filter recipe list
-  const filteredRecipes = useMemo(() => recipes.filter(r => r.menu_name.toLowerCase().includes(search.toLowerCase())), [recipes, search]);
+  const filteredRecipes = useMemo(() => {
+    return recipes.filter(r => {
+      const matchSearch = r.menu_name.toLowerCase().includes(search.toLowerCase());
+      const cat = (r.category || '').toUpperCase();
+      const isBeer = cat.includes('BEER');
+      const matchTab = activeTab === 'BEER' ? isBeer : !isBeer;
+      return matchSearch && matchTab;
+    });
+  }, [recipes, search, activeTab]);
 
   const RECIPES_PAGE_SIZE = 15;
   const [recipesPage, setRecipesPage] = useState(1);
@@ -303,6 +313,24 @@ export default function Recipes() {
     <div className="recipes-layout" style={{ display: 'flex', gap: '24px', height: 'calc(100vh - 180px)', fontFamily: 'var(--font-sans)', animation: 'fadeIn 0.3s ease' }}>
       {/* Left: Recipe List */}
       <div className="glass-card recipes-list-panel" style={{ width: '310px', display: 'flex', flexDirection: 'column', padding: '20px', flexShrink: 0, border: '1px solid var(--border)' }}>
+        {/* Tab Switcher */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+          <button
+            className={`btn premium-btn ${activeTab === 'BEVERAGE' ? 'premium-btn-primary' : 'premium-btn-secondary'}`}
+            style={{ flex: 1, fontSize: '0.8rem', padding: '8px 0', borderRadius: 'var(--radius-md)' }}
+            onClick={() => { setActiveTab('BEVERAGE'); setRecipesPage(1); setSelectedItems([]); }}
+          >
+            BEVERAGE
+          </button>
+          <button
+            className={`btn premium-btn ${activeTab === 'BEER' ? 'premium-btn-primary' : 'premium-btn-secondary'}`}
+            style={{ flex: 1, fontSize: '0.8rem', padding: '8px 0', borderRadius: 'var(--radius-md)' }}
+            onClick={() => { setActiveTab('BEER'); setRecipesPage(1); setSelectedItems([]); }}
+          >
+            BEER
+          </button>
+        </div>
+
         {/* Search */}
         <div style={{ position: 'relative', marginBottom: '14px' }}>
           <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />

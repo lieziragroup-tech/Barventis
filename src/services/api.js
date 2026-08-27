@@ -2236,7 +2236,7 @@ export const api = {
     // 2. Query Transactions for calculations
     const { data: transactions } = await supabase
       .from('transactions')
-      .select('type, amount, date, notes')
+      .select('type, amount, date, notes, material_id, materials(category)')
       .eq('tenant_id', tenantId)
       .gte('date', startDate)
       .lte('date', endDate);
@@ -2316,7 +2316,8 @@ export const api = {
         target_cost_pct: 27.00,
         status: beverageCostPct <= 27.00 ? 'SAFE' : (beverageCostPct <= 30.00 ? 'WARNING' : 'DANGER')
       },
-      category_valuation: categoryValuation
+      category_valuation: categoryValuation,
+      detailed_opname_items: detailedOpnameItems
     };
   },
 

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   FileSpreadsheet, FileText, CheckCircle, AlertTriangle,
   TrendingDown, TrendingUp, Info, Calendar, Loader, ChevronDown
@@ -11,19 +11,56 @@ const getXLSX = async () => { if (!_XLSX) _XLSX = await import('xlsx'); return _
 import { useData } from '../../contexts/DataContext';
 
 export default function CostControl() {
-  const { stock } = useData();
+  const { stock, recipes } = useData();
   const [period, setPeriod] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+  const [activeTab, setActiveTab] = useState('ALL');
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
 
+  // Cross-reference menu names to categories
+  const menuCategoryMap = useMemo(() => {
+    const map = {};
+    (recipes || []).forEach(r => {
+      if (r.menu_name) map[r.menu_name.toLowerCase()] = r.category?.toUpperCase() || '';
+    });
+    return map;
+  }, [recipes]);
 
+  const checkTabMatch = useCallback((tx, tab) => {
+    if (tab === 'ALL') return true;
 
-  // Fetch dynamic report from backend API (resolving BUG-002)
+    let matchedCategory = null;
+
+    if (tx.type === 'POS_SALE' || tx.type === 'POS_DEDUCTION' || tx.type === 'OUT') {
+      let menuName = tx.notes || '';
+      if (menuName.startsWith('POS Sync:')) menuName = menuName.replace('POS Sync:', '').trim();
+
+      const exactMatch = menuCategoryMap[menuName.toLowerCase()];
+      if (exactMatch) {
+        matchedCategory = exactMatch;
+      } else {
+        const rMatch = (recipes || []).find(r => r.menu_name && menuName.toLowerCase().includes(r.menu_name.toLowerCase()));
+        if (rMatch) matchedCategory = rMatch.category?.toUpperCase() || '';
+      }
+    } else {
+      // PURCHASE_IN, WASTE, etc. rely on the attached material category from API
+      matchedCategory = tx.materials?.category?.toUpperCase() || '';
+    }
+
+    if (!matchedCategory) return true; // Fail-safe let it through ALL
+
+    const isBeer = matchedCategory.includes('BEER');
+    if (tab === 'BEER') return isBeer;
+    if (tab === 'BEVERAGE') return !isBeer;
+    return true;
+  }, [menuCategoryMap, recipes]);
+
+  // Fetch dynamic report from backend API
   useEffect(() => {
     const fetchReport = async () => {
       setLoading(true);
@@ -39,27 +76,89 @@ export default function CostControl() {
       }
     };
     fetchReport();
-  }, [period, stock]); // Reload if any crucial state updates
+  }, [period, stock]);
 
-  // Map API metrics
-  const openingStock = reportData?.metrics?.opening_stock ?? 0;
-  const totalPembelian = reportData?.metrics?.purchases ?? 0;
-  const closingStock = reportData?.metrics?.closing_stock ?? 0;
-  const pemakaianBulan = reportData?.metrics?.total_cogs ?? 0;
-  const totalSalesBeverage = reportData?.metrics?.sales_revenue ?? 0;
-  const beverageCostPct = reportData?.metrics?.beverage_cost_pct ?? 0;
-  const wasteValuation = reportData?.metrics?.waste_valuation ?? 0;
-  const statusLabel = reportData?.metrics?.status ?? 'SAFE';
+  // Re-calculate all metrics dynamically on the frontend to support Tab Filtering
+  const { openingStock, totalPembelian, closingStock, pemakaianBulan, totalSalesBeverage, beverageCostPct, wasteValuation, statusLabel, filteredOpnameItems } = useMemo(() => {
+    if (!reportData) return { openingStock: 0, totalPembelian: 0, closingStock: 0, pemakaianBulan: 0, totalSalesBeverage: 0, beverageCostPct: 0, wasteValuation: 0, statusLabel: 'SAFE', filteredOpnameItems: [] };
 
-  // BUG-CC-01: POS sync writes transactions with type='OUT' (not 'POS_SALE' or 'POS_DEDUCTION').
-  // The daily breakdown must also count OUT transactions with POS Sync notes as COGS.
+    let purchases = 0;
+    let cogsIngredients = 0;
+    let sales = 0;
+    let waste = 0;
+
+    const wasteTypes = ['WASTE', 'BREAKAGE', 'EXPIRED', 'COMP'];
+
+    // 1. Accumulate Transactions
+    (reportData.transactions || []).forEach(tx => {
+      if (!checkTabMatch(tx, activeTab)) return;
+      const amt = Math.abs(parseFloat(tx.amount || 0));
+
+      if (tx.type === 'PURCHASE_IN') {
+        purchases += amt;
+      } else if (tx.type === 'POS_DEDUCTION' || (tx.type === 'OUT' && (tx.notes || '').startsWith('POS Sync:'))) {
+        cogsIngredients += amt;
+      } else if (tx.type === 'POS_SALE') {
+        sales += amt;
+      } else if (wasteTypes.includes(tx.type)) {
+        waste += amt;
+      }
+    });
+
+    // 2. Accumulate Closing Stock from detailed_opname_items
+    let closing = 0;
+    const filteredOpnames = [];
+    (reportData.detailed_opname_items || []).forEach(item => {
+      const isBeer = (item.category || '').toUpperCase().includes('BEER');
+      let include = true;
+      if (activeTab === 'BEER') include = isBeer;
+      else if (activeTab === 'BEVERAGE') include = !isBeer;
+
+      if (include) {
+        closing += (item.totalValuation || 0);
+        filteredOpnames.push(item);
+      }
+    });
+
+    // 3. Reverse-engineer Opening Stock dynamically
+    // Opening = COGS + Closing - Purchases + Waste
+    // Wait, the backend formula is: COGS = Opening + Purchases - Closing -> Opening = COGS - Purchases + Closing
+    let opening = cogsIngredients - purchases + closing;
+    if (opening < 0) opening = 0; // Fallback bound
+
+    // In case of ALL, we can just use the backend's opening stock if it differs from the derivation
+    if (activeTab === 'ALL' && reportData.metrics) {
+      opening = reportData.metrics.opening_stock;
+      closing = reportData.metrics.closing_stock;
+    }
+
+    let actualCogs = opening + purchases - closing;
+    if (actualCogs < 0) actualCogs = 0;
+
+    const bevPct = sales > 0 ? (actualCogs / sales) * 100 : 0;
+    const stat = bevPct <= 27.00 ? 'SAFE' : (bevPct <= 30.00 ? 'WARNING' : 'DANGER');
+
+    return {
+      openingStock: opening,
+      totalPembelian: purchases,
+      closingStock: closing,
+      pemakaianBulan: actualCogs,
+      totalSalesBeverage: sales,
+      beverageCostPct: bevPct,
+      wasteValuation: waste,
+      statusLabel: stat,
+      filteredOpnameItems: filteredOpnames
+    };
+  }, [reportData, activeTab, checkTabMatch]);
+
+  // The daily breakdown must also count OUT transactions with POS Sync notes as COGS, and respect Tabs.
   const dailyColumns = useMemo(() => {
     const dailyMap = {};
     const txs = reportData?.transactions || [];
 
     // Group POS OUT deductions (stock consumed from POS sync) by date
     txs
-      .filter(tx => (tx.type === 'POS_SALE' || (tx.type === 'OUT' && (tx.notes || '').startsWith('POS Sync:'))) && (tx.date || '').startsWith(period))
+      .filter(tx => (tx.type === 'POS_SALE' || (tx.type === 'OUT' && (tx.notes || '').startsWith('POS Sync:'))) && (tx.date || '').startsWith(period) && checkTabMatch(tx, activeTab))
       .forEach(tx => {
         const day = (tx.date || '').substring(5).replace('-', '/');
         if (!dailyMap[day]) dailyMap[day] = { date: day, purchase: 0, sales: 0 };
@@ -68,7 +167,7 @@ export default function CostControl() {
 
     // Group PURCHASE_IN (stock received from invoices) by date
     txs
-      .filter(tx => tx.type === 'PURCHASE_IN' && (tx.date || '').startsWith(period))
+      .filter(tx => tx.type === 'PURCHASE_IN' && (tx.date || '').startsWith(period) && checkTabMatch(tx, activeTab))
       .forEach(tx => {
         const day = (tx.date || '').substring(5).replace('-', '/');
         if (!dailyMap[day]) dailyMap[day] = { date: day, purchase: 0, sales: 0 };
@@ -78,7 +177,7 @@ export default function CostControl() {
     const result = Object.values(dailyMap);
     result.sort((a, b) => a.date.localeCompare(b.date));
     return result;
-  }, [reportData?.transactions, period]);
+  }, [reportData?.transactions, period, activeTab, checkTabMatch]);
 
   // Generate last 18 months dynamically
   const periodOptions = useMemo(() => {
@@ -107,7 +206,7 @@ export default function CostControl() {
       { 'Item': 'Status', 'Value (IDR)': statusLabel }
     ];
     
-    const opnameData = (reportData?.detailed_opname_items || []).map((item, idx) => ({
+    const opnameData = filteredOpnameItems.map((item, idx) => ({
       'NO': idx + 1,
       'NAMA ITEM': item.name,
       'KATEGORI': item.category,
@@ -147,7 +246,7 @@ export default function CostControl() {
 
   // Print PDF Lengkap
   const handlePrintPDF = (type = 'ALL') => {
-    const opnameItems = reportData?.detailed_opname_items || [];
+    const opnameItems = filteredOpnameItems;
     const printHTML = `
       <html><head><title>UMATIS Laporan LENGKAP - ${period}</title>
       <style>body{font-family:Arial,sans-serif;padding:30px;color:#333;font-size:12px}
@@ -229,15 +328,15 @@ export default function CostControl() {
 
   return (
     <div className="fade-in">
-      {/* Period Picker */}
+      {/* Tab Switcher & Period Picker */}
       <div className="glass-card" style={{ marginBottom: '24px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <Calendar size={18} style={{ color: 'var(--accent)', flexShrink: 0 }} />
           <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Period:</span>
-          <select 
-            className="form-control" 
-            style={{ width: '160px', padding: '6px 12px', fontSize: '0.875rem' }} 
-            value={period} 
+          <select
+            className="form-control"
+            style={{ width: '160px', padding: '6px 12px', fontSize: '0.875rem' }}
+            value={period}
             onChange={e => setPeriod(e.target.value)}
           >
             {periodOptions.map(opt => (
@@ -245,8 +344,33 @@ export default function CostControl() {
             ))}
           </select>
         </div>
+
+        <div style={{ display: 'flex', background: 'var(--bg-tertiary)', padding: '4px', borderRadius: 'var(--radius-md)', width: 'fit-content' }}>
+          <button
+            className={`btn ${activeTab === 'ALL' ? 'btn-primary' : ''}`}
+            style={{ padding: '6px 16px', fontSize: '0.8rem', background: activeTab === 'ALL' ? '' : 'transparent', color: activeTab === 'ALL' ? '' : 'var(--text-secondary)', border: 'none' }}
+            onClick={() => setActiveTab('ALL')}
+          >
+            Semua (Global)
+          </button>
+          <button
+            className={`btn ${activeTab === 'BEVERAGE' ? 'btn-primary' : ''}`}
+            style={{ padding: '6px 16px', fontSize: '0.8rem', background: activeTab === 'BEVERAGE' ? '' : 'transparent', color: activeTab === 'BEVERAGE' ? '' : 'var(--text-secondary)', border: 'none' }}
+            onClick={() => setActiveTab('BEVERAGE')}
+          >
+            Beverage (Non-Beer)
+          </button>
+          <button
+            className={`btn ${activeTab === 'BEER' ? 'btn-primary' : ''}`}
+            style={{ padding: '6px 16px', fontSize: '0.8rem', background: activeTab === 'BEER' ? '' : 'transparent', color: activeTab === 'BEER' ? '' : 'var(--text-secondary)', border: 'none' }}
+            onClick={() => setActiveTab('BEER')}
+          >
+            Beer Only
+          </button>
+        </div>
+
         <div style={{ position: 'relative' }}>
-          <button 
+          <button
             className="btn btn-primary" 
             style={{ display: 'flex', gap: '8px', padding: '10px 18px', fontSize: '0.85rem', fontWeight: 600, alignItems: 'center' }} 
             onClick={() => setShowExportMenu(!showExportMenu)}
@@ -301,7 +425,7 @@ export default function CostControl() {
             display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '24px'
           }}>
             <div>
-              <span className="badge badge-info" style={{ marginBottom: '8px' }}>Period Beverage Cost</span>
+              <span className="badge badge-info" style={{ marginBottom: '8px' }}>Period {activeTab === 'BEER' ? 'Beer Cost' : 'Beverage Cost'}</span>
               <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '6px' }}>
                 HPP: <span style={{ color: beverageCostPct <= 27 ? 'var(--success)' : 'var(--danger)' }}>{beverageCostPct.toFixed(2)}%</span>
               </h2>

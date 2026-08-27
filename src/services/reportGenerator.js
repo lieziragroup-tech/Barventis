@@ -146,8 +146,11 @@ export async function generateReports(salesData, dbData, XLSX, unitConversionMap
   // 7. Menu Pricing
   sheets['MENU PRICING'] = buildMenuPricingSheet(dbData, XLSX);
 
-  // 8. COGS All Beverages
-  sheets['COGS All Beverage '] = buildCOGSSheet(dbData, XLSX);
+  // 8. COGS Beverages (Non-Beer)
+  sheets['COGS Beverage'] = buildCOGSSheet(dbData, XLSX, false);
+
+  // 8b. COGS Beer (Beer Only)
+  sheets['COGS Beer'] = buildCOGSSheet(dbData, XLSX, true);
 
   // 9. Stock Opname RESTO
   sheets['STOCK OPNAME RESTO'] = buildStockOpnameSheet(dbData, 'RESTO', period, XLSX, unitConversionMap);
@@ -785,14 +788,25 @@ function buildMenuPricingSheet(dbData, XLSX) {
   return XLSX.utils.aoa_to_sheet(rows);
 }
 
-function buildCOGSSheet(dbData, XLSX) {
+function buildCOGSSheet(dbData, XLSX, isBeer = false) {
   const rows = [];
   rows.push(['']);
 
+  let recipes = dbData.recipes || [];
+  recipes = recipes.filter(r => {
+    const cat = (r.category || '').toLowerCase();
+    const isBeerCategory = cat.includes('beer') || cat.includes('bir') || cat.includes('alkohol');
+    return isBeer ? isBeerCategory : !isBeerCategory;
+  });
+
   // Build COGS cards for each recipe (6 per row like the template)
-  const recipes = dbData.recipes || [];
   const COLS_PER_RECIPE = 6;
   const perRow = 6; // 6 recipes per horizontal group
+
+  if (recipes.length === 0) {
+    rows.push(['Tidak ada data resep untuk kategori ini.']);
+    return XLSX.utils.aoa_to_sheet(rows);
+  }
 
   for (let batch = 0; batch < recipes.length; batch += perRow) {
     const chunk = recipes.slice(batch, batch + perRow);
