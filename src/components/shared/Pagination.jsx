@@ -24,7 +24,7 @@ export default function Pagination({ page, pageSize, totalCount, onPageChange, i
 
   const getPageNumbers = () => {
     const pages = [];
-    const maxVisible = 5;
+    const maxVisible = 3;
     if (totalPages <= maxVisible + 2) {
       for (let i = 1; i <= totalPages; i++) pages.push(i);
       return pages;
@@ -32,8 +32,8 @@ export default function Pagination({ page, pageSize, totalCount, onPageChange, i
     pages.push(1);
     let start = Math.max(2, clampedPage - 1);
     let end = Math.min(totalPages - 1, clampedPage + 1);
-    if (clampedPage <= 3) end = 4;
-    if (clampedPage >= totalPages - 2) start = totalPages - 3;
+    if (clampedPage <= 2) end = 3;
+    if (clampedPage >= totalPages - 1) start = totalPages - 2;
     if (start > 2) pages.push('ellipsis-start');
     for (let i = start; i <= end; i++) pages.push(i);
     if (end < totalPages - 1) pages.push('ellipsis-end');
