@@ -20,6 +20,10 @@ const Kpi = React.memo(function Kpi({ title, value, icon, color, footer, valueCo
         {loading ? '…' : value}
       </div>
       <div className="kpi-footer"><span style={{ color: 'var(--text-secondary)' }}>{footer}</span></div>
+
+
+
+
     </div>
   );
 });
@@ -43,6 +47,7 @@ export default function Maintenance() {
   // Unit Conversions (Settings) GUI States
   const [conversions, setConversions] = useState([]);
   const [conversionsLoading, setConversionsLoading] = useState(false);
+
   const [materialsForConversion, setMaterialsForConversion] = useState([]);
   const [newConversion, setNewConversion] = useState({ material_id: '', to_unit: '', factor: '' });
   const [savingConversion, setSavingConversion] = useState(false);

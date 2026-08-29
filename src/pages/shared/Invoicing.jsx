@@ -15,6 +15,8 @@ export default function Invoicing() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [viewInvoice, setViewInvoice] = useState(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [invoiceToSubmit, setInvoiceToSubmit] = useState(null);
   
   const [search, setSearch] = useState('');
   const [invSupplier, setInvSupplier] = useState('');
@@ -88,17 +90,12 @@ export default function Invoicing() {
   const invTotal = useMemo(() => invItems.reduce((acc, item) => acc + (item.qty * item.unit_price), 0), [invItems]);
 
   // Submit new invoice
-  const handleCreateSubmit = (e) => {
+  const handlePrepareSubmit = (e) => {
     e.preventDefault();
     if (!invSupplier.trim()) return;
     const validItems = invItems.filter(i => i.item_name && i.qty > 0);
     if (validItems.length === 0) return;
 
-    if (!window.confirm(`Konfirmasi pembuatan invoice untuk supplier ${invSupplier}?`)) return;
-
-    // Note: invoice_no, total, status & date are assigned authoritatively by the
-    // server (api.createInvoice → INV-YYYYMMDD-XXX with a UNIQUE constraint), so we
-    // do not generate a client-side number here (M-3). UI refreshes from DB after save.
     const invoice = {
       supplier: invSupplier,
       date: new Date().toISOString().split('T')[0],
@@ -109,11 +106,19 @@ export default function Invoicing() {
       received_date: null
     };
 
-    onCreateInvoice(invoice);
+    setInvoiceToSubmit(invoice);
+    setShowConfirmModal(true);
+  };
+
+  const handleFinalSubmit = () => {
+    if (!invoiceToSubmit) return;
+    onCreateInvoice(invoiceToSubmit);
+    setShowConfirmModal(false);
     setShowCreateModal(false);
     setInvSupplier('');
     setInvNotes('');
     setInvItems([blankLineItem()]);
+    setInvoiceToSubmit(null);
   };
 
   // Status badge
@@ -406,7 +411,7 @@ export default function Invoicing() {
               <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Buat Purchase Invoice</h3>
               <button style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => setShowCreateModal(false)}><X size={16} /></button>
             </div>
-            <form onSubmit={handleCreateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <form onSubmit={handlePrepareSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Invoice No (auto)</label>
@@ -556,6 +561,88 @@ export default function Invoicing() {
         ]}
       />
 
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && invoiceToSubmit && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="glass-card modal-card" style={{ width: '800px', maxWidth: 'calc(100vw - 32px)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: '24px' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '8px' }}>Review Finalisasi Invoice (Purchase Order)</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '20px' }}>
+              Tinjau kembali rincian pemesanan untuk supplier <strong>{invoiceToSubmit.supplier}</strong> sebelum membuat invoice DRAFT.
+            </p>
+            
+            <div className="table-container" style={{ flex: 1, overflowY: 'auto', marginBottom: '20px' }}>
+              <table className="custom-table" style={{ fontSize: '0.9rem' }}>
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th style={{ width: '100px' }}>Kuantitas</th>
+                    <th style={{ width: '150px' }}>Harga Satuan</th>
+                    <th style={{ textAlign: 'right' }}>Total (Rp)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoiceToSubmit.items.map((item, idx) => (
+                    <tr key={idx}>
+                      <td style={{ fontWeight: 600 }}>{item.item_name}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <input 
+                            type="number" step="any" min="0" className="form-control" style={{ width: '60px', padding: '4px' }} 
+                            value={item.qty} 
+                            onChange={(e) => {
+                              const newQty = parseFloat(e.target.value) || 0;
+                              setInvoiceToSubmit(prev => {
+                                const newItems = [...prev.items];
+                                newItems[idx].qty = newQty;
+                                const newTotal = newItems.reduce((a, i) => a + i.qty * i.unit_price, 0);
+                                return { ...prev, items: newItems, total: newTotal };
+                              });
+                            }} 
+                          />
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                          <span style={{ position: 'absolute', left: '10px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>Rp</span>
+                          <input 
+                            type="number" step="any" min="0" className="form-control" style={{ paddingLeft: '32px', paddingRight: '8px', paddingTop: '4px', paddingBottom: '4px' }} 
+                            value={item.unit_price} 
+                            onChange={(e) => {
+                              const newPrice = parseFloat(e.target.value) || 0;
+                              setInvoiceToSubmit(prev => {
+                                const newItems = [...prev.items];
+                                newItems[idx].unit_price = newPrice;
+                                const newTotal = newItems.reduce((a, i) => a + i.qty * i.unit_price, 0);
+                                return { ...prev, items: newItems, total: newTotal };
+                              });
+                            }} 
+                          />
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {(item.qty * item.unit_price).toLocaleString('id-ID')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>
+                Total Order: <span style={{ color: 'var(--primary)' }}>Rp {invoiceToSubmit.total.toLocaleString('id-ID')}</span>
+              </div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowConfirmModal(false)}>Batal</button>
+                <button type="button" className="btn btn-primary" onClick={handleFinalSubmit}>
+                  Finalisasi Sekarang
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

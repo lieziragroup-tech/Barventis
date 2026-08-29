@@ -76,6 +76,7 @@ export default function Purchasing() {
   // Bulk Import
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [showBulkImportPurchases, setShowBulkImportPurchases] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   // New Material Modal
   const [showNewMaterialModal, setShowNewMaterialModal] = useState(false);
@@ -167,7 +168,7 @@ export default function Purchasing() {
     setCart(prev => prev.filter(item => item.cart_id !== cartId));
   };
 
-  const handleSavePurchases = async () => {
+  const handlePrepareSavePurchases = () => {
     if (cart.length === 0) return setNotification({ type: 'error', text: 'Keranjang pembelian kosong.' });
 
     // Validation
@@ -176,8 +177,10 @@ export default function Purchasing() {
       if (item.unit_price === '' || parseFloat(item.unit_price) < 0) return setNotification({ type: 'error', text: `Harga untuk ${item.name} tidak valid.` });
     }
 
-    if (!window.confirm(`Simpan ${cart.length} item pembelian ini?`)) return;
+    setShowConfirmModal(true);
+  };
 
+  const handleFinalSavePurchases = async () => {
     setLoading(true);
     try {
       await Promise.all(cart.map(item => api.createPurchaseEntry({
@@ -191,6 +194,7 @@ export default function Purchasing() {
       })));
 
       setCart([]);
+      setShowConfirmModal(false);
       setNotification({ type: 'success', text: `${cart.length} item berhasil disimpan ke gudang.` });
       setPage(1);
       fetchHistory(1, search);
@@ -498,7 +502,7 @@ export default function Purchasing() {
               <button
                 className="btn btn-primary"
                 style={{ display: 'flex', gap: '8px', padding: '12px 24px', fontSize: '0.95rem' }}
-                onClick={handleSavePurchases}
+                onClick={handlePrepareSavePurchases}
                 disabled={loading || cart.length === 0}
               >
                 <ShoppingCart size={18} /> {loading ? 'Menyimpan...' : `Simpan ${cart.length} Item ke Database`}
@@ -738,6 +742,65 @@ export default function Purchasing() {
           return { success, failed };
         }}
       />
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="glass-card modal-card" style={{ width: '800px', maxWidth: 'calc(100vw - 32px)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: '24px' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '8px' }}>Review Finalisasi Pembelian Harian</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '20px' }}>
+              Tinjau kembali daftar pembelian yang akan disimpan ke database gudang. Anda dapat menyesuaikan harga dan qty di sini.
+            </p>
+            
+            <div className="table-container" style={{ flex: 1, overflowY: 'auto', marginBottom: '20px' }}>
+              <table className="custom-table" style={{ fontSize: '0.9rem' }}>
+                <thead>
+                  <tr>
+                    <th>Bahan Baku</th>
+                    <th style={{ width: '150px' }}>Kuantitas</th>
+                    <th style={{ width: '200px' }}>Harga Satuan</th>
+                    <th style={{ textAlign: 'right' }}>Total (Rp)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cart.map(item => (
+                    <tr key={item.cart_id}>
+                      <td style={{ fontWeight: 600 }}>{item.name} <br/><span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{suppliers.find(s => s.id === item.supplier_id)?.name || 'Tanpa Supplier'}</span></td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <input type="number" step="any" min="0" className="form-control" style={{ width: '80px', padding: '4px' }} value={item.qty} onChange={(e) => updateCartItem(item.cart_id, 'qty', e.target.value)} />
+                          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{item.unit}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                          <span style={{ position: 'absolute', left: '10px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>Rp</span>
+                          <input type="number" step="any" min="0" className="form-control" style={{ paddingLeft: '32px', paddingRight: '8px', paddingTop: '4px', paddingBottom: '4px' }} value={item.unit_price} onChange={(e) => updateCartItem(item.cart_id, 'unit_price', e.target.value)} />
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {((parseFloat(item.qty) || 0) * (parseFloat(item.unit_price) || 0)).toLocaleString('id-ID')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>
+                Total Estimasi: <span style={{ color: 'var(--primary)' }}>Rp {cart.reduce((acc, curr) => acc + (parseFloat(curr.qty || 0) * parseFloat(curr.unit_price || 0)), 0).toLocaleString('id-ID')}</span>
+              </div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowConfirmModal(false)} disabled={loading}>Batal</button>
+                <button type="button" className="btn btn-primary" onClick={handleFinalSavePurchases} disabled={loading}>
+                  {loading ? 'Memproses...' : 'Finalisasi Sekarang'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

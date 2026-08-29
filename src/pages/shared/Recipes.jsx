@@ -948,6 +948,7 @@ export default function Recipes() {
           { key: 'qty_10', label: 'QTY 10', required: false, type: 'number', description: 'Jumlah bahan baku 10', sample: '' }
         ]}
       />
+
     </div>
   );
 }

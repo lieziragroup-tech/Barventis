@@ -12,6 +12,7 @@ export default function PhysicalCheck() {
   const [period, setPeriod] = useState(null);
   const [search, setSearch] = useState('');
   const [notification, setNotification] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmItems, setConfirmItems] = useState([]);
 
@@ -69,7 +70,7 @@ export default function PhysicalCheck() {
       if (materialIds.length > 0) {
         const { data: materialsData, error: matErr } = await supabase
           .from('materials')
-          .select('id, name, qty_resto, unit, price, new_price')
+          .select('id, name, qty_resto, unit, price, new_price, category')
           .in('id', materialIds);
         if (matErr) throw matErr;
         materialsById = Object.fromEntries((materialsData || []).map(m => [m.id, m]));
@@ -285,16 +286,29 @@ export default function PhysicalCheck() {
             <span style={{ fontWeight: 600 }}>Periode POS Terakhir: {period.start} s.d {period.end}</span>
           </div>
 
-          <div style={{ marginBottom: '16px', position: 'relative', maxWidth: '300px' }}>
-            <Search size={16} style={{ position: 'absolute', left: '12px', top: '10px', color: 'var(--text-muted)' }} />
-            <input 
-              type="text" 
+          <div style={{ marginBottom: '16px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', width: '300px', maxWidth: '100%' }}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '10px', color: 'var(--text-muted)' }} />
+              <input 
+                type="text" 
+                className="form-control" 
+                placeholder="Cari bahan..." 
+                style={{ paddingLeft: '36px' }}
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            <select 
               className="form-control" 
-              placeholder="Cari bahan..." 
-              style={{ paddingLeft: '36px' }}
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
+              style={{ width: '200px', maxWidth: '100%' }}
+              value={selectedCategory}
+              onChange={e => setSelectedCategory(e.target.value)}
+            >
+              <option value="">Semua Kategori</option>
+              {[...new Set(expectedUsages.map(u => u.materials?.category).filter(Boolean))].sort().map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
           </div>
 
           <div className="table-container" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
@@ -311,6 +325,7 @@ export default function PhysicalCheck() {
               </thead>
               <tbody>
                 {filteredUsages.length > 0 ? filteredUsages.map(u => {
+                  if (selectedCategory && u.materials?.category !== selectedCategory) return null;
                   const variance = calculateVariance(u.material_id);
                   const isNegative = variance < -0.001;
                   return (
