@@ -1,18 +1,5 @@
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 
-/**
- * Reusable classic pagination bar (Prev/Next + page numbers).
- * Responsive: shows full page-number list + "Showing X-Y of Z" on desktop,
- * collapses to compact "‹ Hal 2/8 ›" on mobile so it never crowds the UI.
- *
- * Props:
- *  - page: current page (1-indexed)
- *  - pageSize: rows per page
- *  - totalCount: total rows available on the server
- *  - onPageChange(nextPage): callback
- *  - itemLabel: e.g. "material", "transaksi" (for the info text)
- *  - loading: optional, disables controls while a page is being fetched
- */
 export default function Pagination({ page, pageSize, totalCount, onPageChange, itemLabel = 'data', loading = false }) {
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const clampedPage = Math.min(Math.max(1, page), totalPages);

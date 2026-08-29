@@ -36,6 +36,24 @@ export default function DailyInventory() {
   const [historyPage, setHistoryPage] = useState(1);
   const [historyTotal, setHistoryTotal] = useState(0);
 
+  // Period Filter
+  const [period, setPeriod] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+
+  const periodOptions = useMemo(() => {
+    const opts = [];
+    const now = new Date();
+    for (let i = 0; i < 18; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = d.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+      opts.push({ value, label });
+    }
+    return opts;
+  }, []);
+
   // UI State
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
@@ -71,19 +89,35 @@ export default function DailyInventory() {
     }
   };
 
-  const fetchHistory = useCallback(async (page = 1) => {
+  const fetchHistory = useCallback(async (page = 1, periodFilter = period) => {
     setHistoryLoading(true);
     try {
       const tenantId = await api.getActiveTenantId();
       const from = (page - 1) * PAGE_SIZE;
-      const { data, count, error } = await supabase
+
+      let query = supabase
         .from('transactions')
         .select('*, materials(name, unit)', { count: 'exact' })
         .eq('tenant_id', tenantId)
-        .eq('type', 'WASTE')
+        .eq('type', 'WASTE');
+
+      if (periodFilter) {
+        const year = periodFilter.substring(0, 4);
+        const month = periodFilter.substring(5, 7);
+        const nextMonth = parseInt(month, 10) === 12 ? 1 : parseInt(month, 10) + 1;
+        const nextYear = parseInt(month, 10) === 12 ? parseInt(year, 10) + 1 : year;
+
+        const startDate = `${periodFilter}-01`;
+        const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+
+        query = query.gte('date', startDate).lt('date', endDate);
+      }
+
+      const { data, count, error } = await query
         .order('date', { ascending: false })
         .order('created_at', { ascending: false })
         .range(from, from + PAGE_SIZE - 1);
+
       if (error) throw error;
       setHistory(data || []);
       setHistoryTotal(count || 0);
@@ -92,15 +126,15 @@ export default function DailyInventory() {
     } finally {
       setHistoryLoading(false);
     }
-  }, []);
+  }, [period]);
 
   useEffect(() => {
     fetchMasters();
   }, []);
 
   useEffect(() => {
-    fetchHistory(historyPage);
-  }, [historyPage, fetchHistory]);
+    fetchHistory(historyPage, period);
+  }, [historyPage, period, fetchHistory]);
 
   const filteredSearch = useMemo(() => {
     const q = debouncedQuery.trim().toLowerCase();
@@ -388,7 +422,25 @@ export default function DailyInventory() {
 
       {/* History */}
       <div className="glass-card" style={{ padding: '24px' }}>
-        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '16px' }}>Log Riwayat Waste / Barang Rusak</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>Log Riwayat Waste / Barang Rusak</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Calendar size={16} style={{ color: 'var(--accent)' }} />
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Periode:</span>
+            <select
+              className="form-control"
+              style={{ padding: '6px 12px', fontSize: '0.85rem', width: '150px' }}
+              value={period}
+              onChange={e => { setPeriod(e.target.value); setHistoryPage(1); }}
+            >
+              <option value="">Semua Waktu</option>
+              {periodOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div className="table-container" style={{ opacity: historyLoading ? 0.5 : 1, transition: 'opacity 0.15s' }}>
           <table className="custom-table">
             <thead>

@@ -21,6 +21,8 @@ export default function CostControl() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   // Cross-reference menu names to categories
   const menuCategoryMap = useMemo(() => {
@@ -61,22 +63,23 @@ export default function CostControl() {
   }, [menuCategoryMap, recipes]);
 
   // Fetch dynamic report from backend API
+  const fetchReport = useCallback(async () => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const data = await api.getCostControlReport(period);
+      setReportData(data);
+    } catch (e) {
+      console.error('Failed to load cost control report:', e);
+      setErrorMsg(e.message || 'Gagal memuat laporan Cost Control.');
+    } finally {
+      setLoading(false);
+    }
+  }, [period]);
+
   useEffect(() => {
-    const fetchReport = async () => {
-      setLoading(true);
-      setErrorMsg(null);
-      try {
-        const data = await api.getCostControlReport(period);
-        setReportData(data);
-      } catch (e) {
-        console.error('Failed to load cost control report:', e);
-        setErrorMsg(e.message || 'Gagal memuat laporan Cost Control.');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchReport();
-  }, [period, stock]);
+  }, [fetchReport]);
 
   // Re-calculate all metrics dynamically on the frontend to support Tab Filtering
   const { openingStock, totalPembelian, closingStock, pemakaianBulan, totalSalesBeverage, beverageCostPct, wasteValuation, statusLabel, filteredOpnameItems } = useMemo(() => {
@@ -176,8 +179,30 @@ export default function CostControl() {
 
     const result = Object.values(dailyMap);
     result.sort((a, b) => a.date.localeCompare(b.date));
-    return result;
-  }, [reportData?.transactions, period, activeTab, checkTabMatch]);
+
+    // Apply date range filter
+    return result.filter(row => {
+      if (!dateFrom && !dateTo) return true;
+
+      const year = parseInt(period.split('-')[0], 10);
+      const month = parseInt(period.split('-')[1], 10) - 1;
+      const day = parseInt(row.date.split('/')[1] || row.date.split('-')[1], 10);
+
+      const rowDateObj = new Date(year, month, day);
+
+      let passFrom = true;
+      let passTo = true;
+
+      if (dateFrom) {
+        passFrom = rowDateObj >= new Date(dateFrom);
+      }
+      if (dateTo) {
+        passTo = rowDateObj <= new Date(dateTo);
+      }
+
+      return passFrom && passTo;
+    });
+  }, [reportData?.transactions, period, activeTab, checkTabMatch, dateFrom, dateTo]);
 
   // Generate last 18 months dynamically
   const periodOptions = useMemo(() => {
@@ -413,7 +438,7 @@ export default function CostControl() {
           <AlertTriangle size={36} style={{ color: 'var(--danger)', margin: '0 auto 12px' }} />
           <h4 style={{ color: 'var(--text-primary)', fontWeight: 700, marginBottom: '8px' }}>Gagal Memuat Laporan</h4>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '16px' }}>{errorMsg}</p>
-          <button className="btn btn-secondary" onClick={() => setPeriod(period)}>Coba Lagi</button>
+          <button className="btn btn-secondary" onClick={fetchReport}>Coba Lagi</button>
         </div>
       ) : (
         <>
@@ -465,9 +490,44 @@ export default function CostControl() {
 
           {/* Daily Table */}
           <div className="glass-card" style={{ padding: '24px' }}>
-            <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Info size={16} style={{ color: 'var(--accent)' }} /> Daily Purchase vs Sales
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Info size={16} style={{ color: 'var(--accent)' }} /> Daily Purchase vs Sales
+              </h3>
+
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Filter Tanggal:</span>
+                <input
+                  type="date"
+                  className="form-control"
+                  style={{ padding: '4px 8px', fontSize: '0.8rem', width: '130px' }}
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  min={`${period}-01`}
+                  max={`${period}-31`}
+                />
+                <span style={{ color: 'var(--text-muted)' }}>-</span>
+                <input
+                  type="date"
+                  className="form-control"
+                  style={{ padding: '4px 8px', fontSize: '0.8rem', width: '130px' }}
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  min={dateFrom || `${period}-01`}
+                  max={`${period}-31`}
+                />
+                {(dateFrom || dateTo) && (
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                    onClick={() => { setDateFrom(''); setDateTo(''); }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+
             {dailyColumns.length === 0 ? (
               <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                 Tidak ada data transaksi harian tercatat untuk periode {period}.

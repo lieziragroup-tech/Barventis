@@ -2361,7 +2361,7 @@ export const api = {
   // material's name) so the history table never has to pull hundreds of
   // rows at once — fixes the previous unbounded 400/embedding issue too,
   // since this goes through a single well-formed query with FK embeds.
-  getPurchaseEntriesPaged: async ({ page = 1, pageSize = 15, search = '', material_id = null } = {}) => {
+  getPurchaseEntriesPaged: async ({ page = 1, pageSize = 15, search = '', material_id = null, period = null } = {}) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { data: [], totalCount: 0 };
     const from = (page - 1) * pageSize;
@@ -2371,9 +2371,21 @@ export const api = {
       .from('purchase_entries')
       .select('*, materials(name, unit), suppliers(name)', { count: 'exact' })
       .eq('tenant_id', tenantId);
-      
+
     if (material_id) {
       query = query.eq('material_id', material_id);
+    }
+
+    if (period) {
+      const year = period.substring(0, 4);
+      const month = period.substring(5, 7);
+      const nextMonth = parseInt(month, 10) === 12 ? 1 : parseInt(month, 10) + 1;
+      const nextYear = parseInt(month, 10) === 12 ? parseInt(year, 10) + 1 : year;
+
+      const startDate = `${period}-01`;
+      const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+
+      query = query.gte('date', startDate).lt('date', endDate);
     }
 
     if (search && search.trim()) {

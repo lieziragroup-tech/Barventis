@@ -25,8 +25,27 @@ export default function Purchasing() {
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [historySearchInput, setHistorySearchInput] = useState('');
   const [historyLoading, setHistoryLoading] = useState(false);
   const [notification, setNotification] = useState(null);
+
+  // Period Filter
+  const [period, setPeriod] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+
+  const periodOptions = useMemo(() => {
+    const opts = [];
+    const now = new Date();
+    for (let i = 0; i < 18; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = d.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+      opts.push({ value, label });
+    }
+    return opts;
+  }, []);
 
   // --- CART STATES ---
   const [cart, setCart] = useState([]);
@@ -38,13 +57,21 @@ export default function Purchasing() {
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const searchInputRef = useRef(null);
 
-  // Debounce effect
+  // Debounce effects
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(searchQuery);
     }, 250); // 250ms debounce
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(historySearchInput);
+      setPage(1);
+    }, 500); // 500ms debounce for API call
+    return () => clearTimeout(timer);
+  }, [historySearchInput]);
 
   // Bulk Import
   const [showBulkImport, setShowBulkImport] = useState(false);
@@ -53,10 +80,10 @@ export default function Purchasing() {
   const [showNewMaterialModal, setShowNewMaterialModal] = useState(false);
   const [newMaterialData, setNewMaterialData] = useState({ name: '', category: 'Bahan Baku Dasar', unit: 'pcs', price: '', min_stock: 15 });
 
-  const fetchHistory = useCallback(async (targetPage, targetSearch) => {
+  const fetchHistory = useCallback(async (targetPage, targetSearch, targetPeriod) => {
     setHistoryLoading(true);
     try {
-      const { data, totalCount: count } = await api.getPurchaseEntriesPaged({ page: targetPage, pageSize: PAGE_SIZE, search: targetSearch });
+      const { data, totalCount: count } = await api.getPurchaseEntriesPaged({ page: targetPage, pageSize: PAGE_SIZE, search: targetSearch, period: targetPeriod });
       setPurchases(data);
       setTotalCount(count);
     } catch (err) {
@@ -87,8 +114,8 @@ export default function Purchasing() {
   }, []);
 
   useEffect(() => {
-    fetchHistory(page, search);
-  }, [page, search, fetchHistory]);
+    fetchHistory(page, search, period);
+  }, [page, search, period, fetchHistory]);
 
   // Click outside to close dropdown — use mousedown on the wrapper so the
   // dropdown is still alive when any child receives a click event
@@ -476,15 +503,32 @@ export default function Purchasing() {
           <div className="glass-card purchasing-history-panel" style={{ padding: '24px' }}>
             <div className="paged-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
               <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Log Riwayat Pembelian</h3>
-              <div style={{ position: 'relative', width: '250px' }}>
-                <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                <input
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Calendar size={16} style={{ color: 'var(--accent)' }} />
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Periode:</span>
+                  <select
+                    className="form-control"
+                    style={{ padding: '6px 12px', fontSize: '0.85rem', width: '150px' }}
+                    value={period}
+                    onChange={e => { setPeriod(e.target.value); setPage(1); }}
+                  >
+                    <option value="">Semua Waktu</option>
+                    {periodOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ position: 'relative', width: '250px' }}>
+                  <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                  <input
                   type="text"
                   className="form-control"
                   placeholder="Cari histori (bahan/supplier)..."
                   style={{ paddingLeft: '36px' }}
-                  value={search}
-                  onChange={e => { setSearch(e.target.value); setPage(1); }}
+                  value={historySearchInput}
+                  onChange={e => setHistorySearchInput(e.target.value)}
                 />
               </div>
             </div>
