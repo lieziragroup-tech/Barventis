@@ -25,6 +25,7 @@ export default function DailyInventory() {
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const searchInputRef = useRef(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   // New Material Modal
   const [showNewMaterialModal, setShowNewMaterialModal] = useState(false);
@@ -159,6 +160,10 @@ export default function DailyInventory() {
     setShowSearchDropdown(false);
   };
 
+  const updateCartItem = (cartId, field, value) => {
+    setCart(prev => prev.map(item => item.cart_id === cartId ? { ...item, [field]: value } : item));
+  };
+
   const updateCart = (cartId, field, value) => {
     setCart(prev => prev.map(item => item.cart_id === cartId ? { ...item, [field]: value } : item));
   };
@@ -204,12 +209,15 @@ export default function DailyInventory() {
     }
   };
 
-  const handleSaveWaste = async () => {
+  const handlePrepareSaveWaste = () => {
     if (cart.length === 0) return setNotification({ type: 'error', text: 'Daftar barang rusak kosong.' });
     for (const item of cart) {
       if (!item.qty || parseFloat(item.qty) <= 0) return setNotification({ type: 'error', text: `Qty untuk "${item.name}" harus lebih dari 0.` });
     }
-    if (!window.confirm(`Simpan ${cart.length} item waste/barang rusak?`)) return;
+    setShowConfirmModal(true);
+  };
+
+  const handleFinalSaveWaste = async () => {
     setLoading(true);
     try {
       const tenantId = await api.getActiveTenantId();
@@ -412,7 +420,7 @@ export default function DailyInventory() {
           <button
             className="btn btn-warning"
             style={{ display: 'flex', gap: '8px', padding: '12px 24px', fontSize: '0.95rem', alignItems: 'center' }}
-            onClick={handleSaveWaste}
+            onClick={handlePrepareSaveWaste}
             disabled={loading || cart.length === 0}
           >
             <AlertTriangle size={18} /> {loading ? 'Menyimpan...' : `Simpan ${cart.length} Item Waste`}
@@ -529,6 +537,53 @@ export default function DailyInventory() {
                 <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={loading}>{loading ? 'Menyimpan...' : 'Simpan & Tambah'}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="glass-card modal-card" style={{ width: '800px', maxWidth: 'calc(100vw - 32px)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: '24px' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '8px' }}>Review Finalisasi Waste</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '20px' }}>
+              Tinjau kembali daftar barang rusak sebelum menyimpan. Anda dapat mengubah jumlahnya di bawah ini.
+            </p>
+            
+            <div className="table-container" style={{ flex: 1, overflowY: 'auto', marginBottom: '20px' }}>
+              <table className="custom-table" style={{ fontSize: '0.9rem' }}>
+                <thead>
+                  <tr>
+                    <th>Bahan Baku</th>
+                    <th style={{ width: '200px' }}>Jumlah Waste</th>
+                    <th>Penyebab/Catatan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cart.map(item => (
+                    <tr key={item.cart_id}>
+                      <td style={{ fontWeight: 600 }}>{item.name}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <input type="number" step="any" min="0" className="form-control" style={{ width: '80px', padding: '4px' }} value={item.qty} onChange={(e) => updateCartItem(item.cart_id, 'qty', e.target.value)} />
+                          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{item.unit}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <input type="text" className="form-control" style={{ padding: '4px' }} placeholder="Opsional" value={item.cause} onChange={(e) => updateCartItem(item.cart_id, 'cause', e.target.value)} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowConfirmModal(false)} disabled={loading}>Batal</button>
+              <button type="button" className="btn btn-warning" onClick={handleFinalSaveWaste} disabled={loading}>
+                {loading ? 'Memproses...' : 'Finalisasi Sekarang'}
+              </button>
+            </div>
           </div>
         </div>
       )}

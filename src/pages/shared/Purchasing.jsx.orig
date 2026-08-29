@@ -75,7 +75,6 @@ export default function Purchasing() {
 
   // Bulk Import
   const [showBulkImport, setShowBulkImport] = useState(false);
-  const [showBulkImportPurchases, setShowBulkImportPurchases] = useState(false);
 
   // New Material Modal
   const [showNewMaterialModal, setShowNewMaterialModal] = useState(false);
@@ -580,7 +579,6 @@ export default function Purchasing() {
             />
           </div>
         </div>
-        </div>
       )}
 
       {/* Supplier Modal */}
@@ -701,7 +699,7 @@ export default function Purchasing() {
           let success = 0;
           let failed = 0;
           
-          
+          const newCartItems = [];
 
           for (const row of rows) {
             const materialName = row.material_name || row['NAMA BAHAN'];
@@ -724,19 +722,17 @@ export default function Purchasing() {
               if (supplier) supplier_id = supplier.id;
             }
             
-            setCart(prev => [...prev, {
-              cart_id: Date.now() + Math.random(),
-              material_id: material.id,
-              name: material.name,
-              unit: material.unit,
-              qty: qty,
-              unit_price: unitPrice,
-              supplier_id: supplier_id
-            }]);
+            addToCart(material);
             success++;
           }
           return { success, failed };
         }}
+        expectedColumns={[
+          { key: 'NAMA SUPPLIER', label: 'NAMA SUPPLIER', required: true, type: 'string', description: 'Nama Toko/Supplier', sample: 'Toko Kopi ABC' },
+          { key: 'KONTAK', label: 'KONTAK (PERSON)', required: false, type: 'string', description: 'Nama PIC', sample: 'Budi' },
+          { key: 'NO HP', label: 'NO HP', required: false, type: 'string', description: 'Nomor telepon/WA', sample: '08123456789' },
+          { key: 'ALAMAT', label: 'ALAMAT', required: false, type: 'string', description: 'Alamat lengkap', sample: 'Jl. Merdeka No 1' }
+        ]}
       />
     </div>
   );

@@ -12,6 +12,8 @@ export default function PhysicalCheck() {
   const [period, setPeriod] = useState(null);
   const [search, setSearch] = useState('');
   const [notification, setNotification] = useState(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmItems, setConfirmItems] = useState([]);
 
   const fetchExpectedUsage = async () => {
     setLoading(true);
@@ -124,7 +126,19 @@ export default function PhysicalCheck() {
     return physical - currentSystem;
   };
 
-  const handleSubmit = async () => {
+  const handlePrepareSubmit = () => {
+    if (!period) return;
+    
+    const items = expectedUsages.map(u => {
+      const variance = calculateVariance(u.material_id);
+      return { ...u, variance, physical: physicalCounts[u.material_id] || 0 };
+    });
+    
+    setConfirmItems(items);
+    setShowConfirmModal(true);
+  };
+
+  const handleFinalSubmit = async () => {
     if (!period) return;
     setSubmitting(true);
     setNotification(null);
@@ -353,7 +367,7 @@ export default function PhysicalCheck() {
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
             <button 
               className="btn btn-primary" 
-              onClick={handleSubmit} 
+              onClick={handlePrepareSubmit} 
               disabled={submitting || expectedUsages.length === 0}
             >
               {submitting ? 'Menyimpan...' : 'Submit Physical Check'}
@@ -363,6 +377,64 @@ export default function PhysicalCheck() {
       ) : (
         <div className="glass-card" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
           {loading ? 'Memuat data...' : 'Silakan upload data POS terlebih dahulu untuk menghasilkan expected usage.'}
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="glass-card modal-card" style={{ width: '800px', maxWidth: 'calc(100vw - 32px)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: '24px' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '8px' }}>Review Finalisasi Cek Fisik</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '20px' }}>
+              Tinjau kembali stok fisik dan variance (waste). Jika Anda perlu merubahnya, Anda dapat mengedit langsung di tabel bawah ini.
+            </p>
+            
+            <div className="table-container" style={{ flex: 1, overflowY: 'auto', marginBottom: '20px' }}>
+              <table className="custom-table" style={{ fontSize: '0.9rem' }}>
+                <thead>
+                  <tr>
+                    <th>Nama Bahan</th>
+                    <th style={{ textAlign: 'center' }}>Sistem</th>
+                    <th style={{ textAlign: 'center' }}>Fisik Aktual</th>
+                    <th style={{ textAlign: 'center' }}>Variance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {confirmItems.map(item => (
+                    <tr key={item.material_id}>
+                      <td style={{ fontWeight: 600 }}>{item.materials?.name}</td>
+                      <td style={{ textAlign: 'center' }}>{parseFloat(item.materials?.qty_resto || 0).toFixed(2)} {item.materials?.unit}</td>
+                      <td style={{ textAlign: 'center', width: '150px' }}>
+                        <input 
+                          type="number" 
+                          step="any"
+                          className="form-control" 
+                          style={{ textAlign: 'center', padding: '4px' }}
+                          value={physicalCounts[item.material_id] === 0 ? '' : physicalCounts[item.material_id]}
+                          onChange={(e) => {
+                            handleCountChange(item.material_id, e.target.value);
+                            const currentSystem = parseFloat(item.materials?.qty_resto || 0);
+                            const physical = parseFloat(e.target.value) || 0;
+                            setConfirmItems(prev => prev.map(i => i.material_id === item.material_id ? { ...i, physical, variance: physical - currentSystem } : i));
+                          }}
+                        />
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: 700, color: item.variance < -0.001 ? 'var(--danger)' : item.variance > 0.001 ? 'var(--success)' : 'var(--text-muted)' }}>
+                        {item.variance > 0 ? '+' : ''}{item.variance.toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowConfirmModal(false)} disabled={submitting}>Batal</button>
+              <button type="button" className="btn btn-primary" onClick={handleFinalSubmit} disabled={submitting}>
+                {submitting ? 'Memproses...' : 'Finalisasi Sekarang'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

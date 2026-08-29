@@ -1,0 +1,10 @@
+--- Purchasing.jsx
++++ Purchasing.jsx
+@@ -75,6 +75,7 @@
+   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+   
+   const [showBulkImport, setShowBulkImport] = useState(false);
++  const [showBulkImportPurchases, setShowBulkImportPurchases] = useState(false);
+   const [showNewMaterialModal, setShowNewMaterialModal] = useState(false);
+   const [newMaterialName, setNewMaterialName] = useState('');
+ 
