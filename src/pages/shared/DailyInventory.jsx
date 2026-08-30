@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { calculateIngredientCost } from '../../services/costUtils';
+import Pagination from '../../components/shared/Pagination';
 
 const WASTE_CATEGORIES = ['Spoilage (Basi)', 'Broken (Rusak Fisik)', 'Expired (Kadaluarsa)', 'Contaminated', 'Over-portion', 'Lainnya'];
 const PAGE_SIZE = 30;
@@ -35,7 +36,8 @@ export default function DailyInventory() {
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyPage, setHistoryPage] = useState(1);
-  const [historyTotal, setHistoryTotal] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const [search, setSearch] = useState('');
 
   // Period Filter
   const [period, setPeriod] = useState(() => {
@@ -90,7 +92,7 @@ export default function DailyInventory() {
     }
   };
 
-  const fetchHistory = useCallback(async (page = 1, periodFilter = period) => {
+  const fetchHistory = useCallback(async (page = 1, periodFilter = period, searchQuery = search) => {
     setHistoryLoading(true);
     try {
       const tenantId = await api.getActiveTenantId();
@@ -98,7 +100,7 @@ export default function DailyInventory() {
 
       let query = supabase
         .from('transactions')
-        .select('*, materials(name, unit)', { count: 'exact' })
+        .select('*, materials!inner(name, unit)', { count: 'exact' })
         .eq('tenant_id', tenantId)
         .eq('type', 'WASTE');
 
@@ -114,6 +116,10 @@ export default function DailyInventory() {
         query = query.gte('date', startDate).lt('date', endDate);
       }
 
+      if (searchQuery) {
+         query = query.ilike('materials.name', `%${searchQuery}%`);
+      }
+
       const { data, count, error } = await query
         .order('date', { ascending: false })
         .order('created_at', { ascending: false })
@@ -121,7 +127,7 @@ export default function DailyInventory() {
 
       if (error) throw error;
       setHistory(data || []);
-      setHistoryTotal(count || 0);
+      setTotalCount(count || 0);
     } catch (err) {
       setNotification({ type: 'error', text: err.message });
     } finally {
@@ -129,13 +135,21 @@ export default function DailyInventory() {
     }
   }, [period]);
 
+  // Search debounce for history table
+  useEffect(() => {
+    const t = setTimeout(() => {
+      fetchHistory(1, period, search);
+    }, 500);
+    return () => clearTimeout(t);
+  }, [search, period, fetchHistory]);
+
   useEffect(() => {
     fetchMasters();
   }, []);
 
   useEffect(() => {
-    fetchHistory(historyPage, period);
-  }, [historyPage, period, fetchHistory]);
+    fetchHistory(historyPage, period, search);
+  }, [historyPage, period, search, fetchHistory]);
 
   const filteredSearch = useMemo(() => {
     const q = debouncedQuery.trim().toLowerCase();
@@ -430,22 +444,37 @@ export default function DailyInventory() {
 
       {/* History */}
       <div className="glass-card" style={{ padding: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+        <div className="paged-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
           <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>Log Riwayat Waste / Barang Rusak</h3>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Calendar size={16} style={{ color: 'var(--accent)' }} />
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Periode:</span>
-            <select
-              className="form-control"
-              style={{ padding: '6px 12px', fontSize: '0.85rem', width: '150px' }}
-              value={period}
-              onChange={e => { setPeriod(e.target.value); setHistoryPage(1); }}
-            >
-              <option value="">Semua Waktu</option>
-              {periodOptions.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
+
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Calendar size={16} style={{ color: 'var(--accent)' }} />
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Periode:</span>
+              <select
+                className="form-control"
+                style={{ padding: '6px 12px', fontSize: '0.85rem', width: '150px' }}
+                value={period}
+                onChange={e => { setPeriod(e.target.value); setHistoryPage(1); }}
+              >
+                <option value="">Semua Waktu</option>
+                {periodOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ position: 'relative', width: '250px' }}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Cari histori waste..."
+                style={{ paddingLeft: '36px' }}
+                value={search}
+                onChange={e => { setSearch(e.target.value); setHistoryPage(1); }}
+              />
+            </div>
           </div>
         </div>
 
@@ -488,13 +517,15 @@ export default function DailyInventory() {
             </tbody>
           </table>
         </div>
-        {totalPages > 1 && (
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '16px' }}>
-            <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => setHistoryPage(p => Math.max(1, p - 1))} disabled={historyPage === 1}>Prev</button>
-            <span style={{ display: 'flex', alignItems: 'center', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{historyPage} / {totalPages}</span>
-            <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => setHistoryPage(p => Math.min(totalPages, p + 1))} disabled={historyPage === totalPages}>Next</button>
-          </div>
-        )}
+
+        <Pagination
+          page={historyPage}
+          pageSize={PAGE_SIZE}
+          totalCount={totalCount}
+          onPageChange={setHistoryPage}
+          itemLabel="catatan rusak"
+          loading={historyLoading}
+        />
       </div>
 
       {/* New Material Modal */}

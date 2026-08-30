@@ -534,13 +534,14 @@ export default function Purchasing() {
                 <div style={{ position: 'relative', width: '250px' }}>
                   <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                   <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Cari histori (bahan/supplier)..."
-                  style={{ paddingLeft: '36px' }}
-                  value={historySearchInput}
-                  onChange={e => setHistorySearchInput(e.target.value)}
-                />
+                    type="text"
+                    className="form-control"
+                    placeholder="Cari histori (bahan/supplier)..."
+                    style={{ paddingLeft: '36px' }}
+                    value={historySearchInput}
+                    onChange={e => setHistorySearchInput(e.target.value)}
+                  />
+                </div>
               </div>
             </div>
             <div className="table-container" style={{ opacity: historyLoading ? 0.5 : 1, transition: 'opacity 0.15s' }}>
