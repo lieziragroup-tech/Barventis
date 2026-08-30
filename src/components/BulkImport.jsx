@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react';
-import { 
-  UploadCloud, FileSpreadsheet, Download, CheckCircle, 
-  AlertTriangle, X, ChevronRight, Loader
+import { useState, useRef, useMemo } from 'react';
+import {
+  UploadCloud, FileSpreadsheet, Download, CheckCircle,
+  AlertTriangle, X, ChevronRight, Loader, Sparkles, PlusCircle
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 let _XLSX;
 const getXLSX = async () => { if (!_XLSX) _XLSX = await import('xlsx'); return _XLSX; };
@@ -30,6 +31,7 @@ export default function BulkImport({
   expectedColumns,
   currentData = [] // New prop for Sync Export
 }) {
+  const navigate = useNavigate();
   const [step, setStep] = useState('upload'); // 'upload' | 'preview' | 'importing' | 'done'
   const [parsedRows, setParsedRows] = useState([]);
   const [errors, setErrors] = useState([]);
@@ -234,6 +236,67 @@ export default function BulkImport({
 
   const validCount = parsedRows.filter(r => r._selected && !r._error).length;
   const errorCount = parsedRows.filter(r => r._error).length;
+
+  const renderAIAnalysis = () => {
+    if (!importResult || importResult.failed === 0 || !Array.isArray(importResult.errors) || importResult.errors.length === 0) return null;
+
+    // Auto-analyze errors
+    const errorMessages = importResult.errors.map(e => e.error?.toLowerCase() || '');
+    const hasMissingMasterData = errorMessages.some(m => m.includes('tidak ditemukan') || m.includes('master data') || m.includes('kosong'));
+    const hasFormatError = errorMessages.some(m => m.includes('format') || m.includes('valid') || m.includes('angka') || m.includes('harus'));
+
+    return (
+      <div style={{
+        marginTop: '12px', background: 'var(--accent-glow)', border: '1px solid rgba(79, 110, 247, 0.2)',
+        borderRadius: 'var(--radius-lg)', padding: '16px', textAlign: 'left'
+      }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
+          <Sparkles size={16} style={{ color: 'var(--accent)' }} />
+          <span style={{ color: 'var(--accent)', fontWeight: 700, fontSize: '0.85rem' }}>AI Assistant Analysis</span>
+        </div>
+
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '0 0 12px 24px', lineHeight: 1.5 }}>
+          Ditemukan {importResult.failed} baris data yang ditolak oleh sistem. Berdasarkan analisis pola error:
+        </p>
+
+        <ul style={{ color: 'var(--text-primary)', fontSize: '0.8rem', margin: '0 0 16px 24px', paddingLeft: '16px', lineHeight: 1.6 }}>
+          {hasMissingMasterData && (
+            <li>Beberapa item belum terdaftar di <strong>Master Data</strong>. Sistem tidak mengizinkan transaksi atas barang yang fiktif/belum didaftarkan.</li>
+          )}
+          {hasFormatError && (
+            <li>Terdapat angka Qty atau Harga yang kosong/bernilai negatif.</li>
+          )}
+          {!hasMissingMasterData && !hasFormatError && (
+            <li>Pastikan penulisan data mengikuti panduan standar.</li>
+          )}
+        </ul>
+
+        <div style={{ marginLeft: '24px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          {hasMissingMasterData && (
+            <button
+              onClick={() => {
+                handleClose();
+                // Navigate to materials master data
+                if (type === 'assets') navigate('/pengawas/items?tab=ASSET');
+                else navigate('/pengawas/items?tab=RAW_MATERIAL');
+              }}
+              className="btn btn-primary"
+              style={{ padding: '6px 14px', fontSize: '0.78rem', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <PlusCircle size={14} /> Tambahkan ke Master Data
+            </button>
+          )}
+          <button
+            onClick={() => handleDownloadTemplate()}
+            className="btn btn-secondary"
+            style={{ padding: '6px 14px', fontSize: '0.78rem', borderRadius: 'var(--radius-md)' }}
+          >
+            Download Template Kosong
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div style={{
@@ -515,7 +578,11 @@ export default function BulkImport({
                 ))}
               </div>
             )}
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+
+            {/* AI Analysis and Recommendations */}
+            {renderAIAnalysis()}
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '24px' }}>
               <button onClick={handleClose} className="btn btn-secondary" style={{ padding: '9px 28px', fontSize: '0.84rem', borderRadius: 'var(--radius-md)' }}>{importResult && importResult.failed > 0 ? 'Tutup' : 'Selesai'}</button>
               {importResult && importResult.failed > 0 && (
                 <button onClick={() => setStep('upload')} className="btn btn-primary" style={{ padding: '9px 28px', fontSize: '0.84rem', borderRadius: 'var(--radius-md)' }}>
