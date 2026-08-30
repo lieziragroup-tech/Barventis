@@ -659,6 +659,12 @@ export default function Purchasing() {
         title="Bulk Import Data Supplier"
         description="Upload data supplier dari file Excel. Kolom nama wajib diisi."
         currentData={[]}
+        expectedColumns={[
+          { key: 'name', label: 'NAMA SUPPLIER', required: true, type: 'string', sample: 'PT. Supplier Abadi', description: 'Nama supplier (wajib)' },
+          { key: 'contact_person', label: 'KONTAK', required: false, type: 'string', sample: 'Budi Santoso', description: 'Nama PIC/Kontak person' },
+          { key: 'phone', label: 'NO HP', required: false, type: 'string', sample: '08123456789', description: 'Nomor telepon/WA' },
+          { key: 'address', label: 'ALAMAT', required: false, type: 'string', sample: 'Jl. Sudirman No.123, Jakarta', description: 'Alamat lengkap supplier' }
+        ]}
         onCommit={async (rows) => {
           let success = 0;
           let failed = 0;
@@ -699,7 +705,8 @@ export default function Purchasing() {
           { key: 'tanggal', label: 'TANGGAL', required: false, type: 'string', sample: '2026-08-30', description: 'Tanggal pembelian' },
           { key: 'material_name', label: 'NAMA ITEM', labels: ['NAMA ITEM', 'NAMA BAHAN'], required: true, type: 'string', sample: 'Kopi Arabica', description: 'Nama bahan baku (harus persis sama)' },
           { key: 'qty', label: 'QTY', required: true, type: 'number', sample: 5, description: 'Jumlah yang dibeli' },
-          { key: 'unit_price', label: 'HARGA/KG', labels: ['HARGA/KG', 'HARGA SATUAN'], required: true, type: 'number', sample: 150000, description: 'Harga per satuan (tanpa titik/koma)' },
+          { key: 'unit', label: 'Unit', required: false, type: 'string', sample: 'kg', description: 'Satuan barang' },
+          { key: 'unit_price', label: 'HARGA/KG', labels: ['HARGA/KG', 'HARGA/UNIT', 'HARGA SATUAN'], required: true, type: 'number', sample: 150000, description: 'Harga per satuan (tanpa titik/koma)' },
           { key: 'supplier_name', label: 'SUPPLIER', labels: ['SUPPLIER', 'NAMA SUPPLIER'], required: false, type: 'string', sample: 'Supplier A', description: 'Nama supplier (opsional)' },
         ]}
         onCommit={async (rows) => {
@@ -727,29 +734,29 @@ export default function Purchasing() {
           for (const row of rows) {
             const materialName = row.material_name || row['NAMA ITEM'] || row['NAMA BAHAN'];
             const qty = parseFloat(row.qty || row['QTY'] || 0);
-            const unitPrice = parseFloat(row.unit_price || row['HARGA/KG'] || row['HARGA SATUAN'] || 0);
+            const unitPrice = parseFloat(row.unit_price || row['HARGA/KG'] || row['HARGA/UNIT'] || row['HARGA SATUAN'] || 0);
             const supplierName = row.supplier_name || row['SUPPLIER'] || row['NAMA SUPPLIER'] || '';
 
             if (!materialName || qty <= 0 || unitPrice < 0) {
               failed++; continue;
             }
-            
+
             const material = materials.find(m => m.name.toLowerCase() === materialName.toLowerCase());
             if (!material) {
               failed++; continue;
             }
-            
+
             let supplier_id = '';
             if (supplierName) {
               const supplier = suppliers.find(s => s.name.toLowerCase() === supplierName.toLowerCase());
               if (supplier) supplier_id = supplier.id;
             }
-            
+
             setCart(prev => [...prev, {
               cart_id: Date.now() + Math.random(),
               material_id: material.id,
               name: material.name,
-              unit: material.unit,
+              unit: row.unit || row['Unit'] || material.unit,
               qty: qty,
               unit_price: unitPrice,
               supplier_id: supplier_id
