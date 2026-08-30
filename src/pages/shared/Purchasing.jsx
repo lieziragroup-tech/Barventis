@@ -585,7 +585,6 @@ export default function Purchasing() {
             />
           </div>
         </div>
-        </div>
       )}
 
       {/* Supplier Modal */}
