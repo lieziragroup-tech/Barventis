@@ -489,7 +489,7 @@ export default function BulkImport({
               }}>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
                   <AlertTriangle size={15} style={{ color: 'var(--danger)' }} />
-                  <span style={{ color: 'var(--danger-text)', fontWeight: 600, fontSize: '0.82rem' }}>Detail Baris Gagal</span>
+                  <span style={{ color: 'var(--danger-text)', fontWeight: 600, fontSize: '0.82rem' }}>Detail Baris Gagal (Silakan perbaiki data di bawah atau upload ulang)</span>
                 </div>
                 {importResult.errors.map((err, i) => (
                   <p key={i} style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', margin: '2px 0 2px 23px', lineHeight: 1.4 }}>
@@ -515,7 +515,14 @@ export default function BulkImport({
                 ))}
               </div>
             )}
-            <button onClick={handleClose} className="btn btn-primary" style={{ padding: '9px 28px', fontSize: '0.84rem', borderRadius: 'var(--radius-md)' }}>Selesai</button>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button onClick={handleClose} className="btn btn-secondary" style={{ padding: '9px 28px', fontSize: '0.84rem', borderRadius: 'var(--radius-md)' }}>{importResult && importResult.failed > 0 ? 'Tutup' : 'Selesai'}</button>
+              {importResult && importResult.failed > 0 && (
+                <button onClick={() => setStep('upload')} className="btn btn-primary" style={{ padding: '9px 28px', fontSize: '0.84rem', borderRadius: 'var(--radius-md)' }}>
+                  Upload Ulang File Perbaikan
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

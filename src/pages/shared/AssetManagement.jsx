@@ -279,15 +279,19 @@ export default function AssetManagement() {
           const tenantId = await api.getActiveTenantId();
           let success = 0;
           let failed = 0;
+          const errors = [];
 
           const payloads = rows.map(row => {
-            if (!row.name && !row['NAMA ASET']) {
-              failed++; return null;
+            const name = row.name || row['NAMA ASET'];
+            if (!name) {
+              failed++;
+              errors.push({ row: 'Baris Kosong', error: 'Nama aset tidak boleh kosong' });
+              return null;
             }
             success++;
             return {
               tenant_id: tenantId,
-              name: row.name || row['NAMA ASET'],
+              name: name,
               category: 'ASSET',
               supplier: row.supplier || row['GRUP'] || '-',
               unit: 'pcs',
@@ -302,10 +306,22 @@ export default function AssetManagement() {
           }).filter(p => p !== null);
 
           if (payloads.length > 0) {
-            await supabase.from('materials').insert(payloads);
-            fetchAssets();
+            try {
+              const { error } = await supabase.from('materials').insert(payloads);
+              if (error) {
+                 failed += payloads.length;
+                 success -= payloads.length;
+                 errors.push({ row: 'Insert Database', error: error.message });
+              } else {
+                 fetchAssets();
+              }
+            } catch (err) {
+               failed += payloads.length;
+               success -= payloads.length;
+               errors.push({ row: 'System', error: err.message });
+            }
           }
-          return { success, failed };
+          return { success, failed, errors };
         }}
         expectedColumns={[
           { key: 'NAMA ASET', label: 'NAMA ASET', required: true, type: 'string', description: 'Nama Aset', sample: 'Mesin Espresso' },

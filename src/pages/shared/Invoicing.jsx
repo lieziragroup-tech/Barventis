@@ -507,10 +507,12 @@ export default function Invoicing() {
         onCommit={async (rows) => {
           const grouped = {};
           const unmatched = [];
+          const errors = [];
           for (const row of rows) {
             const key = row.po_ref || `PO-${Date.now()}`;
             if (!grouped[key]) {
               grouped[key] = {
+                po_ref: key,
                 supplier: row.supplier || '',
                 notes: row.notes || '',
                 location: row.location || 'CENTRAL',
@@ -520,6 +522,7 @@ export default function Invoicing() {
             const mat = stock.find(s => s.name.toLowerCase() === (row.item_name || '').toLowerCase().trim());
             if (!mat) {
               unmatched.push(row.item_name);
+              errors.push({ row: row.item_name || 'Item Kosong', error: `Bahan ${row.item_name} tidak ditemukan di master data` });
               continue;
             }
             grouped[key].items.push({
@@ -531,7 +534,10 @@ export default function Invoicing() {
           let success = 0;
           let failed = 0;
           for (const po of Object.values(grouped)) {
-            if (po.items.length === 0) { failed++; continue; }
+            if (po.items.length === 0) {
+              failed++;
+              continue;
+            }
             try {
               await api.createInvoice({
                 supplier: po.supplier,
@@ -540,15 +546,16 @@ export default function Invoicing() {
                 items: po.items
               });
               success++;
-            } catch {
+            } catch (err) {
               failed++;
+              errors.push({ row: po.po_ref, error: err.message || 'Gagal menyimpan ke database' });
             }
           }
           await refreshData();
           if (unmatched.length > 0) {
             toast(`${unmatched.length} item tidak ditemukan di database: ${unmatched.slice(0, 3).join(', ')}${unmatched.length > 3 ? '...' : ''}. PO tetap dibuat untuk item yang cocok.`, 'warning');
           }
-          return { success, failed: failed + unmatched.length };
+          return { success, failed: failed + unmatched.length, errors };
         }}
         expectedColumns={[
           { key: 'po_ref', label: 'PO REF', required: true, type: 'string', description: 'Referensi PO (Satu referensi akan digabung jadi satu PO)', sample: 'PO-2023-001' },

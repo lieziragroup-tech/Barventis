@@ -668,11 +668,14 @@ export default function Purchasing() {
         onCommit={async (rows) => {
           let success = 0;
           let failed = 0;
+          const errors = [];
 
           for (const row of rows) {
             const name = row.name || row['NAMA SUPPLIER'];
             if (!name) {
-              failed++; continue;
+              failed++;
+              errors.push({ row: 'Baris Kosong', error: 'Nama supplier tidak boleh kosong' });
+              continue;
             }
             try {
               await api.saveSupplier({
@@ -685,11 +688,12 @@ export default function Purchasing() {
             } catch (err) {
               console.warn("Failed to import supplier:", err);
               failed++;
+              errors.push({ row: name, error: err.message || 'Gagal menyimpan ke database' });
             }
           }
 
           fetchMasterData();
-          return { success, failed };
+          return { success, failed, errors };
         }}
       />
 
@@ -712,6 +716,7 @@ export default function Purchasing() {
         onCommit={async (rows) => {
           let success = 0;
           let failed = 0;
+          const errors = [];
 
           // Coba ambil tanggal pertama yang valid dari baris excel jika ada, untuk set global date
           let firstValidDate = null;
@@ -737,13 +742,27 @@ export default function Purchasing() {
             const unitPrice = parseFloat(row.unit_price || row['HARGA/KG'] || row['HARGA/UNIT'] || row['HARGA SATUAN'] || 0);
             const supplierName = row.supplier_name || row['SUPPLIER'] || row['NAMA SUPPLIER'] || '';
 
-            if (!materialName || qty <= 0 || unitPrice < 0) {
-              failed++; continue;
+            if (!materialName) {
+              failed++;
+              errors.push({ row: 'Baris Kosong', error: 'Nama bahan kosong/tidak ditemukan di excel' });
+              continue;
+            }
+            if (qty <= 0) {
+              failed++;
+              errors.push({ row: materialName, error: 'Qty harus lebih dari 0' });
+              continue;
+            }
+            if (unitPrice < 0) {
+              failed++;
+              errors.push({ row: materialName, error: 'Harga satuan tidak valid' });
+              continue;
             }
 
             const material = materials.find(m => m.name.toLowerCase() === materialName.toLowerCase());
             if (!material) {
-              failed++; continue;
+              failed++;
+              errors.push({ row: materialName, error: 'Bahan baku belum terdaftar di Master Data' });
+              continue;
             }
 
             let supplier_id = '';
@@ -763,7 +782,7 @@ export default function Purchasing() {
             }]);
             success++;
           }
-          return { success, failed };
+          return { success, failed, errors };
         }}
       />
 

@@ -503,9 +503,11 @@ export default function StockOpname() {
           const updated = [...opnameItems];
           let success = 0;
           let failed = 0;
-          
-          rows.forEach(row => {
-            const rowName = (row.material_name || row['NAMA ITEM'] || '').toLowerCase();
+          const errors = [];
+
+          rows.forEach((row, i) => {
+            const rawName = row.material_name || row['NAMA ITEM'] || '';
+            const rowName = rawName.toLowerCase();
             const idx = updated.findIndex(u => u.name.toLowerCase() === rowName);
             if (idx >= 0) {
               const qty = row.physical_qty !== undefined ? row.physical_qty : row['KUANTITI'];
@@ -514,11 +516,12 @@ export default function StockOpname() {
               success++;
             } else {
               failed++;
+              errors.push({ row: rawName || `Baris ${i + 1}`, error: 'Nama item tidak ditemukan di sistem' });
             }
           });
-          
+
           setOpnameItems(updated);
-          return { success, failed };
+          return { success, failed, errors };
         }}
         expectedColumns={[
           { key: 'NO', label: 'NO', required: false, type: 'number', description: 'Nomor Urut', sample: 1 },
