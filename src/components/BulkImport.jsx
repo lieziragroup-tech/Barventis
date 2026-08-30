@@ -276,9 +276,15 @@ export default function BulkImport({
             <button
               onClick={() => {
                 handleClose();
-                // Navigate to materials master data
-                if (type === 'assets') navigate('/pengawas/items?tab=ASSET');
-                else navigate('/pengawas/items?tab=RAW_MATERIAL');
+                // Get the current base path (either /owner or /staff)
+                const currentPath = window.location.pathname;
+                const basePath = currentPath.startsWith('/superadmin') ? '/superadmin' : currentPath.startsWith('/owner') ? '/owner' : '/staff';
+
+                // Navigate to materials master data (Stock Ledger)
+                // Note: /assets is only available for owner roles usually, so fallback to dashboard or show toast if needed
+                // but navigating to the closest matching master data path is best effort
+                if (type === 'assets') navigate(`${basePath}/assets`);
+                else navigate(`${basePath}/stock`);
               }}
               className="btn btn-primary"
               style={{ padding: '6px 14px', fontSize: '0.78rem', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '6px' }}

@@ -268,8 +268,6 @@ export default function DailyInventory() {
     }
   };
 
-  const totalPages = Math.ceil(historyTotal / PAGE_SIZE);
-
   return (
     <div className="fade-in">
       <div style={{ marginBottom: '24px' }}>
