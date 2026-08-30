@@ -117,8 +117,17 @@ export default function BulkImport({
           setLoading(false);
           return;
         }
-        
-        const headers = rawRows[0].map(h => (h || '').toString().trim().toLowerCase());
+
+        // Find the actual header row heuristically (row with most strings, or first row with > 2 non-empty columns)
+        let headerRowIdx = 0;
+        for(let r = 0; r < Math.min(10, rawRows.length); r++) {
+          if (rawRows[r] && rawRows[r].filter(c => c && String(c).trim()).length > 2) {
+            headerRowIdx = r;
+            break;
+          }
+        }
+
+        const headers = (rawRows[headerRowIdx] || []).map(h => (h || '').toString().trim().toLowerCase());
 
         // A column can optionally declare `labels: [..]` — alternate header text
         // that should also match (e.g. a column renamed between template
@@ -149,8 +158,8 @@ export default function BulkImport({
         }
         
         const parsed = [];
-        
-        for (let i = 1; i < rawRows.length; i++) {
+
+        for (let i = headerRowIdx + 1; i < rawRows.length; i++) {
           const row = rawRows[i];
           // Skip truly empty rows only. Use a blank check (null/undefined/'') so a
           // legitimate row whose values are all 0 / false is NOT dropped. (LOW #22)

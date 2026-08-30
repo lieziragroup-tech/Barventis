@@ -696,22 +696,39 @@ export default function Purchasing() {
         description="Upload data pembelian dari file Excel. Pastikan nama bahan sesuai."
         currentData={[]}
         expectedColumns={[
-          { key: 'material_name', label: 'NAMA BAHAN', required: true, type: 'string', sample: 'Kopi Arabica', description: 'Nama bahan baku (harus persis sama)' },
+          { key: 'tanggal', label: 'TANGGAL', required: false, type: 'string', sample: '2026-08-30', description: 'Tanggal pembelian' },
+          { key: 'material_name', label: 'NAMA ITEM', labels: ['NAMA ITEM', 'NAMA BAHAN'], required: true, type: 'string', sample: 'Kopi Arabica', description: 'Nama bahan baku (harus persis sama)' },
           { key: 'qty', label: 'QTY', required: true, type: 'number', sample: 5, description: 'Jumlah yang dibeli' },
-          { key: 'unit_price', label: 'HARGA SATUAN', required: true, type: 'number', sample: 150000, description: 'Harga per satuan (tanpa titik/koma)' },
-          { key: 'supplier_name', label: 'NAMA SUPPLIER', required: false, type: 'string', sample: 'Supplier A', description: 'Nama supplier (opsional)' },
+          { key: 'unit_price', label: 'HARGA/KG', labels: ['HARGA/KG', 'HARGA SATUAN'], required: true, type: 'number', sample: 150000, description: 'Harga per satuan (tanpa titik/koma)' },
+          { key: 'supplier_name', label: 'SUPPLIER', labels: ['SUPPLIER', 'NAMA SUPPLIER'], required: false, type: 'string', sample: 'Supplier A', description: 'Nama supplier (opsional)' },
         ]}
         onCommit={async (rows) => {
           let success = 0;
           let failed = 0;
-          
-          
+
+          // Coba ambil tanggal pertama yang valid dari baris excel jika ada, untuk set global date
+          let firstValidDate = null;
+          for (const row of rows) {
+             let d = row.tanggal || row['TANGGAL'];
+             if (d) {
+               // Handle excel serialized date
+               if (!isNaN(d) && typeof d === 'number') {
+                 firstValidDate = new Date(Math.round((d - 25569) * 86400 * 1000)).toISOString().split('T')[0];
+               } else if (typeof d === 'string' && !isNaN(Date.parse(d))) {
+                 firstValidDate = new Date(d).toISOString().split('T')[0];
+               }
+               if (firstValidDate) break;
+             }
+          }
+          if (firstValidDate) {
+            setPurchaseDate(firstValidDate);
+          }
 
           for (const row of rows) {
-            const materialName = row.material_name || row['NAMA BAHAN'];
+            const materialName = row.material_name || row['NAMA ITEM'] || row['NAMA BAHAN'];
             const qty = parseFloat(row.qty || row['QTY'] || 0);
-            const unitPrice = parseFloat(row.unit_price || row['HARGA SATUAN'] || 0);
-            const supplierName = row.supplier_name || row['NAMA SUPPLIER'] || '';
+            const unitPrice = parseFloat(row.unit_price || row['HARGA/KG'] || row['HARGA SATUAN'] || 0);
+            const supplierName = row.supplier_name || row['SUPPLIER'] || row['NAMA SUPPLIER'] || '';
 
             if (!materialName || qty <= 0 || unitPrice < 0) {
               failed++; continue;
