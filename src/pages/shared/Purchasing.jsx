@@ -715,6 +715,29 @@ export default function Purchasing() {
         title="Bulk Import Data Pembelian Harian"
         description="Upload data pembelian dari file Excel. Pastikan nama bahan sesuai."
         currentData={[]}
+        onRegisterMissing={async (missingItems) => {
+          // Layer 2: Daftarkan semua missing items ke master data secara batch.
+          // Item akan dibuat dengan data minimal dari Excel (name, unit, price).
+          // Owner bisa update detail (kategori, min_stock, dll) nanti di Stock Ledger.
+          const created = [];
+          for (const item of missingItems) {
+            const newMat = await api.createMaterial({
+              name: item.name,
+              unit: item.unit || 'pcs',
+              price: item.price || 0,
+              category: 'Bahan Baku',
+              supplier: '',
+              full_pack: 1,
+              min_stock: 15
+            });
+            created.push(newMat);
+          }
+          // Refresh materials state agar fuzzy match pada retry bisa menemukan item baru.
+          // Format sama dengan load awal di useEffect (map ke { id, name, unit, price })
+          const freshMaterials = await api.getMaterials();
+          setMaterials((freshMaterials || []).map(m => ({ id: m.id, name: m.name, unit: m.unit, price: m.new_price || 0 })));
+          return created;
+        }}
         expectedColumns={[
           { key: 'tanggal', label: 'TANGGAL', required: false, type: 'string', sample: '2026-08-30', description: 'Tanggal pembelian' },
           { key: 'material_name', label: 'NAMA ITEM', labels: ['NAMA ITEM', 'NAMA BAHAN'], required: true, type: 'string', sample: 'Kopi Arabica', description: 'Nama bahan baku (harus persis sama)' },
@@ -727,74 +750,87 @@ export default function Purchasing() {
           let success = 0;
           let failed = 0;
           const errors = [];
+          const warnings = [];
 
-          // Coba ambil tanggal pertama yang valid dari baris excel jika ada, untuk set global date
+          // ─── LAYER 1: Fuzzy Match Helper ─────────────────────────────────────────
+          // Hitung similarity antara dua string (0-1).
+          // Menggunakan bigram overlap agar tahan terhadap typo minor,
+          // perbedaan spasi, dan variasi kapitalisasi.
+          const getBigrams = (str) => {
+            const s = str.toLowerCase().replace(/\s+/g, ' ').trim();
+            const bigrams = new Set();
+            for (let i = 0; i < s.length - 1; i++) bigrams.add(s.slice(i, i + 2));
+            return bigrams;
+          };
+          const similarity = (a, b) => {
+            const ba = getBigrams(a);
+            const bb = getBigrams(b);
+            if (ba.size === 0 || bb.size === 0) return 0;
+            let intersection = 0;
+            ba.forEach(g => { if (bb.has(g)) intersection++; });
+            return (2 * intersection) / (ba.size + bb.size);
+          };
+
+          // Cari material: exact first, lalu fuzzy (≥0.70 = auto-map, ≥0.50 = auto-map + warning)
+          const findMaterial = (name) => {
+            const exact = materials.find(m => m.name.toLowerCase() === name.toLowerCase());
+            if (exact) return { material: exact, matched: 'exact' };
+
+            let best = null, bestScore = 0;
+            materials.forEach(m => {
+              const s = similarity(m.name, name);
+              if (s > bestScore) { bestScore = s; best = m; }
+            });
+            if (best && bestScore >= 0.70) return { material: best, matched: 'fuzzy-high', score: bestScore };
+            if (best && bestScore >= 0.50) return { material: best, matched: 'fuzzy-low', score: bestScore };
+            return { material: null, matched: 'none' };
+          };
+          // ─────────────────────────────────────────────────────────────────────────
+
+          // Parse tanggal helper (reused for firstValidDate + per-row)
+          const parseExcelDate = (d) => {
+            if (!d) return null;
+            if (!isNaN(d) && typeof d === 'number')
+              return new Date(Math.round((d - 25569) * 86400 * 1000)).toISOString().split('T')[0];
+            if (typeof d === 'string' && d.includes('/') || typeof d === 'string' && d.includes('-')) {
+              const parts = d.split(/[/\-]/);
+              if (parts.length === 3) {
+                if (parts[2].length === 4) // DD/MM/YYYY
+                  return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).toISOString().split('T')[0];
+                return new Date(d).toISOString().split('T')[0];
+              }
+            }
+            if (typeof d === 'string' && !isNaN(Date.parse(d)))
+              return new Date(d).toISOString().split('T')[0];
+            return null;
+          };
+
           let firstValidDate = null;
           for (const row of rows) {
-             let d = row.tanggal || row['TANGGAL'];
-             if (d) {
-               // Handle excel serialized date
-               if (!isNaN(d) && typeof d === 'number') {
-                 firstValidDate = new Date(Math.round((d - 25569) * 86400 * 1000)).toISOString().split('T')[0];
-               } else if (typeof d === 'string' && !isNaN(Date.parse(d))) {
-                 // Custom parsing for DD/MM/YYYY or DD-MM-YYYY format which is common in Indonesia
-                 if (d.includes('/') || d.includes('-')) {
-                   const parts = d.split(/[/|-]/);
-                   if (parts.length === 3) {
-                     // Check if it's likely DD/MM/YYYY (first part > 12 usually means day)
-                     if (parts[0].length === 2 && parseInt(parts[0]) > 12) {
-                       firstValidDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).toISOString().split('T')[0];
-                     } else if (parts[2].length === 4) {
-                       // Assume DD/MM/YYYY if year is at the end
-                       firstValidDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).toISOString().split('T')[0];
-                     } else {
-                       firstValidDate = new Date(d).toISOString().split('T')[0];
-                     }
-                   } else {
-                     firstValidDate = new Date(d).toISOString().split('T')[0];
-                   }
-                 } else {
-                   firstValidDate = new Date(d).toISOString().split('T')[0];
-                 }
-               }
-               if (firstValidDate && !isNaN(new Date(firstValidDate).getTime())) break;
-             }
+            firstValidDate = parseExcelDate(row.tanggal || row['TANGGAL']);
+            if (firstValidDate && !isNaN(new Date(firstValidDate).getTime())) break;
           }
-          if (firstValidDate && !isNaN(new Date(firstValidDate).getTime())) {
+          if (firstValidDate && !isNaN(new Date(firstValidDate).getTime()))
             setPurchaseDate(firstValidDate);
-          }
+
+          // ─── LAYER 2: Kumpulkan item yang belum di master data ────────────────────
+          // Jika tidak ada match sama sekali (bahkan fuzzy), kumpulkan untuk
+          // ditawarkan ke user via "Register & Retry" di BulkImport modal.
+          const missingItems = new Map(); // key: lowerCaseName, val: { name, unit, price }
+          // ─────────────────────────────────────────────────────────────────────────
 
           for (const row of rows) {
-            let rowDate = purchaseDate;
-            let d = row.tanggal || row['TANGGAL'];
-            if (d) {
-               if (!isNaN(d) && typeof d === 'number') {
-                 rowDate = new Date(Math.round((d - 25569) * 86400 * 1000)).toISOString().split('T')[0];
-               } else if (typeof d === 'string' && !isNaN(Date.parse(d))) {
-                 if (d.includes('/') || d.includes('-')) {
-                   const parts = d.split(/[/|-]/);
-                   if (parts.length === 3) {
-                     if (parts[0].length === 2 && parseInt(parts[0]) > 12) {
-                       rowDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).toISOString().split('T')[0];
-                     } else if (parts[2].length === 4) {
-                       rowDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).toISOString().split('T')[0];
-                     } else {
-                       rowDate = new Date(d).toISOString().split('T')[0];
-                     }
-                   } else {
-                     rowDate = new Date(d).toISOString().split('T')[0];
-                   }
-                 } else {
-                   rowDate = new Date(d).toISOString().split('T')[0];
-                 }
-               }
-            }
-            if (isNaN(new Date(rowDate).getTime())) rowDate = purchaseDate;
+            const rawDate = row.tanggal || row['TANGGAL'];
+            const rowDate = (() => {
+              const parsed = parseExcelDate(rawDate);
+              return parsed && !isNaN(new Date(parsed).getTime()) ? parsed : purchaseDate;
+            })();
 
             const materialName = row.material_name || row['NAMA ITEM'] || row['NAMA BAHAN'];
             const qty = parseFloat(row.qty || row['QTY'] || 0);
             const unitPrice = parseFloat(row.unit_price || row['HARGA/KG'] || row['HARGA/UNIT'] || row['HARGA SATUAN'] || 0);
             const supplierName = row.supplier_name || row['SUPPLIER'] || row['NAMA SUPPLIER'] || '';
+            const unitLabel = row.unit || row['Unit'] || '';
 
             if (!materialName) {
               failed++;
@@ -812,11 +848,30 @@ export default function Purchasing() {
               continue;
             }
 
-            const material = materials.find(m => m.name.toLowerCase() === materialName.toLowerCase());
+            // LAYER 1: Coba exact + fuzzy match
+            const { material, matched, score } = findMaterial(materialName);
+
             if (!material) {
+              // LAYER 2: Tidak ada match → kumpulkan untuk Register & Retry
               failed++;
               errors.push({ row: materialName, error: 'Bahan baku belum terdaftar di Master Data' });
+              const key = materialName.toLowerCase();
+              if (!missingItems.has(key)) {
+                missingItems.set(key, {
+                  name: materialName,
+                  unit: unitLabel || 'pcs',
+                  price: unitPrice,
+                  category: 'Bahan Baku'
+                });
+              }
               continue;
+            }
+
+            // Fuzzy match dengan confidence rendah → tetap lolos tapi beri warning
+            if (matched === 'fuzzy-high') {
+              warnings.push(`"${materialName}" dicocokkan otomatis ke "${material.name}" (kemiripan: ${Math.round(score * 100)}%)`);
+            } else if (matched === 'fuzzy-low') {
+              warnings.push(`"${materialName}" dicocokkan ke "${material.name}" (kemiripan: ${Math.round(score * 100)}%) — harap verifikasi`);
             }
 
             let supplier_id = '';
@@ -829,15 +884,20 @@ export default function Purchasing() {
               cart_id: Date.now() + Math.random(),
               material_id: material.id,
               name: material.name,
-              unit: row.unit || row['Unit'] || material.unit,
-              qty: qty,
+              unit: unitLabel || material.unit,
+              qty,
               unit_price: unitPrice,
-              supplier_id: supplier_id,
+              supplier_id,
               date: rowDate
             }]);
             success++;
           }
-          return { success, failed, errors };
+
+          // Kirim missingItems ke BulkImport untuk flow Register & Retry
+          return {
+            success, failed, errors, warnings,
+            missingItems: missingItems.size > 0 ? Array.from(missingItems.values()) : []
+          };
         }}
       />
 
