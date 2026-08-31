@@ -94,7 +94,8 @@ export default function CostControl() {
 
     // 1. Accumulate Transactions
     (reportData.transactions || []).forEach(tx => {
-      if (!checkTabMatch(tx, activeTab)) return;
+      const dateStr = tx.date || '';
+      if (!dateStr.startsWith(period) || !checkTabMatch(tx, activeTab)) return;
       const amt = Math.abs(parseFloat(tx.amount || 0));
 
       if (tx.type === 'PURCHASE_IN') {
@@ -161,20 +162,26 @@ export default function CostControl() {
 
     // Group POS OUT deductions (stock consumed from POS sync) by date
     txs
-      .filter(tx => (tx.type === 'POS_SALE' || (tx.type === 'OUT' && (tx.notes || '').startsWith('POS Sync:'))) && (tx.date || '').startsWith(period) && checkTabMatch(tx, activeTab))
+      .filter(tx => (tx.type === 'POS_SALE' || (tx.type === 'OUT' && (tx.notes || '').startsWith('POS Sync:'))) && checkTabMatch(tx, activeTab))
       .forEach(tx => {
-        const day = (tx.date || '').substring(5).replace('-', '/');
-        if (!dailyMap[day]) dailyMap[day] = { date: day, purchase: 0, sales: 0 };
-        dailyMap[day].sales += Math.abs(tx.amount || 0);
+        const dateStr = tx.date || '';
+        if (dateStr.startsWith(period)) {
+          const day = dateStr.substring(5).replace('-', '/');
+          if (!dailyMap[day]) dailyMap[day] = { date: day, purchase: 0, sales: 0 };
+          dailyMap[day].sales += Math.abs(tx.amount || 0);
+        }
       });
 
     // Group PURCHASE_IN (stock received from invoices) by date
     txs
-      .filter(tx => tx.type === 'PURCHASE_IN' && (tx.date || '').startsWith(period) && checkTabMatch(tx, activeTab))
+      .filter(tx => tx.type === 'PURCHASE_IN' && checkTabMatch(tx, activeTab))
       .forEach(tx => {
-        const day = (tx.date || '').substring(5).replace('-', '/');
-        if (!dailyMap[day]) dailyMap[day] = { date: day, purchase: 0, sales: 0 };
-        dailyMap[day].purchase += Math.abs(tx.amount || 0);
+        const dateStr = tx.date || '';
+        if (dateStr.startsWith(period)) {
+          const day = dateStr.substring(5).replace('-', '/');
+          if (!dailyMap[day]) dailyMap[day] = { date: day, purchase: 0, sales: 0 };
+          dailyMap[day].purchase += Math.abs(tx.amount || 0);
+        }
       });
 
     const result = Object.values(dailyMap);

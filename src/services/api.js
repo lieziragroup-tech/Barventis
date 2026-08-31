@@ -3600,10 +3600,20 @@ export const api = {
 
     // Try to also delete from purchase_entries if applicable
     if (tx.type === 'PURCHASE_IN') {
-      await supabase.from('purchase_entries').delete()
+      const { data: purchaseEntries } = await supabase.from('purchase_entries').select('id, qty')
         .eq('tenant_id', tenantId)
         .eq('date', tx.date)
         .eq('material_id', tx.material_id);
+
+      if (purchaseEntries && purchaseEntries.length > 0) {
+         const match = purchaseEntries.find(p => p.qty === tx.qty);
+         if (match) {
+            await supabase.from('purchase_entries').delete().eq('id', match.id);
+         } else {
+            // fallback to first one if exact qty match not found
+            await supabase.from('purchase_entries').delete().eq('id', purchaseEntries[0].id);
+         }
+      }
     }
 
     // Delete the transaction row

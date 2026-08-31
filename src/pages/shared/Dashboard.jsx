@@ -95,7 +95,9 @@ export default function Dashboard() {
   // Real trend from transactions within the selected period month
   const realTrendData = useMemo(() => {
     const dayMap = {};
-    const daysInMonth = new Date(period.split('-')[0], period.split('-')[1], 0).getDate();
+    const year = parseInt(period.split('-')[0], 10);
+    const month = parseInt(period.split('-')[1], 10);
+    const daysInMonth = new Date(year, month, 0).getDate();
     const resultArr = [];
 
     for (let i = 1; i <= daysInMonth; i++) {
@@ -106,9 +108,10 @@ export default function Dashboard() {
     }
 
     (transactions || []).forEach(tx => {
-      if (dayMap[tx.date] && checkTabMatch(tx, activeTab)) {
-        if (tx.type === 'POS_DEDUCTION') dayMap[tx.date].cost += Math.abs(parseFloat(tx.amount || 0));
-        if (tx.type === 'POS_SALE') dayMap[tx.date].revenue += Math.abs(parseFloat(tx.amount || 0));
+      const dateStr = tx.date || '';
+      if (dateStr && dateStr.startsWith(period) && dayMap[dateStr] && checkTabMatch(tx, activeTab)) {
+        if (tx.type === 'POS_DEDUCTION') dayMap[dateStr].cost += Math.abs(parseFloat(tx.amount || 0));
+        if (tx.type === 'POS_SALE') dayMap[dateStr].revenue += Math.abs(parseFloat(tx.amount || 0));
       }
     });
 

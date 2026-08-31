@@ -154,7 +154,8 @@ export default function Purchasing() {
       unit: material.unit,
       qty: 1,
       unit_price: material.price,
-      supplier_id: ''
+      supplier_id: '',
+      date: purchaseDate
     }]);
     setSearchQuery('');
     setShowSearchDropdown(false);
@@ -175,6 +176,7 @@ export default function Purchasing() {
     for (const item of cart) {
       if (!item.qty || parseFloat(item.qty) <= 0) return setNotification({ type: 'error', text: `Kuantitas untuk ${item.name} harus lebih dari 0.` });
       if (item.unit_price === '' || parseFloat(item.unit_price) < 0) return setNotification({ type: 'error', text: `Harga untuk ${item.name} tidak valid.` });
+      if (!item.date && !purchaseDate) return setNotification({ type: 'error', text: `Tanggal pembelian untuk ${item.name} tidak valid.` });
     }
 
     setShowConfirmModal(true);
@@ -184,7 +186,7 @@ export default function Purchasing() {
     setLoading(true);
     try {
       await Promise.all(cart.map(item => api.createPurchaseEntry({
-        date: purchaseDate,
+        date: item.date || purchaseDate,
         material_id: item.material_id,
         supplier_id: item.supplier_id || null,
         qty: parseFloat(item.qty),
@@ -343,7 +345,7 @@ export default function Purchasing() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-tertiary)', padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
                   <Calendar size={16} style={{ color: 'var(--accent)' }} />
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Tanggal Pembelian:</span>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Tanggal Pembelian Default:</span>
                   <input
                     type="date"
                     className="form-control"
@@ -420,6 +422,7 @@ export default function Purchasing() {
                   <tr>
                     <th>Bahan Baku</th>
                     <th style={{ width: '120px' }}>Supplier</th>
+                    <th style={{ width: '130px' }}>Tanggal</th>
                     <th style={{ width: '100px', textAlign: 'right' }}>Qty</th>
                     <th style={{ width: '60px' }}>Unit</th>
                     <th style={{ width: '140px', textAlign: 'right' }}>Harga Satuan</th>
@@ -441,6 +444,9 @@ export default function Purchasing() {
                           <option value="">(Tunai / Tidak ada)</option>
                           {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
+                      </td>
+                      <td>
+                        <input type="date" className="form-control" style={{ padding: '4px', fontSize: '0.85rem', width: '110px' }} value={item.date || purchaseDate} onChange={(e) => updateCartItem(item.cart_id, 'date', e.target.value)} />
                       </td>
                       <td>
                         <input
@@ -565,9 +571,13 @@ export default function Purchasing() {
                       <td style={{ textAlign: 'right' }}>{p.qty} {p.unit}</td>
                       <td style={{ textAlign: 'right', fontWeight: 600 }}>Rp {(p.qty * p.unit_price).toLocaleString('id-ID')}</td>
                       <td style={{ textAlign: 'center' }}>
-                        <button className="btn" style={{ padding: '4px', color: 'var(--danger)', background: 'transparent' }} onClick={() => handleDeleteHistory(p.id, p.materials?.name)}>
-                          <Trash2 size={16} />
-                        </button>
+                        {p.materials ? (
+                          <button className="btn" style={{ padding: '4px', color: 'var(--danger)', background: 'transparent' }} onClick={() => handleDeleteHistory(p.id, p.materials?.name)}>
+                            <Trash2 size={16} />
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No Action</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -727,16 +737,60 @@ export default function Purchasing() {
                if (!isNaN(d) && typeof d === 'number') {
                  firstValidDate = new Date(Math.round((d - 25569) * 86400 * 1000)).toISOString().split('T')[0];
                } else if (typeof d === 'string' && !isNaN(Date.parse(d))) {
-                 firstValidDate = new Date(d).toISOString().split('T')[0];
+                 // Custom parsing for DD/MM/YYYY or DD-MM-YYYY format which is common in Indonesia
+                 if (d.includes('/') || d.includes('-')) {
+                   const parts = d.split(/[/|-]/);
+                   if (parts.length === 3) {
+                     // Check if it's likely DD/MM/YYYY (first part > 12 usually means day)
+                     if (parts[0].length === 2 && parseInt(parts[0]) > 12) {
+                       firstValidDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).toISOString().split('T')[0];
+                     } else if (parts[2].length === 4) {
+                       // Assume DD/MM/YYYY if year is at the end
+                       firstValidDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).toISOString().split('T')[0];
+                     } else {
+                       firstValidDate = new Date(d).toISOString().split('T')[0];
+                     }
+                   } else {
+                     firstValidDate = new Date(d).toISOString().split('T')[0];
+                   }
+                 } else {
+                   firstValidDate = new Date(d).toISOString().split('T')[0];
+                 }
                }
-               if (firstValidDate) break;
+               if (firstValidDate && !isNaN(new Date(firstValidDate).getTime())) break;
              }
           }
-          if (firstValidDate) {
+          if (firstValidDate && !isNaN(new Date(firstValidDate).getTime())) {
             setPurchaseDate(firstValidDate);
           }
 
           for (const row of rows) {
+            let rowDate = purchaseDate;
+            let d = row.tanggal || row['TANGGAL'];
+            if (d) {
+               if (!isNaN(d) && typeof d === 'number') {
+                 rowDate = new Date(Math.round((d - 25569) * 86400 * 1000)).toISOString().split('T')[0];
+               } else if (typeof d === 'string' && !isNaN(Date.parse(d))) {
+                 if (d.includes('/') || d.includes('-')) {
+                   const parts = d.split(/[/|-]/);
+                   if (parts.length === 3) {
+                     if (parts[0].length === 2 && parseInt(parts[0]) > 12) {
+                       rowDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).toISOString().split('T')[0];
+                     } else if (parts[2].length === 4) {
+                       rowDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).toISOString().split('T')[0];
+                     } else {
+                       rowDate = new Date(d).toISOString().split('T')[0];
+                     }
+                   } else {
+                     rowDate = new Date(d).toISOString().split('T')[0];
+                   }
+                 } else {
+                   rowDate = new Date(d).toISOString().split('T')[0];
+                 }
+               }
+            }
+            if (isNaN(new Date(rowDate).getTime())) rowDate = purchaseDate;
+
             const materialName = row.material_name || row['NAMA ITEM'] || row['NAMA BAHAN'];
             const qty = parseFloat(row.qty || row['QTY'] || 0);
             const unitPrice = parseFloat(row.unit_price || row['HARGA/KG'] || row['HARGA/UNIT'] || row['HARGA SATUAN'] || 0);
@@ -778,7 +832,8 @@ export default function Purchasing() {
               unit: row.unit || row['Unit'] || material.unit,
               qty: qty,
               unit_price: unitPrice,
-              supplier_id: supplier_id
+              supplier_id: supplier_id,
+              date: rowDate
             }]);
             success++;
           }
@@ -800,6 +855,7 @@ export default function Purchasing() {
                 <thead>
                   <tr>
                     <th>Bahan Baku</th>
+                    <th style={{ width: '130px' }}>Tanggal</th>
                     <th style={{ width: '150px' }}>Kuantitas</th>
                     <th style={{ width: '200px' }}>Harga Satuan</th>
                     <th style={{ textAlign: 'right' }}>Total (Rp)</th>
@@ -809,6 +865,9 @@ export default function Purchasing() {
                   {cart.map(item => (
                     <tr key={item.cart_id}>
                       <td style={{ fontWeight: 600 }}>{item.name} <br/><span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{suppliers.find(s => s.id === item.supplier_id)?.name || 'Tanpa Supplier'}</span></td>
+                      <td>
+                        <input type="date" className="form-control" style={{ padding: '4px', fontSize: '0.85rem', width: '110px' }} value={item.date || purchaseDate} onChange={(e) => updateCartItem(item.cart_id, 'date', e.target.value)} />
+                      </td>
                       <td>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                           <input type="number" step="any" min="0" className="form-control" style={{ width: '80px', padding: '4px' }} value={item.qty} onChange={(e) => updateCartItem(item.cart_id, 'qty', e.target.value)} />
