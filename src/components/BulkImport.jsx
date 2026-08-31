@@ -29,7 +29,8 @@ export default function BulkImport({
   title,
   description,
   expectedColumns,
-  currentData = [] // New prop for Sync Export
+  currentData = [],          // New prop for Sync Export
+  onRegisterMissing = null   // Layer 2: async (items[]) => void — daftarkan item ke master data
 }) {
   const navigate = useNavigate();
   const [step, setStep] = useState('upload'); // 'upload' | 'preview' | 'importing' | 'done'
@@ -39,12 +40,18 @@ export default function BulkImport({
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef(null);
 
+  // Layer 2 — Register & Retry state
+  const [registerLoading, setRegisterLoading] = useState(false);
+  const [registerDone, setRegisterDone] = useState(false);
+
   const handleClose = () => {
     setStep('upload');
     setParsedRows([]);
     setErrors([]);
     setImportResult(null);
     setLoading(false);
+    setRegisterLoading(false);
+    setRegisterDone(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
     onClose();
   };
@@ -237,13 +244,55 @@ export default function BulkImport({
   const validCount = parsedRows.filter(r => r._selected && !r._error).length;
   const errorCount = parsedRows.filter(r => r._error).length;
 
+  // Layer 2: Register semua missing items ke master data langsung dari modal,
+  // lalu trigger retry import tanpa perlu upload ulang file.
+  const handleRegisterAndRetry = async () => {
+    if (!onRegisterMissing || !importResult?.missingItems?.length) return;
+    setRegisterLoading(true);
+    try {
+      await onRegisterMissing(importResult.missingItems);
+      setRegisterDone(true);
+      // Retry commit dengan parsedRows yang valid (yang sebelumnya gagal karena missing)
+      setStep('importing');
+      setLoading(true);
+      const selectedRows = parsedRows.filter(r => r._selected && !r._error);
+      const cleanRows = selectedRows.map(r => {
+        const rest = { ...r };
+        delete rest._selected; delete rest._rowIndex; delete rest._error;
+        return rest;
+      });
+      // Juga tambahkan kembali baris yang gagal karena missing master data
+      const failedMissingRows = parsedRows.filter(r => {
+        if (!r._error) return false;
+        const name = (r.material_name || r['NAMA ITEM'] || r['NAMA BAHAN'] || '').toLowerCase();
+        return importResult.missingItems.some(m => m.name.toLowerCase() === name);
+      }).map(r => {
+        const rest = { ...r };
+        delete rest._selected; delete rest._rowIndex; delete rest._error;
+        return rest;
+      });
+      const result = await onCommit([...cleanRows, ...failedMissingRows]);
+      setImportResult(result || { success: cleanRows.length + failedMissingRows.length, failed: 0 });
+      setStep('done');
+    } catch (err) {
+      setErrors([{ row: 0, message: 'Gagal mendaftarkan item: ' + err.message }]);
+      setStep('done');
+    } finally {
+      setLoading(false);
+      setRegisterLoading(false);
+    }
+  };
+
   const renderAIAnalysis = () => {
     if (!importResult || importResult.failed === 0 || !Array.isArray(importResult.errors) || importResult.errors.length === 0) return null;
 
-    // Auto-analyze errors
     const errorMessages = importResult.errors.map(e => e.error?.toLowerCase() || '');
     const hasMissingMasterData = errorMessages.some(m => m.includes('tidak ditemukan') || m.includes('master data') || m.includes('kosong'));
     const hasFormatError = errorMessages.some(m => m.includes('format') || m.includes('valid') || m.includes('angka') || m.includes('harus'));
+
+    // Layer 2: apakah ada missing items yang bisa di-register langsung?
+    const canRegisterInline = onRegisterMissing && Array.isArray(importResult.missingItems) && importResult.missingItems.length > 0;
+    const missingNames = canRegisterInline ? importResult.missingItems.map(i => i.name) : [];
 
     return (
       <div style={{
@@ -261,28 +310,62 @@ export default function BulkImport({
 
         <ul style={{ color: 'var(--text-primary)', fontSize: '0.8rem', margin: '0 0 16px 24px', paddingLeft: '16px', lineHeight: 1.6 }}>
           {hasMissingMasterData && (
-            <li>Beberapa item belum terdaftar di <strong>Master Data</strong>. Sistem tidak mengizinkan transaksi atas barang yang fiktif/belum didaftarkan.</li>
+            <li>
+              Beberapa item belum terdaftar di <strong>Master Data</strong>.
+              {canRegisterInline && (
+                <span style={{ color: 'var(--accent)', fontWeight: 600 }}> ({missingNames.join(', ')})</span>
+              )}
+            </li>
           )}
-          {hasFormatError && (
-            <li>Terdapat angka Qty atau Harga yang kosong/bernilai negatif.</li>
-          )}
-          {!hasMissingMasterData && !hasFormatError && (
-            <li>Pastikan penulisan data mengikuti panduan standar.</li>
-          )}
+          {hasFormatError && <li>Terdapat angka Qty atau Harga yang kosong/bernilai negatif.</li>}
+          {!hasMissingMasterData && !hasFormatError && <li>Pastikan penulisan data mengikuti panduan standar.</li>}
         </ul>
 
+        {/* Layer 2: Register & Retry inline — tidak perlu keluar modal atau upload ulang */}
+        {canRegisterInline && !registerDone && (
+          <div style={{
+            margin: '0 0 12px 24px', padding: '10px 14px',
+            background: 'rgba(79,110,247,0.06)', borderRadius: 'var(--radius-md)',
+            border: '1px solid rgba(79,110,247,0.15)'
+          }}>
+            <p style={{ color: 'var(--text-primary)', fontSize: '0.78rem', margin: '0 0 10px 0', fontWeight: 600 }}>
+              ✨ Daftarkan otomatis & ulangi import tanpa upload ulang:
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
+              {missingNames.map(n => (
+                <span key={n} style={{
+                  padding: '3px 10px', borderRadius: '99px', fontSize: '0.72rem',
+                  background: 'rgba(79,110,247,0.12)', color: 'var(--accent)', fontWeight: 500
+                }}>{n}</span>
+              ))}
+            </div>
+            <button
+              onClick={handleRegisterAndRetry}
+              disabled={registerLoading}
+              className="btn btn-primary"
+              style={{ padding: '7px 16px', fontSize: '0.78rem', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              {registerLoading
+                ? <><Loader size={13} style={{ animation: 'spin 1s linear infinite' }} /> Mendaftarkan & Mengulang...</>
+                : <><PlusCircle size={13} /> Daftarkan ke Master Data & Ulangi Import</>
+              }
+            </button>
+          </div>
+        )}
+
+        {registerDone && (
+          <p style={{ margin: '0 0 12px 24px', fontSize: '0.78rem', color: 'var(--success)', fontWeight: 600 }}>
+            ✅ Item berhasil didaftarkan ke Master Data. Import diulang otomatis.
+          </p>
+        )}
+
         <div style={{ marginLeft: '24px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {hasMissingMasterData && (
+          {hasMissingMasterData && !canRegisterInline && (
             <button
               onClick={() => {
                 handleClose();
-                // Get the current base path (either /owner or /staff)
                 const currentPath = window.location.pathname;
                 const basePath = currentPath.startsWith('/superadmin') ? '/superadmin' : currentPath.startsWith('/owner') ? '/owner' : '/staff';
-
-                // Navigate to materials master data (Stock Ledger)
-                // Note: /assets is only available for owner roles usually, so fallback to dashboard or show toast if needed
-                // but navigating to the closest matching master data path is best effort
                 if (type === 'assets') navigate(`${basePath}/assets`);
                 else navigate(`${basePath}/stock`);
               }}
