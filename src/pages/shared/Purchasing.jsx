@@ -27,6 +27,7 @@ export default function Purchasing() {
   const [search, setSearch] = useState('');
   const [historySearchInput, setHistorySearchInput] = useState('');
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [totalNominal, setTotalNominal] = useState(0);
   const [notification, setNotification] = useState(null);
 
   // Period Filter
@@ -85,9 +86,10 @@ export default function Purchasing() {
   const fetchHistory = useCallback(async (targetPage, targetSearch, targetPeriod) => {
     setHistoryLoading(true);
     try {
-      const { data, totalCount: count } = await api.getPurchaseEntriesPaged({ page: targetPage, pageSize: PAGE_SIZE, search: targetSearch, period: targetPeriod });
+      const { data, totalCount: count, totalNominal: nominal } = await api.getPurchaseEntriesPaged({ page: targetPage, pageSize: PAGE_SIZE, search: targetSearch, period: targetPeriod });
       setPurchases(data);
       setTotalCount(count);
+      setTotalNominal(nominal);
     } catch (err) {
       setNotification({ type: 'error', text: err.message });
     } finally {
@@ -213,6 +215,44 @@ export default function Purchasing() {
     try {
       await api.deleteTransactionAndReverseStock(txId);
       setNotification({ type: 'success', text: `Pembelian "${itemName}" berhasil dibatalkan.` });
+      fetchHistory(page, search);
+      fetchMasterData(); // Refresh current stock levels globally
+    } catch (err) {
+      setNotification({ type: 'error', text: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditHistory = async (p) => {
+    const newQty = prompt(`Edit QTY untuk pembelian harian "${p.materials?.name}":\nFormat: Angka. (Contoh: 10)`, p.qty);
+    if (newQty === null) return;
+    const qtyFloat = parseFloat(newQty);
+    if (isNaN(qtyFloat) || qtyFloat <= 0) return alert('Quantity harus angka valid > 0');
+
+    const newPrice = prompt(`Edit Harga Satuan (Rp) untuk pembelian harian "${p.materials?.name}":\nFormat: Angka bulat tanpa titik/koma. (Contoh: 15000)`, p.unit_price);
+    if (newPrice === null) return;
+    const priceFloat = parseFloat(newPrice);
+    if (isNaN(priceFloat) || priceFloat <= 0) return alert('Harga harus angka valid > 0');
+
+    const newNotes = prompt(`Edit Catatan untuk pembelian harian "${p.materials?.name}":`, p.notes || '');
+    if (newNotes === null) return;
+
+    // Optional date edit
+    const newDate = prompt(`Edit Tanggal untuk pembelian harian "${p.materials?.name}":\nFormat: YYYY-MM-DD. (Contoh: 2026-08-30)`, p.date);
+    if (newDate === null) return;
+    // basic date validation
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) return alert('Format tanggal tidak valid. Harus YYYY-MM-DD');
+
+    setLoading(true);
+    try {
+      await api.editTransactionAndAdjustStock(p.id, {
+        qty: qtyFloat,
+        unit_price: priceFloat,
+        notes: newNotes,
+        date: newDate
+      });
+      setNotification({ type: 'success', text: `Data pembelian "${p.materials?.name}" berhasil diperbarui.` });
       fetchHistory(page, search);
       fetchMasterData(); // Refresh current stock levels globally
     } catch (err) {
@@ -572,9 +612,14 @@ export default function Purchasing() {
                       <td style={{ textAlign: 'right', fontWeight: 600 }}>Rp {(p.qty * p.unit_price).toLocaleString('id-ID')}</td>
                       <td style={{ textAlign: 'center' }}>
                         {p.materials ? (
-                          <button className="btn" style={{ padding: '4px', color: 'var(--danger)', background: 'transparent' }} onClick={() => handleDeleteHistory(p.id, p.materials?.name)}>
-                            <Trash2 size={16} />
-                          </button>
+                          <>
+                            <button className="btn" style={{ padding: '4px', color: 'var(--accent)', background: 'transparent', marginRight: '4px' }} onClick={() => handleEditHistory(p)}>
+                              <Edit2 size={16} />
+                            </button>
+                            <button className="btn" style={{ padding: '4px', color: 'var(--danger)', background: 'transparent' }} onClick={() => handleDeleteHistory(p.id, p.materials?.name)}>
+                              <Trash2 size={16} />
+                            </button>
+                          </>
                         ) : (
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No Action</span>
                         )}
@@ -583,6 +628,17 @@ export default function Purchasing() {
                   ))}
                   {purchases.length === 0 && !historyLoading && <tr><td colSpan="6" style={{ textAlign: 'center' }}>{search ? 'Tidak ada hasil untuk pencarian ini.' : 'Belum ada data pembelian harian.'}</td></tr>}
                 </tbody>
+                {purchases.length > 0 && (
+                  <tfoot>
+                    <tr style={{ background: 'var(--bg-tertiary)' }}>
+                      <td colSpan="4" style={{ textAlign: 'right', fontWeight: 700 }}>Total Nominal Keseluruhan:</td>
+                      <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--text-primary)', fontSize: '1.05rem' }}>
+                        Rp {totalNominal.toLocaleString('id-ID')}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
             <Pagination

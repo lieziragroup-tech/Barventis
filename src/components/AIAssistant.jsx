@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Bot, X, Send, Sparkles, Loader, ChevronRight } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { calculateIngredientCost } from '../services/costUtils';
+import { GoogleGenAI } from '@google/genai';
 
 // Context-aware response engine using real stock/recipe/transaction data
 function buildAIResponse(input, { stock, recipes, transactions, unitConversionMap }) {
@@ -145,19 +146,55 @@ export default function AIAssistant() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  const sendMessage = (text) => {
+  const sendMessage = async (text) => {
     if (!text.trim()) return;
     const userMessage = { role: 'user', text };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsTyping(true);
 
-    // Simulate brief "thinking" delay then respond with context-aware answer
-    setTimeout(() => {
-      const response = buildAIResponse(text, { stock, recipes, transactions, unitConversionMap });
-      setMessages(prev => [...prev, { role: 'assistant', text: response }]);
+    try {
+      // Hanya gunakan env variable
+      const apiKey = import.meta.env.VITE_GOOGLE_AI_API_KEY;
+
+      if (apiKey) {
+        const ai = new GoogleGenAI({ apiKey: apiKey });
+
+        // Build context data string
+        const contextStr = `
+        Konteks Data Inventory Barventis:
+        - Total Stok Bahan: ${stock.length} item
+        - Total Resep: ${recipes.length} resep
+
+        Data Stok: ${JSON.stringify(stock.map(s => ({ nama: s.name, stok_resto: s.qty_resto, stok_central: s.qty_central, harga: s.price, unit: s.unit })).slice(0, 50))}
+
+        Tolong jawab pertanyaan pengguna berdasarkan data di atas secara ringkas dan profesional sebagai asisten AI Barventis.
+        Gunakan bahasa Indonesia.
+        `;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `${contextStr}\n\nPertanyaan pengguna: ${text}`,
+        });
+
+        setMessages(prev => [...prev, { role: 'assistant', text: response.text }]);
+      } else {
+        // Fallback to rule-based engine if no API key
+        setTimeout(() => {
+          const response = buildAIResponse(text, { stock, recipes, transactions, unitConversionMap });
+          setMessages(prev => [...prev, { role: 'assistant', text: response }]);
+        }, 700);
+      }
+    } catch (err) {
+      console.error("AI Generation Error:", err);
+      // Fallback on error
+      setTimeout(() => {
+        const response = buildAIResponse(text, { stock, recipes, transactions, unitConversionMap });
+        setMessages(prev => [...prev, { role: 'assistant', text: response }]);
+      }, 700);
+    } finally {
       setIsTyping(false);
-    }, 700);
+    }
   };
 
   const handleSend = (e) => {

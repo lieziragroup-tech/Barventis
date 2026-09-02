@@ -1,6 +1,6 @@
 /* Waste / Barang Rusak Daily Report — Cart-Based Input */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Search, Trash2, Calendar, User, AlertTriangle, Plus, PackageX } from 'lucide-react';
+import { Search, Trash2, Edit2, Calendar, User, AlertTriangle, Plus, PackageX } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -192,6 +192,36 @@ export default function DailyInventory() {
     try {
       await api.deleteTransactionAndReverseStock(txId);
       setNotification({ type: 'success', text: `Data waste "${itemName}" berhasil dibatalkan.` });
+      fetchHistory(historyPage);
+      fetchMasters(); // Refresh stock
+    } catch (err) {
+      setNotification({ type: 'error', text: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditWasteHistory = async (h) => {
+    const newQtyRaw = prompt(`Edit Qty untuk waste "${h.materials?.name}":\nFormat: Angka (Contoh: 5)`, Math.abs(h.qty));
+    if (newQtyRaw === null) return;
+    const newQtyFloat = parseFloat(newQtyRaw);
+    if (isNaN(newQtyFloat) || newQtyFloat <= 0) return alert('Quantity harus angka > 0');
+
+    const newNotes = prompt(`Edit Catatan untuk waste "${h.materials?.name}":`, h.notes || '');
+    if (newNotes === null) return;
+
+    const newDate = prompt(`Edit Tanggal untuk waste "${h.materials?.name}":\nFormat: YYYY-MM-DD`, h.date);
+    if (newDate === null) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) return alert('Format tanggal tidak valid. Harus YYYY-MM-DD');
+
+    setLoading(true);
+    try {
+      await api.editTransactionAndAdjustStock(h.id, {
+        qty: -newQtyFloat, // waste is negative qty
+        notes: newNotes,
+        date: newDate
+      });
+      setNotification({ type: 'success', text: `Data waste "${h.materials?.name}" berhasil diperbarui.` });
       fetchHistory(historyPage);
       fetchMasters(); // Refresh stock
     } catch (err) {
@@ -502,6 +532,9 @@ export default function DailyInventory() {
                     <td style={{ textAlign: 'right', color: 'var(--danger)', fontWeight: 600 }}>{Math.abs(h.qty).toFixed(2)} {h.materials?.unit}</td>
                     <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{notesClean || '-'}</td>
                     <td style={{ textAlign: 'center' }}>
+                      <button className="btn" style={{ padding: '4px', color: 'var(--accent)', background: 'transparent', marginRight: '4px' }} onClick={() => handleEditWasteHistory(h)}>
+                        <Edit2 size={16} />
+                      </button>
                       <button className="btn" style={{ padding: '4px', color: 'var(--danger)', background: 'transparent' }} onClick={() => handleDeleteWasteHistory(h.id, h.materials?.name)}>
                         <Trash2 size={16} />
                       </button>

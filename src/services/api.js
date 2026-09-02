@@ -59,25 +59,8 @@ export { parsePackSize, calculateIngredientCost };
 
 export const api = {
   // ═══════════════════════════════════════════════════════════════════
-  // FIX (root cause hasil reverse-engineering SO BARISTA):
-  // Versi lama fungsi ini LANGSUNG mengurangi `materials.qty_resto` sebesar
-  // usage TEORITIS (qty terjual x qty resep), seolah itu adalah stok fisik
-  // yang sebenarnya. Trace formula di Excel asli ("Daily Iventory Bahan",
-  // "STOCK OPNAME RESTO/CENTRAL") menunjukkan stok sebenarnya SELALU berasal
-  // dari hitungan fisik manual (TERPAKAI = OUT + WASTE, Sisa Stok = hard
-  // value hasil hitung), sedangkan resep (COGS All Beverage) hanya dipakai
-  // sbg BENCHMARK teoritis untuk menghitung food cost % / variance -- bukan
-  // sumber kebenaran stok. Auto-deduct qty_resto pakai angka teoritis inilah
-  // yang membuat stok di sistem lama-lama menyimpang dari hasil stock opname
-  // fisik, dan menjadi penyebab paling mungkin SO Barista sistem tidak match
-  // dengan SO Barista Excel manual.
-  //
-  // Perbaikan: qty_resto TIDAK disentuh oleh fungsi ini sama sekali. Usage
-  // teoritis ditulis ke tabel `expected_usage` (sudah ada di schema, tapi
-  // sebelumnya tidak pernah dipakai oleh kode manapun) untuk dibandingkan
-  // dengan usage AKTUAL (`daily_inventory_items.terpakai_qty`, diisi dari
-  // input fisik harian) lewat VarianceCalculator -- lihat services/varianceCalculator.js.
-  // ═══════════════════════════════════════════════════════════════════
+  // REFACTOR: Qty_resto is NOT modified here. Expected usage is logged
+  // to expected_usage table for comparison against actual physical inventory.
   processPOSSync: async (posDataArray, options = {}) => {
     try {
       if (!activeTenantId || !activeUserId) throw new Error("Missing active session.");
@@ -90,15 +73,13 @@ export const api = {
 
       if (recipesErr) throw recipesErr;
       const recipeMap = new Map((recipes || []).map(r => [r.id, r]));
-      const materialTheoretical = new Map(); // usage TEORITIS saja, bukan deduksi stok riil
+      const materialTheoretical = new Map();
       const salesByDate = new Map();
       const today = new Date().toISOString().split('T')[0];
       let minDate = today;
       let maxDate = today;
 
-      // FIX: Paksa minDate/maxDate ke awal-akhir bulan jika periodMonth/Year tersedia.
-      // Ini mencegah double-counting ketika user upload 2 file berbeda (Senin vs Selasa)
-      // di bulan yang sama — keduanya sekarang di-aggregate ke satu periode yang sama.
+      // Force min/max date to beginning and end of month if period provided
       if (options.periodMonth && options.periodYear) {
         const m = options.periodMonth.toString().padStart(2, '0');
         const lastDay = new Date(parseInt(options.periodYear), parseInt(options.periodMonth), 0).getDate();
@@ -120,8 +101,7 @@ export const api = {
            .gte('date', startDate)
            .lte('date', endDate);
 
-         // FIX: bersihkan juga expected_usage periode ini supaya tidak dobel
-         // dengan re-upload/overwrite bulan yang sama.
+         // Clean up old expected usage
          await supabase.from('expected_usage')
            .delete()
            .eq('tenant_id', activeTenantId)
@@ -130,10 +110,6 @@ export const api = {
       }
 
       for (const item of posDataArray) {
-        // Collect Sales Revenue. FIX: qty/total negatif (void/refund/cancel)
-        // sebelumnya dibuang (`sTotal > 0` saja) — sekarang tetap dihitung
-        // supaya void benar-benar mengurangi revenue & usage teoritis,
-        // bukan menghilang tanpa jejak (lihat edge case "Sales minus/Void").
         const sDate = item.salesDate || today;
         if (sDate < minDate) minDate = sDate;
         if (sDate > maxDate) maxDate = sDate;
@@ -160,7 +136,7 @@ export const api = {
         }
       }
 
-      // Simpan usage teoritis sbg benchmark (BUKAN mengubah qty_resto)
+      // Save theoretical usage as benchmark
       const expectedUsageRows = [];
       for (const [matId, data] of materialTheoretical.entries()) {
         expectedUsageRows.push({
@@ -174,12 +150,7 @@ export const api = {
         });
       }
       if (expectedUsageRows.length > 0) {
-        // BUG-FIX 2026-08: `onConflict: 'tenant_id, week_start, material_id'` has
-        // no confirmed matching unique constraint/index in any migration for this
-        // project (analysis Bagian 3.4) — if it's actually missing, every upsert()
-        // here fails outright with a Postgres "no unique or exclusion constraint"
-        // error. Resolve existing rows explicitly instead (all rows in this batch
-        // share the same week_start), so this never depends on that constraint.
+        // Resolve existing rows explicitly to avoid unique constraint issues
         const { data: existingUsageRows } = await supabase
           .from('expected_usage')
           .select('id, material_id')
@@ -229,12 +200,7 @@ export const api = {
         if (txErr) throw txErr;
       }
 
-      // GAP-FIX 2026-07: pos_upload_logs existed in the schema (branch_name,
-      // company_name, category_filter, branch_mismatch, period_start/end) but the
-      // live sync path never wrote to it — only the dead `syncPos` function did.
-      // Log it here so there's an actual audit trail of which branch/category filter
-      // was used per upload (relevant now that "Kasuna by Umatis" uploads are
-      // deliberately merged into this tenant rather than rejected).
+      // Record upload log
       try {
         await supabase.from('pos_upload_logs').insert({
           tenant_id: activeTenantId,
@@ -250,7 +216,6 @@ export const api = {
           branch_mismatch: !!options.branchMismatch
         });
       } catch (logErr) {
-        // Non-critical — don't fail the whole sync just because the audit log failed.
         console.warn('[processPOSSync] Failed to write pos_upload_logs:', logErr?.message || logErr);
       }
 
@@ -261,11 +226,7 @@ export const api = {
     }
   },
 
-  // FIX/NEW: laporan variance usage teoritis (dari sales x resep, tabel
-  // expected_usage) vs usage aktual (dari input fisik harian, tabel
-  // daily_inventory_items.terpakai_qty). Ini yang sebelumnya tidak ada sama
-  // sekali sbg data tersimpan/queryable -- padahal ini inti dari "Cost
-  // Control" di SO Barista asli. Lihat services/varianceCalculator.js.
+  // Theoretical usage variance calculation vs actual inputs
   getUsageVariance: async (month, year) => {
     const tenantId = await getActiveTenantId();
     const m = month.toString().padStart(2, '0');
@@ -1218,19 +1179,7 @@ export const api = {
     return true;
   },
 
-  // GAP-FIX 2026-07: recipes.basic_cost/food_cost_pct/subtotal/fix_cost are only
-  // ever recomputed when a HUMAN opens a specific recipe and clicks "Simpan Resep"
-  // (createRecipe/updateRecipe). The Recipe Builder's detail panel looks correct
-  // regardless, because it recomputes live from the current ingredient list on every
-  // render — but that live number is NEVER what the sidebar list, Menu Pricing page,
-  // or the generated SO Barista COGS sheet read; those all read the STORED column.
-  // So after any master-data fix (like the Ice Cube / pack-size corrections), every
-  // recipe's stored numbers stay stale at whatever they were computed as during the
-  // last manual save — until someone reopens and re-saves each of the 56 recipes one
-  // by one. This function does that in one shot: recompute + persist for every
-  // recipe in the tenant, using the exact same calculateIngredientCost() the Recipe
-  // Builder itself uses, so the stored values are guaranteed consistent with what
-  // the UI already shows live.
+  // Recalculate basic cost and food cost pct for all recipes.
   recalculateAllRecipes: async () => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { updated: 0, results: [] };
@@ -1252,29 +1201,11 @@ export const api = {
         return sum + calculateIngredientCost(mat, parseFloat(ing.qty_in_use || 0), unit, unitConversionMap);
       }, 0);
 
-      // BUG-FIX 2026-08: this used to hardcode fixCostPct=0.05 and derive
-      // food_cost_pct as basic_cost/selling_price directly — ignoring this
-      // recipe's own fix_cost_pct/rounding_direction/rounding_increment/
-      // price_adjustment columns entirely, and reusing the SAME formula
-      // createRecipe/updateRecipe/bulkImportRecipes all funnel through
-      // computeRecipeCosts() for. That mismatch meant "Hitung Ulang Semua"
-      // could silently override a recipe's custom Fix Cost % back to 5%.
-      // It also never fixed `selling_price` — so a recipe imported while
-      // basic_cost was still 0 (see the bulkImportRecipes full_pack fix
-      // below) recalculated a correct basic_cost here, but selling_price
-      // stayed stuck at 0 and food_cost_pct got overwritten to 0 right
-      // along with it (worse than before: the badge used to at least show
-      // the original FOOD COST % TARGET from the import).
       const fixCostPct = r.fix_cost_pct != null ? parseFloat(r.fix_cost_pct) : activeOverheadPct;
       const roundingDirection = r.rounding_direction || DEFAULT_ROUNDING_DIRECTION;
       const roundingIncrement = r.rounding_increment != null ? parseFloat(r.rounding_increment) : DEFAULT_ROUNDING_INCREMENT;
       const priceAdjustment = r.price_adjustment != null ? parseFloat(r.price_adjustment) : DEFAULT_PRICE_ADJUSTMENT;
-      // `food_cost_pct` as stored is this recipe's TARGET at the time it was
-      // priced (same convention bulkImportRecipes/createRecipe/updateRecipe
-      // use to derive an initial selling price) — reuse it ONLY to fill in a
-      // selling_price that's still missing; a selling_price that's already
-      // set (manual or previously computed) is a business decision and is
-      // never overwritten here.
+
       const targetPct = parseFloat(r.food_cost_pct || 0);
 
       const { fixCost, basicCost, sellingPriceFinal } = computeRecipeCosts({
@@ -1284,9 +1215,7 @@ export const api = {
 
       const currentSellingPrice = parseFloat(r.selling_price || 0);
       const sellingPrice = currentSellingPrice > 0 ? currentSellingPrice : (sellingPriceFinal || 0);
-      // Once a selling price exists, food_cost_pct going forward represents
-      // the ACTUAL ratio at that price — matching how Recipes.jsx's own
-      // "M-5" badge/list logic already interprets this field.
+
       const foodCostPct = sellingPrice > 0 ? basicCost / sellingPrice : 0;
 
       const before = {
@@ -1305,9 +1234,7 @@ export const api = {
           results.push({ menu_name: r.menu_name, status: 'error', message: updErr.message });
           continue;
         }
-        // Also refresh each ingredient row's stored amount/unit_price for consistency
-        // with reportGenerator.js's buildCOGSSheet, which reads recipe_ingredients.amount
-        // directly rather than recomputing it.
+
         for (const ing of ings) {
           const mat = ing.materials;
           const unit = ing.unit || mat?.unit || 'gr';
@@ -1704,43 +1631,39 @@ export const api = {
     if (minDate === '9999-12-31') minDate = nowStr;
     if (maxDate === '0000-01-01') maxDate = nowStr;
 
-    // 2. Perform Atomic Deductions per UNIQUE material (Parallel Batching API Optimization)
-    const deductionEntries = Object.entries(deductionMap);
-    const BATCH_SIZE = 20; // Concurrent requests limit
+      // 2. Perform Atomic Deductions per UNIQUE material (Parallel Batching API Optimization)
+      const deductionEntries = Object.entries(deductionMap);
+      const BATCH_SIZE = 20; // Concurrent requests limit
 
-    for (let i = 0; i < deductionEntries.length; i += BATCH_SIZE) {
-      const batch = deductionEntries.slice(i, i + BATCH_SIZE);
-      const unitConversionMap = await api._loadUnitConversionMap(tenantId);
+      for (let i = 0; i < deductionEntries.length; i += BATCH_SIZE) {
+        const batch = deductionEntries.slice(i, i + BATCH_SIZE);
+        const unitConversionMap = await api._loadUnitConversionMap(tenantId);
 
-      await Promise.all(batch.map(async ([, data]) => {
-        const material = data.material;
-        const deductQty = data.totalDeduct;
-        const currentResto = parseFloat(material.qty_resto);
-        const newQty = currentResto - deductQty;
+        await Promise.all(batch.map(async ([, data]) => {
+          const material = data.material;
+          const deductQty = data.totalDeduct;
+          const currentResto = parseFloat(material.qty_resto);
+          const newQty = currentResto - deductQty;
 
-        if (newQty < 0) {
-          negativeWarnings.push(`Stok ${material.name} tidak cukup. Butuh ${deductQty.toFixed(2)}, tersedia ${currentResto.toFixed(2)}.`);
-        }
+          if (newQty < 0) {
+            negativeWarnings.push(`Stok ${material.name} tidak cukup. Butuh ${deductQty.toFixed(2)}, tersedia ${currentResto.toFixed(2)}.`);
+          }
 
-        const { error: deductErr } = await supabase.rpc('deduct_stock_atomic', {
-          p_material_id: material.id,
-          p_deduct_qty: deductQty
-        });
-        
-        if (deductErr) {
-          deductionErrors.push(`${material.name}: ${deductErr.message}`);
-          console.error('[syncPos] deduct_stock_atomic failed for', material.name, deductErr.message);
-          return;
-        }
+          const { error: deductErr } = await supabase.rpc('deduct_stock_atomic', {
+            p_material_id: material.id,
+            p_deduct_qty: deductQty
+          });
 
-        // BUG-FIX 2026-07: `unitPrice = material.price` was being multiplied straight
-        // by deductQty (a base-unit qty, e.g. grams) — but material.price is a per-PACK
-        // price, so this inflated every POS_DEDUCTION amount by the pack-size factor.
-        // deduct_stock_atomic itself is fine (deducts qty_resto in base units correctly);
-        // only the Rupiah valuation here was wrong. Route through the shared calculator.
-        const deductionAmount = calculateIngredientCost(material, deductQty, material.unit, unitConversionMap);
-        const datesArray = Array.from(data.saleDates).sort();
-        const primaryDate = datesArray[datesArray.length - 1] || nowStr;
+          if (deductErr) {
+            deductionErrors.push(`${material.name}: ${deductErr.message}`);
+            console.error('[syncPos] deduct_stock_atomic failed for', material.name, deductErr.message);
+            return;
+          }
+
+          // FIX: Route through the shared calculator to avoid pack-size inflation
+          const deductionAmount = calculateIngredientCost(material, deductQty, material.unit, unitConversionMap);
+          const datesArray = Array.from(data.saleDates).sort();
+          const primaryDate = datesArray[datesArray.length - 1] || nowStr;
 
         transactionRows.push({
           tenant_id: tenantId,
@@ -1899,13 +1822,6 @@ export const api = {
         const material = ing.materials;
         if (!material) continue;
 
-        // BUG-FIX 2026-08: replaced the ad hoc "gr/ml usage vs kg/l-tracked material
-        // -> divide by 1000" special case (a duplicate, narrower reimplementation of
-        // a unit conversion that lived here only) with the shared
-        // convertQtyToStockUnit() from costUtils.js. Same behavior for the legacy
-        // kg/l case, PLUS it now also understands the manual "Carton = 24 pcs"
-        // pack/content conversion (StockLedger.jsx "Konversi Isi"), so a recipe
-        // using "pcs" against a Carton-tracked material deducts stock correctly too.
         const { qty: deductQty } = convertQtyToStockUnit(material, parseFloat(ing.qty_in_use) * cartItem.qty, ing.unit);
         if (!deductionMap[material.id]) {
           deductionMap[material.id] = { material, totalDeduct: 0 };
@@ -1936,19 +1852,17 @@ export const api = {
       const deductQty = data.totalDeduct;
       const currentResto = parseFloat(material.qty_resto);
 
-      // FIX: izinkan stok negatif. Di realitas, fisik kopi tetap terpotong walau sistem bilangnya habis
-      // (biasanya karena telat catat stok masuk). Supaya di akhir bulan kelihatan minusnya pas opname.
+      // Allow negative stock to reflect actual physical depletion over delayed system inputs
       if (currentResto - deductQty < 0) {
         negativeWarnings.push(`Stok ${material.name} tersisa ${currentResto.toFixed(2)}, tapi order butuh ${deductQty.toFixed(2)}. (Stok akan jadi minus)`);
-        // continue; // HAPUS SKIP INI
       }
 
-        deductionsPayload.push({
+      deductionsPayload.push({
         material_id: material.id,
         deduct_qty: deductQty
       });
 
-      // FIX: jangan kali lurus deductQty (bisa dalam gram) dengan unitPrice (harga per pack)
+      // Calculate precise deduction amount
       const exactCost = calculateIngredientCost(material, deductQty, material.unit, unitConversionMap);
 
       transactionRows.push({
@@ -2001,7 +1915,6 @@ export const api = {
     
     const location = opnameData.location;
     const items = opnameData.items;
-    // FIX: Gunakan bulan/tahun dari UI jika user pilih backdate. Jangan kunci ke waktu sekarang.
     const currentMonth = opnameData.period_month ? parseInt(opnameData.period_month, 10) : new Date().getMonth() + 1;
     const currentYear = opnameData.period_year ? parseInt(opnameData.period_year, 10) : new Date().getFullYear();
 
@@ -2144,10 +2057,7 @@ export const api = {
           const physicalQty = parseFloat(item.physical_qty || 0);
           const bookQty = parseFloat(item.book_qty || 0);
           const price = parseFloat(item.materials?.price ?? 0);
-          // BUG-FIX 2026-07: `physicalQty * price` used price as if it were already a
-          // per-base-unit price — but materials.price is a per-PACK price. This is the
-          // core reason monthly Cost Control HPP was inflated even when Recipe Builder
-          // looked fine. Route through the shared, pack-size-aware calculator.
+          // Route through the shared, pack-size-aware calculator.
           const val = calculateIngredientCost(item.materials, physicalQty, item.materials?.unit, unitConversionMap);
           const cat = item.materials?.category || 'Lain-lain';
 
@@ -2408,7 +2318,45 @@ export const api = {
       .range(from, to);
 
     if (error) throw new Error("Gagal memuat riwayat pembelian: " + error.message);
-    return { data: data || [], totalCount: count || 0 };
+
+    // Calculate total nominal across ALL matching records (not just the current page)
+    // We clone the query but only select the fields we need to calculate total
+    let totalQuery = supabase
+      .from('purchase_entries')
+      .select('qty, unit_price')
+      .eq('tenant_id', tenantId);
+
+    if (material_id) totalQuery = totalQuery.eq('material_id', material_id);
+
+    if (period) {
+      const year = period.substring(0, 4);
+      const month = period.substring(5, 7);
+      const nextMonth = parseInt(month, 10) === 12 ? 1 : parseInt(month, 10) + 1;
+      const nextYear = parseInt(month, 10) === 12 ? parseInt(year, 10) + 1 : year;
+      const startDate = `${period}-01`;
+      const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+      totalQuery = totalQuery.gte('date', startDate).lt('date', endDate);
+    }
+
+    if (search && search.trim()) {
+      const s = sanitizePostgrest(search);
+      const { data: matMatches } = await supabase
+        .from('materials')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .ilike('name', `%${s}%`);
+      const matIds = (matMatches || []).map(m => m.id);
+      if (matIds.length > 0) {
+        totalQuery = totalQuery.or(`notes.ilike.%${s}%,material_id.in.(${matIds.join(',')})`);
+      } else {
+        totalQuery = totalQuery.ilike('notes', `%${s}%`);
+      }
+    }
+
+    const { data: allData } = await totalQuery;
+    const totalNominal = (allData || []).reduce((sum, item) => sum + (item.qty * item.unit_price), 0);
+
+    return { data: data || [], totalCount: count || 0, totalNominal };
   },
 
   createPurchaseEntry: async (purchaseData) => {
@@ -3626,6 +3574,91 @@ export const api = {
     if (delErr) throw new Error('Gagal menghapus transaksi: ' + delErr.message);
 
     await logAudit('DELETE_TRANSACTION', `Menghapus dan membalikkan transaksi tipe "${tx.type}" tgl ${tx.date}. Stok disesuaikan kembali.`);
+    return true;
+  },
+
+  editTransactionAndAdjustStock: async (txId, payload) => {
+    const tenantId = await getActiveTenantId();
+    const rawId = String(txId).replace(/^tx-/, '');
+
+    const { data: tx, error: fetchErr } = await supabase
+      .from('transactions')
+      .select('id, type, qty, material_id, amount, notes, date')
+      .eq('id', rawId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+
+    if (fetchErr) throw new Error('Gagal mengambil data transaksi: ' + fetchErr.message);
+    if (!tx) throw new Error('Transaksi tidak ditemukan.');
+
+    // Calculate diffs
+    const oldQty = parseFloat(tx.qty);
+    const newQty = parseFloat(payload.qty);
+    const qtyDiff = oldQty - newQty;
+
+    // Adjust stock if material is linked and qty changed
+    if (tx.material_id && qtyDiff !== 0) {
+      const { error: rpcErr } = await supabase.rpc('deduct_stock_atomic', {
+        p_material_id: tx.material_id,
+        p_deduct_qty: qtyDiff
+      });
+      if (rpcErr) throw new Error('Gagal adjust stok: ' + rpcErr.message);
+    }
+
+    // Calculate new amount based on type
+    let newAmount = 0;
+    if (tx.type === 'PURCHASE_IN') {
+        newAmount = newQty * payload.unit_price;
+    } else {
+        newAmount = (tx.amount / oldQty) * newQty;
+    }
+
+    // Update transactions table
+    const { error: updateErr } = await supabase
+      .from('transactions')
+      .update({
+        qty: newQty,
+        amount: newAmount,
+        notes: payload.notes || tx.notes,
+        date: payload.date || tx.date
+      })
+      .eq('id', rawId)
+      .eq('tenant_id', tenantId);
+
+    if (updateErr) throw new Error('Gagal update transaksi: ' + updateErr.message);
+
+    // Update purchase_entries if applicable
+    if (tx.type === 'PURCHASE_IN') {
+      const { data: purchaseEntries } = await supabase.from('purchase_entries').select('id, qty, unit_price')
+        .eq('tenant_id', tenantId)
+        .eq('date', tx.date)
+        .eq('material_id', tx.material_id);
+
+      if (purchaseEntries && purchaseEntries.length > 0) {
+         const match = purchaseEntries.find(p => p.qty === oldQty) || purchaseEntries[0];
+         await supabase.from('purchase_entries').update({
+             qty: newQty,
+             unit_price: payload.unit_price,
+             date: payload.date || tx.date,
+             notes: payload.notes || tx.notes
+         }).eq('id', match.id);
+      }
+    }
+
+    // Update daily_inventory_items if applicable
+    if (tx.type === 'WASTE' || tx.type === 'BREAKAGE' || tx.type === 'EXPIRED' || tx.type === 'COMP') {
+       const { data: dailyItems } = await supabase.from('daily_inventory_items').select('id, qty')
+         .eq('material_id', tx.material_id)
+         .eq('qty', Math.abs(oldQty)); // NOTE: daily items store absolute values
+
+       if(dailyItems && dailyItems.length > 0){
+          await supabase.from('daily_inventory_items').update({
+              qty: Math.abs(newQty)
+          }).eq('id', dailyItems[0].id);
+       }
+    }
+
+    await logAudit('EDIT_TRANSACTION', `Mengubah transaksi tipe "${tx.type}" tgl ${tx.date}.`);
     return true;
   }
 };
