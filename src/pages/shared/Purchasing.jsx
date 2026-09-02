@@ -29,6 +29,7 @@ export default function Purchasing() {
   const [historySearchInput, setHistorySearchInput] = useState('');
   const [historyLoading, setHistoryLoading] = useState(false);
   const [totalNominal, setTotalNominal] = useState(0);
+  const [allMatchingIds, setAllMatchingIds] = useState([]);
   const [notification, setNotification] = useState(null);
 
   // Period Filter
@@ -87,10 +88,11 @@ export default function Purchasing() {
   const fetchHistory = useCallback(async (targetPage, targetSearch, targetPeriod) => {
     setHistoryLoading(true);
     try {
-      const { data, totalCount: count, totalNominal: nominal } = await api.getPurchaseEntriesPaged({ page: targetPage, pageSize: PAGE_SIZE, search: targetSearch, period: targetPeriod });
+      const { data, totalCount: count, totalNominal: nominal, allMatchingIds: allIds } = await api.getPurchaseEntriesPaged({ page: targetPage, pageSize: PAGE_SIZE, search: targetSearch, period: targetPeriod });
       setPurchases(data);
       setTotalCount(count);
       setTotalNominal(nominal);
+      setAllMatchingIds(allIds || []);
     } catch (err) {
       setNotification({ type: 'error', text: err.message });
     } finally {
@@ -248,9 +250,16 @@ export default function Purchasing() {
 
   const handleSelectAllHistory = (e) => {
     if (e.target.checked) {
+      // Pilih HANYA yang ada di halaman saat ini (Current Page)
       setSelectedPurchases(purchases.map(p => p.id));
     } else {
       setSelectedPurchases([]);
+    }
+  };
+
+  const handleSelectAllMatchedHistory = () => {
+    if (window.confirm(`Pilih semua ${allMatchingIds.length} data pembelian yang cocok dengan filter saat ini (termasuk yang tidak tampil di halaman ini)?`)) {
+      setSelectedPurchases(allMatchingIds);
     }
   };
 
@@ -630,9 +639,16 @@ export default function Purchasing() {
               {selectedPurchases.length > 0 && (
                 <div style={{ padding: '8px 12px', background: 'var(--danger)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: 'var(--radius-md) var(--radius-md) 0 0' }}>
                   <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{selectedPurchases.length} item terpilih</span>
-                  <button className="btn" style={{ background: 'rgba(255,255,255,0.2)', color: 'white', padding: '4px 12px', fontSize: '0.8rem', border: '1px solid rgba(255,255,255,0.3)' }} onClick={handleBulkDeleteHistory} disabled={loading}>
-                    <Trash2 size={14} style={{ marginRight: '6px' }}/> Hapus Terpilih
-                  </button>
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    {allMatchingIds.length > purchases.length && selectedPurchases.length > 0 && selectedPurchases.length < allMatchingIds.length && (
+                      <button className="btn" style={{ background: 'transparent', color: 'white', padding: '4px 12px', fontSize: '0.8rem', border: 'none', textDecoration: 'underline' }} onClick={handleSelectAllMatchedHistory}>
+                        Pilih semua {allMatchingIds.length} item di filter ini
+                      </button>
+                    )}
+                    <button className="btn" style={{ background: 'rgba(255,255,255,0.2)', color: 'white', padding: '4px 12px', fontSize: '0.8rem', border: '1px solid rgba(255,255,255,0.3)' }} onClick={handleBulkDeleteHistory} disabled={loading}>
+                      <Trash2 size={14} style={{ marginRight: '6px' }}/> Hapus Terpilih
+                    </button>
+                  </div>
                 </div>
               )}
               <table className="custom-table" style={selectedPurchases.length > 0 ? { borderTopLeftRadius: 0, borderTopRightRadius: 0 } : {}}>
@@ -641,7 +657,7 @@ export default function Purchasing() {
                     <th style={{ width: '40px', textAlign: 'center' }}>
                       <input
                         type="checkbox"
-                        checked={purchases.length > 0 && selectedPurchases.length === purchases.length}
+                        checked={purchases.length > 0 && purchases.every(p => selectedPurchases.includes(p.id))}
                         onChange={handleSelectAllHistory}
                       />
                     </th>

@@ -2319,11 +2319,11 @@ export const api = {
 
     if (error) throw new Error("Gagal memuat riwayat pembelian: " + error.message);
 
-    // Calculate total nominal across ALL matching records (not just the current page)
+    // Calculate total nominal and get ALL IDs across ALL matching records (not just the current page)
     // We clone the query but only select the fields we need to calculate total
     let totalQuery = supabase
       .from('purchase_entries')
-      .select('qty, unit_price')
+      .select('id, qty, unit_price')
       .eq('tenant_id', tenantId);
 
     if (material_id) totalQuery = totalQuery.eq('material_id', material_id);
@@ -2355,8 +2355,9 @@ export const api = {
 
     const { data: allData } = await totalQuery;
     const totalNominal = (allData || []).reduce((sum, item) => sum + (item.qty * item.unit_price), 0);
+    const allMatchingIds = (allData || []).map(item => item.id);
 
-    return { data: data || [], totalCount: count || 0, totalNominal };
+    return { data: data || [], totalCount: count || 0, totalNominal, allMatchingIds };
   },
 
   createPurchaseEntry: async (purchaseData) => {
