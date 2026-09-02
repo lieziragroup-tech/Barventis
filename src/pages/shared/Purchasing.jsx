@@ -22,6 +22,7 @@ export default function Purchasing() {
 
   // Purchase Entry history
   const [purchases, setPurchases] = useState([]);
+  const [selectedPurchases, setSelectedPurchases] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -222,6 +223,41 @@ export default function Purchasing() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleBulkDeleteHistory = async () => {
+    if (selectedPurchases.length === 0) return;
+    if (!window.confirm(`Hapus dan batalkan ${selectedPurchases.length} data pembelian harian terpilih? Stok akan ditarik kembali secara otomatis.`)) return;
+
+    setLoading(true);
+    try {
+      // Menjalankan semua penghapusan secara berurutan agar aman di Supabase (menghindari deadlock)
+      for (const txId of selectedPurchases) {
+        await api.deleteTransactionAndReverseStock(txId);
+      }
+      setNotification({ type: 'success', text: `${selectedPurchases.length} data pembelian berhasil dibatalkan.` });
+      setSelectedPurchases([]);
+      fetchHistory(page, search);
+      fetchMasterData();
+    } catch (err) {
+      setNotification({ type: 'error', text: 'Terjadi kesalahan saat menghapus beberapa item: ' + err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelectAllHistory = (e) => {
+    if (e.target.checked) {
+      setSelectedPurchases(purchases.map(p => p.id));
+    } else {
+      setSelectedPurchases([]);
+    }
+  };
+
+  const handleSelectHistory = (id) => {
+    setSelectedPurchases(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
   };
 
   const handleEditHistory = async (p) => {
@@ -591,9 +627,24 @@ export default function Purchasing() {
               </div>
             </div>
             <div className="table-container" style={{ opacity: historyLoading ? 0.5 : 1, transition: 'opacity 0.15s' }}>
-              <table className="custom-table">
+              {selectedPurchases.length > 0 && (
+                <div style={{ padding: '8px 12px', background: 'var(--danger)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: 'var(--radius-md) var(--radius-md) 0 0' }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{selectedPurchases.length} item terpilih</span>
+                  <button className="btn" style={{ background: 'rgba(255,255,255,0.2)', color: 'white', padding: '4px 12px', fontSize: '0.8rem', border: '1px solid rgba(255,255,255,0.3)' }} onClick={handleBulkDeleteHistory} disabled={loading}>
+                    <Trash2 size={14} style={{ marginRight: '6px' }}/> Hapus Terpilih
+                  </button>
+                </div>
+              )}
+              <table className="custom-table" style={selectedPurchases.length > 0 ? { borderTopLeftRadius: 0, borderTopRightRadius: 0 } : {}}>
                 <thead>
                   <tr>
+                    <th style={{ width: '40px', textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={purchases.length > 0 && selectedPurchases.length === purchases.length}
+                        onChange={handleSelectAllHistory}
+                      />
+                    </th>
                     <th>Tanggal Input</th>
                     <th>Nama Bahan Baku</th>
                     <th>Supplier</th>
@@ -604,7 +655,14 @@ export default function Purchasing() {
                 </thead>
                 <tbody>
                   {purchases.map(p => (
-                    <tr key={p.id}>
+                    <tr key={p.id} style={{ background: selectedPurchases.includes(p.id) ? 'var(--bg-tertiary)' : 'transparent' }}>
+                      <td style={{ textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedPurchases.includes(p.id)}
+                          onChange={() => handleSelectHistory(p.id)}
+                        />
+                      </td>
                       <td>{p.date}</td>
                       <td style={{ fontWeight: 600 }}>{p.materials?.name}</td>
                       <td style={{ fontSize: '0.85rem' }}>{p.suppliers?.name || '-'}</td>
@@ -626,12 +684,12 @@ export default function Purchasing() {
                       </td>
                     </tr>
                   ))}
-                  {purchases.length === 0 && !historyLoading && <tr><td colSpan="6" style={{ textAlign: 'center' }}>{search ? 'Tidak ada hasil untuk pencarian ini.' : 'Belum ada data pembelian harian.'}</td></tr>}
+                  {purchases.length === 0 && !historyLoading && <tr><td colSpan="7" style={{ textAlign: 'center' }}>{search ? 'Tidak ada hasil untuk pencarian ini.' : 'Belum ada data pembelian harian.'}</td></tr>}
                 </tbody>
                 {purchases.length > 0 && (
                   <tfoot>
                     <tr style={{ background: 'var(--bg-tertiary)' }}>
-                      <td colSpan="4" style={{ textAlign: 'right', fontWeight: 700 }}>Total Nominal Keseluruhan:</td>
+                      <td colSpan="5" style={{ textAlign: 'right', fontWeight: 700 }}>Total Nominal Keseluruhan:</td>
                       <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--text-primary)', fontSize: '1.05rem' }}>
                         Rp {totalNominal.toLocaleString('id-ID')}
                       </td>
