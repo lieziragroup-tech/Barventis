@@ -62,18 +62,28 @@ export default function Purchasing() {
 
   // Debounce effects
   useEffect(() => {
+    let active = true;
     const timer = setTimeout(() => {
-      setDebouncedQuery(searchQuery);
+      if (active) setDebouncedQuery(searchQuery);
     }, 250); // 250ms debounce
-    return () => clearTimeout(timer);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, [searchQuery]);
 
   useEffect(() => {
+    let active = true;
     const timer = setTimeout(() => {
-      setSearch(historySearchInput);
-      setPage(1);
+      if (active) {
+        setSearch(historySearchInput);
+        setPage(1);
+      }
     }, 500); // 500ms debounce for API call
-    return () => clearTimeout(timer);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, [historySearchInput]);
 
   // Bulk Import
@@ -212,11 +222,11 @@ export default function Purchasing() {
     }
   };
 
-  const handleDeleteHistory = async (txId, itemName) => {
+  const handleDeleteHistory = async (purchaseId, itemName) => {
     if (!window.confirm(`Hapus dan batalkan data pembelian harian "${itemName}"? Stok akan ditarik kembali secara otomatis.`)) return;
     setLoading(true);
     try {
-      await api.deleteTransactionAndReverseStock(txId);
+      await api.deletePurchaseEntry(purchaseId);
       setNotification({ type: 'success', text: `Pembelian "${itemName}" berhasil dibatalkan.` });
       fetchHistory(page, search);
       fetchMasterData(); // Refresh current stock levels globally
@@ -232,17 +242,26 @@ export default function Purchasing() {
     if (!window.confirm(`Hapus dan batalkan ${selectedPurchases.length} data pembelian harian terpilih? Stok akan ditarik kembali secara otomatis.`)) return;
 
     setLoading(true);
+    let successCount = 0;
     try {
       // Menjalankan semua penghapusan secara berurutan agar aman di Supabase (menghindari deadlock)
-      for (const txId of selectedPurchases) {
-        await api.deleteTransactionAndReverseStock(txId);
+      for (const purchaseId of selectedPurchases) {
+        // Find the transaction record associated with this purchase entry
+        // The api.deleteTransactionAndReverseStock function expects a transaction ID, not a purchase entry ID
+        // But in Purchasing.jsx, `selectedPurchases` contains `purchase_entries.id`.
+        // We need to fetch the transaction ID first or create a dedicated API method.
+        // Easiest is to just call a new method in api to delete the purchase entry itself.
+        await api.deletePurchaseEntry(purchaseId);
+        successCount++;
       }
-      setNotification({ type: 'success', text: `${selectedPurchases.length} data pembelian berhasil dibatalkan.` });
+      setNotification({ type: 'success', text: `${successCount} data pembelian berhasil dibatalkan.` });
       setSelectedPurchases([]);
       fetchHistory(page, search);
       fetchMasterData();
     } catch (err) {
-      setNotification({ type: 'error', text: 'Terjadi kesalahan saat menghapus beberapa item: ' + err.message });
+      setNotification({ type: 'error', text: `Berhasil menghapus ${successCount} item. Terjadi kesalahan pada item berikutnya: ${err.message}` });
+      fetchHistory(page, search); // refresh whatever succeeded
+      fetchMasterData();
     } finally {
       setLoading(false);
     }
@@ -922,8 +941,8 @@ export default function Purchasing() {
             if (!d) return null;
             if (!isNaN(d) && typeof d === 'number')
               return new Date(Math.round((d - 25569) * 86400 * 1000)).toISOString().split('T')[0];
-            if (typeof d === 'string' && d.includes('/') || typeof d === 'string' && d.includes('-')) {
-              const parts = d.split(/[/\-]/);
+            if (typeof d === 'string' && (d.includes('/') || d.includes('-'))) {
+              const parts = d.split(/[/-]/);
               if (parts.length === 3) {
                 if (parts[2].length === 4) // DD/MM/YYYY
                   return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).toISOString().split('T')[0];

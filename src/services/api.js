@@ -2376,7 +2376,7 @@ export const api = {
       notes: purchaseData.notes || null
     };
 
-    const { error: pErr } = await supabase.from('purchase_entries').insert(payload);
+    const { data: insertedPurchase, error: pErr } = await supabase.from('purchase_entries').insert(payload).select().single();
     if (pErr) throw new Error("Gagal menyimpan pembelian: " + pErr.message);
 
     const { error: rpcErr } = await supabase.rpc('deduct_stock_atomic', {
@@ -2393,12 +2393,52 @@ export const api = {
       location: 'CENTRAL',
       qty: payload.qty,
       amount: payload.qty * payload.unit_price,
-      notes: 'Daily Purchase Entry',
+      notes: `Daily Purchase Entry [ID:${insertedPurchase.id}]`,
       created_by: userId
     });
     if (txErr) throw new Error("Gagal mencatat transaksi: " + txErr.message);
 
     await logAudit('CREATE_PURCHASE_ENTRY', `Mencatat pembelian ${payload.qty} ${payload.unit} (Rp ${(payload.qty * payload.unit_price).toLocaleString('id-ID')}).`);
+  },
+
+  deletePurchaseEntry: async (purchaseId) => {
+    const tenantId = await getActiveTenantId();
+
+    const { data: purchase, error: pErr } = await supabase
+      .from('purchase_entries')
+      .select('id, qty, material_id, unit, date')
+      .eq('id', purchaseId)
+      .eq('tenant_id', tenantId)
+      .single();
+
+    if (pErr || !purchase) throw new Error("Pembelian tidak ditemukan.");
+
+    // Tarik kembali stock (add qty to restore)
+    const { error: rpcErr } = await supabase.rpc('deduct_stock_atomic', {
+      p_material_id: purchase.material_id,
+      p_deduct_qty: parseFloat(purchase.qty) // positive qty = kurangi stok dari central
+    });
+    if (rpcErr) throw new Error("Gagal membalikkan stok: " + rpcErr.message);
+
+    // Hapus transaction log yang terkait
+    await supabase
+      .from('transactions')
+      .delete()
+      .eq('tenant_id', tenantId)
+      .eq('type', 'PURCHASE_IN')
+      .eq('material_id', purchase.material_id)
+      .eq('date', purchase.date)
+      .eq('qty', purchase.qty)
+      .ilike('notes', `%[ID:${purchase.id}]%`);
+
+    // Hapus entry
+    const { error: delErr } = await supabase
+      .from('purchase_entries')
+      .delete()
+      .eq('id', purchaseId)
+      .eq('tenant_id', tenantId);
+
+    if (delErr) throw new Error("Gagal menghapus entri pembelian: " + delErr.message);
   },
 
   // Lightweight aggregate stats for the Audit Logs KPI cards — uses
@@ -3607,12 +3647,9 @@ export const api = {
     }
 
     // Calculate new amount based on type
-    let newAmount = 0;
-    if (tx.type === 'PURCHASE_IN') {
-        newAmount = newQty * payload.unit_price;
-    } else {
-        newAmount = (tx.amount / oldQty) * newQty;
-    }
+    const newAmount = tx.type === 'PURCHASE_IN'
+        ? newQty * (payload.unit_price || 0)
+        : (oldQty !== 0 ? (tx.amount / oldQty) * newQty : 0);
 
     // Update transactions table
     const { error: updateErr } = await supabase

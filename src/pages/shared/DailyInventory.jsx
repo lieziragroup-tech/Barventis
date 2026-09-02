@@ -63,7 +63,9 @@ export default function DailyInventory() {
 
   // Debounce
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(searchQuery), 250);
+    const t = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 250);
     return () => clearTimeout(t);
   }, [searchQuery]);
 
@@ -78,7 +80,7 @@ export default function DailyInventory() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const fetchMasters = async () => {
+  const fetchMasters = useCallback(async () => {
     try {
       const tenantId = await api.getActiveTenantId();
       const [{ data: mats }, ucMap] = await Promise.all([
@@ -90,7 +92,11 @@ export default function DailyInventory() {
     } catch (err) {
       setNotification({ type: 'error', text: err.message });
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchMasters();
+  }, [fetchMasters]);
 
   const fetchHistory = useCallback(async (page = 1, periodFilter = period, searchQuery = search) => {
     setHistoryLoading(true);
@@ -137,18 +143,27 @@ export default function DailyInventory() {
 
   // Search debounce for history table
   useEffect(() => {
+    let isSubscribed = true;
     const t = setTimeout(() => {
-      fetchHistory(1, period, search);
+      if (isSubscribed) {
+         fetchHistory(1, period, search);
+      }
     }, 500);
-    return () => clearTimeout(t);
+    return () => {
+      isSubscribed = false;
+      clearTimeout(t);
+    };
   }, [search, period, fetchHistory]);
 
   useEffect(() => {
-    fetchMasters();
-  }, []);
-
-  useEffect(() => {
-    fetchHistory(historyPage, period, search);
+    let isSubscribed = true;
+    const loadHistory = async () => {
+        if (isSubscribed) {
+           await fetchHistory(historyPage, period, search);
+        }
+    };
+    loadHistory();
+    return () => { isSubscribed = false; };
   }, [historyPage, period, search, fetchHistory]);
 
   const filteredSearch = useMemo(() => {

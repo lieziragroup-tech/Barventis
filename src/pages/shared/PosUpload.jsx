@@ -113,6 +113,47 @@ export default function PosUpload() {
   const [showMappingModal, setShowMappingModal] = useState(false);
   const [mappingMenuName, setMappingMenuName] = useState('');
   const [selectedRecipeName, setSelectedRecipeName] = useState('');
+  const [recipeSearchTerm, setRecipeSearchTerm] = useState('');
+  const [debouncedRecipeSearch, setDebouncedRecipeSearch] = useState('');
+  const [isRecipeDropdownOpen, setIsRecipeDropdownOpen] = useState(false);
+  const [isCreatingInline, setIsCreatingInline] = useState(false);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => setDebouncedRecipeSearch(recipeSearchTerm), 300);
+    return () => clearTimeout(timer);
+  }, [recipeSearchTerm]);
+
+  const filteredRecipes = React.useMemo(() => {
+    if (!debouncedRecipeSearch) return recipes;
+    const lowerSearch = debouncedRecipeSearch.toLowerCase();
+    return (recipes || []).filter(r =>
+      r.menu_name.toLowerCase().includes(lowerSearch)
+    );
+  }, [recipes, debouncedRecipeSearch]);
+
+  const handleCreateNewRecipeInline = async (newMenuName) => {
+    try {
+      setIsCreatingInline(true);
+      const rowToImport = {
+        menu_name: newMenuName,
+        pos_code: '',
+        category: categoryFilter === 'BOTH' ? 'NON-KOPI' : categoryFilter,
+        selling_price: 0
+      };
+      await api.bulkImportRecipes([rowToImport]);
+      if (fetchAllData) await fetchAllData();
+
+      setSelectedRecipeName(newMenuName);
+      setRecipeSearchTerm(newMenuName);
+      setIsRecipeDropdownOpen(false);
+      setUploadStatus({ type: 'success', message: `Berhasil membuat menu baru: ${newMenuName}` });
+    } catch (err) {
+      console.error("Failed to create inline recipe:", err);
+      alert("Gagal membuat resep: " + err.message);
+    } finally {
+      setIsCreatingInline(false);
+    }
+  };
   const [uploadStatus, setUploadStatus] = useState(null); // 'success', 'warning', 'error'
   const [duplicateInfo, setDuplicateInfo] = useState(null);
   const fileInputRef = useRef(null);
@@ -182,6 +223,8 @@ export default function PosUpload() {
   const openMappingModal = (name) => {
     setMappingMenuName(name);
     setSelectedRecipeName(recipes?.[0]?.menu_name || '');
+    setRecipeSearchTerm('');
+    setIsRecipeDropdownOpen(false);
     setShowMappingModal(true);
   };
 
@@ -878,17 +921,62 @@ export default function PosUpload() {
               </div>
 
               {/* Autocomplete selection */}
-              <div className="form-group">
-                <label className="form-label">Select Destination COGS Recipe</label>
-                <select 
-                  className="form-control" 
-                  value={selectedRecipeName}
-                  onChange={e => setSelectedRecipeName(e.target.value)}
-                >
-                  {recipes.map(r => (
-                    <option key={r.menu_name} value={r.menu_name}>{r.menu_name} (HPP: {formatIDR(r.basic_cost)})</option>
-                  ))}
-                </select>
+              <div className="form-group" style={{ position: 'relative' }}>
+                <label className="form-label">Search Destination COGS Recipe</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Cari menu..."
+                  value={recipeSearchTerm}
+                  onChange={e => {
+                    setRecipeSearchTerm(e.target.value);
+                    setIsRecipeDropdownOpen(true);
+                  }}
+                  onFocus={() => setIsRecipeDropdownOpen(true)}
+                  onBlur={() => setTimeout(() => setIsRecipeDropdownOpen(false), 200)}
+                />
+                {isRecipeDropdownOpen && (
+                  <div
+                    style={{
+                      position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
+                      background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-md)', maxHeight: '200px', overflowY: 'auto',
+                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                    }}
+                  >
+                    {filteredRecipes.map(r => (
+                      <div
+                        key={r.menu_name}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setSelectedRecipeName(r.menu_name);
+                          setRecipeSearchTerm(r.menu_name);
+                          setIsRecipeDropdownOpen(false);
+                        }}
+                        style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border-subtle)', background: selectedRecipeName === r.menu_name ? 'var(--bg-tertiary)' : 'transparent', color: 'var(--text-primary)' }}
+                      >
+                        {r.menu_name} (HPP: {formatIDR(r.basic_cost)})
+                      </div>
+                    ))}
+                    {filteredRecipes.length === 0 && (
+                      <div style={{ padding: '8px 12px', color: 'var(--text-muted)' }}>Tidak ditemukan.</div>
+                    )}
+                    <div
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        handleCreateNewRecipeInline(recipeSearchTerm || mappingMenuName);
+                      }}
+                      style={{ padding: '8px 12px', cursor: 'pointer', color: 'var(--accent)', fontWeight: 'bold', borderTop: '1px solid var(--border)' }}
+                    >
+                      + Tambah menu baru "{recipeSearchTerm || mappingMenuName}"
+                    </div>
+                  </div>
+                )}
+                {selectedRecipeName && recipeSearchTerm === selectedRecipeName && (
+                   <div style={{marginTop: '8px', fontSize: '0.85rem', color: 'var(--success)'}}>
+                     ✓ Terpilih: {selectedRecipeName}
+                   </div>
+                )}
               </div>
 
               <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '12px' }}>

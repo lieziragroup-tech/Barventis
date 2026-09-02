@@ -11,7 +11,7 @@ const getXLSX = async () => { if (!_XLSX) _XLSX = await import('xlsx'); return _
 import { useData } from '../../contexts/DataContext';
 
 export default function CostControl() {
-  const { stock, recipes } = useData();
+  const { recipes } = useData();
   const [period, setPeriod] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -62,24 +62,24 @@ export default function CostControl() {
     return true;
   }, [menuCategoryMap, recipes]);
 
-  // Fetch dynamic report from backend API
-  const fetchReport = useCallback(async () => {
-    setLoading(true);
-    setErrorMsg(null);
-    try {
-      const data = await api.getCostControlReport(period);
-      setReportData(data);
-    } catch (e) {
-      console.error('Failed to load cost control report:', e);
-      setErrorMsg(e.message || 'Gagal memuat laporan Cost Control.');
-    } finally {
-      setLoading(false);
-    }
-  }, [period]);
-
   useEffect(() => {
-    fetchReport();
-  }, [fetchReport]);
+    let active = true;
+    const loadReport = async () => {
+      setLoading(true);
+      setErrorMsg(null);
+      try {
+        const data = await api.getCostControlReport(period);
+        if (active) setReportData(data);
+      } catch (e) {
+        console.error('Failed to load cost control report:', e);
+        if (active) setErrorMsg(e.message || 'Gagal memuat laporan Cost Control.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    loadReport();
+    return () => { active = false; };
+  }, [period]);
 
   // Re-calculate all metrics dynamically on the frontend to support Tab Filtering
   const { openingStock, totalPembelian, closingStock, pemakaianBulan, totalSalesBeverage, beverageCostPct, wasteValuation, statusLabel, filteredOpnameItems } = useMemo(() => {
@@ -93,7 +93,7 @@ export default function CostControl() {
     const wasteTypes = ['WASTE', 'BREAKAGE', 'EXPIRED', 'COMP'];
 
     // 1. Accumulate Transactions
-    (reportData.transactions || []).forEach(tx => {
+    (reportData?.transactions || []).forEach(tx => {
       const dateStr = tx.date || '';
       if (!dateStr.startsWith(period) || !checkTabMatch(tx, activeTab)) return;
       const amt = Math.abs(parseFloat(tx.amount || 0));
@@ -112,7 +112,7 @@ export default function CostControl() {
     // 2. Accumulate Closing Stock from detailed_opname_items
     let closing = 0;
     const filteredOpnames = [];
-    (reportData.detailed_opname_items || []).forEach(item => {
+    (reportData?.detailed_opname_items || []).forEach(item => {
       const isBeer = (item.category || '').toUpperCase().includes('BEER');
       let include = true;
       if (activeTab === 'BEER') include = isBeer;
@@ -445,7 +445,7 @@ export default function CostControl() {
           <AlertTriangle size={36} style={{ color: 'var(--danger)', margin: '0 auto 12px' }} />
           <h4 style={{ color: 'var(--text-primary)', fontWeight: 700, marginBottom: '8px' }}>Gagal Memuat Laporan</h4>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '16px' }}>{errorMsg}</p>
-          <button className="btn btn-secondary" onClick={fetchReport}>Coba Lagi</button>
+          <button className="btn btn-secondary" onClick={() => window.location.reload()}>Coba Lagi</button>
         </div>
       ) : (
         <>

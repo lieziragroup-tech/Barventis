@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef } from 'react';
 import {
   UploadCloud, FileSpreadsheet, Download, CheckCircle,
   AlertTriangle, X, ChevronRight, Loader, Sparkles, PlusCircle
