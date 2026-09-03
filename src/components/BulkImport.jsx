@@ -8,6 +8,47 @@ import { useNavigate } from 'react-router-dom';
 let _XLSX;
 const getXLSX = async () => { if (!_XLSX) _XLSX = await import('xlsx'); return _XLSX; };
 
+// Menormalkan nilai tanggal dari Excel ke format YYYY-MM-DD, apapun bentuk
+// mentahnya dari SheetJS:
+// 1. Angka serial Excel (cell benar-benar berformat Date di Excel)
+// 2. Objek Date (jaga-jaga kalau suatu saat cellDates diaktifkan)
+// 3. String dengan berbagai format umum (YYYY-MM-DD, DD/MM/YYYY, dst.)
+// Sebelumnya kolom bertipe 'string' langsung di-.toString() tanpa cek ini,
+// jadi kalau raw value-nya angka serial Excel, hasilnya string angka mentah
+// ("46113") yang gagal di-parse ulang jadi tanggal valid di layer berikutnya.
+const normalizeDateValue = (raw) => {
+  if (raw === undefined || raw === null || raw === '') return '';
+
+  if (typeof raw === 'number' && !isNaN(raw)) {
+    const d = new Date(Math.round((raw - 25569) * 86400 * 1000));
+    return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+  }
+
+  if (raw instanceof Date) {
+    return isNaN(raw.getTime()) ? '' : raw.toISOString().split('T')[0];
+  }
+
+  const s = raw.toString().trim();
+  if (!s) return '';
+
+  if (s.includes('/') || s.includes('-')) {
+    const parts = s.split(/[/-]/);
+    if (parts.length === 3) {
+      if (parts[2].length === 4) {
+        // DD/MM/YYYY atau DD-MM-YYYY (bagian terakhir 4 digit = tahun)
+        const d = new Date(`${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`);
+        return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+      }
+      // YYYY-MM-DD atau YYYY/MM/DD (bagian pertama 4 digit = tahun)
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+    }
+  }
+
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+};
+
 /**
  * BulkImport — Reusable Excel bulk import modal
  * 
@@ -189,6 +230,8 @@ export default function BulkImport({
             if (col.type === 'number') {
               const num = parseFloat(rawVal);
               obj[col.key] = isNaN(num) ? 0 : num;
+            } else if (col.type === 'date') {
+              obj[col.key] = normalizeDateValue(rawVal);
             } else {
               obj[col.key] = rawVal ? rawVal.toString().trim() : '';
             }

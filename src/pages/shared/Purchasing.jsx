@@ -243,24 +243,32 @@ export default function Purchasing() {
 
     setLoading(true);
     let successCount = 0;
+    const failedItems = [];
     try {
-      // Menjalankan semua penghapusan secara berurutan agar aman di Supabase (menghindari deadlock)
+      // Menjalankan semua penghapusan secara berurutan agar aman di Supabase (menghindari deadlock).
+      // PENTING: setiap item punya try/catch SENDIRI — kalau 1 item gagal (mis. stok
+      // tidak cukup untuk di-reverse), item lain yang terpilih tetap lanjut dihapus,
+      // tidak ikut batal seperti sebelumnya.
       for (const purchaseId of selectedPurchases) {
-        // Find the transaction record associated with this purchase entry
-        // The api.deleteTransactionAndReverseStock function expects a transaction ID, not a purchase entry ID
-        // But in Purchasing.jsx, `selectedPurchases` contains `purchase_entries.id`.
-        // We need to fetch the transaction ID first or create a dedicated API method.
-        // Easiest is to just call a new method in api to delete the purchase entry itself.
-        await api.deletePurchaseEntry(purchaseId);
-        successCount++;
+        try {
+          await api.deletePurchaseEntry(purchaseId);
+          successCount++;
+        } catch (err) {
+          failedItems.push({ id: purchaseId, error: err.message });
+        }
       }
-      setNotification({ type: 'success', text: `${successCount} data pembelian berhasil dibatalkan.` });
-      setSelectedPurchases([]);
+
+      if (failedItems.length === 0) {
+        setNotification({ type: 'success', text: `${successCount} data pembelian berhasil dibatalkan.` });
+        setSelectedPurchases([]);
+      } else {
+        setNotification({
+          type: 'error',
+          text: `${successCount} berhasil dihapus, ${failedItems.length} gagal (contoh: ${failedItems[0].error}). Item yang gagal tetap tercentang agar bisa dicoba lagi.`
+        });
+        setSelectedPurchases(failedItems.map(f => f.id));
+      }
       fetchHistory(page, search);
-      fetchMasterData();
-    } catch (err) {
-      setNotification({ type: 'error', text: `Berhasil menghapus ${successCount} item. Terjadi kesalahan pada item berikutnya: ${err.message}` });
-      fetchHistory(page, search); // refresh whatever succeeded
       fetchMasterData();
     } finally {
       setLoading(false);
@@ -888,7 +896,7 @@ export default function Purchasing() {
           return created;
         }}
         expectedColumns={[
-          { key: 'tanggal', label: 'TANGGAL', required: false, type: 'string', sample: '2026-08-30', description: 'Tanggal pembelian' },
+          { key: 'tanggal', label: 'TANGGAL', required: false, type: 'date', sample: '2026-08-30', description: 'Tanggal pembelian' },
           { key: 'material_name', label: 'NAMA ITEM', labels: ['NAMA ITEM', 'NAMA BAHAN'], required: true, type: 'string', sample: 'Kopi Arabica', description: 'Nama bahan baku (harus persis sama)' },
           { key: 'qty', label: 'QTY', required: true, type: 'number', sample: 5, description: 'Jumlah yang dibeli' },
           { key: 'unit', label: 'Unit', required: false, type: 'string', sample: 'kg', description: 'Satuan barang' },
