@@ -153,7 +153,7 @@ export default function CostControl() {
       statusLabel: stat,
       filteredOpnameItems: filteredOpnames
     };
-  }, [reportData, activeTab, checkTabMatch]);
+  }, [reportData, activeTab, checkTabMatch, period]);
 
   // The daily breakdown must also count OUT transactions with POS Sync notes as COGS, and respect Tabs.
   const dailyColumns = useMemo(() => {
@@ -559,7 +559,7 @@ export default function CostControl() {
                           <td>{row.date}</td>
                           <td style={{ textAlign: 'right', fontWeight: 500 }}>{formatIDR(row.purchase)}</td>
                           <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatIDR(row.sales)}</td>
-                          <td style={{ textAlign: 'right', fontWeight: 700, color: ratio > 50 ? 'var(--warning)' : 'white' }}>{ratio.toFixed(1)}%</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: ratio > 50 ? 'var(--warning)' : 'var(--text-primary)' }}>{ratio.toFixed(1)}%</td>
                           <td>{ratio > 50 ? <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>High</span> : <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>OK</span>}</td>
                         </tr>
                       );
