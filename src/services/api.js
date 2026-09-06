@@ -1,5 +1,6 @@
 // UMATIS Serverless API Service Client for Supabase Backend Integration
 import { supabase } from '../lib/supabase';
+import { materialsRepo } from '../data/materialsRepo';
 import { parsePackSize, calculateIngredientCost, getUnitPrice, computeRecipeCosts, convertQtyToStockUnit, DEFAULT_ROUNDING_DIRECTION, DEFAULT_ROUNDING_INCREMENT, DEFAULT_PRICE_ADJUSTMENT } from './costUtils';
 // NOTE: DEFAULT_FIX_COST_PCT intentionally NOT imported here — per PRD §4.2
 // Opsi B, a new recipe's fix_cost_pct falls back to the tenant's existing
@@ -734,16 +735,7 @@ export const api = {
   getMaterials: async () => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return []; // H-2: Super Admin / no-tenant — avoid malformed .eq('tenant_id', null) query
-    const { data, error } = await supabase
-      .from('materials')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .eq('is_active', true)
-      .order('category')
-      .order('name');
-
-    if (error) throw new Error("Gagal memuat bahan baku: " + error.message);
-    return data;
+    return await materialsRepo.getAll(tenantId);
   },
 
   // Paginated + searchable version for the Stock Ledger table. The full
@@ -752,52 +744,12 @@ export const api = {
   getMaterialsPaged: async ({ page = 1, pageSize = 20, search = '' } = {}) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { data: [], totalCount: 0 };
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-
-    let query = supabase
-      .from('materials')
-      .select('*', { count: 'exact' })
-      .eq('tenant_id', tenantId)
-      .eq('is_active', true);
-
-    if (search && search.trim()) {
-      const s = sanitizePostgrest(search);
-      query = query.or(`name.ilike.%${s}%,category.ilike.%${s}%,supplier.ilike.%${s}%`);
-    }
-
-    const { data, error, count } = await query
-      .order('category')
-      .order('name')
-      .range(from, to);
-
-    if (error) throw new Error("Gagal memuat bahan baku: " + error.message);
-    return { data, totalCount: count || 0 };
+    return await materialsRepo.getPaged(tenantId, { page, pageSize, search: sanitizePostgrest(search) });
   },
   
   createMaterial: async (materialData) => {
     const tenantId = await getActiveTenantId();
-    const { data, error } = await supabase
-      .from('materials')
-      .insert({
-        tenant_id: tenantId,
-        name: materialData.name,
-        category: materialData.category,
-        supplier: materialData.supplier,
-        unit: materialData.unit,
-        full_pack: materialData.full_pack,
-        sku: materialData.sku || null,
-        price: parseFloat(materialData.price || 0),
-        new_price: parseFloat(materialData.price || 0),
-        qty_resto: 0.00,
-        qty_central: 0.00,
-        min_stock: parseFloat(materialData.min_stock || 15.00),
-        is_active: true
-      })
-      .select('*')
-      .single();
-
-    if (error) throw new Error("Gagal menambah bahan: " + error.message);
+    const data = await materialsRepo.create(tenantId, materialData);
     await logAudit('CREATE_MATERIAL', `Menambahkan bahan baku baru: "${data.name}" ke kategori "${data.category}".`);
     return data;
   },
@@ -806,25 +758,7 @@ export const api = {
     const tenantId = await getActiveTenantId();
     const { data: oldMaterial } = await supabase.from('materials').select('*').eq('id', id).eq('tenant_id', tenantId).single();
 
-    const { data, error } = await supabase
-      .from('materials')
-      .update({
-        name: materialData.name,
-        category: materialData.category,
-        supplier: materialData.supplier,
-        unit: materialData.unit,
-        full_pack: materialData.full_pack,
-        sku: materialData.sku !== undefined ? (materialData.sku || null) : oldMaterial?.sku,
-        price: parseFloat(materialData.price || 0),
-        new_price: parseFloat(materialData.new_price ?? materialData.price ?? 0),
-        min_stock: parseFloat(materialData.min_stock || 15.00)
-      })
-      .eq('id', id)
-      .eq('tenant_id', tenantId)
-      .select('*')
-      .single();
-
-    if (error) throw new Error("Gagal memperbarui bahan: " + error.message);
+    const data = await materialsRepo.update(tenantId, id, materialData, oldMaterial);
 
     if (oldMaterial.price !== data.price || oldMaterial.new_price !== data.new_price) {
       const formattedOld = new Intl.NumberFormat('id-ID').format(oldMaterial.new_price || oldMaterial.price);
@@ -857,15 +791,7 @@ export const api = {
       }
     }
 
-    const { data, error } = await supabase
-      .from('materials')
-      .update({ is_active: false })
-      .eq('id', id)
-      .eq('tenant_id', tenantId)
-      .select('*')
-      .single();
-
-    if (error) throw new Error("Gagal menonaktifkan bahan: " + error.message);
+    const data = await materialsRepo.delete(tenantId, id);
     await logAudit('DELETE_MATERIAL', `Menonaktifkan bahan mentah: "${data.name}" dari database inventory.`);
     return data;
   },
@@ -2600,7 +2526,7 @@ export const api = {
 
   createBackup: async () => {
     const tenantId = await getActiveTenantId();
-    
+
     // 1. Fetch entire tenant tables
     const { data: materials } = await supabase.from('materials').select('*').eq('tenant_id', tenantId);
     const { data: recipes } = await supabase.from('recipes').select('*').eq('tenant_id', tenantId);
@@ -2630,6 +2556,14 @@ export const api = {
     const sizeBytes = dataJson.length;
     const sizeFormatted = (sizeBytes / 1024).toFixed(2) + ' KB';
     const filename = `umatis_backup_${Date.now()}.zip`; // Mocked zip extension for client side verification compatibility
+    const storageFilename = `backup_${tenantId}_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    const blob = new Blob([dataJson], { type: 'application/json' });
+
+    const { data: storageData, error: storageErr } = await supabase.storage
+      .from('tenant-backups')
+      .upload(`${tenantId}/${storageFilename}`, blob);
+
+    if (storageErr) throw new Error("Gagal mengunggah file cadangan: " + storageErr.message);
 
     const { data: backup, error } = await supabase
       .from('backups')
@@ -2638,7 +2572,7 @@ export const api = {
         filename,
         size_bytes: sizeBytes,
         size_formatted: sizeFormatted,
-        data_json: dataJson
+        storage_path: storageData.path
       })
       .select('*')
       .single();
@@ -2646,7 +2580,7 @@ export const api = {
     if (error) throw new Error("Gagal membuat file cadangan: " + error.message);
     await logAudit('CREATE_BACKUP', `Berhasil membuat arsip database cadangan: "${filename}".`);
 
-    return { backup };
+    return { backup, dataJson };
   },
 
   deleteBackup: async (id) => {
@@ -2667,13 +2601,21 @@ export const api = {
     if (typeof formDataOrFilename === 'string') {
       const { data, error } = await supabase
         .from('backups')
-        .select('data_json, filename')
+        .select('storage_path, filename')
         .eq('filename', formDataOrFilename)
         .eq('tenant_id', tenantId)
         .single();
 
       if (error || !data) throw new Error("Gagal memuat arsip pemulihan: " + error.message);
-      backupPayload = JSON.parse(data.data_json);
+
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from('tenant-backups')
+        .download(data.storage_path);
+
+      if (downloadError) throw new Error("Gagal mengunduh arsip dari storage: " + downloadError.message);
+
+      const text = await fileData.text();
+      backupPayload = JSON.parse(text);
       await logAudit('RESTORE_BACKUP', `Melakukan restorasi database dari arsip internal: "${data.filename}".`);
     } else {
       const file = formDataOrFilename.get('backup_file');
@@ -2701,15 +2643,23 @@ export const api = {
     // 1. Fetch file record from Supabase backups table
     const { data, error } = await supabase
       .from('backups')
-      .select('data_json')
+      .select('storage_path')
       .eq('filename', filename)
       .eq('tenant_id', tenantId)
       .single();
 
     if (error || !data) throw new Error("Gagal mengunduh backup: " + error.message);
 
+    const { data: fileData, error: downloadError } = await supabase.storage
+      .from('tenant-backups')
+      .download(data.storage_path);
+
+    if (downloadError) throw new Error("Gagal mengunduh file dari storage: " + downloadError.message);
+
+    const text = await fileData.text();
+
     // 2. Trigger browser download of raw text representation (mocking a zip file extension)
-    const blob = new Blob([data.data_json], { type: 'application/octet-stream' });
+    const blob = new Blob([text], { type: 'application/octet-stream' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

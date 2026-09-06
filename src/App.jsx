@@ -92,7 +92,8 @@ export default function App() {
   return (
     <LanguageProvider>
     <React.Suspense fallback={<LoadingSpinner />}>
-      <Routes>
+      <ErrorBoundary>
+        <Routes>
         <Route path="/login" element={
           <AuthRoute>
             <AuthScreen />
@@ -184,6 +185,7 @@ export default function App() {
 
         <Route path="*" element={<RootRedirect />} />
       </Routes>
+      </ErrorBoundary>
     </React.Suspense>
     </LanguageProvider>
   );

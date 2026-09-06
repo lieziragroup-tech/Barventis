@@ -2,6 +2,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Plus, Edit2, Search, Trash2, Calendar, ShoppingCart, User, UploadCloud } from 'lucide-react';
 import { api } from '../../services/api';
+import ExportButton from '../../components/shared/ExportButton';
+import { exportWithAudit } from '../../services/export/exportAudit';
 import Pagination from '../../components/shared/Pagination';
 import BulkImport from '../../components/BulkImport';
 import { useAuth } from '../../contexts/AuthContext';
@@ -364,7 +366,66 @@ export default function Purchasing() {
     }
   };
 
-  const filteredSearch = useMemo(() => {
+  const handleExportExcel = async () => {
+    try {
+      const rows = purchases.map((p, idx) => ({
+        'NO': idx + 1,
+        'TANGGAL': p.date,
+        'NAMA BAHAN BAKU': p.materials?.name || '-',
+        'SUPPLIER': p.suppliers?.name || '-',
+        'QTY': p.qty,
+        'UNIT': p.unit,
+        'HARGA SATUAN': p.unit_price,
+        'TOTAL': p.qty * p.unit_price
+      }));
+      await exportWithAudit({
+        format: 'excel',
+        filename: `Riwayat_Pembelian_${period || 'Semua'}`,
+        sheets: [{ name: 'Pembelian Harian', rows }],
+        actionName: 'Purchasing Export',
+        role: activeUser?.role || 'SuperAdmin'
+      });
+    } catch (err) {
+      console.error(err);
+      alert('Gagal mengekspor data pembelian');
+    }
+  };
+
+  const handleExportPDF = async () => {
+    try {
+      const columns = [
+        { key: 'no', label: '#' },
+        { key: 'tanggal', label: 'Tanggal' },
+        { key: 'bahan', label: 'Nama Bahan Baku' },
+        { key: 'supplier', label: 'Supplier' },
+        { key: 'qty', label: 'Qty' },
+        { key: 'total', label: 'Total' }
+      ];
+      const rows = purchases.map((p, idx) => ({
+        no: idx + 1,
+        tanggal: p.date,
+        bahan: p.materials?.name || '-',
+        supplier: p.suppliers?.name || '-',
+        qty: `${p.qty} ${p.unit}`,
+        total: `Rp ${(p.qty * p.unit_price).toLocaleString('id-ID')}`
+      }));
+      await exportWithAudit({
+        format: 'pdf',
+        filename: `Riwayat_Pembelian_${period || 'Semua'}`,
+        title: `Log Riwayat Pembelian Harian — Periode: ${period || 'Semua'}`,
+        tenantName: 'BARVENTIS - Sistem Manajemen Gudang',
+        columns,
+        rows,
+        actionName: 'Purchasing Export PDF',
+        role: activeUser?.role || 'SuperAdmin'
+      });
+    } catch (err) {
+      console.error(err);
+      alert('Gagal mengekspor PDF pembelian');
+    }
+  };
+
+    const filteredSearch = useMemo(() => {
     const q = debouncedQuery.trim().toLowerCase();
     if (q === '') return [];
     return materials.filter(m => m.name.toLowerCase().includes(q)).slice(0, 8);
@@ -632,6 +693,11 @@ export default function Purchasing() {
           <div className="glass-card purchasing-history-panel" style={{ padding: '24px' }}>
             <div className="paged-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
               <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Log Riwayat Pembelian</h3>
+              <ExportButton 
+                onExportExcel={handleExportExcel} 
+                onExportPDF={handleExportPDF}
+                currentRole={activeUser?.role || 'SuperAdmin'}
+              />
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Calendar size={16} style={{ color: 'var(--accent)' }} />

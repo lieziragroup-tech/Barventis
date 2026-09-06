@@ -1,14 +1,15 @@
 import { useState, useMemo, useEffect } from 'react';
 import {
-  Search, Plus, Edit, History, X, Download, Trash2,
+  Search, Plus, Edit, History, X, Trash2,
   Package, UploadCloud
 } from 'lucide-react';
 import BulkImport from '../../components/BulkImport';
 import Pagination from '../../components/shared/Pagination';
 
-let _XLSX;
-const getXLSX = async () => { if (!_XLSX) _XLSX = await import('xlsx'); return _XLSX; };
 import { useData } from '../../contexts/DataContext';
+import ExportButton from '../../components/shared/ExportButton';
+import { exportWithAudit } from '../../services/export/exportAudit';
+import { useAuth } from '../../contexts/AuthContext';
 import { formatIDR, parsePackSize, getPackUnitInfo, parseStructuredFullPack } from '../../services/costUtils';
 import { api } from '../../services/api';
 
@@ -71,6 +72,7 @@ function KonversiSatuanFields({ packUnit, fullPack, price, onChangeFullPack }) {
 }
 
 export default function StockLedger() {
+  const { profile } = useAuth();
   "use no memo";
   const { stock, handleAdjustStock, handleUpdateItem, handleAddItem, handleDeleteItem, refreshData } = useData();
   const onAdjustStock = handleAdjustStock;
@@ -238,28 +240,73 @@ export default function StockLedger() {
   };
 
   // Export to Excel
-  const handleExport = async () => {
-    const XLSX = await getXLSX();
-    let rowNum = 1;
-    const data = filteredStock.map(item => {
-      const rQty = item.qty_resto || 0;
-      const cQty = item.qty_central || 0;
-      const total = rQty + cQty;
-      return {
-        'NO': rowNum++,
-        'NAMA ITEM': item.name,
-        'KUANTITI': total,
-        'UNIT': item.unit,
-        'Full': item.full_pack || '',
-        'Price': item.price || 0,
-        'NEW Price': item.new_price || 0,
-        'SUPPLIER': item.supplier || '',
-      };
-    });
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Stock Report');
-    XLSX.writeFile(wb, `SO BARISTA_${new Date().toISOString().split('T')[0]}.xlsx`);
+  const handleExportExcel = async () => {
+    try {
+      let rowNum = 1;
+      const data = filteredStock.map(item => {
+        const rQty = item.qty_resto || 0;
+        const cQty = item.qty_central || 0;
+        const total = rQty + cQty;
+        return {
+          'NO': rowNum++,
+          'NAMA ITEM': item.name,
+          'KUANTITI': total,
+          'UNIT': item.unit,
+          'Full': item.full_pack || '',
+          'Price': item.price || 0,
+          'NEW Price': item.new_price || 0,
+          'SUPPLIER': item.supplier || '',
+        };
+      });
+      await exportWithAudit({
+        format: 'excel',
+        filename: `SO_BARISTA`,
+        sheets: [{ name: 'Stock Report', rows: data }],
+        actionName: 'Stock Ledger Export',
+        role: profile?.role || 'SuperAdmin'
+      });
+    } catch (err) {
+      console.error('Export failed', err);
+      alert('Gagal mengekspor data');
+    }
+  };
+  
+  const handleExportPDF = async () => {
+    try {
+      const columns = [
+        { key: 'no', label: 'NO' },
+        { key: 'name', label: 'NAMA ITEM' },
+        { key: 'qty', label: 'KUANTITI' },
+        { key: 'unit', label: 'UNIT' },
+        { key: 'price', label: 'HARGA' }
+      ];
+      let rowNum = 1;
+      const rows = filteredStock.map(item => {
+        const rQty = item.qty_resto || 0;
+        const cQty = item.qty_central || 0;
+        const total = rQty + cQty;
+        return {
+          no: rowNum++,
+          name: item.name,
+          qty: total,
+          unit: item.unit,
+          price: `Rp ${(item.new_price || item.price || 0).toLocaleString('id-ID')}`
+        };
+      });
+      await exportWithAudit({
+        format: 'pdf',
+        filename: `SO_BARISTA`,
+        title: 'Laporan Stok Barang (Ledger)',
+        tenantName: 'BARVENTIS - Sistem Manajemen Gudang',
+        columns,
+        rows,
+        actionName: 'Stock Ledger Export PDF',
+        role: profile?.role || 'SuperAdmin'
+      });
+    } catch (err) {
+      console.error('Export PDF failed', err);
+      alert('Gagal mengekspor PDF');
+    }
   };
 
   const [itemHistory, setItemHistory] = useState([]);
@@ -317,9 +364,11 @@ export default function StockLedger() {
                 <button className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '0.8rem' }} onClick={() => setShowBulkImport(true)}>
                   <UploadCloud size={14} style={{ marginRight: '4px' }}/> Bulk Import
                 </button>
-                <button className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '0.8rem' }} onClick={handleExport}>
-                  <Download size={14} style={{ marginRight: '4px' }}/> Export Excel
-                </button>
+                <ExportButton 
+                  onExportExcel={handleExportExcel} 
+                  onExportPDF={handleExportPDF} 
+                  currentRole={profile?.role || 'SuperAdmin'} 
+                />
               </>
             )}
           </div>

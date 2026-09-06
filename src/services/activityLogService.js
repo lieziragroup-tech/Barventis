@@ -127,10 +127,8 @@ export function initAutoFlush() {
   window.addEventListener('beforeunload', () => {
     const logs = getStoredLogs();
     if (logs.length === 0) return;
-    // Use sendBeacon for reliable delivery on page unload
-    const blob = new Blob([JSON.stringify(logs)], { type: 'application/json' });
-    navigator.sendBeacon?.('/api/flush-logs', blob);
-    // Also attempt async flush (best-effort)
+    // We remove the missing /api/flush-logs sendBeacon call
+    // The new audit architecture will rely on database triggers (Fase 1.2), this is just for best-effort UI events now
     flushLogs().catch(() => {});
   });
 }

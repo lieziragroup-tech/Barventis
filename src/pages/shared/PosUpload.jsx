@@ -116,7 +116,6 @@ export default function PosUpload() {
   const [recipeSearchTerm, setRecipeSearchTerm] = useState('');
   const [debouncedRecipeSearch, setDebouncedRecipeSearch] = useState('');
   const [isRecipeDropdownOpen, setIsRecipeDropdownOpen] = useState(false);
-  const [isCreatingInline, setIsCreatingInline] = useState(false);
 
   React.useEffect(() => {
     const timer = setTimeout(() => setDebouncedRecipeSearch(recipeSearchTerm), 300);
@@ -133,7 +132,6 @@ export default function PosUpload() {
 
   const handleCreateNewRecipeInline = async (newMenuName) => {
     try {
-      setIsCreatingInline(true);
       const rowToImport = {
         menu_name: newMenuName,
         pos_code: '',
@@ -150,8 +148,6 @@ export default function PosUpload() {
     } catch (err) {
       console.error("Failed to create inline recipe:", err);
       alert("Gagal membuat resep: " + err.message);
-    } finally {
-      setIsCreatingInline(false);
     }
   };
   const [uploadStatus, setUploadStatus] = useState(null); // 'success', 'warning', 'error'

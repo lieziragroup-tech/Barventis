@@ -95,6 +95,7 @@ export default function DailyInventory() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchMasters();
   }, [fetchMasters]);
 
@@ -139,7 +140,7 @@ export default function DailyInventory() {
     } finally {
       setHistoryLoading(false);
     }
-  }, [period]);
+  }, [period, search]);
 
   // Search debounce for history table
   useEffect(() => {

@@ -6,6 +6,7 @@ import Pagination from '../../components/shared/Pagination';
 import { api } from '../../services/api';
 import { formatIDR } from '../../services/costUtils';
 import useDebounce from '../../hooks/useDebounce';
+import { exportToPDF } from '../../services/export/pdfExporter';
 
 const rowUid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `r${Date.now()}${Math.random()}`);
 const blankLineItem = () => ({ item_name: '', qty: 1, unit_price: 0, unit: 'pck', _uid: rowUid() });
@@ -133,97 +134,46 @@ export default function Invoicing() {
   };
 
   // Print invoice
-  // BUG-INV-01: window.open() returns null when browser blocks popups.
-  // Dereferencing w.document on null throws TypeError. Added null guard with fallback.
-  // Helper to prevent XSS during document.write
-  const escapeHTML = (str) => {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  };
+  const handlePrintInvoice = async (inv) => {
+    try {
+      const columns = [
+        { key: 'no', label: '#' },
+        { key: 'item', label: 'Nama Item' },
+        { key: 'qty', label: 'Kuantiti' },
+        { key: 'price', label: 'Harga Satuan' },
+        { key: 'subtotal', label: 'Subtotal' }
+      ];
+      const rows = (inv.items || []).map((item, i) => ({
+        no: i + 1,
+        item: item.item_name || '-',
+        qty: `${item.qty} ${item.unit || ''}`,
+        price: `Rp ${(item.unit_price || 0).toLocaleString('id-ID')}`,
+        subtotal: `Rp ${((item.qty || 0) * (item.unit_price || 0)).toLocaleString('id-ID')}`
+      }));
+      rows.push({
+        no: '',
+        item: 'TOTAL',
+        qty: '',
+        price: '',
+        subtotal: `Rp ${(inv.total || 0).toLocaleString('id-ID')}`
+      });
 
-  const handlePrintInvoice = (inv) => {
-    const printContent = `
-      <html><head><title>Invoice ${escapeHTML(inv.invoice_no)}</title>
-      <style>
-        body { font-family: 'Inter', Arial, sans-serif; padding: 40px; color: #1a1a1a; max-width: 800px; margin: 0 auto; }
-        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
-        .brand h1 { font-size: 28px; margin: 0; color: #059669; letter-spacing: -0.5px; }
-        .brand p { margin: 5px 0 0 0; color: #64748b; font-size: 14px; }
-        .invoice-details { text-align: right; }
-        .invoice-details h2 { margin: 0 0 5px 0; font-size: 20px; color: #0f172a; }
-        .invoice-details p { margin: 2px 0; color: #475569; font-size: 14px; }
-        .supplier-box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px; margin-bottom: 30px; }
-        .supplier-box h3 { margin: 0 0 10px 0; font-size: 14px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
-        .supplier-box p { margin: 0; font-size: 16px; font-weight: 600; color: #0f172a; }
-        table { width: 100%; border-collapse: separate; border-spacing: 0; margin: 0 0 30px 0; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
-        th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; }
-        th { background: #f8fafc; font-weight: 600; color: #475569; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
-        td { font-size: 14px; color: #334155; }
-        tr:last-child td { border-bottom: none; }
-        .amount-col { text-align: right; }
-        .total-box { display: flex; justify-content: flex-end; }
-        .total-content { background: #f8fafc; padding: 20px 30px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 250px; }
-        .total-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; color: #64748b; }
-        .total-row.final { border-top: 2px solid #e2e8f0; margin-top: 10px; padding-top: 10px; font-size: 18px; font-weight: 700; color: #0f172a; }
-        .notes { margin-top: 40px; font-size: 13px; color: #64748b; background: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px 16px; }
-        @media print { body { padding: 0; } .supplier-box, .total-content { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-      </style></head><body>
-      <div class="header">
-        <div class="brand">
-          <h1>BARVENTIS</h1>
-          <p>Sistem Manajemen Gudang & HPP</p>
-        </div>
-        <div class="invoice-details">
-          <h2>Purchase Order</h2>
-          <p><strong>No:</strong> ${escapeHTML(inv.invoice_no)}</p>
-          <p><strong>Date:</strong> ${escapeHTML(inv.date)}</p>
-          <p><strong>Status:</strong> ${escapeHTML(inv.status)}</p>
-        </div>
-      </div>
-      <div class="supplier-box">
-        <h3>Kepada / Supplier</h3>
-        <p>${escapeHTML(inv.supplier)}</p>
-      </div>
-      <table>
-        <thead><tr>
-          <th style="width: 5%">#</th>
-          <th style="width: 40%">Nama Item</th>
-          <th style="width: 15%">Kuantiti</th>
-          <th style="width: 20%" class="amount-col">Harga Satuan</th>
-          <th style="width: 20%" class="amount-col">Subtotal</th>
-        </tr></thead>
-        <tbody>${(inv.items || []).map((item, i) => `
-          <tr>
-            <td>${i + 1}</td>
-            <td style="font-weight: 500">${escapeHTML(item.item_name || '-')}</td>
-            <td>${escapeHTML(item.qty)} ${escapeHTML(item.unit || '')}</td>
-            <td class="amount-col">Rp ${(item.unit_price || 0).toLocaleString('id-ID')}</td>
-            <td class="amount-col" style="font-weight: 600">Rp ${((item.qty || 0) * (item.unit_price || 0)).toLocaleString('id-ID')}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
-      <div class="total-box">
-        <div class="total-content">
-          <div class="total-row"><span>Subtotal:</span> <span>Rp ${(inv.total || 0).toLocaleString('id-ID')}</span></div>
-          <div class="total-row final"><span>TOTAL:</span> <span>Rp ${(inv.total || 0).toLocaleString('id-ID')}</span></div>
-        </div>
-      </div>
-      ${inv.notes ? `<div class="notes"><strong>Catatan:</strong><br/>${escapeHTML(inv.notes)}</div>` : ''}
-      </body></html>`;
+      await exportToPDF({
+        filename: `PO_${inv.invoice_no}`,
+        title: `Purchase Order - ${inv.invoice_no}
+Tanggal: ${inv.date}
+Supplier: ${inv.supplier}
+Status: ${inv.status}
 
-    const w = window.open('', '_blank');
-    if (!w) {
-      toast('Browser memblokir popup. Izinkan popup untuk halaman ini agar bisa mencetak invoice.', 'warning');
-      return;
+Catatan: ${inv.notes || '-'}`,
+        tenantName: 'BARVENTIS - Sistem Manajemen Gudang & HPP',
+        columns,
+        rows
+      });
+    } catch (err) {
+      console.error(err);
+      toast('Gagal mencetak invoice.', 'error');
     }
-    w.document.write(printContent);
-    w.document.close();
-    w.print();
   };
 
   const pendingCount = kpis.pending;

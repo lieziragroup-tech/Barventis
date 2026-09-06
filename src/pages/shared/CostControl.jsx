@@ -6,11 +6,13 @@ import {
 import { api } from '../../services/api';
 import { formatIDR } from '../../services/costUtils';
 
-let _XLSX;
-const getXLSX = async () => { if (!_XLSX) _XLSX = await import('xlsx'); return _XLSX; };
 import { useData } from '../../contexts/DataContext';
 
+import { exportWithAudit } from '../../services/export/exportAudit';
+import { useAuth } from '../../contexts/AuthContext';
+
 export default function CostControl() {
+  const { profile } = useAuth();
   const { recipes } = useData();
   const [period, setPeriod] = useState(() => {
     const now = new Date();
@@ -224,139 +226,118 @@ export default function CostControl() {
     return opts;
   }, []);
 
-  // Export Excel Lengkap (Summary + SO Fisik)
+  
+  const prepareSummaryRows = () => [
+    { item: 'Total Stock Awal (Opening)', value: openingStock },
+    { item: 'Total Pembelian (PO)', value: totalPembelian },
+    { item: 'Total Stock Akhir (Closing)', value: closingStock },
+    { item: 'Total Waste / Kerugian (Spoilage, Broken)', value: wasteValuation },
+    { item: 'Total Pemakaian (COGS Aktual + Overhead)', value: pemakaianBulan },
+    { item: 'Total Sales Beverage', value: totalSalesBeverage },
+    { item: 'Beverage Cost %', value: `${beverageCostPct.toFixed(2)}%` },
+    { item: 'Status', value: statusLabel }
+  ];
+
+  const prepareOpnameRows = () => filteredOpnameItems.map((item, idx) => ({
+    no: idx + 1,
+    name: item.name,
+    category: item.category,
+    unit: item.unit,
+    full_pack: item.full_pack,
+    system_qty: item.systemQty,
+    physical_qty: item.physicalQty,
+    variance: item.variance,
+    price: item.price,
+    total_val: item.totalValuation,
+    supplier: item.supplier
+  }));
+
   const handleExportExcel = async (type = 'ALL') => {
-    const XLSX = await getXLSX();
-    const summaryData = [
-      { 'Item': 'Total Stock Awal (Opening)', 'Value (IDR)': openingStock },
-      { 'Item': 'Total Pembelian (PO)', 'Value (IDR)': totalPembelian },
-      { 'Item': 'Total Stock Akhir (Closing)', 'Value (IDR)': closingStock },
-      { 'Item': 'Total Waste / Kerugian (Spoilage, Broken)', 'Value (IDR)': wasteValuation },
-      { 'Item': 'Total Pemakaian (COGS Aktual + Overhead)', 'Value (IDR)': pemakaianBulan },
-      { 'Item': 'Total Sales Beverage', 'Value (IDR)': totalSalesBeverage },
-      { 'Item': 'Beverage Cost %', 'Value (IDR)': `${beverageCostPct.toFixed(2)}%` },
-      { 'Item': 'Status', 'Value (IDR)': statusLabel }
-    ];
-    
-    const opnameData = filteredOpnameItems.map((item, idx) => ({
-      'NO': idx + 1,
-      'NAMA ITEM': item.name,
-      'KATEGORI': item.category,
-      'UNIT': item.unit,
-      'FULL PACK': item.full_pack,
-      'STOK SISTEM': item.systemQty,
-      'STOK FISIK': item.physicalQty,
-      'VARIANCE': item.variance,
-      'HARGA BELI': item.price,
-      'TOTAL VALUASI': item.totalValuation,
-      'SUPPLIER': item.supplier
-    }));
-
-    const wb = XLSX.utils.book_new();
-
-    if (type === 'ALL' || type === 'SUMMARY') {
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), 'Cost Control Summary');
-      const dailyData = dailyColumns.map(row => ({
-        'Date': row.date,
-        'Purchases (IDR)': row.purchase,
-        'Sales (IDR)': row.sales,
-        'Purchase/Sales %': row.sales > 0 ? ((row.purchase / row.sales) * 100).toFixed(1) : '0.0'
-      }));
-      if (dailyData.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dailyData), 'Daily Breakdown');
-    }
-
-    if (type === 'ALL' || type === 'SO') {
-      if (opnameData.length > 0) {
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(opnameData), 'Stock Opname Fisik');
+    try {
+      const sheets = [];
+      if (type === 'ALL' || type === 'SUMMARY') {
+        const sumRows = prepareSummaryRows().map(r => ({ 'Item': r.item, 'Value': r.value }));
+        sheets.push({ name: 'Cost Control Summary', rows: sumRows });
+        
+        const dailyRows = dailyColumns.map(row => ({
+          'Date': row.date,
+          'Purchases': row.purchase,
+          'Sales': row.sales,
+          'Purchase/Sales %': row.sales > 0 ? ((row.purchase / row.sales) * 100).toFixed(1) : '0.0'
+        }));
+        if (dailyRows.length > 0) sheets.push({ name: 'Daily Breakdown', rows: dailyRows });
       }
-    }
 
-    const filename = type === 'ALL' ? `Laporan_Lengkap_SO_COGS_${period}.xlsx` : type === 'SUMMARY' ? `CostControl_Summary_${period}.xlsx` : `StockOpname_Fisik_${period}.xlsx`;
-    XLSX.writeFile(wb, filename);
-    setShowExportMenu(false);
+      if (type === 'ALL' || type === 'SO') {
+        const soRows = prepareOpnameRows().map(r => ({
+          'NO': r.no, 'NAMA ITEM': r.name, 'KATEGORI': r.category, 'UNIT': r.unit,
+          'FULL PACK': r.full_pack, 'STOK SISTEM': r.system_qty, 'STOK FISIK': r.physical_qty,
+          'VARIANCE': r.variance, 'HARGA BELI': r.price, 'TOTAL VALUASI': r.total_val, 'SUPPLIER': r.supplier
+        }));
+        if (soRows.length > 0) sheets.push({ name: 'Stock Opname Fisik', rows: soRows });
+      }
+
+      const filename = type === 'ALL' ? `Laporan_Lengkap_SO_COGS_${period}` : type === 'SUMMARY' ? `CostControl_Summary_${period}` : `StockOpname_Fisik_${period}`;
+      await exportWithAudit({
+        format: 'excel',
+        filename,
+        sheets,
+        actionName: 'Cost Control Export',
+        role: profile?.role || 'SuperAdmin'
+      });
+      setShowExportMenu(false);
+    } catch (err) {
+      console.error(err);
+      alert('Gagal mengekspor file');
+    }
   };
+
+  const handlePrintPDF = async (type = 'ALL') => {
+    try {
+      let rows = [];
+      let columns = [];
+      
+      if (type === 'ALL' || type === 'SUMMARY') {
+        columns = [
+          { key: 'item', label: 'Item' },
+          { key: 'value', label: 'Value' }
+        ];
+        rows = prepareSummaryRows().map(r => ({ item: r.item, value: typeof r.value === 'number' ? `Rp ${r.value.toLocaleString('id-ID')}` : r.value }));
+      } else if (type === 'SO') {
+        columns = [
+          { key: 'no', label: '#' },
+          { key: 'name', label: 'Item' },
+          { key: 'system_qty', label: 'Sistem' },
+          { key: 'physical_qty', label: 'Fisik' },
+          { key: 'variance', label: 'Selisih' },
+          { key: 'total_val', label: 'Total Valuasi' }
+        ];
+        rows = prepareOpnameRows().map(r => ({
+          ...r,
+          total_val: `Rp ${(r.total_val || 0).toLocaleString('id-ID')}`
+        }));
+      }
+
+      const filename = type === 'ALL' ? `Laporan_Lengkap_${period}` : type === 'SUMMARY' ? `Summary_${period}` : `SO_${period}`;
+      await exportWithAudit({
+        format: 'pdf',
+        filename,
+        title: `Laporan ${type === 'ALL' ? 'Lengkap' : type === 'SUMMARY' ? 'Cost Control Summary' : 'Stock Opname Fisik'} - ${period}`,
+        tenantName: 'UMATIS RESTO & VENUE',
+        columns,
+        rows,
+        actionName: 'Cost Control Export PDF',
+        role: profile?.role || 'SuperAdmin'
+      });
+      setShowExportMenu(false);
+    } catch (err) {
+      console.error(err);
+      alert('Gagal mengekspor PDF');
+    }
+  };
+
 
   // Print PDF Lengkap
-  const handlePrintPDF = (type = 'ALL') => {
-    const opnameItems = filteredOpnameItems;
-    const printHTML = `
-      <html><head><title>UMATIS Laporan LENGKAP - ${period}</title>
-      <style>body{font-family:Arial,sans-serif;padding:30px;color:#333;font-size:12px}
-      h1{font-size:22px;margin-bottom:4px;color:#111;text-align:center;}
-      h2{font-size:16px;color:#444;margin:30px 0 10px;border-bottom:2px solid #eee;padding-bottom:5px;}
-      p.subtitle{text-align:center;color:#666;font-size:14px;margin-top:0;}
-      table{width:100%;border-collapse:collapse;margin:10px 0}
-      th,td{border:1px solid #ddd;padding:6px 8px;text-align:left}
-      th{background:#f5f5f5;font-size:11px;font-weight:bold;text-transform:uppercase;}
-      .highlight{font-weight:bold;font-size:18px;color:${beverageCostPct <= 27 ? '#2ecc71' : '#e74c3c'}}
-      .summary-row{background:#f9f9f9;font-weight:bold}
-      .text-right{text-align:right;}
-      .danger{color:#e74c3c;}
-      @media print { @page { size: landscape; margin: 10mm; } }
-      </style></head><body>
-      
-      <h1>UMATIS RESTO & VENUE</h1>
-      <p class="subtitle">Laporan Bulanan ${type === 'ALL' ? 'Cost Control & Stock Opname' : 'Cost Control'} — Periode: <strong>${period}</strong></p>
-      
-      ${(type === 'ALL' || type === 'SUMMARY') ? `
-      <h2>Ringkasan HPP & COGS</h2>
-      <p style="font-size:14px;">Status HPP Beverage: <span class="highlight">${beverageCostPct.toFixed(2)}%</span> ${beverageCostPct <= 27 ? '✓ Target Aman' : '⚠ Di Atas Target'}</p>
-      <table style="max-width:500px;">
-        <tr><td>Total Stock Awal (Opening)</td><td class="text-right">Rp ${openingStock.toLocaleString('id-ID')}</td></tr>
-        <tr><td>+ Total Pembelian (PO Masuk)</td><td class="text-right">Rp ${totalPembelian.toLocaleString('id-ID')}</td></tr>
-        <tr><td>- Total Stock Akhir Fisik (Closing SO)</td><td class="text-right">Rp ${closingStock.toLocaleString('id-ID')}</td></tr>
-        <tr><td class="danger">⚠ Kerugian / Waste (Basi, Hilang)</td><td class="text-right danger">Rp ${wasteValuation.toLocaleString('id-ID')}</td></tr>
-        <tr class="summary-row"><td>= Total Pemakaian (COGS Aktual + Overhead)</td><td class="text-right">Rp ${pemakaianBulan.toLocaleString('id-ID')}</td></tr>
-        <tr><td>Total Sales Beverage (Pendapatan POS)</td><td class="text-right">Rp ${totalSalesBeverage.toLocaleString('id-ID')}</td></tr>
-      </table>
-      ` : ''}
-
-      ${(type === 'ALL' && opnameItems.length > 0) ? `
-      <div style="page-break-before: always;"></div>
-      <h2>Detail Fisik Stock Opname (SO)</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>No</th>
-            <th>Nama Item</th>
-            <th>Kategori</th>
-            <th>Sistem</th>
-            <th>Fisik</th>
-            <th>Selisih</th>
-            <th>Unit</th>
-            <th class="text-right">Harga Beli</th>
-            <th class="text-right">Total Valuasi Fisik</th>
-            <th>Supplier</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${opnameItems.map((r, i) => `
-            <tr>
-              <td>${i + 1}</td>
-              <td>${r.name}</td>
-              <td>${r.category}</td>
-              <td>${r.systemQty}</td>
-              <td style="font-weight:bold;">${r.physicalQty}</td>
-              <td class="${r.variance < 0 ? 'danger' : ''}">${r.variance}</td>
-              <td>${r.unit}</td>
-              <td class="text-right">Rp ${r.price.toLocaleString('id-ID')}</td>
-              <td class="text-right">Rp ${r.totalValuation.toLocaleString('id-ID')}</td>
-              <td>${r.supplier}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-      ` : ''}
-      
-      <p style="margin-top:40px;font-size:10px;color:#999;text-align:right;">Dicetak oleh Sistem Barventis pada ${new Date().toLocaleString('id-ID')}</p>
-      </body></html>`;
-    const w = window.open('', '_blank');
-    if (!w) return;
-    w.document.write(printHTML);
-    w.document.close();
-    w.print();
-    setShowExportMenu(false);
-  };
 
   return (
     <div className="fade-in">

@@ -1,10 +1,24 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  app.use(helmet({
+    contentSecurityPolicy: false, // CSP might break Vite dev server HMR if not configured correctly
+  }));
+
+  const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+    message: { error: "Too many requests, please try again later." }
+  });
+
+  app.use("/api", apiLimiter);
 
   app.use(express.json());
 

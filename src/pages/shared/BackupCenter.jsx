@@ -55,14 +55,14 @@ export default function BackupCenter() {
       // api.createBackup() returns the backup record directly (id, filename, size_formatted, created_at, data_json)
       // The old code accessed `res.backup` which was always undefined — bug BUG-BC-01.
       const res = await api.createBackup();
-      
+
       // Trigger download automatically after creation
-      if (res?.data_json && res?.filename) {
-        const blob = new Blob([res.data_json], { type: 'application/json' });
+      if (res?.dataJson && res?.backup?.filename) {
+        const blob = new Blob([res.dataJson], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = res.filename;
+        link.download = res.backup.filename;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -90,17 +90,8 @@ export default function BackupCenter() {
   // Also, the old code discarded the returned record and never triggered a browser download.
   const handleDownloadBackup = async (backup) => {
     try {
-      const data = await api.downloadBackup(backup.id);
-      if (!data?.data_json) throw new Error("Data backup kosong atau tidak ditemukan.");
-      const blob = new Blob([data.data_json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = data.filename || backup.filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      // api.downloadBackup handles storage fetch + browser download trigger internally
+      await api.downloadBackup(backup.id);
     } catch (err) {
       toast.showError("Gagal mengunduh file backup: " + err.message);
     }

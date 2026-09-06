@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Bot, X, Send, Sparkles, Loader, ChevronRight } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { calculateIngredientCost } from '../services/costUtils';
-import { GoogleGenAI } from '@google/genai';
+import { supabase } from '../lib/supabase';
 
 // Context-aware response engine using real stock/recipe/transaction data
 function buildAIResponse(input, { stock, recipes, transactions, unitConversionMap }) {
@@ -154,32 +154,32 @@ export default function AIAssistant() {
     setIsTyping(true);
 
     try {
-      // Hanya gunakan env variable
-      const apiKey = import.meta.env.VITE_GOOGLE_AI_API_KEY;
+      // Build context data string
+      const contextStr = `
+      Konteks Data Inventory Barventis:
+      - Total Stok Bahan: ${stock.length} item
+      - Total Resep: ${recipes.length} resep
 
-      if (apiKey) {
-        const ai = new GoogleGenAI({ apiKey: apiKey });
+      Data Stok: ${JSON.stringify(stock.map(s => ({ nama: s.name, stok_resto: s.qty_resto, stok_central: s.qty_central, harga: s.price, unit: s.unit })).slice(0, 50))}
 
-        // Build context data string
-        const contextStr = `
-        Konteks Data Inventory Barventis:
-        - Total Stok Bahan: ${stock.length} item
-        - Total Resep: ${recipes.length} resep
+      Tolong jawab pertanyaan pengguna berdasarkan data di atas secara ringkas dan profesional sebagai asisten AI Barventis.
+      Gunakan bahasa Indonesia.
+      `;
 
-        Data Stok: ${JSON.stringify(stock.map(s => ({ nama: s.name, stok_resto: s.qty_resto, stok_central: s.qty_central, harga: s.price, unit: s.unit })).slice(0, 50))}
+      // Cek session untuk header Authorization
+      const { data: { session } } = await supabase.auth.getSession();
 
-        Tolong jawab pertanyaan pengguna berdasarkan data di atas secara ringkas dan profesional sebagai asisten AI Barventis.
-        Gunakan bahasa Indonesia.
-        `;
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: `${contextStr}\n\nPertanyaan pengguna: ${text}`,
+      if (session?.access_token) {
+        // Panggil edge function
+        const { data, error } = await supabase.functions.invoke('ai-assistant', {
+          body: { contextStr, question: text },
         });
 
-        setMessages(prev => [...prev, { role: 'assistant', text: response.text }]);
+        if (error) throw error;
+
+        setMessages(prev => [...prev, { role: 'assistant', text: data.text }]);
       } else {
-        // Fallback to rule-based engine if no API key
+        // Fallback to rule-based engine if no auth token (or no api key in function)
         setTimeout(() => {
           const response = buildAIResponse(text, { stock, recipes, transactions, unitConversionMap });
           setMessages(prev => [...prev, { role: 'assistant', text: response }]);

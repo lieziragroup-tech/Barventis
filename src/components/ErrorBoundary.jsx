@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import * as Sentry from '@sentry/react';
 
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -12,76 +12,25 @@ export default class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error('ErrorBoundary caught:', error, errorInfo);
+    if (typeof Sentry !== 'undefined' && Sentry.captureException) {
+      Sentry.captureException(error, { extra: errorInfo });
+    }
     this.setState({ errorInfo });
+    console.error("ErrorBoundary caught an error", error, errorInfo);
   }
 
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: '300px',
-          padding: '40px',
-          textAlign: 'center',
-          background: 'rgba(239, 68, 68, 0.03)',
-          border: '1px solid rgba(239, 68, 68, 0.15)',
-          borderRadius: 'var(--radius-xl)',
-          margin: '16px 0'
-        }}>
-          <div style={{
-            width: '56px', height: '56px', borderRadius: 'var(--radius-lg)',
-            background: 'var(--danger-glow)', display: 'flex',
-            alignItems: 'center', justifyContent: 'center',
-            color: 'var(--danger)', marginBottom: '16px'
-          }}>
-            <AlertTriangle size={28} />
-          </div>
-          <h3 style={{ color: 'var(--text-inverse)', fontSize: '1.1rem', fontWeight: 700, marginBottom: '8px' }}>
-            Terjadi Kesalahan Sistem
-          </h3>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '8px', maxWidth: '400px' }}>
-            {this.props.label || 'Komponen ini'} mengalami error tidak terduga.
-          </p>
-          {this.state.error && (
-            <code style={{
-              fontSize: '0.72rem', color: 'var(--danger-text)',
-              background: 'rgba(239,68,68,0.08)', padding: '8px 14px',
-              borderRadius: 'var(--radius-md)', marginBottom: '20px',
-              maxWidth: '500px', wordBreak: 'break-all', display: 'block'
-            }}>
-              {this.state.error.message}
-            </code>
-          )}
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-            <button
-              className="btn btn-secondary"
-              style={{ display: 'flex', gap: '8px', alignItems: 'center' }}
-              onClick={() => {
-                this.setState({ hasError: false, error: null, errorInfo: null });
-                window.location.reload();
-              }}
-            >
-              <RefreshCw size={14} /> Muat Ulang Halaman
-            </button>
-            <button
-              className="btn btn-primary"
-              style={{ display: 'flex', gap: '8px', alignItems: 'center' }}
-              onClick={() => {
-                this.setState({ hasError: false, error: null, errorInfo: null });
-                if (this.props.role === 'Super Admin' || this.props.role === 'SuperAdmin') {
-                  window.location.href = '/superadmin';
-                } else {
-                  window.location.href = '/';
-                }
-              }}
-            >
-              Kembali ke Dashboard
-            </button>
-          </div>
+        <div style={{ padding: '2rem', textAlign: 'center', fontFamily: 'sans-serif' }}>
+          <h2 style={{ color: '#ef4444' }}>Terjadi Kesalahan Sistem</h2>
+          <p>Maaf, terjadi kesalahan yang tidak terduga pada halaman ini.</p>
+          <button 
+            onClick={() => window.location.reload()}
+            style={{ marginTop: '1rem', padding: '8px 16px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+          >
+            Muat Ulang Halaman
+          </button>
         </div>
       );
     }
