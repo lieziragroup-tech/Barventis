@@ -666,7 +666,9 @@ export const api = {
       .eq('tenant_id', tenantId);
     
     if (period) {
-      query = query.gte('date', `${period}-01`).lte('date', `${period}-31`);
+      const [year, month] = period.split('-');
+      const lastDay = new Date(year, month, 0).getDate();
+      query = query.gte('date', `${period}-01`).lte('date', `${period}-${lastDay}`);
     } else {
       query = query.limit(500);
     }

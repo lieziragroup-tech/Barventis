@@ -1,6 +1,6 @@
 export async function exportToPDF({ filename, title, tenantName, columns, rows, orientation = 'landscape' }) {
   const { default: jsPDF } = await import('jspdf');
-  await import('jspdf-autotable');
+  const { default: autoTable } = await import('jspdf-autotable');
   const doc = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
 
   doc.setFontSize(14); doc.text(tenantName || 'Barventis', 14, 15);
@@ -8,7 +8,7 @@ export async function exportToPDF({ filename, title, tenantName, columns, rows, 
   doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, 14, 27);
   doc.text('CONFIDENTIAL — Internal Use Only', 14, 31); // watermark
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: 36,
     head: [columns.map(c => c.label)],
     body: rows.map(r => columns.map(c => r[c.key])),
