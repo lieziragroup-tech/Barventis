@@ -142,7 +142,13 @@ export default function CostControl() {
     if (actualCogs < 0) actualCogs = 0;
 
     const bevPct = sales > 0 ? (actualCogs / sales) * 100 : 0;
-    const stat = bevPct <= 27.00 ? 'SAFE' : (bevPct <= 30.00 ? 'WARNING' : 'DANGER');
+    // FIX 2026-09 (QA finding, sanity check): Cost % > 100% berarti COGS lebih
+    // besar dari seluruh omzet bulan itu — secara bisnis nyaris mustahil terjadi
+    // wajar. Ini jauh lebih mungkin gejala bug data (duplikasi upload POS,
+    // duplikasi stock opname, atau transaksi historis pra-perbaikan pack-size)
+    // daripada kondisi operasional riil. Beri label terpisah ('ANOMALY') supaya
+    // tidak disamakan dengan 'DANGER' biasa (cost tinggi tapi datanya valid).
+    const stat = bevPct <= 27.00 ? 'SAFE' : (bevPct <= 30.00 ? 'WARNING' : (bevPct <= 100.00 ? 'DANGER' : 'ANOMALY'));
 
     return {
       openingStock: opening,
@@ -430,6 +436,24 @@ export default function CostControl() {
         </div>
       ) : (
         <>
+          {statusLabel === 'ANOMALY' && (
+            <div style={{
+              background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.35)',
+              borderRadius: 'var(--radius-xl)', padding: '16px 24px', marginBottom: '16px',
+              display: 'flex', alignItems: 'flex-start', gap: '12px'
+            }}>
+              <AlertTriangle size={22} style={{ color: 'var(--warning)', flexShrink: 0, marginTop: '2px' }} />
+              <div>
+                <strong style={{ color: 'var(--warning)' }}>Data tidak wajar terdeteksi.</strong>{' '}
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                  Beverage Cost {beverageCostPct.toFixed(2)}% berarti biaya bahan melebihi seluruh omzet periode ini —
+                  ini nyaris selalu tanda ada duplikasi data (upload POS berulang, stock opname ganda, atau transaksi
+                  historis lama) dan bukan kondisi bisnis riil. Periksa jumlah baris di modul Purchasing/POS Upload
+                  untuk periode ini sebelum mengambil keputusan berdasarkan angka ini.
+                </span>
+              </div>
+            </div>
+          )}
           {/* HPP Card */}
           <div style={{
             background: beverageCostPct <= 27 ? 'rgba(81,207,102,0.04)' : 'rgba(255,107,107,0.04)',
@@ -445,6 +469,8 @@ export default function CostControl() {
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 {beverageCostPct <= 27 ? (
                   <><CheckCircle size={16} style={{ color: 'var(--success)' }} /> Target aman (&lt;27%)</>
+                ) : statusLabel === 'ANOMALY' ? (
+                  <><AlertTriangle size={16} style={{ color: 'var(--warning)' }} /> Anomali data — lihat peringatan di atas</>
                 ) : (
                   <><AlertTriangle size={16} style={{ color: 'var(--danger)' }} /> Melebihi target 27%</>
                 )}

@@ -21,40 +21,40 @@ ALTER TABLE recipe_ingredients ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "tenant_select" ON recipe_ingredients FOR SELECT USING (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
 CREATE POLICY "tenant_insert" ON recipe_ingredients FOR INSERT WITH CHECK (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
 CREATE POLICY "tenant_update" ON recipe_ingredients FOR UPDATE USING (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
-CREATE POLICY "superadmin_full_access" ON recipe_ingredients FOR ALL USING ((SELECT role FROM users WHERE id = auth.uid()) = 'SuperAdmin');
+CREATE POLICY "superadmin_full_access" ON recipe_ingredients FOR ALL USING ((SELECT role::text FROM users WHERE id = auth.uid()) = 'SuperAdmin');
 
 ALTER TABLE invoice_items ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "tenant_select" ON invoice_items FOR SELECT USING (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
 CREATE POLICY "tenant_insert" ON invoice_items FOR INSERT WITH CHECK (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
 CREATE POLICY "tenant_update" ON invoice_items FOR UPDATE USING (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
-CREATE POLICY "superadmin_full_access" ON invoice_items FOR ALL USING ((SELECT role FROM users WHERE id = auth.uid()) = 'SuperAdmin');
+CREATE POLICY "superadmin_full_access" ON invoice_items FOR ALL USING ((SELECT role::text FROM users WHERE id = auth.uid()) = 'SuperAdmin');
 
 ALTER TABLE daily_inventory_items ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "tenant_select" ON daily_inventory_items FOR SELECT USING (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
 CREATE POLICY "tenant_insert" ON daily_inventory_items FOR INSERT WITH CHECK (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
 CREATE POLICY "tenant_update" ON daily_inventory_items FOR UPDATE USING (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
-CREATE POLICY "superadmin_full_access" ON daily_inventory_items FOR ALL USING ((SELECT role FROM users WHERE id = auth.uid()) = 'SuperAdmin');
+CREATE POLICY "superadmin_full_access" ON daily_inventory_items FOR ALL USING ((SELECT role::text FROM users WHERE id = auth.uid()) = 'SuperAdmin');
 
 ALTER TABLE physical_check_items ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "tenant_select" ON physical_check_items FOR SELECT USING (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
 CREATE POLICY "tenant_insert" ON physical_check_items FOR INSERT WITH CHECK (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
 CREATE POLICY "tenant_update" ON physical_check_items FOR UPDATE USING (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
-CREATE POLICY "superadmin_full_access" ON physical_check_items FOR ALL USING ((SELECT role FROM users WHERE id = auth.uid()) = 'SuperAdmin');
+CREATE POLICY "superadmin_full_access" ON physical_check_items FOR ALL USING ((SELECT role::text FROM users WHERE id = auth.uid()) = 'SuperAdmin');
 
 ALTER TABLE stock_opname_items ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "tenant_select" ON stock_opname_items FOR SELECT USING (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
 CREATE POLICY "tenant_insert" ON stock_opname_items FOR INSERT WITH CHECK (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
 CREATE POLICY "tenant_update" ON stock_opname_items FOR UPDATE USING (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
-CREATE POLICY "superadmin_full_access" ON stock_opname_items FOR ALL USING ((SELECT role FROM users WHERE id = auth.uid()) = 'SuperAdmin');
+CREATE POLICY "superadmin_full_access" ON stock_opname_items FOR ALL USING ((SELECT role::text FROM users WHERE id = auth.uid()) = 'SuperAdmin');
 
 ALTER TABLE pos_transaction_items ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "tenant_select" ON pos_transaction_items FOR SELECT USING (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
 CREATE POLICY "tenant_insert" ON pos_transaction_items FOR INSERT WITH CHECK (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
 CREATE POLICY "tenant_update" ON pos_transaction_items FOR UPDATE USING (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
-CREATE POLICY "superadmin_full_access" ON pos_transaction_items FOR ALL USING ((SELECT role FROM users WHERE id = auth.uid()) = 'SuperAdmin');
+CREATE POLICY "superadmin_full_access" ON pos_transaction_items FOR ALL USING ((SELECT role::text FROM users WHERE id = auth.uid()) = 'SuperAdmin');
 
 ALTER TABLE pos_order_items ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "tenant_select" ON pos_order_items FOR SELECT USING (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
 CREATE POLICY "tenant_insert" ON pos_order_items FOR INSERT WITH CHECK (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
 CREATE POLICY "tenant_update" ON pos_order_items FOR UPDATE USING (tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid()));
-CREATE POLICY "superadmin_full_access" ON pos_order_items FOR ALL USING ((SELECT role FROM users WHERE id = auth.uid()) = 'SuperAdmin');
+CREATE POLICY "superadmin_full_access" ON pos_order_items FOR ALL USING ((SELECT role::text FROM users WHERE id = auth.uid()) = 'SuperAdmin');

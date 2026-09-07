@@ -182,9 +182,34 @@ export const api = {
         }
       }
 
-      const transactions = [];
+      // FIX 2026-09 (QA finding 3B, root cause Total Sales Beverage ~8x lipat):
+      // sebelumnya kode ini SELALU insert baris POS_SALE baru per tanggal, tanpa
+      // pernah mengecek apakah tanggal tsb sudah punya POS_SALE dari upload
+      // sebelumnya. Akibatnya, mode "Tambahkan (Upload Mingguan)" yang di-upload
+      // berulang / overlap tanggal akan MENAMBAH total, bukan menggantinya —
+      // untuk 1 tanggal bisa punya banyak baris POS_SALE yang saling menumpuk.
+      //
+      // Fix: untuk tanggal yang SUDAH ada POS_SALE-nya di rentang [minDate,maxDate]
+      // milik tenant ini, lakukan UPDATE in-place (ganti amount, bukan menambah
+      // baris baru). Tanggal yang benar-benar baru (belum pernah disinkron)
+      // tetap di-INSERT seperti biasa — ini menjaga alur kerja "upload mingguan"
+      // yang sah (minggu berikutnya = tanggal baru) sambil mencegah duplikasi
+      // saat rentang tanggal yang di-upload overlap dengan upload sebelumnya.
+      const { data: existingPosSales, error: existingErr } = await supabase
+        .from('transactions')
+        .select('id, date')
+        .eq('tenant_id', activeTenantId)
+        .eq('type', 'POS_SALE')
+        .gte('date', minDate)
+        .lte('date', maxDate);
+      if (existingErr) throw existingErr;
+
+      const existingByDate = new Map((existingPosSales || []).map(t => [t.date, t.id]));
+      const txToInsert = [];
+      const txUpdateOps = [];
+
       for (const [sDate, sTotal] of salesByDate.entries()) {
-        transactions.push({
+        const row = {
            tenant_id: activeTenantId,
            date: sDate,
            type: 'POS_SALE',
@@ -193,12 +218,44 @@ export const api = {
            amount: sTotal,
            notes: 'POS Sync Revenue',
            created_by: activeUserId
-        });
+        };
+        const existingId = existingByDate.get(sDate);
+        if (existingId) {
+          // Tanggal sudah pernah disinkron sebelumnya -> replace nilainya,
+          // jangan tambah baris baru (mencegah double counting).
+          txUpdateOps.push(
+            supabase.from('transactions').update({ amount: sTotal, notes: 'POS Sync Revenue (updated)' }).eq('id', existingId)
+          );
+        } else {
+          txToInsert.push(row);
+        }
       }
 
-      if (transactions.length > 0) {
-        const { error: txErr } = await supabase.from('transactions').insert(transactions);
+      if (txUpdateOps.length > 0) {
+        const updateResults = await Promise.all(txUpdateOps);
+        const updateErr = updateResults.find(r => r.error)?.error;
+        if (updateErr) throw updateErr;
+      }
+
+      if (txToInsert.length > 0) {
+        const { error: txErr } = await supabase.from('transactions').insert(txToInsert);
         if (txErr) throw txErr;
+      }
+
+      // FIX 2026-09: file_hash sebelumnya diisi dari `options.filename` (atau
+      // timestamp) — BUKAN hash isi file yang sebenarnya, jadi 2 file berbeda
+      // dengan nama sama akan dianggap identik, dan file yang sama diunggah
+      // ulang dengan nama berbeda tidak akan terdeteksi. Sekarang hash dihitung
+      // dari isi data yang sudah di-parse (SHA-256), deterministik terhadap isi.
+      let contentHash = options.filename || String(Date.now());
+      try {
+        const canonical = JSON.stringify(
+          [...salesByDate.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+        );
+        const digestBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical));
+        contentHash = Array.from(new Uint8Array(digestBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+      } catch (hashErr) {
+        console.warn('[processPOSSync] Gagal menghitung content hash, fallback ke filename:', hashErr?.message || hashErr);
       }
 
       // Record upload log
@@ -206,7 +263,7 @@ export const api = {
         await supabase.from('pos_upload_logs').insert({
           tenant_id: activeTenantId,
           filename: options.filename || 'unknown',
-          file_hash: options.filename || String(Date.now()),
+          file_hash: contentHash,
           period: `${options.periodMonth || ''}/${options.periodYear || ''}`,
           total_rows: options.totalRows ?? posDataArray.length,
           branch_name: options.branchName || null,
@@ -214,7 +271,9 @@ export const api = {
           period_start: minDate,
           period_end: maxDate,
           category_filter: options.categoryFilter || 'MINUMAN',
-          branch_mismatch: !!options.branchMismatch
+          branch_mismatch: !!options.branchMismatch,
+          rows_inserted: txToInsert.length,
+          rows_updated: txUpdateOps.length
         });
       } catch (logErr) {
         console.warn('[processPOSSync] Failed to write pos_upload_logs:', logErr?.message || logErr);
@@ -1957,12 +2016,28 @@ export const api = {
     const unitConversionMap = await api._loadUnitConversionMap(tenantId);
 
     // 1. Fetch closing valuation from this month's opnames if they exist (RESTO + CENTRAL)
+    // FIX 2026-09 (QA finding 3C, root cause Total Stock Akhir ~2x lipat): query
+    // ini sebelumnya tidak memfilter status, jadi draft/opname ganda untuk
+    // periode+cabang yang sama ikut dijumlah. Sekarang hanya opname yang sudah
+    // final yang dihitung — didukung juga oleh UNIQUE constraint di migrasi
+    // 0009_cost_control_integrity_fix.sql yang mencegah duplikat baru terbentuk.
+    //
+    // !! VERIFIKASI SEBELUM DEPLOY !!: nilai 'APPROVED' di bawah ini ASUMSI.
+    // Enum `opname_status` di-set final oleh RPC `complete_opname_atomic`
+    // (Postgres function), yang badannya TIDAK ADA di source/migration yang
+    // di-export ke QA ini — hanya default 'DRAFT' yang terlihat. Cek langsung
+    // definisi RPC tsb di Supabase Dashboard (Database > Functions) untuk
+    // memastikan nilai status final yang benar (mis. bisa jadi 'APPROVED',
+    // 'COMPLETED', atau 'SUBMITTED'), lalu sesuaikan filter di bawah. Kalau
+    // nilainya salah, query ini akan selalu kosong dan JUSTRU memaksa semua
+    // laporan masuk fallback derivation (memperparah, bukan memperbaiki).
     const { data: thisOpnames } = await supabase
       .from('stock_opnames')
       .select('id')
       .eq('tenant_id', tenantId)
       .eq('period_month', m)
-      .eq('period_year', year);
+      .eq('period_year', year)
+      .eq('status', 'APPROVED');
 
     let closingValuation = 0.00;
     let categoryValuation = [];
@@ -2102,12 +2177,16 @@ export const api = {
     // 3. Opening Stock: Query last month's opname or use derivation as fallback
     const prevMonth = m === 1 ? 12 : m - 1;
     const prevYear = m === 1 ? year - 1 : year;
+    // FIX 2026-09 (QA finding, sama seperti closing valuation di atas): filter
+    // status APPROVED supaya fallback derivation di bawah tidak dipicu secara
+    // keliru hanya karena ada draft opname bulan lalu yang belum di-submit.
     const { data: prevOpnames } = await supabase
       .from('stock_opnames')
       .select('id')
       .eq('tenant_id', tenantId)
       .eq('period_month', prevMonth)
-      .eq('period_year', prevYear);
+      .eq('period_year', prevYear)
+      .eq('status', 'APPROVED');
 
     let openingValuation = 0;
     if (prevOpnames && prevOpnames.length > 0) {

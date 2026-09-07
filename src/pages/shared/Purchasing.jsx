@@ -366,9 +366,29 @@ export default function Purchasing() {
     }
   };
 
+  // FIX 2026-09 (QA finding 3A): jangan pernah export dari `purchases`, karena
+  // itu adalah state HALAMAN yang sudah dipaginasi (PAGE_SIZE=15). Export harus
+  // menarik ULANG seluruh baris yang cocok dengan filter aktif (search/period)
+  // langsung dari server, memakai pageSize besar, supaya jumlah baris yang
+  // diekspor selalu sama dengan `totalCount`/`totalNominal` yang tampil di UI.
+  const fetchAllForExport = async () => {
+    const sizeNeeded = totalCount && totalCount > 0 ? totalCount : 100000;
+    const { data } = await api.getPurchaseEntriesPaged({
+      page: 1,
+      pageSize: sizeNeeded,
+      search,
+      period
+    });
+    return data || [];
+  };
+
   const handleExportExcel = async () => {
     try {
-      const rows = purchases.map((p, idx) => ({
+      const allRows = await fetchAllForExport();
+      if (allRows.length !== totalCount) {
+        console.warn(`[Export] Baris tertarik (${allRows.length}) tidak sama dengan totalCount (${totalCount}) — periksa filter/pagination di getPurchaseEntriesPaged.`);
+      }
+      const rows = allRows.map((p, idx) => ({
         'NO': idx + 1,
         'TANGGAL': p.date,
         'NAMA BAHAN BAKU': p.materials?.name || '-',
@@ -393,6 +413,10 @@ export default function Purchasing() {
 
   const handleExportPDF = async () => {
     try {
+      const allRows = await fetchAllForExport();
+      if (allRows.length !== totalCount) {
+        console.warn(`[Export] Baris tertarik (${allRows.length}) tidak sama dengan totalCount (${totalCount}) — periksa filter/pagination di getPurchaseEntriesPaged.`);
+      }
       const columns = [
         { key: 'no', label: '#' },
         { key: 'tanggal', label: 'Tanggal' },
@@ -401,7 +425,7 @@ export default function Purchasing() {
         { key: 'qty', label: 'Qty' },
         { key: 'total', label: 'Total' }
       ];
-      const rows = purchases.map((p, idx) => ({
+      const rows = allRows.map((p, idx) => ({
         no: idx + 1,
         tanggal: p.date,
         bahan: p.materials?.name || '-',
