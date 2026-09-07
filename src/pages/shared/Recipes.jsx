@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Search, Plus, Trash2, Save, X, UploadCloud, Coins, AlertTriangle, CheckCircle, ChefHat, RefreshCw } from 'lucide-react';
+import { Search, Plus, Trash2, Save, X, UploadCloud, Coins, AlertTriangle, CheckCircle, ChefHat, RefreshCw, Download } from 'lucide-react';
 import BulkImport from '../../components/BulkImport';
 import Pagination from '../../components/shared/Pagination';
 import { useData } from '../../contexts/DataContext';
@@ -36,6 +36,7 @@ export default function Recipes() {
   const [newImageUrl, setNewImageUrl] = useState('');
   const [openDropdown, setOpenDropdown] = useState(null);
   const [selectedItems, setSelectedItems] = useState([]);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
 
 
@@ -126,6 +127,55 @@ export default function Recipes() {
   const toggleSelectAll = (e) => {
     if (e.target.checked) setSelectedItems(filteredRecipes.map(r => r.id));
     else setSelectedItems([]);
+  };
+
+  const handleExportData = async (type) => {
+    const XLSX = await import('xlsx');
+
+    // Determine which recipes to export
+    let exportData = recipes;
+    if (type === 'BEVERAGE') {
+      exportData = recipes.filter(r => !(r.category || '').toUpperCase().includes('BEER'));
+    } else if (type === 'BEER') {
+      exportData = recipes.filter(r => (r.category || '').toUpperCase().includes('BEER'));
+    }
+
+    if (exportData.length === 0) {
+      showToast?.('Tidak ada data resep untuk diekspor', 'warning');
+      return;
+    }
+
+    const rows = exportData.map(r => {
+      const { liveBasicCost, liveFoodCostPct } = computeLiveRecipeCost(r);
+      const row = {
+        'Kode Menu': r.recipe_code || '',
+        'Nama Menu': r.menu_name || '',
+        'Kategori': r.category || '',
+        'Harga Jual': r.selling_price || 0,
+        'HPP (Basic Cost)': liveBasicCost || 0,
+        'Food Cost %': ((liveFoodCostPct || 0) * 100).toFixed(2) + '%',
+        'Fix Cost %': ((r.fix_cost_pct != null ? parseFloat(r.fix_cost_pct) : api.getOverheadPct()) * 100).toFixed(2) + '%',
+      };
+
+      // Add up to 10 ingredients
+      const ings = r.ingredients || [];
+      for (let i = 0; i < 10; i++) {
+        const ing = ings[i];
+        row[`Bahan ${i+1}`] = ing ? ing.item_name : '';
+        row[`Qty ${i+1}`] = ing ? ing.qty_in_use : '';
+        row[`Satuan ${i+1}`] = ing ? (ing.unit || 'gr') : '';
+      }
+      return row;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Recipes');
+
+    const timestamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+    const filename = `Export_Recipes_${type}_${timestamp}.xlsx`;
+    XLSX.writeFile(wb, filename);
+    showToast?.(`Berhasil mengekspor data ${type}`, 'success');
   };
 
   const toggleSelectItem = (id) => {
@@ -371,15 +421,67 @@ export default function Recipes() {
             >
               <UploadCloud size={15} />
             </button>
-            <button 
-              className="btn premium-btn premium-btn-secondary" 
-              style={{ width: '38px', height: '38px', padding: 0, borderRadius: 'var(--radius-md)' }} 
+            <button
+              className="btn premium-btn premium-btn-secondary"
+              style={{ width: '38px', height: '38px', padding: 0, borderRadius: 'var(--radius-md)' }}
               onClick={handleRecalculateAll}
               disabled={recalculating}
               title="Hitung ulang HPP & Food Cost% semua resep berdasarkan harga bahan terbaru (perlu dijalankan setelah memperbaiki data bahan)"
             >
               <RefreshCw size={15} className={recalculating ? 'spin' : ''} />
             </button>
+
+            {/* Export Menu Dropdown */}
+            <div style={{ position: 'relative' }}>
+              <button
+                className="btn premium-btn premium-btn-secondary"
+                style={{ width: '38px', height: '38px', padding: 0, borderRadius: 'var(--radius-md)' }}
+                onClick={() => setShowExportMenu(!showExportMenu)}
+                title="Export Data"
+              >
+                <Download size={15} />
+              </button>
+
+              {showExportMenu && (
+                <>
+                  <div
+                    style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99 }}
+                    onClick={() => setShowExportMenu(false)}
+                  />
+                  <div style={{
+                    position: 'absolute', top: 'calc(100% + 4px)', right: 0,
+                    background: 'var(--bg-primary)', border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-md)', padding: '4px', zIndex: 100,
+                    minWidth: '160px', boxShadow: 'var(--shadow-lg)'
+                  }}>
+                    <button
+                      style={{ width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: '0.8rem', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-primary)', borderRadius: 'var(--radius-sm)' }}
+                      onMouseEnter={e => e.target.style.background = 'var(--bg-secondary)'}
+                      onMouseLeave={e => e.target.style.background = 'transparent'}
+                      onClick={() => { handleExportData('ALL'); setShowExportMenu(false); }}
+                    >
+                      Export Semua Resep
+                    </button>
+                    <button
+                      style={{ width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: '0.8rem', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-primary)', borderRadius: 'var(--radius-sm)' }}
+                      onMouseEnter={e => e.target.style.background = 'var(--bg-secondary)'}
+                      onMouseLeave={e => e.target.style.background = 'transparent'}
+                      onClick={() => { handleExportData('BEVERAGE'); setShowExportMenu(false); }}
+                    >
+                      Export Beverage Only
+                    </button>
+                    <button
+                      style={{ width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: '0.8rem', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-primary)', borderRadius: 'var(--radius-sm)' }}
+                      onMouseEnter={e => e.target.style.background = 'var(--bg-secondary)'}
+                      onMouseLeave={e => e.target.style.background = 'transparent'}
+                      onClick={() => { handleExportData('BEER'); setShowExportMenu(false); }}
+                    >
+                      Export Beer Only
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         )}
 
