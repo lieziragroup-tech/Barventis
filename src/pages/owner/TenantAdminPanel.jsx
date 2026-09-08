@@ -658,9 +658,17 @@ export default function TenantAdminPanel() {
         )}
       </div>
 
-      {/* Confirmation Modal (Generic) */}
+      {/* Confirmation Modal (Generic) — z-[60], intentionally higher than every
+          other modal in this file (all z-50). This dialog is a generic
+          double-confirmation that can be triggered FROM INSIDE another modal
+          (e.g. handleCancelReset fires it while the Reset Modal is still
+          open). With equal z-index, whichever modal is later in the JSX wins
+          the paint order regardless of which one opened more recently — here
+          that was the Reset Modal, so this dialog rendered hidden behind it
+          and users had to close the Reset Modal first to reach it. A higher
+          z-index makes stacking explicit instead of accidental DOM order. */}
       {showConfirmModal && confirmActionState && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
           <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl w-full max-w-sm overflow-hidden shadow-2xl">
             <div className="p-5">
               <h3 className="text-lg font-bold text-[var(--text-primary)] mb-2 flex items-center gap-2">
