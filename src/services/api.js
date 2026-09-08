@@ -3536,7 +3536,7 @@ export const api = {
       .from('tenant_reset_requests')
       .select('*')
       .eq('tenant_id', tenantId)
-      
+      .order('created_at', { ascending: false })
       .limit(20);
     if (error) { console.error("DB Error:", error); throw error; }
     return data || [];
@@ -3547,7 +3547,7 @@ export const api = {
     const { data, error } = await supabase
       .from('tenant_reset_requests')
       .select('*, tenants(company_name, name), requester:requested_by(name, email)')
-      
+      .order('created_at', { ascending: false })
       .limit(100);
     if (error) { console.error("DB Error:", error); throw error; }
     return data || [];
@@ -3568,6 +3568,18 @@ export const api = {
       throw new Error(error.message.replace('AUTH: ', ''));
     }
     return data;
+  },
+
+  // Owner: cancel their own request while it's still PENDING, so they're
+  // never stuck waiting on Super Admin if the approval side is having issues.
+  async cancelTenantResetRequest(requestId) {
+    const { error } = await supabase.rpc('cancel_tenant_reset_request', {
+      p_request_id: requestId
+    });
+    if (error) {
+      throw new Error(error.message.replace('AUTH: ', ''));
+    }
+    return true;
   },
 
   getInvoicesStats: async () => {

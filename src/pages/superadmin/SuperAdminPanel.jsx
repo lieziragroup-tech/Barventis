@@ -527,7 +527,7 @@ export default function SuperAdminPanel({ tab }) {
 
   const resetRequestStats = useMemo(() => {
     const pending = resetRequests.filter(r => r.status?.toLowerCase() === 'pending').length;
-    const executed = resetRequests.filter(r => r.status?.toLowerCase() === 'executed').length;
+    const executed = resetRequests.filter(r => ['approved', 'executed'].includes(r.status?.toLowerCase())).length;
     const rejected = resetRequests.filter(r => r.status?.toLowerCase() === 'rejected').length;
     const failed = resetRequests.filter(r => r.status?.toLowerCase() === 'failed').length;
     return { pending, executed, rejected, failed };
@@ -1164,12 +1164,13 @@ export default function SuperAdminPanel({ tab }) {
                     reset_recipes: 'F&B Recipes (HPP)',
                     reset_materials: 'Master Bahan Baku'
                   };
-                  const selectedOptions = Object.entries(r.reset_options || {})
-                    .filter(([, v]) => v)
-                    .map(([k]) => optionLabels[k] || k);
+                  const selectedOptions = Object.entries(optionLabels)
+                    .filter(([key]) => r[key])
+                    .map(([, label]) => label);
 
                   const statusStyle = {
                     pending: { bg: colors.warningGlow, fg: colors.warning, label: 'Menunggu Persetujuan' },
+                    approved: { bg: colors.successGlow, fg: colors.success, label: 'Disetujui & Dieksekusi' },
                     executed: { bg: colors.successGlow, fg: colors.success, label: 'Disetujui & Dieksekusi' },
                     rejected: { bg: colors.dangerGlow, fg: colors.danger, label: 'Ditolak' },
                     failed: { bg: colors.dangerGlow, fg: colors.danger, label: 'Gagal Dieksekusi' },
@@ -1200,16 +1201,16 @@ export default function SuperAdminPanel({ tab }) {
                             ))}
                           </div>
 
-                          {r.status?.toLowerCase() === 'executed' && r.result_summary && (
+                          {(r.status?.toLowerCase() === 'approved' || r.status?.toLowerCase() === 'executed') && r.result_summary && (
                             <div style={{ marginTop: '8px', fontSize: '0.7rem', color: colors.textSecondary }}>
                               Baris terhapus: {
                                 Object.entries(r.result_summary).filter(([, c]) => c > 0).map(([t, c]) => `${t}: ${c}`).join(', ') || 'tidak ada (data sudah kosong)'
                               }
                             </div>
                           )}
-                          {r.status?.toLowerCase() === 'rejected' && r.rejection_reason && (
+                          {r.status?.toLowerCase() === 'rejected' && r.notes && (
                             <div style={{ marginTop: '8px', fontSize: '0.7rem', color: colors.textSecondary, fontStyle: 'italic' }}>
-                              Alasan penolakan: {r.rejection_reason}
+                              Alasan penolakan: {r.notes}
                             </div>
                           )}
                           {r.status?.toLowerCase() === 'failed' && r.error_message && (

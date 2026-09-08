@@ -161,6 +161,25 @@ export default function TenantAdminPanel() {
     );
   };
 
+  const handleCancelReset = (requestId) => {
+    requestConfirmation(
+      'Batalkan Permintaan Reset',
+      'Batalkan permintaan reset yang masih menunggu persetujuan ini? Anda bisa mengajukan permintaan baru setelahnya.',
+      async () => {
+        try {
+          setIsSaving(true);
+          await api.cancelTenantResetRequest(requestId);
+          displayToast('Permintaan reset dibatalkan.', 'success');
+          fetchResetRequests();
+        } catch (err) {
+          displayToast('Gagal membatalkan: ' + err.message, 'error');
+        } finally {
+          setIsSaving(false);
+        }
+      }
+    );
+  };
+
   const executeFactoryReset = async () => {
     setShowResetModal(false);
     requestConfirmation(
@@ -695,9 +714,17 @@ export default function TenantAdminPanel() {
               {resetRequests.some(r => r.status?.toLowerCase() === 'pending') && (
                 <div className="mb-4 p-3 rounded-lg border border-[var(--warning)] bg-[rgba(217,119,6,0.08)] flex items-start gap-2">
                   <Clock size={16} className="text-[var(--warning)] mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-[var(--text-primary)] m-0">
-                    Sudah ada permintaan reset yang masih <strong>menunggu persetujuan Super Admin</strong>. Anda perlu menunggu itu diproses (disetujui/ditolak) sebelum bisa mengajukan permintaan baru.
-                  </p>
+                  <div className="flex-1">
+                    <p className="text-xs text-[var(--text-primary)] m-0">
+                      Sudah ada permintaan reset yang masih <strong>menunggu persetujuan Super Admin</strong>. Anda perlu menunggu itu diproses (disetujui/ditolak) sebelum bisa mengajukan permintaan baru.
+                    </p>
+                    <button
+                      onClick={() => handleCancelReset(resetRequests.find(r => r.status?.toLowerCase() === 'pending')?.id)}
+                      className="text-xs font-bold text-[var(--danger)] mt-2 hover:underline"
+                    >
+                      Batalkan permintaan ini
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -714,12 +741,12 @@ export default function TenantAdminPanel() {
                         </span>
                         <span className={
                           r.status?.toLowerCase() === 'pending' ? 'text-[var(--warning)] font-bold' :
-                          r.status?.toLowerCase() === 'executed' ? 'text-[var(--success)] font-bold' :
+                          (r.status?.toLowerCase() === 'approved' || r.status?.toLowerCase() === 'executed') ? 'text-[var(--success)] font-bold' :
                           r.status?.toLowerCase() === 'rejected' ? 'text-[var(--danger)] font-bold' :
                           r.status?.toLowerCase() === 'failed' ? 'text-[var(--danger)] font-bold' :
                           'text-[var(--text-muted)]'
-                        }>
-                          {{ pending: 'Menunggu Persetujuan', executed: 'Disetujui & Dieksekusi', rejected: 'Ditolak', failed: 'Gagal Dieksekusi' }[r.status?.toLowerCase()] || r.status}
+                        } title={r.status?.toLowerCase() === 'failed' ? r.error_message : undefined}>
+                          {{ pending: 'Menunggu Persetujuan', approved: 'Disetujui & Dieksekusi', executed: 'Disetujui & Dieksekusi', rejected: 'Ditolak', failed: 'Gagal Dieksekusi' }[r.status?.toLowerCase()] || r.status}
                         </span>
                       </div>
                     ))}
