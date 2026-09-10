@@ -12,7 +12,6 @@ const DashboardLayout = React.lazy(() => import('./components/layout/DashboardLa
 const Dashboard = React.lazy(() => import('./pages/shared/Dashboard'));
 const StockLedger = React.lazy(() => import('./pages/shared/StockLedger'));
 const PosUpload = React.lazy(() => import('./pages/shared/PosUpload'));
-const ESBUpload = React.lazy(() => import('./pages/shared/ESBUpload'));
 const Recipes = React.lazy(() => import('./pages/shared/Recipes'));
 const MenuPricing = React.lazy(() => import('./pages/shared/MenuPricing'));
 const StockOpname = React.lazy(() => import('./pages/shared/StockOpname'));
@@ -131,7 +130,6 @@ export default function App() {
           <Route path="stock" element={<RouteErrorBoundary><StockLedger /></RouteErrorBoundary>} />
           <Route path="daily-inventory" element={<RouteErrorBoundary><DailyInventory /></RouteErrorBoundary>} />
           <Route path="pos" element={<RouteErrorBoundary><PosUpload /></RouteErrorBoundary>} />
-          <Route path="esb-upload" element={<RouteErrorBoundary><ESBUpload /></RouteErrorBoundary>} />
           <Route path="recipes" element={<RouteErrorBoundary><Recipes /></RouteErrorBoundary>} />
           <Route path="pricing" element={<RouteErrorBoundary><MenuPricing /></RouteErrorBoundary>} />
           <Route path="invoicing" element={<RouteErrorBoundary><Invoicing /></RouteErrorBoundary>} />
@@ -163,7 +161,6 @@ export default function App() {
           <Route path="stock" element={<RouteErrorBoundary><StockLedger /></RouteErrorBoundary>} />
           <Route path="daily-inventory" element={<RouteErrorBoundary><DailyInventory /></RouteErrorBoundary>} />
           <Route path="pos" element={<RouteErrorBoundary><PosUpload /></RouteErrorBoundary>} />
-          <Route path="esb-upload" element={<RouteErrorBoundary><ESBUpload /></RouteErrorBoundary>} />
           <Route path="recipes" element={<RouteErrorBoundary><Recipes /></RouteErrorBoundary>} />
           <Route path="maintenance" element={<RouteErrorBoundary><Maintenance /></RouteErrorBoundary>} />
           <Route path="barista-report" element={<RouteErrorBoundary><BaristaReport /></RouteErrorBoundary>} />
