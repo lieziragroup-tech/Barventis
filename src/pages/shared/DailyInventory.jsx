@@ -5,6 +5,8 @@ import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { calculateIngredientCost } from '../../services/costUtils';
+import ExportButton from '../../components/shared/ExportButton';
+import { exportWithAudit } from '../../services/export/exportAudit';
 import Pagination from '../../components/shared/Pagination';
 
 const WASTE_CATEGORIES = ['Spoilage (Basi)', 'Broken (Rusak Fisik)', 'Expired (Kadaluarsa)', 'Contaminated', 'Over-portion', 'Lainnya'];
@@ -244,6 +246,37 @@ export default function DailyInventory() {
       setNotification({ type: 'error', text: err.message });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      const rows = history.map(h => {
+        const notesRaw = h.notes || '';
+        const typeMatch = notesRaw.match(/\[([^\]]+)\]/);
+        const wasteType = typeMatch ? typeMatch[1] : '-';
+        const notesClean = notesRaw.replace(/\[[^\]]+\]\s?/, '').replace(/— Dicatat oleh:.*$/, '').trim();
+        return {
+          Tanggal: h.date,
+          "Bahan Baku": h.materials?.name || 'Terhapus',
+          "Tipe Kerusakan": wasteType,
+          "Qty Rusak": Math.abs(h.qty),
+          Unit: h.materials?.unit || '',
+          Catatan: notesClean,
+          "Dicatat Oleh": notesRaw.match(/Dicatat oleh: (.*)$/) ? notesRaw.match(/Dicatat oleh: (.*)$/)[1] : '-'
+        };
+      });
+
+      await exportWithAudit({
+        actionName: 'Waste History Export',
+        description: `Export data Waste History`,
+        exportType: 'excel',
+        filename: `Waste_Report_${period || 'All'}`,
+        sheets: [{ name: 'Waste Log', rows }]
+      });
+    } catch (err) {
+      console.error("Gagal export", err);
+      alert("Gagal melakukan export: " + err.message);
     }
   };
 
@@ -489,7 +522,14 @@ export default function DailyInventory() {
       {/* History */}
       <div className="glass-card" style={{ padding: '24px' }}>
         <div className="paged-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>Log Riwayat Waste / Barang Rusak</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>Log Riwayat Waste / Barang Rusak</h3>
+            <ExportButton
+              onExportExcel={handleExportExcel}
+              currentRole={activeUser?.role || 'SuperAdmin'}
+              allowedRoles={['Super Admin', 'SuperAdmin', 'Admin / Owner', 'Manager']}
+            />
+          </div>
 
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

@@ -62,6 +62,228 @@ export const api = {
   // ═══════════════════════════════════════════════════════════════════
   // REFACTOR: Qty_resto is NOT modified here. Expected usage is logged
   // to expected_usage table for comparison against actual physical inventory.
+  processESBAndDeduct: async (posDataArray, options = {}) => {
+    try {
+      if (!activeTenantId || !activeUserId) throw new Error("Missing active session.");
+
+      const tenantId = activeTenantId;
+      const userId = activeUserId;
+
+      const { data: recipes, error: recipesErr } = await supabase
+        .from('recipes')
+        .select('*, recipe_ingredients(material_id, qty_in_use, materials(id, name, price, new_price, unit, full_pack, qty_resto))')
+        .eq('tenant_id', tenantId);
+
+      const { data: materials, error: matErr } = await supabase
+        .from('materials')
+        .select('*')
+        .eq('tenant_id', tenantId);
+
+      if (recipesErr) throw recipesErr;
+      if (matErr) throw matErr;
+
+      const recipeMapByCode = new Map(recipes.filter(r => r.pos_code).map(r => [r.pos_code.toLowerCase().trim(), r]));
+      const recipeMapByName = new Map(recipes.map(r => [r.menu_name.toLowerCase().trim(), r]));
+      const materialMapByName = new Map(materials.map(m => [m.name.toLowerCase().trim(), m]));
+
+      const today = new Date().toISOString().split('T')[0];
+      let minDate = today;
+      let maxDate = today;
+      if (options.periodMonth && options.periodYear) {
+        const m = options.periodMonth.toString().padStart(2, '0');
+        const lastDay = new Date(parseInt(options.periodYear), parseInt(options.periodMonth), 0).getDate();
+        minDate = `${options.periodYear}-${m}-01`;
+        maxDate = `${options.periodYear}-${m}-${String(lastDay).padStart(2, '0')}`;
+      }
+
+      if (options.mode === 'overwrite' && options.periodMonth && options.periodYear) {
+         const { data: oldDeductions } = await supabase.from('transactions')
+           .select('qty, material_id')
+           .eq('tenant_id', tenantId)
+           .eq('type', 'POS_DEDUCTION')
+           .gte('date', minDate)
+           .lte('date', maxDate);
+
+         if (oldDeductions && oldDeductions.length > 0) {
+            const refundMap = new Map();
+            for (const d of oldDeductions) {
+              const deductQty = Math.abs(parseFloat(d.qty));
+              refundMap.set(d.material_id, (refundMap.get(d.material_id) || 0) + deductQty);
+            }
+
+            await Promise.all(Array.from(refundMap.entries()).map(async ([matId, qtyToRefund]) => {
+                await supabase.rpc('deduct_stock_atomic', { p_material_id: matId, p_deduct_qty: -qtyToRefund });
+            }));
+         }
+
+         await supabase.from('transactions').delete().eq('tenant_id', tenantId).in('type', ['POS_SALE', 'POS_DEDUCTION']).gte('date', minDate).lte('date', maxDate);
+         await supabase.from('expected_usage').delete().eq('tenant_id', tenantId).gte('week_start', minDate).lte('week_end', maxDate);
+      }
+
+      const materialDeductMap = new Map();
+      const salesByDate = new Map();
+      const transactionRows = [];
+      const unmappedItems = new Set();
+      let totalTheoreticalUsage = 0;
+
+      for (const item of posDataArray) {
+        const sDate = item.salesDate || today;
+        if (sDate < minDate) minDate = sDate;
+        if (sDate > maxDate) maxDate = sDate;
+        const sTotal = parseFloat(item.total || 0);
+        const qtySold = parseFloat(item.qty) || 0;
+
+        if (sTotal !== 0) {
+           salesByDate.set(sDate, (salesByDate.get(sDate) || 0) + sTotal);
+        }
+        if (qtySold === 0) continue;
+
+        const lookupName = String(item.menu_name).toLowerCase().trim();
+        const lookupCode = String(item.menu_code).toLowerCase().trim();
+
+        let recipe = recipeMapByCode.get(lookupCode);
+        if (!recipe) recipe = recipeMapByName.get(lookupName);
+
+        if (recipe && recipe.recipe_ingredients) {
+           for (const ing of recipe.recipe_ingredients) {
+               const matId = ing.material_id;
+               const qtyTheoretical = parseFloat(ing.qty_in_use) * qtySold;
+               const mat = ing.materials;
+               const costUnit = (mat.new_price > 0 ? mat.new_price : mat.price) / (mat.full_pack || 1);
+               const costTheoretical = qtyTheoretical * costUnit;
+
+               if (materialDeductMap.has(matId)) {
+                   const m = materialDeductMap.get(matId);
+                   m.qty += qtyTheoretical;
+                   m.totalSold += qtySold;
+                   m.costAmount += costTheoretical;
+               } else {
+                   materialDeductMap.set(matId, { qty: qtyTheoretical, totalSold: qtySold, costAmount: costTheoretical, matInfo: mat });
+               }
+           }
+        } else {
+           let material = materialMapByName.get(lookupName);
+           if (material) {
+               const qtyTheoretical = qtySold;
+               const costUnit = (material.new_price > 0 ? material.new_price : material.price) / (material.full_pack || 1);
+               const costTheoretical = qtyTheoretical * costUnit;
+
+               if (materialDeductMap.has(material.id)) {
+                   const m = materialDeductMap.get(material.id);
+                   m.qty += qtyTheoretical;
+                   m.totalSold += qtySold;
+                   m.costAmount += costTheoretical;
+               } else {
+                   materialDeductMap.set(material.id, { qty: qtyTheoretical, totalSold: qtySold, costAmount: costTheoretical, matInfo: material });
+               }
+           } else {
+               unmappedItems.add(item.menu_name);
+           }
+        }
+      }
+
+      const expectedUsageRows = [];
+      const deductionErrors = [];
+      const negativeWarnings = [];
+
+      await Promise.all(Array.from(materialDeductMap.entries()).map(async ([matId, data]) => {
+          const deductQty = data.qty;
+          const currentResto = parseFloat(data.matInfo.qty_resto || 0);
+
+          if (currentResto - deductQty < 0) {
+             negativeWarnings.push(`Stok ${data.matInfo.name} kurang. Butuh ${deductQty.toFixed(2)}, tersedia ${currentResto.toFixed(2)}.`);
+          }
+
+          const { error: rpcErr } = await supabase.rpc('deduct_stock_atomic', { p_material_id: matId, p_deduct_qty: deductQty });
+          if (rpcErr) {
+             console.error('RPC Error:', rpcErr);
+             deductionErrors.push(data.matInfo.name);
+             return;
+          }
+
+          transactionRows.push({
+              tenant_id: tenantId,
+              date: maxDate,
+              material_id: matId,
+              type: 'POS_DEDUCTION',
+              location: 'RESTO',
+              qty: -deductQty,
+              amount: -data.costAmount,
+              notes: `Auto Deduct ESB Upload (${options.periodMonth}/${options.periodYear})`,
+              created_by: userId
+          });
+
+          expectedUsageRows.push({
+              tenant_id: tenantId,
+              week_start: minDate,
+              week_end: maxDate,
+              material_id: matId,
+              expected_qty: deductQty,
+              total_sold: data.totalSold,
+              created_by: userId
+          });
+          totalTheoreticalUsage += deductQty;
+      }));
+
+      for (const [date, amount] of salesByDate.entries()) {
+          transactionRows.push({
+              tenant_id: tenantId,
+              date: date,
+              type: 'POS_SALE',
+              qty: 0,
+              amount: amount,
+              notes: `ESB Daily Sales Aggregation`,
+              created_by: userId
+          });
+      }
+
+      if (transactionRows.length > 0) {
+          const chunkSize = 100;
+          for (let i = 0; i < transactionRows.length; i += chunkSize) {
+              const { error: txErr } = await supabase.from('transactions').insert(transactionRows.slice(i, i + chunkSize));
+              if (txErr) throw new Error("Gagal menyimpan transaksi POS: " + txErr.message);
+          }
+      }
+
+      if (expectedUsageRows.length > 0) {
+          const chunkSize = 100;
+          for (let i = 0; i < expectedUsageRows.length; i += chunkSize) {
+              const { error: euErr } = await supabase.from('expected_usage').insert(expectedUsageRows.slice(i, i + chunkSize));
+              if (euErr) throw new Error("Gagal menyimpan expected usage: " + euErr.message);
+          }
+      }
+
+      const contentHash = options.fileHash || 'manual-' + Date.now();
+      try {
+        await supabase.from('pos_upload_logs').insert({
+          tenant_id: tenantId,
+          filename: options.filename || 'ESB Upload',
+          file_hash: contentHash,
+          period: `${options.periodMonth || ''}/${options.periodYear || ''}`,
+          total_rows: posDataArray.length,
+          period_start: minDate,
+          period_end: maxDate,
+          category_filter: options.categoryFilter || 'ALL',
+          rows_inserted: transactionRows.length
+        });
+      } catch (logErr) {
+        console.warn('[processESBAndDeduct] Failed to write pos_upload_logs:', logErr);
+      }
+
+      return {
+          success: true,
+          deducted_materials: materialDeductMap.size,
+          negative_warnings: negativeWarnings,
+          unmapped_items: Array.from(unmappedItems),
+          errors: deductionErrors
+      };
+
+    } catch (err) {
+      console.error('ESB Sync error:', err);
+      throw err;
+    }
+  },
+
   processPOSSync: async (posDataArray, options = {}) => {
     try {
       if (!activeTenantId || !activeUserId) throw new Error("Missing active session.");

@@ -313,7 +313,8 @@ export default function DashboardLayout() {
                       )}
                       <NavItem to={`${basePath}/stock`} label="Stock Ledger" icon={BookOpen}  isHovered={isHovered} index={6} />
                       <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" icon={ClipboardList}  isHovered={isHovered} index={7} />
-                      <NavItem to={`${basePath}/pos`} label="Upload POS Sales" icon={UploadCloud}  isHovered={isHovered} index={8} />
+                      <NavItem to={`${basePath}/pos`} label="Upload POS Sales (Moka/GoBiz)" icon={UploadCloud}  isHovered={isHovered} index={8} />
+                      <NavItem to={`${basePath}/esb-upload`} label="Upload POS (ESB)" icon={UploadCloud}  isHovered={isHovered} index={8.5} />
                       <NavItem to={`${basePath}/recipes`} label="F&B Recipes" icon={Utensils}  isHovered={isHovered} index={9} />
                       <NavItem to={`${basePath}/pricing`} label="Menu Pricing" icon={Tag}  isHovered={isHovered} index={10} />
                     </NavGroup>
@@ -450,7 +451,8 @@ export default function DashboardLayout() {
                   )}
                   <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/stock`} label="Stock Ledger" icon={BookOpen}  isHovered={true} index={11} />
                   <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory" icon={ClipboardList}  isHovered={true} index={12} />
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos`} label="Upload POS Sales" icon={UploadCloud}  isHovered={true} index={13} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos`} label="Upload POS Sales (Moka/GoBiz)" icon={UploadCloud}  isHovered={true} index={13} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/esb-upload`} label="Upload POS (ESB)" icon={UploadCloud}  isHovered={true} index={13.5} />
                   <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/recipes`} label="F&B Recipes" icon={Utensils}  isHovered={true} index={14} />
                   <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pricing`} label="Menu Pricing" icon={Tag}  isHovered={true} index={0} />
                 </NavGroup>
@@ -521,6 +523,7 @@ export default function DashboardLayout() {
                     {location.pathname === `${basePath}/stock` && "Warehouse Stocks & Ledgers"}
                     {location.pathname === `${basePath}/daily-inventory` && "Pencatatan Stok Harian"}
                     {location.pathname === `${basePath}/pos` && "POS Kasir Integration"}
+                    {location.pathname === `${basePath}/esb-upload` && "ESB POS Sync & Deduct"}
                     {location.pathname === `${basePath}/recipes` && "Menu COGS & Recipe Builder"}
                     {location.pathname === `${basePath}/pricing` && "Menu Pricing Simulator"}
                     {location.pathname === `${basePath}/purchasing` && "Pembelian Harian & Supplier"}
@@ -547,6 +550,7 @@ export default function DashboardLayout() {
                   {location.pathname === `${basePath}/stock` && "Manage raw materials — edit supplier, price, stock levels. Dual-unit display."}
                   {location.pathname === `${basePath}/daily-inventory` && "Daily stock count per shift, waste, and beer grouping."}
                   {location.pathname === `${basePath}/pos` && "Browser-side Excel parser. Drag and drop POS reports to deduct raw stock."}
+                  {location.pathname === `${basePath}/esb-upload` && "Smart parser for ESB format with auto-deduct, missing-recipe detection, and auto-rollback."}
                   {location.pathname === `${basePath}/recipes` && "Configure ingredients, fixed costs, and selling HPP percentages."}
                   {location.pathname === `${basePath}/pricing` && "Simulate selling price changes and see margin impact instantly."}
                   {location.pathname === `${basePath}/purchasing` && "Quick entry daily purchase and manage supplier data."}
