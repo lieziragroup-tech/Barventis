@@ -236,13 +236,17 @@ export default function SuperAdminPanel({ tab }) {
 
     try {
       setLoading(true);
-      const { error } = await supabase
-        .from('tenants')
-        .delete()
-        .eq('id', tenant.id);
-      
+      // NOTE: tidak boleh langsung `.from('tenants').delete()` — tidak ada
+      // satupun FK tenant_id yang ON DELETE CASCADE, jadi pasti kena foreign
+      // key violation begitu tenant punya data. delete_tenant_permanently()
+      // membersihkan semua tabel anak secara berurutan sebelum menghapus
+      // baris tenants-nya (lihat migration 0018).
+      const { error } = await supabase.rpc('delete_tenant_permanently', {
+        p_tenant_id: tenant.id
+      });
+
       if (error) throw error;
-      
+
       displayToast(`Tenant ${tenant.company_name} beserta seluruh datanya berhasil dihapus permanen.`, 'success');
       fetchData();
     } catch (err) {
