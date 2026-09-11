@@ -313,9 +313,8 @@ export default function DashboardLayout() {
                       )}
                       <NavItem to={`${basePath}/stock`} label="Stock Ledger" icon={BookOpen}  isHovered={isHovered} index={6} />
                       <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" icon={ClipboardList}  isHovered={isHovered} index={7} />
-                      <NavItem to={`${basePath}/pos`} label="Upload POS Sales (Moka/GoBiz)" icon={UploadCloud}  isHovered={isHovered} index={8} />
-                      <NavItem to={`${basePath}/esb-upload`} label="Upload POS (ESB)" icon={UploadCloud}  isHovered={isHovered} index={8.5} />
-                      <NavItem to={`${basePath}/recipes`} label="F&B Recipes" icon={Utensils}  isHovered={isHovered} index={9} />
+                      <NavItem to={`${basePath}/pos`} label="Upload POS Sales" icon={UploadCloud}  isHovered={isHovered} index={8} />
+                                            <NavItem to={`${basePath}/recipes`} label="F&B Recipes" icon={Utensils}  isHovered={isHovered} index={9} />
                       <NavItem to={`${basePath}/pricing`} label="Menu Pricing" icon={Tag}  isHovered={isHovered} index={10} />
                     </NavGroup>
 
@@ -451,7 +450,7 @@ export default function DashboardLayout() {
                   )}
                   <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/stock`} label="Stock Ledger" icon={BookOpen}  isHovered={true} index={11} />
                   <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory" icon={ClipboardList}  isHovered={true} index={12} />
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos`} label="Upload POS Sales (Moka/GoBiz)" icon={UploadCloud}  isHovered={true} index={13} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos`} label="Upload POS Sales" icon={UploadCloud}  isHovered={true} index={13} />
                   <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/esb-upload`} label="Upload POS (ESB)" icon={UploadCloud}  isHovered={true} index={13.5} />
                   <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/recipes`} label="F&B Recipes" icon={Utensils}  isHovered={true} index={14} />
                   <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pricing`} label="Menu Pricing" icon={Tag}  isHovered={true} index={0} />

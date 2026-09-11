@@ -32,3 +32,18 @@ scratch/
 *.njsproj
 *.sln
 *.sw?
+
+# Python script & cache
+*.py
+__pycache__/
+
+# Raw Data & Generated Templates
+*.xlsx
+~$*.xlsx
+*.csv
+Hasil yang diinginkan (Utama)/
+
+# Temp analysis files
+Analisis_*.md
+Manual_Setup_Required.md
+SQL.txt
