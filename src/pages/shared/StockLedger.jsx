@@ -10,9 +10,18 @@ import { useData } from '../../contexts/DataContext';
 import ExportButton from '../../components/shared/ExportButton';
 import { exportWithAudit } from '../../services/export/exportAudit';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatIDR, parsePackSize, getPackUnitInfo, parseStructuredFullPack } from '../../services/costUtils';
+import { formatIDR, parsePackSize, isPackUnitConsistent, getPackUnitInfo, parseStructuredFullPack } from '../../services/costUtils';
 import { api } from '../../services/api';
 
+// MANUAL UNIT CONVERSION (2026-08): lets a user say e.g. "1 Carton = 24 pcs"
+// directly in the Add/Edit Material form instead of typing a free-text Full
+// Pack string by hand. Composes `full_pack` into the structured "PackLabel =
+// Qty Unit" form costUtils.js already parses (see getPackUnitInfo/
+// parseStructuredFullPack) — once saved, this reaches Recipe Builder, Cost
+// Control, and Waste (Daily Inventory) automatically, since all of them
+// already read `full_pack`/`unit` off the same material row. Left blank,
+// nothing changes: the plain "Full Pack Size" field below still works
+// exactly as before for materials that don't need a pack/content split.
 function KonversiSatuanFields({ packUnit, fullPack, price, onChangeFullPack }) {
   const structured = parseStructuredFullPack(fullPack);
   const isi = structured ? String(structured.contentQty) : '';
@@ -60,6 +69,15 @@ function KonversiSatuanFields({ packUnit, fullPack, price, onChangeFullPack }) {
       </div>
     </div>
   );
+}
+
+// Resolve a material's Full Pack string into a usable { size, unit, consistent }
+// shape for the ledger table (same logic used in Recipes.jsx's stockMap).
+function parseFullPack(fullPack, materialUnit) {
+  const size = parsePackSize(fullPack);
+  const consistent = isPackUnitConsistent(materialUnit, fullPack);
+  const { contentUnit } = getPackUnitInfo(fullPack, materialUnit);
+  return { size: size > 0 && consistent ? size : 0, unit: contentUnit, consistent };
 }
 
 export default function StockLedger() {
