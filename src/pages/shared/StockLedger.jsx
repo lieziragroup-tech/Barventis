@@ -155,61 +155,24 @@ export default function StockLedger() {
 
     let failedCount = 0;
     let failedNames = [];
-
+    
     for (const name of selectedItems) {
       try {
         await onDeleteItem(name);
-      } catch {
+      } catch (err) {
         failedCount++;
         failedNames.push(name);
       }
     }
-
+    
     if (failedCount > 0) {
-      alert(`Gagal menghapus ${failedCount} bahan baku:\n${failedNames.join(', ')}\n\nBahan-bahan ini sedang digunakan di resep aktif. Hapus dari resep atau hapus satu-per-satu untuk menggunakan fitur Force Delete.`);
+      alert(`Berhasil menghapus ${selectedItems.length - failedCount} bahan. ${failedCount} bahan gagal dihapus karena masih digunakan di resep.`);
+    } else {
+      alert(`Berhasil menghapus ${selectedItems.length} bahan.`);
     }
-
-    // Unselect only successful ones
+    
     setSelectedItems(prev => prev.filter(name => failedNames.includes(name)));
   };
-
-  const categories = useMemo(() => ['ALL', ...new Set(stock.map(item => item.category))], [stock]);
-  const uniqueSuppliersInStock = useMemo(() => ['ALL', ...new Set(stock.map(item => item.supplier).filter(Boolean))], [stock]);
-
-
-  // Parse full_pack to get conversion — delegates to the shared costUtils
-  // helpers (same ones the actual HPP/Cost Control math uses) instead of a
-  // separately-maintained regex, so this "Stock (Converted)" display column
-  // can never disagree with what a material's real conversion factor is.
-  // MANUAL UNIT CONVERSION (2026-08): supports the structured "Carton = 24 pcs"
-  // full_pack format, showing e.g. "336 PCS" for 14 Cartons in stock.
-  const parseFullPack = (fullPack, materialUnit) => {
-    const size = parsePackSize(fullPack);
-    const { contentUnit } = getPackUnitInfo(fullPack, materialUnit);
-    return { size: size > 0 ? size : 1, unit: contentUnit || 'pcs' };
-  };
-
-  // Filtered stock
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
-  const filteredStock = useMemo(() => stock.filter(item => {
-    const totalQty = (item.qty_resto || 0) + (item.qty_central || 0);
-    const minLevel = item.min_stock || 15;
-    const matchesSearch = (item.name || '').toLowerCase().includes(search.toLowerCase()) || (item.supplier || '').toLowerCase().includes(search.toLowerCase());
-    const matchesCat = catFilter === 'ALL' || item.category === catFilter;
-    const matchesSup = supFilter === 'ALL' || item.supplier === supFilter;
-    let matchesAlert = true;
-    if (alertFilter === 'CRITICAL') matchesAlert = totalQty === 0;
-    else if (alertFilter === 'WARNING') matchesAlert = totalQty > 0 && totalQty < minLevel;
-    else if (alertFilter === 'SAFE') matchesAlert = totalQty >= minLevel;
-    return matchesSearch && matchesCat && matchesSup && matchesAlert;
-  }), [stock, search, catFilter, supFilter, alertFilter]);
-
-  // Slice for the current page (client-side, since the full materials
-  // list is already in memory and bounded in size — see chat explanation)
-  const paginatedStock = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return filteredStock.slice(start, start + PAGE_SIZE);
-  }, [filteredStock, currentPage]);
 
   // Adjust submit
   const handleAdjustSubmit = (e) => {
@@ -226,30 +189,37 @@ export default function StockLedger() {
     if (!editItem) return;
     if (!window.confirm(`Simpan perubahan konfigurasi untuk ${editItem.name}?`)) return;
     
-    // First, handle stock adjustments if they changed the physical stock fields
-    const originalItem = stock.find(s => s.id === editItem.id);
-    if (originalItem) {
-      if (editItem.qty_resto !== undefined && editItem.qty_resto !== originalItem.qty_resto) {
-        const diff = editItem.qty_resto - originalItem.qty_resto;
-        const type = diff > 0 ? 'IN' : 'OUT';
-        const adjustNotes = 'Penyesuaian stok fisik via Edit Configuration';
-        await onAdjustStock(editItem.name, 'RESTO', type, Math.abs(diff), adjustNotes);
+    try {
+      // First, handle stock adjustments if they changed the physical stock fields
+      const originalItem = stock.find(s => s.id === editItem.id);
+      if (originalItem) {
+        const oldResto = originalItem.qty_resto || 0;
+        const newResto = editItem.qty_resto !== undefined ? editItem.qty_resto : oldResto;
+        const diffResto = newResto - oldResto;
+        if (diffResto !== 0) {
+          const type = diffResto > 0 ? 'IN' : 'OUT';
+          await onAdjustStock(originalItem.name, 'RESTO', type, Math.abs(diffResto), 'Penyesuaian stok fisik via Edit Configuration');
+        }
+
+        const oldCentral = originalItem.qty_central || 0;
+        const newCentral = editItem.qty_central !== undefined ? editItem.qty_central : oldCentral;
+        const diffCentral = newCentral - oldCentral;
+        if (diffCentral !== 0) {
+          const type = diffCentral > 0 ? 'IN' : 'OUT';
+          await onAdjustStock(originalItem.name, 'CENTRAL', type, Math.abs(diffCentral), 'Penyesuaian stok fisik via Edit Configuration');
+        }
       }
-      if (editItem.qty_central !== undefined && editItem.qty_central !== originalItem.qty_central) {
-        const diff = editItem.qty_central - originalItem.qty_central;
-        const type = diff > 0 ? 'IN' : 'OUT';
-        const adjustNotes = 'Penyesuaian stok fisik via Edit Configuration';
-        await onAdjustStock(editItem.name, 'CENTRAL', type, Math.abs(diff), adjustNotes);
-      }
+      
+      // Clean up temporary stock fields before updating
+      const updatePayload = { ...editItem };
+      delete updatePayload.qty_resto; 
+      delete updatePayload.qty_central;
+      
+      await onUpdateItem(updatePayload);
+      setEditItem(null);
+    } catch (err) {
+      alert("Gagal menyimpan: " + err.message);
     }
-    
-    // Clean up temporary stock fields before updating
-    const updatePayload = { ...editItem };
-    delete updatePayload.qty_resto; 
-    delete updatePayload.qty_central;
-    
-    onUpdateItem(updatePayload);
-    setEditItem(null);
   };
 
   // Add item submit
