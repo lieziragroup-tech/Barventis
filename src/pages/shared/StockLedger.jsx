@@ -13,15 +13,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { formatIDR, parsePackSize, getPackUnitInfo, parseStructuredFullPack } from '../../services/costUtils';
 import { api } from '../../services/api';
 
-// MANUAL UNIT CONVERSION (2026-08): lets a user say e.g. "1 Carton = 24 pcs"
-// directly in the Add/Edit Material form instead of typing a free-text Full
-// Pack string by hand. Composes `full_pack` into the structured "PackLabel =
-// Qty Unit" form costUtils.js already parses (see getPackUnitInfo/
-// parseStructuredFullPack) — once saved, this reaches Recipe Builder, Cost
-// Control, and Waste (Daily Inventory) automatically, since all of them
-// already read `full_pack`/`unit` off the same material row. Left blank,
-// nothing changes: the plain "Full Pack Size" field below still works
-// exactly as before for materials that don't need a pack/content split.
 function KonversiSatuanFields({ packUnit, fullPack, price, onChangeFullPack }) {
   const structured = parseStructuredFullPack(fullPack);
   const isi = structured ? String(structured.contentQty) : '';
@@ -133,13 +124,13 @@ export default function StockLedger() {
     return matchesSearch && matchesCat && matchesSup && matchesAlert;
   }), [stock, search, catFilter, supFilter, alertFilter]);
 
+  const PAGE_SIZE = 20;
+  const [currentPage, setCurrentPage] = useState(1);
+
   const paginatedStock = useMemo(() => {
     const start = (currentPage - 1) * 20;
     return filteredStock.slice(start, start + 20);
   }, [filteredStock, currentPage]);
-
-  const PAGE_SIZE = 20;
-  const [currentPage, setCurrentPage] = useState(1);
 
   const toggleSelectAll = (e) => {
     if (e.target.checked) setSelectedItems(filteredStock.map(i => i.name));
@@ -827,5 +818,3 @@ export default function StockLedger() {
     </div>
   );
 }
-
-
