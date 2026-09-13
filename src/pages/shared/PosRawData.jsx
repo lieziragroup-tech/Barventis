@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Calendar, Database, FileSpreadsheet } from 'lucide-react';
+import { Search, Calendar, FileText as Database, FileText as FileSpreadsheet } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatIDR } from '../../services/costUtils';
