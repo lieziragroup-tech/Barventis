@@ -115,6 +115,29 @@ export default function StockLedger() {
     }
   }, [selectedItem, historyTab]);
 
+  const categories = useMemo(() => ['ALL', ...new Set(stock.map(item => item.category))], [stock]);
+  const uniqueSuppliersInStock = useMemo(() => ['ALL', ...new Set(stock.map(item => item.supplier).filter(Boolean))], [stock]);
+
+  // Filtered stock
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
+  const filteredStock = useMemo(() => stock.filter(item => {
+    const totalQty = (item.qty_resto || 0) + (item.qty_central || 0);
+    const minLevel = item.min_stock || 15;
+    const matchesSearch = (item.name || '').toLowerCase().includes(search.toLowerCase()) || (item.supplier || '').toLowerCase().includes(search.toLowerCase());
+    const matchesCat = catFilter === 'ALL' || item.category === catFilter;
+    const matchesSup = supFilter === 'ALL' || item.supplier === supFilter;
+    let matchesAlert = true;
+    if (alertFilter === 'CRITICAL') matchesAlert = totalQty === 0;
+    else if (alertFilter === 'WARNING') matchesAlert = totalQty > 0 && totalQty < minLevel;
+    else if (alertFilter === 'SAFE') matchesAlert = totalQty >= minLevel;
+    return matchesSearch && matchesCat && matchesSup && matchesAlert;
+  }), [stock, search, catFilter, supFilter, alertFilter]);
+
+  const paginatedStock = useMemo(() => {
+    const start = (currentPage - 1) * 20;
+    return filteredStock.slice(start, start + 20);
+  }, [filteredStock, currentPage]);
+
   const PAGE_SIZE = 20;
   const [currentPage, setCurrentPage] = useState(1);
 
