@@ -3725,6 +3725,70 @@ export const api = {
     await logAudit('DELETE_UNIT_CONVERSION', `Konversi satuan (id: ${id}) dihapus.`);
   },
 
+  
+  async executeTenantResetImmediate(tenantId, options = {}) {
+    const {
+      resetPos = true,
+      resetStockHistory = true,
+      resetPurchasing = true,
+      resetRecipes = false,
+      resetMaterials = false
+    } = options;
+    
+    // We do client-side deletion to bypass SuperAdmin.
+    // Order of deletion matters due to FK constraints.
+    try {
+      if (resetPos) {
+        await supabase.from('pos_transaction_items').delete().eq('tenant_id', tenantId);
+        await supabase.from('pos_transactions').delete().eq('tenant_id', tenantId);
+        const { data: posOrders } = await supabase.from('pos_orders').select('id').eq('tenant_id', tenantId);
+        if (posOrders && posOrders.length > 0) {
+          await supabase.from('pos_order_items').delete().in('order_id', posOrders.map(d => d.id));
+        }
+        await supabase.from('pos_orders').delete().eq('tenant_id', tenantId);
+        await supabase.from('pos_upload_logs').delete().eq('tenant_id', tenantId);
+        await supabase.from('pos_daily_aggregates').delete().eq('tenant_id', tenantId);
+      }
+      if (resetStockHistory) {
+        await supabase.from('daily_inventory_items').delete().eq('tenant_id', tenantId);
+        await supabase.from('daily_inventories').delete().eq('tenant_id', tenantId);
+        await supabase.from('stock_opname_items').delete().eq('tenant_id', tenantId);
+        await supabase.from('stock_opnames').delete().eq('tenant_id', tenantId);
+        await supabase.from('physical_check_items').delete().eq('tenant_id', tenantId);
+        await supabase.from('physical_checks').delete().eq('tenant_id', tenantId);
+      }
+      if (resetPurchasing) {
+        await supabase.from('purchase_entries').delete().eq('tenant_id', tenantId);
+        const { data: invoices } = await supabase.from('invoices').select('id').eq('tenant_id', tenantId);
+        if (invoices && invoices.length > 0) {
+          await supabase.from('invoice_items').delete().in('invoice_id', invoices.map(d => d.id));
+        }
+        await supabase.from('invoices').delete().eq('tenant_id', tenantId);
+        await supabase.from('transactions').delete().eq('tenant_id', tenantId);
+      }
+      if (resetRecipes) {
+        await supabase.from('recipe_ingredients').delete().eq('tenant_id', tenantId);
+        const { data: recs } = await supabase.from('recipes').select('id').eq('tenant_id', tenantId);
+        if (recs && recs.length > 0) {
+          await supabase.from('recipe_versions').delete().in('recipe_id', recs.map(r=>r.id));
+        }
+        await supabase.from('recipes').delete().eq('tenant_id', tenantId);
+      }
+      if (resetMaterials) {
+        await supabase.from('recipe_ingredients').delete().eq('tenant_id', tenantId);
+        await supabase.from('materials').delete().eq('tenant_id', tenantId);
+      }
+      
+      // Notify superadmin via audit_logs
+      await this.logAudit('TENANT_RESET', 'Tenant telah menghapus data mereka secara mandiri.', { options });
+      
+      return true;
+    } catch (err) {
+      console.error("Reset Immediate Error: ", err);
+      throw err;
+    }
+  },
+
   async requestTenantReset(tenantId, options = {}) {
     const {
       resetPos = true,

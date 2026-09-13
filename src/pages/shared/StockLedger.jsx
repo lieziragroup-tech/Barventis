@@ -221,11 +221,34 @@ export default function StockLedger() {
   };
 
   // Edit item submit
-  const handleEditSubmit = (e) => {
+  const handleEditSubmit = async (e) => {
     e.preventDefault();
     if (!editItem) return;
-    if (!window.confirm(`Konfirmasi perubahan data untuk ${editItem.name}?`)) return;
-    onUpdateItem(editItem);
+    if (!window.confirm(`Simpan perubahan konfigurasi untuk ${editItem.name}?`)) return;
+    
+    // First, handle stock adjustments if they changed the physical stock fields
+    const originalItem = stock.find(s => s.id === editItem.id);
+    if (originalItem) {
+      if (editItem.qty_resto !== undefined && editItem.qty_resto !== originalItem.qty_resto) {
+        const diff = editItem.qty_resto - originalItem.qty_resto;
+        const type = diff > 0 ? 'IN' : 'OUT';
+        const adjustNotes = 'Penyesuaian stok fisik via Edit Configuration';
+        await onAdjustStock(editItem.name, 'RESTO', type, Math.abs(diff), adjustNotes);
+      }
+      if (editItem.qty_central !== undefined && editItem.qty_central !== originalItem.qty_central) {
+        const diff = editItem.qty_central - originalItem.qty_central;
+        const type = diff > 0 ? 'IN' : 'OUT';
+        const adjustNotes = 'Penyesuaian stok fisik via Edit Configuration';
+        await onAdjustStock(editItem.name, 'CENTRAL', type, Math.abs(diff), adjustNotes);
+      }
+    }
+    
+    // Clean up temporary stock fields before updating
+    const updatePayload = { ...editItem };
+    delete updatePayload.qty_resto; 
+    delete updatePayload.qty_central;
+    
+    onUpdateItem(updatePayload);
     setEditItem(null);
   };
 
@@ -641,7 +664,29 @@ export default function StockLedger() {
                 <label className="form-label">Min Stock</label>
                 <input type="number" className="form-control" value={editItem.min_stock || 15} onChange={e => setEditItem({ ...editItem, min_stock: parseInt(e.target.value) || 15 })} />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              
+              <div style={{ padding: '16px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+                <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '12px', color: 'var(--text-primary)' }}>Set Stok Fisik Aktual (Opsional)</h4>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                  Jika angka diubah, sistem otomatis membuat log penyesuaian (Adjustment) ke master.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="form-group mb-0">
+                    <label className="form-label" style={{fontSize: '0.75rem'}}>Stok Resto Bar</label>
+                    <input type="number" step="any" className="form-control" 
+                      value={editItem.qty_resto !== undefined ? editItem.qty_resto : (stock.find(s => s.id === editItem.id)?.qty_resto || 0)} 
+                      onChange={e => setEditItem({ ...editItem, qty_resto: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div className="form-group mb-0">
+                    <label className="form-label" style={{fontSize: '0.75rem'}}>Stok Central</label>
+                    <input type="number" step="any" className="form-control" 
+                      value={editItem.qty_central !== undefined ? editItem.qty_central : (stock.find(s => s.id === editItem.id)?.qty_central || 0)} 
+                      onChange={e => setEditItem({ ...editItem, qty_central: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
                 <div className="form-group">
                   <label className="form-label">Harga Lama (IDR)</label>
                   <input type="number" className="form-control" value={editItem.price || 0} readOnly style={{ color: 'var(--text-muted)' }} />

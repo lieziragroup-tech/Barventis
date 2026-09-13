@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
+import { translateDbError } from '../../utils/errorHandler';
 import { useData } from '../../contexts/DataContext';
 import {
   Users, Building, Link as LinkIcon, Trash2, Copy, Clock, CheckCircle, XCircle, Store
@@ -154,7 +155,7 @@ export default function TenantAdminPanel() {
           displayToast('Pengguna berhasil dihapus.', 'success');
           fetchUsers();
         } catch (err) {
-          displayToast('Gagal menghapus pengguna: ' + err.message, 'error');
+          displayToast('Gagal menghapus pengguna: ' + translateDbError(err), 'error');
           setLoading(false);
         }
       }
@@ -183,16 +184,16 @@ export default function TenantAdminPanel() {
   const executeFactoryReset = async () => {
     setShowResetModal(false);
     requestConfirmation(
-      'Ajukan Permintaan Reset Data',
-      `Anda akan MENGAJUKAN reset data terpilih untuk resto "${currentTenant?.company_name}" ke Super Admin. Data BELUM akan terhapus sekarang — baru terhapus setelah Super Admin menyetujui permintaan ini.`,
+      'Hapus Data (Reset)',
+      `Anda akan MENGHAPUS data terpilih untuk resto "${currentTenant?.company_name}". Data akan TERHAPUS SECARA PERMANEN sekarang juga dan Super Admin akan menerima notifikasi.`,
       async () => {
         try {
           setIsSaving(true);
-          await api.requestTenantReset(currentTenant.id, resetOptions);
-          displayToast('Permintaan reset sudah dikirim. Menunggu persetujuan Super Admin — data belum terhapus.', 'success');
+          await api.executeTenantResetImmediate(currentTenant.id, resetOptions);
+          displayToast('Data berhasil dihapus secara permanen.', 'success');
           fetchResetRequests();
         } catch (err) {
-          displayToast('Gagal mengajukan reset: ' + err.message, 'error');
+          displayToast('Gagal menghapus data: ' + translateDbError(err), 'error');
         } finally {
           setIsSaving(false);
         }
@@ -716,7 +717,7 @@ export default function TenantAdminPanel() {
             
             <div className="p-5 overflow-y-auto">
               <p className="text-sm text-[var(--text-secondary)] mb-4">
-                Pilih kategori data yang ingin Anda ajukan untuk dihapus. Permintaan ini akan dikirim ke <strong>Super Admin untuk disetujui</strong> — data Anda <strong>tidak langsung terhapus</strong> saat Anda klik tombol di bawah.
+                Pilih kategori data yang ingin Anda ajukan untuk dihapus. Data Anda akan <strong>langsung terhapus secara permanen</strong> saat Anda menyetujui peringatan di bawah.
               </p>
 
               {resetRequests.some(r => r.status?.toLowerCase() === 'pending') && (
@@ -820,7 +821,7 @@ export default function TenantAdminPanel() {
                 disabled={!Object.values(resetOptions).some(v => v) || resetRequests.some(r => r.status?.toLowerCase() === 'pending')}
                 title={resetRequests.some(r => r.status?.toLowerCase() === 'pending') ? 'Masih ada permintaan yang menunggu persetujuan' : undefined}
               >
-                Ajukan Reset ke Super Admin
+                Hapus Data Secara Permanen
               </button>
             </div>
           </div>
