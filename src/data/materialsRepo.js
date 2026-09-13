@@ -7,6 +7,7 @@ export const materialsRepo = {
       .from('materials')
       .select('*')
       .eq('tenant_id', tenantId)
+      .eq('is_active', true)
       .order('name');
     if (error) throw error;
     return data;
@@ -14,7 +15,7 @@ export const materialsRepo = {
 
   getPaged: async (tenantId, { page = 1, pageSize = 20, search = '', category = 'ALL' } = {}) => {
     if (!tenantId) throw new Error("Missing active session.");
-    let query = supabase.from('materials').select('*', { count: 'exact' }).eq('tenant_id', tenantId);
+    let query = supabase.from('materials').select('*', { count: 'exact' }).eq('tenant_id', tenantId).eq('is_active', true);
 
     if (search) query = query.ilike('name', `%${search}%`);
     if (category && category !== 'ALL') query = query.eq('category', category);
