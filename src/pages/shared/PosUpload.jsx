@@ -75,24 +75,24 @@ export default function PosUpload() {
       for (let i = 0; i < Math.min(20, jsonData.length); i++) {
         const row = jsonData[i];
         if (!row) continue;
-        for (let j = 0; j < row.length; j++) {
-          const val = String(row[j] || '').toLowerCase().trim();
-          if (val === 'menu name') {
-            headerRowIdx = i;
-            colName = j;
-          } else if (val === 'qty') {
-            colQty = j;
-          } else if (val === 'total' || val === 'subtotal') {
-            if (colTotal === -1 || val === 'total') colTotal = j;
-          } else if (val === 'sales date') {
-            colDate = j;
-          } else if (val === 'menu code') {
-            colCode = j;
-          } else if (val === 'category' || val === 'kategori' || val === 'menu category') {
-            colCategory = j;
-          }
+        const lowerRow = row.map(c => String(c || '').toLowerCase().trim());
+
+        if (lowerRow.includes('menu name') && lowerRow.includes('qty')) {
+          headerRowIdx = i;
+          colName = lowerRow.indexOf('menu name');
+          colQty = lowerRow.indexOf('qty');
+
+          if (lowerRow.includes('total')) colTotal = lowerRow.indexOf('total');
+          else if (lowerRow.includes('subtotal')) colTotal = lowerRow.indexOf('subtotal');
+
+          if (lowerRow.includes('sales date')) colDate = lowerRow.indexOf('sales date');
+          if (lowerRow.includes('menu code')) colCode = lowerRow.indexOf('menu code');
+          if (lowerRow.includes('category')) colCategory = lowerRow.indexOf('category');
+          else if (lowerRow.includes('kategori')) colCategory = lowerRow.indexOf('kategori');
+          else if (lowerRow.includes('menu category')) colCategory = lowerRow.indexOf('menu category');
+
+          break;
         }
-        if (headerRowIdx !== -1) break;
       }
 
       if (headerRowIdx === -1 || colName === -1 || colQty === -1) {
@@ -385,7 +385,7 @@ export default function PosUpload() {
         <div className="glass-card" style={{ padding: '24px' }}>
 
           {/* CATEGORY FILTER */}
-          {categories.length > 1 && (
+          {categories.length > 0 && (
             <div style={{ marginBottom: '20px' }}>
               <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>Filter Kategori:</div>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
