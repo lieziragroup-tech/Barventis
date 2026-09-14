@@ -1348,11 +1348,13 @@ export const api = {
       ...row
     }));
 
-    const { error: ingErr } = await supabase.from('recipe_ingredients').insert(rowsToInsert);
-    if (ingErr) {
-      // Rollback
-      await supabase.from('recipes').delete().eq('id', recipe.id);
-      throw new Error("Gagal menyimpan bahan resep: " + ingErr.message);
+    if (rowsToInsert.length > 0) {
+      const { error: ingErr } = await supabase.from('recipe_ingredients').insert(rowsToInsert);
+      if (ingErr) {
+        // Rollback
+        await supabase.from('recipes').delete().eq('id', recipe.id);
+        throw new Error("Gagal menyimpan bahan resep: " + ingErr.message);
+      }
     }
 
     const formattedHpp = new Intl.NumberFormat('id-ID').format(recipe.basic_cost);
