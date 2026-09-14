@@ -1285,6 +1285,7 @@ export const api = {
     // 3. Insert Ingredients
     const rowsToInsert = ingredientRows.map(row => ({
       recipe_id: recipe.id,
+      tenant_id: tenantId,
       ...row
     }));
 
@@ -1323,6 +1324,7 @@ export const api = {
 
       ingredientRows.push({
         recipe_id: id,
+        tenant_id: tenantId,
         material_id: ing.material_id,
         qty_in_use: parseFloat(ing.qty_in_use),
         unit: ing.unit,
@@ -1373,11 +1375,23 @@ export const api = {
 
     if (recipeErr) throw new Error("Gagal update resep: " + recipeErr.message);
 
-    // 3. Replace Ingredients (Delete old, insert new)
-    await supabase.from('recipe_ingredients').delete().eq('recipe_id', id);
+    // 3. Replace Ingredients (insert new first, delete old only after that
+    // succeeds — see the identical fix in bulkImportRecipes above for why:
+    // deleting first meant a failed insert wiped the recipe's BOM with
+    // nothing to restore it, since these are two separate calls, not one
+    // atomic DB transaction.)
+    const { data: oldIngredientRows } = await supabase
+      .from('recipe_ingredients')
+      .select('id')
+      .eq('recipe_id', id);
+    const oldIngredientIds = (oldIngredientRows || []).map(r => r.id);
+
     const { error: ingErr } = await supabase.from('recipe_ingredients').insert(ingredientRows);
-    
     if (ingErr) throw new Error("Gagal menyimpan bahan resep baru: " + ingErr.message);
+
+    if (oldIngredientIds.length > 0) {
+      await supabase.from('recipe_ingredients').delete().in('id', oldIngredientIds);
+    }
 
     const formattedHpp = new Intl.NumberFormat('id-ID').format(recipe.basic_cost);
     await logAudit('UPDATE_RECIPE', `Memperbarui resep menu: "${recipe.menu_name}" dengan HPP baru Rp${formattedHpp}.`);
@@ -3203,7 +3217,13 @@ export const api = {
   },
 
   bulkImportRecipes: async (rows) => {
-    const tenantId = await getActiveTenantId();
+    // FIX 2026-09: use requireTenantId() (throws immediately with a clear
+    // message) instead of getActiveTenantId() (silently returns null for
+    // SuperAdmin / no-tenant sessions). Previously a null tenantId here would
+    // silently flow into every recipe_ingredients row built below, and only
+    // surface much later as a cryptic per-row Postgres "null value in column
+    // tenant_id" error instead of one clear upfront failure.
+    const tenantId = await requireTenantId();
     const unitConversionMap = await api._loadUnitConversionMap(tenantId);
 
     let success = 0;
@@ -3453,16 +3473,34 @@ export const api = {
                 qty_in_use: parseFloat(ing.qty_in_use || 0),
                 unit: unit,
                 unit_price: unitPrice,
-                amount: parseFloat(amount.toFixed(2))
+                amount: parseFloat(amount.toFixed(2)),
+                tenant_id: tenantId
               });
             }
           }
 
           if (ingredientsToInsert.length > 0) {
-            // Delete old ingredients first before inserting new ones
-            await supabase.from('recipe_ingredients').delete().eq('recipe_id', recipeData.id);
+            // FIX 2026-09: insert the NEW ingredient rows first, and only
+            // delete the OLD ones after that insert succeeds. Previously this
+            // deleted old ingredients FIRST, so any failure on the insert
+            // (e.g. a NOT NULL violation, a bad material_id, a dropped
+            // connection) left the recipe with ZERO ingredients — silently
+            // wiping its BOM/HPP — with no rollback, since these are two
+            // separate calls, not one DB transaction. Doing it this order
+            // means a failed import can never destroy existing ingredient
+            // data; the recipe just keeps its old (still-correct) BOM.
+            const { data: oldIngredientRows } = await supabase
+              .from('recipe_ingredients')
+              .select('id')
+              .eq('recipe_id', recipeData.id);
+            const oldIngredientIds = (oldIngredientRows || []).map(r => r.id);
+
             const { error: ingErr } = await supabase.from('recipe_ingredients').insert(ingredientsToInsert);
             if (ingErr) throw new Error("Gagal menyimpan detail bahan resep: " + ingErr.message);
+
+            if (oldIngredientIds.length > 0) {
+              await supabase.from('recipe_ingredients').delete().in('id', oldIngredientIds);
+            }
           }
         }
 
@@ -4042,5 +4080,3 @@ export const api = {
     return true;
   }
 };
-
-
