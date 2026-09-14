@@ -93,10 +93,16 @@ export const DataProvider = ({ children }) => {
     else toast.showError(message);
   }, [toast]);
 
-  const handleAdjustStock = useCallback(async (itemName, location, type, qty, notes) => {
-    const match = stock.find(item => item.name === itemName);
-    if (!match) throw new Error(`Material "${itemName}" tidak ditemukan di data lokal.`);
-    await api.adjustStock(match.id, { location, type, qty, notes });
+  const handleAdjustStock = useCallback(async (itemNameOrObj, location, type, qty, notes) => {
+    let id;
+    if (typeof itemNameOrObj === 'object' && itemNameOrObj !== null && itemNameOrObj.id) {
+      id = itemNameOrObj.id;
+    } else {
+      const match = stock.find(item => item.name === itemNameOrObj);
+      if (!match) throw new Error(`Material "${itemNameOrObj}" tidak ditemukan di data lokal.`);
+      id = match.id;
+    }
+    await api.adjustStock(id, { location, type, qty, notes });
     await fetchAllData();
   }, [stock, fetchAllData]);
 
@@ -117,8 +123,9 @@ export const DataProvider = ({ children }) => {
   }, [stock, fetchAllData]);
 
   const handleAddItem = useCallback(async (newItem) => {
-    await api.createMaterial(newItem);
+    const data = await api.createMaterial(newItem);
     await fetchAllData();
+    return data;
   }, [fetchAllData]);
 
   const handleDeleteItem = useCallback(async (itemName, force = false) => {

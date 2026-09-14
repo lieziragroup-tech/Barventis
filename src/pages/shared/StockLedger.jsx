@@ -278,14 +278,14 @@ export default function StockLedger() {
       delete payload.initial_qty_resto;
       delete payload.initial_qty_central;
 
-      await onAddItem(payload);
+      const createdMaterial = await onAddItem(payload);
 
-      // Add initial stock if configured
+      // Add initial stock if configured, passing the returned material object to avoid state-lag
       if (newItem.initial_qty_resto > 0) {
-        await onAdjustStock(newItem.name, 'RESTO', 'IN', newItem.initial_qty_resto, 'Stok awal saat penambahan bahan');
+        await onAdjustStock(createdMaterial, 'RESTO', 'IN', newItem.initial_qty_resto, 'Stok awal saat penambahan bahan');
       }
       if (newItem.initial_qty_central > 0) {
-        await onAdjustStock(newItem.name, 'CENTRAL', 'IN', newItem.initial_qty_central, 'Stok awal saat penambahan bahan');
+        await onAdjustStock(createdMaterial, 'CENTRAL', 'IN', newItem.initial_qty_central, 'Stok awal saat penambahan bahan');
       }
 
       setShowAddModal(false);
