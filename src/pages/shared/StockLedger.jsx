@@ -104,7 +104,7 @@ export default function StockLedger() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [dependencyDeleteModal, setDependencyDeleteModal] = useState(null);
-  const [newItem, setNewItem] = useState({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15 });
+  const [newItem, setNewItem] = useState({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15, initial_qty_resto: 0, initial_qty_central: 0 });
   const [selectedItems, setSelectedItems] = useState([]);
 
   // Supplier & Purchase integration states
@@ -264,9 +264,22 @@ export default function StockLedger() {
     if (!newItem.name.trim()) return;
     if (!window.confirm(`Konfirmasi penambahan bahan baku baru: ${newItem.name}?`)) return;
     try {
-      await onAddItem({ ...newItem, new_price: newItem.price });
+      const payload = { ...newItem, new_price: newItem.price };
+      delete payload.initial_qty_resto;
+      delete payload.initial_qty_central;
+
+      await onAddItem(payload);
+
+      // Add initial stock if configured
+      if (newItem.initial_qty_resto > 0) {
+        await onAdjustStock(newItem.name, 'RESTO', 'IN', newItem.initial_qty_resto, 'Stok awal saat penambahan bahan');
+      }
+      if (newItem.initial_qty_central > 0) {
+        await onAdjustStock(newItem.name, 'CENTRAL', 'IN', newItem.initial_qty_central, 'Stok awal saat penambahan bahan');
+      }
+
       setShowAddModal(false);
-      setNewItem({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15 });
+      setNewItem({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15, initial_qty_resto: 0, initial_qty_central: 0 });
     } catch (err) {
       alert("Gagal menambahkan bahan: " + err.message);
     }
@@ -560,8 +573,8 @@ export default function StockLedger() {
 
       {/* Adjust Stock Slide-over Modal */}
       {adjustItem && (
-        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.2s ease' }}>
-          <div style={{ width: '100%', maxWidth: '400px', background: 'var(--bg-primary)', height: '100vh', padding: '32px 24px', overflowY: 'auto', borderLeft: '1px solid var(--border)', boxShadow: '-10px 0 30px rgba(0,0,0,0.1)', animation: 'slideInRight 0.3s ease' }}>
+        <div onClick={() => { setAdjustItem(null); setAdjustQty(''); setAdjustNotes(''); }} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.2s ease' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: '400px', background: 'var(--bg-primary)', height: '100vh', padding: '32px 24px', overflowY: 'auto', borderLeft: '1px solid var(--border)', boxShadow: '-10px 0 30px rgba(0,0,0,0.1)', animation: 'slideInRight 0.3s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Adjust Stock</h3>
               <button style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => setAdjustItem(null)}><X size={16} /></button>
@@ -613,8 +626,8 @@ export default function StockLedger() {
 
       {/* Edit Item Slide-over Modal */}
       {editItem && (
-        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.2s ease' }}>
-          <div style={{ width: '100%', maxWidth: '450px', background: 'var(--bg-primary)', height: '100vh', padding: '32px 24px', overflowY: 'auto', borderLeft: '1px solid var(--border)', boxShadow: '-10px 0 30px rgba(0,0,0,0.1)', animation: 'slideInRight 0.3s ease' }}>
+        <div onClick={() => setEditItem(null)} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.2s ease' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: '450px', background: 'var(--bg-primary)', height: '100vh', padding: '32px 24px', overflowY: 'auto', borderLeft: '1px solid var(--border)', boxShadow: '-10px 0 30px rgba(0,0,0,0.1)', animation: 'slideInRight 0.3s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Edit Material</h3>
               <button style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => setEditItem(null)}><X size={16} /></button>
@@ -717,8 +730,8 @@ export default function StockLedger() {
 
       {/* Add New Material Slide-over Modal */}
       {showAddModal && (
-        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.2s ease' }}>
-          <div style={{ width: '100%', maxWidth: '450px', background: 'var(--bg-primary)', height: '100vh', padding: '32px 24px', overflowY: 'auto', borderLeft: '1px solid var(--border)', boxShadow: '-10px 0 30px rgba(0,0,0,0.1)', animation: 'slideInRight 0.3s ease' }}>
+        <div onClick={() => { setShowAddModal(false); setNewItem({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15, initial_qty_resto: 0, initial_qty_central: 0 }); }} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.2s ease' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: '450px', background: 'var(--bg-primary)', height: '100vh', padding: '32px 24px', overflowY: 'auto', borderLeft: '1px solid var(--border)', boxShadow: '-10px 0 30px rgba(0,0,0,0.1)', animation: 'slideInRight 0.3s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Tambah Bahan Baru</h3>
               <button style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => setShowAddModal(false)}><X size={16} /></button>
@@ -782,6 +795,25 @@ export default function StockLedger() {
                   <input type="number" className="form-control" placeholder="Harga beli" value={newItem.price || ''} onChange={e => setNewItem({ ...newItem, price: parseInt(e.target.value) || 0 })} />
                 </div>
               </div>
+
+              <div style={{ padding: '16px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+                <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '12px', color: 'var(--text-primary)' }}>Set Stok Awal (Opsional)</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="form-group mb-0">
+                    <label className="form-label" style={{fontSize: '0.75rem'}}>Stok Resto Bar</label>
+                    <input type="number" step="any" className="form-control"
+                      value={newItem.initial_qty_resto}
+                      onChange={e => setNewItem({ ...newItem, initial_qty_resto: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div className="form-group mb-0">
+                    <label className="form-label" style={{fontSize: '0.75rem'}}>Stok Central</label>
+                    <input type="number" step="any" className="form-control"
+                      value={newItem.initial_qty_central}
+                      onChange={e => setNewItem({ ...newItem, initial_qty_central: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                </div>
+              </div>
+
               <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
                 <button type="button" className="btn btn-secondary" style={{ flex: 1, padding: '12px' }} onClick={() => setShowAddModal(false)}>Batal</button>
                 <button type="submit" className="btn btn-primary" style={{ flex: 2, padding: '12px', fontWeight: 700 }}>Tambah ke Inventory</button>
