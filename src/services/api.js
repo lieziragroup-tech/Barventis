@@ -21,20 +21,32 @@ let activeWhatsappEnabled = false;
 const sanitizePostgrest = (str) => String(str).replace(/[,.()"'\\]/g, ' ').trim();
 
 // Helper to get active tenant info — uses cached memory first, falls back to Supabase session (KRITIS-01 fix)
+// Returns null for SuperAdmin (no tenant_id) — read-only guards check this.
+// Throws for no-session (expired/not logged in) — prevents silent CRUD failures.
 const getActiveTenantId = async () => {
   if (activeTenantId !== null) return activeTenantId;
 
   const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user) return null;
+  if (!session?.user) throw new Error("Sesi kadaluarsa atau belum login. Silakan login kembali.");
 
-  const { data: user } = await supabase
+  const { data: user, error } = await supabase
     .from('users')
     .select('tenant_id')
     .eq('id', session.user.id)
     .maybeSingle();
 
+  if (error) throw new Error("Gagal mengambil data tenant: " + error.message);
+
+  // SuperAdmin may not have a tenant_id — return null so read-only guards gracefully return empty data.
   activeTenantId = user?.tenant_id ?? null;
   return activeTenantId;
+};
+
+// Strict variant: throws when tenant_id is null (use for CRUD/mutating operations only)
+const requireTenantId = async () => {
+  const tenantId = await getActiveTenantId();
+  if (!tenantId) throw new Error("Operasi ini membutuhkan tenant aktif. SuperAdmin tidak bisa melakukan mutasi data tanpa konteks tenant.");
+  return tenantId;
 };
 
 // Helper to get authenticated user ID — uses cached memory first, falls back to Supabase session
@@ -42,7 +54,8 @@ const getActiveUserId = async () => {
   if (activeUserId !== null) return activeUserId;
 
   const { data: { session } } = await supabase.auth.getSession();
-  activeUserId = session?.user?.id ?? null;
+  if (!session?.user?.id) throw new Error("Sesi kadaluarsa atau belum login. Silakan login kembali.");
+  activeUserId = session.user.id;
   return activeUserId;
 };
 
@@ -1031,14 +1044,14 @@ export const api = {
   },
   
   createMaterial: async (materialData) => {
-    const tenantId = await getActiveTenantId();
+    const tenantId = await requireTenantId();
     const data = await materialsRepo.create(tenantId, materialData);
     await logAudit('CREATE_MATERIAL', `Menambahkan bahan baku baru: "${data.name}" ke kategori "${data.category}".`);
     return data;
   },
 
   updateMaterial: async (id, materialData) => {
-    const tenantId = await getActiveTenantId();
+    const tenantId = await requireTenantId();
     const { data: oldMaterial } = await supabase.from('materials').select('*').eq('id', id).eq('tenant_id', tenantId).single();
 
     const data = await materialsRepo.update(tenantId, id, materialData, oldMaterial);
@@ -1055,7 +1068,7 @@ export const api = {
   },
 
   deleteMaterial: async (id, force = false) => {
-    const tenantId = await getActiveTenantId();
+    const tenantId = await requireTenantId();
     // Check if ingredient is used in recipes
     const { count, error: countErr } = await supabase
       .from('recipe_ingredients')
@@ -1080,7 +1093,7 @@ export const api = {
   },
 
   adjustStock: async (id, adjustData) => {
-    const tenantId = await getActiveTenantId();
+    const tenantId = await requireTenantId();
     const { location, type, qty, notes } = adjustData;
 
     // Call RPC to guarantee atomic stock updates (prevent TOCTOU race conditions)

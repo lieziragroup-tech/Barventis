@@ -207,12 +207,16 @@ export default function StockLedger() {
   };
 
   // Adjust submit
-  const handleAdjustSubmit = (e) => {
+  const handleAdjustSubmit = async (e) => {
     e.preventDefault();
     if (!adjustItem || !adjustQty || isNaN(adjustQty)) return;
     if (!window.confirm(`Konfirmasi penyesuaian stok untuk ${adjustItem.name}?`)) return;
-    onAdjustStock(adjustItem.name, adjustLoc, adjustType, parseFloat(adjustQty), adjustNotes);
-    setAdjustItem(null); setAdjustQty(''); setAdjustNotes('');
+    try {
+      await onAdjustStock(adjustItem.name, adjustLoc, adjustType, parseFloat(adjustQty), adjustNotes);
+      setAdjustItem(null); setAdjustQty(''); setAdjustNotes('');
+    } catch (err) {
+      alert("Gagal menyimpan penyesuaian stok: " + err.message);
+    }
   };
 
   // Edit item submit
@@ -255,13 +259,17 @@ export default function StockLedger() {
   };
 
   // Add item submit
-  const handleAddSubmit = (e) => {
+  const handleAddSubmit = async (e) => {
     e.preventDefault();
     if (!newItem.name.trim()) return;
     if (!window.confirm(`Konfirmasi penambahan bahan baku baru: ${newItem.name}?`)) return;
-    onAddItem({ ...newItem, new_price: newItem.price });
-    setShowAddModal(false);
-    setNewItem({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15 });
+    try {
+      await onAddItem({ ...newItem, new_price: newItem.price });
+      setShowAddModal(false);
+      setNewItem({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15 });
+    } catch (err) {
+      alert("Gagal menambahkan bahan: " + err.message);
+    }
   };
 
   // Export to Excel

@@ -95,14 +95,14 @@ export const DataProvider = ({ children }) => {
 
   const handleAdjustStock = useCallback(async (itemName, location, type, qty, notes) => {
     const match = stock.find(item => item.name === itemName);
-    if (!match) return;
+    if (!match) throw new Error(`Material "${itemName}" tidak ditemukan di data lokal.`);
     await api.adjustStock(match.id, { location, type, qty, notes });
     await fetchAllData();
   }, [stock, fetchAllData]);
 
   const handleUpdateItem = useCallback(async (updatedItem) => {
     const match = stock.find(item => item.name === updatedItem.originalName || item.name === updatedItem.name);
-    if (!match) return;
+    if (!match) throw new Error(`Material "${updatedItem.originalName || updatedItem.name}" tidak ditemukan di data lokal.`);
     await api.updateMaterial(match.id, {
       name: updatedItem.name,
       category: updatedItem.category,
@@ -123,7 +123,7 @@ export const DataProvider = ({ children }) => {
 
   const handleDeleteItem = useCallback(async (itemName, force = false) => {
     const match = stock.find(item => item.name === itemName);
-    if (!match) return;
+    if (!match) throw new Error(`Material "${itemName}" tidak ditemukan di data lokal.`);
     await api.deleteMaterial(match.id, force);
     await fetchAllData();
   }, [stock, fetchAllData]);
@@ -143,7 +143,7 @@ export const DataProvider = ({ children }) => {
 
   const handleSaveRecipe = useCallback(async (updatedRecipe) => {
     const recipeId = updatedRecipe.id;
-    if (!recipeId) return;
+    if (!recipeId) throw new Error("ID Resep tidak ditemukan.");
     const mappedIngredients = (updatedRecipe.ingredients || []).map(ing => {
       const materialId = ing.material_id ?? stock.find(s => s.name === ing.item_name)?.id ?? null;
       return {
@@ -242,14 +242,14 @@ export const DataProvider = ({ children }) => {
 
   const handleReceiveInvoice = useCallback(async (invoiceId) => {
     const match = invoices.find(inv => inv.id === invoiceId);
-    if (!match) return;
+    if (!match) throw new Error("Invoice tidak ditemukan di data lokal.");
     await api.receiveInvoice(match.id);
     await fetchAllData();
   }, [invoices, fetchAllData]);
 
   const handleCancelInvoice = useCallback(async (invoiceId) => {
     const match = invoices.find(inv => inv.id === invoiceId);
-    if (!match) return;
+    if (!match) throw new Error("Invoice tidak ditemukan di data lokal.");
     await api.updateInvoiceStatus(match.id, 'CANCELLED');
     await fetchAllData();
   }, [invoices, fetchAllData]);

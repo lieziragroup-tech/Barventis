@@ -184,12 +184,23 @@ export default function Recipes() {
 
   const handleBulkDelete = async () => {
     if (!window.confirm(`Hapus ${selectedItems.length} resep terpilih secara permanen?`)) return;
+    const failed = [];
     for (const id of selectedItems) {
-      if (id) await onDeleteRecipe(id);
+      if (id) {
+        try {
+          await onDeleteRecipe(id);
+        } catch (err) {
+          failed.push(id);
+        }
+      }
     }
     setSelectedItems([]);
     if (activeRecipe && selectedItems.includes(activeRecipe.id)) {
       setActiveRecipe(null);
+    }
+    if (failed.length > 0) {
+      if (showToast) showToast(`${failed.length} resep gagal dihapus.`, 'error');
+      else alert(`${failed.length} resep gagal dihapus.`);
     }
   };
 
@@ -264,7 +275,7 @@ export default function Recipes() {
   };
 
 
-  const handleSaveRecipe = () => {
+  const handleSaveRecipe = async () => {
     if (!activeRecipe) return;
     if (!window.confirm(`Konfirmasi simpan perubahan resep "${activeRecipe.menu_name}"?`)) return;
     const savedIngredients = editedIngredients
@@ -292,7 +303,13 @@ export default function Recipes() {
       total_cost: basicCost,
       ingredients: savedIngredients
     };
-    onSaveRecipe(updatedRecipe);
+    try {
+      await onSaveRecipe(updatedRecipe);
+      if (showToast) showToast('Resep berhasil disimpan.', 'success');
+    } catch (err) {
+      if (showToast) showToast(err.message || 'Gagal menyimpan resep', 'error');
+      else alert('Gagal menyimpan resep: ' + err.message);
+    }
   };
 
 
@@ -311,7 +328,7 @@ export default function Recipes() {
   };
 
   // Add new recipe
-  const handleAddNewRecipe = (e) => {
+  const handleAddNewRecipe = async (e) => {
     e.preventDefault();
     if (!newMenuName.trim()) return;
     const newRecipe = {
@@ -324,17 +341,22 @@ export default function Recipes() {
       food_cost_pct: 0,
       selling_price: parseFloat(newMenuPrice) || 0
     };
-    if (onAddRecipe) onAddRecipe(newRecipe);
-    setShowAddModal(false);
-    setNewMenuName('');
-    setNewMenuPrice('');
-    setNewImageUrl('');
-    setActiveRecipe(newRecipe);
-    setEditedIngredients([]);
-    setEditedSellingPrice(parseInt(newMenuPrice) || 0);
-    setEditedFixCostPct(api.getOverheadPct() * 100);
-    setEditedCategory(newMenuCategory);
-    setEditedImageUrl(newImageUrl);
+    try {
+      if (onAddRecipe) await onAddRecipe(newRecipe);
+      setShowAddModal(false);
+      setNewMenuName('');
+      setNewMenuPrice('');
+      setNewImageUrl('');
+      setActiveRecipe(newRecipe);
+      setEditedIngredients([]);
+      setEditedSellingPrice(parseInt(newMenuPrice) || 0);
+      setEditedFixCostPct(api.getOverheadPct() * 100);
+      setEditedCategory(newMenuCategory);
+      setEditedImageUrl(newImageUrl);
+    } catch (err) {
+      if (showToast) showToast(err.message || 'Gagal menambahkan resep', 'error');
+      else alert('Gagal menambahkan resep: ' + err.message);
+    }
   };
 
 
@@ -871,10 +893,16 @@ export default function Recipes() {
                 <button 
                   className="btn premium-btn premium-btn-danger" 
                   style={{ padding: '10px 20px', fontSize: '0.85rem', borderRadius: 'var(--radius-md)', display: 'flex', gap: '8px', background: 'var(--danger-glow)', color: 'var(--danger-text)', border: '1px solid rgba(220, 38, 38, 0.2)' }} 
-                  onClick={() => {
+                  onClick={async () => {
                     if (window.confirm(`Yakin ingin menghapus resep menu "${activeRecipe.menu_name}"?`)) {
-                      onDeleteRecipe(activeRecipe.id);
-                      setActiveRecipe(null);
+                      try {
+                        await onDeleteRecipe(activeRecipe.id);
+                        setActiveRecipe(null);
+                        if (showToast) showToast('Resep berhasil dihapus.', 'success');
+                      } catch (err) {
+                        if (showToast) showToast(err.message || 'Gagal menghapus resep', 'error');
+                        else alert('Gagal menghapus resep: ' + err.message);
+                      }
                     }
                   }}
                 >

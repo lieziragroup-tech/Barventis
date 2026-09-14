@@ -111,15 +111,21 @@ export default function Invoicing() {
     setShowConfirmModal(true);
   };
 
-  const handleFinalSubmit = () => {
+  const handleFinalSubmit = async () => {
     if (!invoiceToSubmit) return;
-    onCreateInvoice(invoiceToSubmit);
-    setShowConfirmModal(false);
-    setShowCreateModal(false);
-    setInvSupplier('');
-    setInvNotes('');
-    setInvItems([blankLineItem()]);
-    setInvoiceToSubmit(null);
+    try {
+      await onCreateInvoice(invoiceToSubmit);
+      setShowConfirmModal(false);
+      setShowCreateModal(false);
+      setInvSupplier('');
+      setInvNotes('');
+      setInvItems([blankLineItem()]);
+      setInvoiceToSubmit(null);
+      if (toast) toast('Invoice berhasil dibuat.', 'success');
+    } catch (err) {
+      if (toast) toast(err.message || 'Gagal membuat invoice', 'error');
+      else alert('Gagal membuat invoice: ' + err.message);
+    }
   };
 
   // Status badge
@@ -267,14 +273,30 @@ Catatan: ${inv.notes || '-'}`,
                         <Eye size={13} />
                       </button>
                       {(inv.status === 'DRAFT' || inv.status === 'SENT') && (
-                        <button className="btn btn-success" style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.7rem' }} title="Mark Received — Stock In" onClick={() => { if (confirm(`Terima invoice ${inv.invoice_no}?\nStock akan otomatis bertambah di Central Warehouse.`)) onReceiveInvoice(inv.id); }}>
+                        <button className="btn btn-success" style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.7rem' }} title="Mark Received — Stock In" onClick={async () => {
+                          if (confirm(`Terima invoice ${inv.invoice_no}?\nStock akan otomatis bertambah di Central Warehouse.`)) {
+                            try {
+                              await onReceiveInvoice(inv.id);
+                              if (toast) toast('Invoice berhasil diterima dan stok bertambah.', 'success');
+                            } catch (err) {
+                              if (toast) toast(err.message || 'Gagal menerima invoice', 'error');
+                              else alert('Gagal menerima invoice: ' + err.message);
+                            }
+                          }
+                        }}>
                           <CheckCircle size={13} /> Terima
                         </button>
                       )}
                       {inv.status === 'DRAFT' && (
-                        <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)', color: 'var(--danger)' }} title="Cancel" onClick={() => {
+                        <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)', color: 'var(--danger)' }} title="Cancel" onClick={async () => {
                           if (window.confirm(`Batalkan invoice ${inv.invoice_no}?\nInvoice draft ini akan diarsip sebagai CANCELLED dan tidak dapat diubah kembali.`)) {
-                            onCancelInvoice(inv.id);
+                            try {
+                              await onCancelInvoice(inv.id);
+                              if (toast) toast('Invoice dibatalkan.', 'info');
+                            } catch (err) {
+                              if (toast) toast(err.message || 'Gagal membatalkan invoice', 'error');
+                              else alert('Gagal membatalkan invoice: ' + err.message);
+                            }
                           }
                         }}>
                           <XCircle size={13} />
