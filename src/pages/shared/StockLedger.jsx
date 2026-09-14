@@ -262,6 +262,16 @@ export default function StockLedger() {
   const handleAddSubmit = async (e) => {
     e.preventDefault();
     if (!newItem.name.trim()) return;
+
+    // Client-side duplicate check before hitting the DB
+    const isDuplicate = stock.some(
+      item => item.name.trim().toLowerCase() === newItem.name.trim().toLowerCase()
+    );
+    if (isDuplicate) {
+      alert(`Bahan dengan nama "${newItem.name}" sudah ada di inventory. Gunakan nama yang berbeda atau edit bahan yang sudah ada.`);
+      return;
+    }
+
     if (!window.confirm(`Konfirmasi penambahan bahan baku baru: ${newItem.name}?`)) return;
     try {
       const payload = { ...newItem, new_price: newItem.price };
@@ -281,7 +291,12 @@ export default function StockLedger() {
       setShowAddModal(false);
       setNewItem({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15, initial_qty_resto: 0, initial_qty_central: 0 });
     } catch (err) {
-      alert("Gagal menambahkan bahan: " + err.message);
+      // Friendly message for DB-level duplicate (race condition edge case)
+      if (err.message?.includes('duplicate key') || err.message?.includes('unique constraint')) {
+        alert(`Bahan "${newItem.name}" sudah ada di inventory. Gunakan nama yang berbeda.`);
+      } else {
+        alert("Gagal menambahkan bahan: " + err.message);
+      }
     }
   };
 
