@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Upload, FileSpreadsheet, CheckCircle,
   Calendar, Database, ShieldAlert, X, AlertTriangle
@@ -26,6 +26,28 @@ export default function PosUpload() {
   const [categories, setCategories] = useState([]);
   const [selectedCategories, setSelectedCategories] = useState([]);
   const fileInputRef = useRef(null);
+
+  // Derived state untuk summary dinamis
+  const filteredSales = React.useMemo(() => {
+    if (!parsedData) return [];
+    return parsedData.sales.filter(s => selectedCategories.includes(s.category));
+  }, [parsedData, selectedCategories]);
+
+  const summaryStats = React.useMemo(() => {
+    let tQty = 0;
+    let tRev = 0;
+    const uniq = new Set();
+    filteredSales.forEach(s => {
+      tQty += s.qty;
+      tRev += s.total;
+      uniq.add(s.menu_name);
+    });
+
+    // Filter missing menus based on selected categories
+    const activeMissing = parsedData ? parsedData.missingMenus.filter(m => selectedCategories.includes(m.category)) : [];
+
+    return { totalQty: tQty, totalRevenue: tRev, uniqueMenus: uniq.size, missingMenus: activeMissing };
+  }, [filteredSales, parsedData, selectedCategories]);
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -336,6 +358,13 @@ export default function PosUpload() {
               const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(duplicateInfo.filename + JSON.stringify(duplicateInfo.sales)));
               const hashArray = Array.from(new Uint8Array(hashBuffer));
               const fileHash = 'sha256-' + hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+              // Re-derive categories from duplicateInfo sales
+              const dupCats = [...new Set(duplicateInfo.sales.map(s => s.category || 'Lainnya'))];
+              setCategories(dupCats);
+              setSelectedCategories(dupCats);
+              const initMap = {};
+              (duplicateInfo.missingMenus || []).forEach(m => { initMap[m.name] = { type: 'ignore' }; });
+              setMissingMenuMappings(initMap);
               setParsedData({ ...duplicateInfo, uploadMode: 'append', fileHash });
               setDuplicateInfo(null);
               setUploadStatus(null);
@@ -344,6 +373,12 @@ export default function PosUpload() {
               const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(duplicateInfo.filename + JSON.stringify(duplicateInfo.sales)));
               const hashArray = Array.from(new Uint8Array(hashBuffer));
               const fileHash = 'sha256-' + hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+              const dupCats = [...new Set(duplicateInfo.sales.map(s => s.category || 'Lainnya'))];
+              setCategories(dupCats);
+              setSelectedCategories(dupCats);
+              const initMap = {};
+              (duplicateInfo.missingMenus || []).forEach(m => { initMap[m.name] = { type: 'ignore' }; });
+              setMissingMenuMappings(initMap);
               setParsedData({ ...duplicateInfo, uploadMode: 'overwrite', fileHash });
               setDuplicateInfo(null);
               setUploadStatus(null);
@@ -465,7 +500,7 @@ export default function PosUpload() {
               </div>
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Item Terjual</div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{parsedData.totalQty.toLocaleString('id-ID')} Pcs</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{summaryStats.totalQty.toLocaleString('id-ID')} Pcs</div>
               </div>
             </div>
 
@@ -475,7 +510,7 @@ export default function PosUpload() {
               </div>
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Menu Unik</div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{parsedData.uniqueMenus} Menu</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{summaryStats.uniqueMenus} Menu</div>
               </div>
             </div>
 
@@ -485,12 +520,12 @@ export default function PosUpload() {
               </div>
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Subtotal Revenue</div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{formatIDR(parsedData.totalRevenue)}</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{formatIDR(summaryStats.totalRevenue)}</div>
               </div>
             </div>
           </div>
 
-          {parsedData.missingMenus.length > 0 ? (
+          {summaryStats.missingMenus.length > 0 ? (
             <div style={{
               marginBottom: '24px',
               padding: '20px',
@@ -499,7 +534,7 @@ export default function PosUpload() {
               background: 'rgba(239, 68, 68, 0.05)'
             }}>
                <h3 style={{ color: 'var(--danger)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <AlertTriangle size={20} /> Warning: {parsedData.missingMenus.length} Menu Tanpa Resep & Bahan
+                  <AlertTriangle size={20} /> Warning: {summaryStats.missingMenus.length} Menu Tanpa Resep & Bahan
                </h3>
                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '16px', marginTop: '8px' }}>
                   Pilih aksi untuk setiap menu yang tidak dikenali: <strong>Abaikan</strong> (stok tidak dipotong), <strong>Buat Menu Baru</strong>, atau <strong>Map ke Menu Ada</strong>.
@@ -508,7 +543,7 @@ export default function PosUpload() {
                <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
                   <table style={{ width: '100%', fontSize: '0.85rem' }}>
                     <tbody>
-                      {parsedData.missingMenus.map((m, i) => {
+                      {summaryStats.missingMenus.map((m, i) => {
                          const mapping = missingMenuMappings[m.name] || { type: 'ignore' };
                          return (
                          <tr key={i} style={{ borderBottom: '1px solid var(--border-light)' }}>
@@ -578,7 +613,7 @@ export default function PosUpload() {
                   style={{ maxWidth: '300px' }}
                 />
                 <div style={{ padding: '10px 16px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)', fontSize: '0.85rem', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
-                  Total Baris Excel: <strong>{parsedData.sales.length}</strong>
+                  Total Baris Excel: <strong>{filteredSales.length}</strong>
                 </div>
               </div>
               <div className="table-container" style={{ maxHeight: '400px', overflowY: 'auto' }}>
@@ -592,7 +627,7 @@ export default function PosUpload() {
                     </tr>
                   </thead>
                   <tbody>
-                    {parsedData.sales
+                    {filteredSales
                       .filter(r => r.menu_name.toLowerCase().includes(searchMenu.toLowerCase()))
                       .slice(0, 500) // limit display for performance
                       .map((row, i) => (
@@ -603,10 +638,10 @@ export default function PosUpload() {
                         <td style={{ textAlign: 'right' }}>{formatIDR(row.total)}</td>
                       </tr>
                     ))}
-                    {parsedData.sales.filter(r => r.menu_name.toLowerCase().includes(searchMenu.toLowerCase())).length > 500 && (
+                    {filteredSales.filter(r => r.menu_name.toLowerCase().includes(searchMenu.toLowerCase())).length > 500 && (
                       <tr>
                         <td colSpan="4" style={{ textAlign: 'center', padding: '12px', color: 'var(--text-muted)' }}>
-                          ... dan {parsedData.sales.length - 500} baris lainnya (dibatasi 500 untuk performa UI).
+                          ... dan {filteredSales.length - 500} baris lainnya (dibatasi 500 untuk performa UI).
                         </td>
                       </tr>
                     )}
