@@ -244,21 +244,9 @@ export default function Purchasing() {
     if (!window.confirm(`Hapus dan batalkan ${selectedPurchases.length} data pembelian harian terpilih? Stok akan ditarik kembali secara otomatis.`)) return;
 
     setLoading(true);
-    let successCount = 0;
-    const failedItems = [];
     try {
-      // Menjalankan semua penghapusan secara berurutan agar aman di Supabase (menghindari deadlock).
-      // PENTING: setiap item punya try/catch SENDIRI — kalau 1 item gagal (mis. stok
-      // tidak cukup untuk di-reverse), item lain yang terpilih tetap lanjut dihapus,
-      // tidak ikut batal seperti sebelumnya.
-      for (const purchaseId of selectedPurchases) {
-        try {
-          await api.deletePurchaseEntry(purchaseId);
-          successCount++;
-        } catch (err) {
-          failedItems.push({ id: purchaseId, error: err.message });
-        }
-      }
+      // Gunakan API yang telah dioptimasi
+      const { successCount, failedItems } = await api.bulkDeletePurchaseEntries(selectedPurchases);
 
       if (failedItems.length === 0) {
         setNotification({ type: 'success', text: `${successCount} data pembelian berhasil dibatalkan.` });
@@ -846,8 +834,8 @@ export default function Purchasing() {
 
       {/* Supplier Modal */}
       {editingSupplier && (
-        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="glass-card modal-card" style={{ width: '400px', maxWidth: 'calc(100vw - 32px)', maxHeight: '90vh', overflowY: 'auto', padding: '24px' }}>
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setEditSupplier(null)}>
+          <div className="glass-card modal-card" style={{ width: '400px', maxWidth: 'calc(100vw - 32px)', maxHeight: '90vh', overflowY: 'auto', padding: '24px' }} onClick={e => e.stopPropagation()}>
             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '20px' }}>{editingSupplier.id ? 'Edit' : 'Tambah'} Supplier</h3>
             <form onSubmit={handleSaveSupplier} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="form-group"><label className="form-label">Nama Supplier</label><input type="text" required className="form-control" value={editingSupplier.name} onChange={e => setEditSupplier({...editingSupplier, name: e.target.value})} /></div>
@@ -865,8 +853,8 @@ export default function Purchasing() {
 
       {/* New Material Modal */}
       {showNewMaterialModal && (
-        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="glass-card modal-card" style={{ width: '400px', maxWidth: 'calc(100vw - 32px)', maxHeight: '90vh', overflowY: 'auto', padding: '24px' }}>
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowNewMaterialModal(false)}>
+          <div className="glass-card modal-card" style={{ width: '400px', maxWidth: 'calc(100vw - 32px)', maxHeight: '90vh', overflowY: 'auto', padding: '24px' }} onClick={e => e.stopPropagation()}>
             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '20px' }}>Tambah Material Baru</h3>
             <form onSubmit={handleCreateMaterial} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="form-group">

@@ -22,6 +22,9 @@ export default function PosUpload() {
   const [duplicateInfo, setDuplicateInfo] = useState(null);
   const [activeTab, setActiveTab] = useState('summary');
   const [searchMenu, setSearchMenu] = useState('');
+  const [missingMenuMappings, setMissingMenuMappings] = useState({});
+  const [categories, setCategories] = useState([]);
+  const [selectedCategories, setSelectedCategories] = useState([]);
   const fileInputRef = useRef(null);
 
   const handleDrag = (e) => {
@@ -67,6 +70,7 @@ export default function PosUpload() {
       let colTotal = -1;
       let colDate = -1;
       let colCode = -1;
+      let colCategory = -1;
 
       for (let i = 0; i < Math.min(20, jsonData.length); i++) {
         const row = jsonData[i];
@@ -79,12 +83,13 @@ export default function PosUpload() {
           } else if (val === 'qty') {
             colQty = j;
           } else if (val === 'total' || val === 'subtotal') {
-            // Prefer Total
             if (colTotal === -1 || val === 'total') colTotal = j;
           } else if (val === 'sales date') {
             colDate = j;
           } else if (val === 'menu code') {
             colCode = j;
+          } else if (val === 'category' || val === 'kategori' || val === 'menu category') {
+            colCategory = j;
           }
         }
         if (headerRowIdx !== -1) break;
@@ -131,11 +136,17 @@ export default function PosUpload() {
           menu_code: colCode !== -1 ? String(row[colCode] || '') : '',
           qty: qty,
           total: total,
-          salesDate: sDate
+          salesDate: sDate,
+          category: colCategory !== -1 ? String(row[colCategory] || 'Lainnya') : 'Lainnya'
         });
 
         if (!menuAggr[mName]) {
-           menuAggr[mName] = { qty: 0, revenue: 0, code: colCode !== -1 ? String(row[colCode] || '') : '' };
+           menuAggr[mName] = {
+             qty: 0,
+             revenue: 0,
+             code: colCode !== -1 ? String(row[colCode] || '') : '',
+             category: colCategory !== -1 ? String(row[colCategory] || 'Lainnya') : 'Lainnya'
+           };
         }
         menuAggr[mName].qty += qty;
         menuAggr[mName].revenue += total;
@@ -147,6 +158,11 @@ export default function PosUpload() {
       const parts = periodStr.split('-');
       const periodYear = parts[0];
       const periodMonth = parts[1];
+
+      // Kumpulkan kategori unik dari data
+      const uniqueCategories = [...new Set(Object.values(menuAggr).map(m => m.category))];
+      setCategories(uniqueCategories);
+      setSelectedCategories(uniqueCategories); // default: semua dipilih
 
       // Missing Recipe Check
       const missingMenus = [];
@@ -198,6 +214,11 @@ export default function PosUpload() {
         uploadMode: 'append'
       });
 
+      // Setup default mappings: semua missing menu → ignore
+      const initMappings = {};
+      missingMenus.forEach(m => { initMappings[m.name] = { type: 'ignore' }; });
+      setMissingMenuMappings(initMappings);
+
     } catch (err) {
       setUploadStatus({ type: 'error', message: err.message });
     } finally {
@@ -209,7 +230,41 @@ export default function PosUpload() {
     if (!parsedData) return;
     setLoading(true);
     try {
-      const res = await api.processESBAndDeduct(parsedData.sales, {
+      // 1. Proses mappings untuk missing menus
+      const mappedSales = parsedData.sales.map(s => ({ ...s }));
+
+      for (const [mName, config] of Object.entries(missingMenuMappings)) {
+        if (config.type === 'new') {
+          // Buat resep baru dengan ingredient kosong
+          const item = parsedData.missingMenus.find(m => m.name === mName);
+          if (item) {
+            try {
+              await api.createRecipe({
+                menu_name: mName,
+                category: item.category || 'Lainnya',
+                ingredients: [],
+                selling_price: item.qty > 0 ? Math.round(item.revenue / item.qty) : 0
+              });
+            } catch (e) {
+              console.warn('[PosUpload] Gagal buat resep baru untuk:', mName, e);
+            }
+          }
+        } else if (config.type === 'map' && config.targetName) {
+          // Ganti nama menu di sales agar cocok dengan resep yang dipilih
+          mappedSales.forEach(s => {
+            if (s.menu_name === mName) s.menu_name = config.targetName;
+          });
+        }
+        // type 'ignore' → tidak lakukan apa-apa
+      }
+
+      // 2. Filter berdasarkan kategori yang dipilih
+      const activeCats = selectedCategories.length > 0 ? selectedCategories : categories;
+      const finalSales = activeCats.length > 0 && activeCats.length < categories.length
+        ? mappedSales.filter(s => activeCats.includes(s.category))
+        : mappedSales;
+
+      const res = await api.processESBAndDeduct(finalSales, {
           mode: parsedData.uploadMode || 'append',
           periodMonth: parsedData.periodMonth,
           periodYear: parsedData.periodYear,
@@ -329,6 +384,38 @@ export default function PosUpload() {
       ) : (
         <div className="glass-card" style={{ padding: '24px' }}>
 
+          {/* CATEGORY FILTER */}
+          {categories.length > 1 && (
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>Filter Kategori:</div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {categories.map(cat => {
+                  const isSelected = selectedCategories.includes(cat);
+                  return (
+                    <button
+                      key={cat}
+                      className="btn"
+                      style={{
+                        padding: '6px 14px', fontSize: '0.8rem', borderRadius: 'var(--radius-md)',
+                        border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
+                        background: isSelected ? 'var(--accent-glow)' : 'var(--bg-secondary)',
+                        color: isSelected ? 'var(--accent)' : 'var(--text-muted)',
+                        fontWeight: isSelected ? 600 : 400
+                      }}
+                      onClick={() => {
+                        setSelectedCategories(prev =>
+                          prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
+                        );
+                      }}
+                    >
+                      {cat}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* TABS */}
           <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', borderBottom: '1px solid var(--border)' }}>
             <button
@@ -415,19 +502,51 @@ export default function PosUpload() {
                   <AlertTriangle size={20} /> Warning: {parsedData.missingMenus.length} Menu Tanpa Resep & Bahan
                </h3>
                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '16px', marginTop: '8px' }}>
-                  Menu di bawah ini ada di laporan ESB tapi tidak ditemukan di Database Resep / Bahan Baku Barventis. HPP tidak akan terpotong untuk menu ini.
-                  Anda tetap bisa melanjutkan (Sistem akan mengabaikan pemotongan stok untuk menu ini saja).
+                  Pilih aksi untuk setiap menu yang tidak dikenali: <strong>Abaikan</strong> (stok tidak dipotong), <strong>Buat Menu Baru</strong>, atau <strong>Map ke Menu Ada</strong>.
                </p>
 
-               <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+               <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
                   <table style={{ width: '100%', fontSize: '0.85rem' }}>
                     <tbody>
-                      {parsedData.missingMenus.map((m, i) => (
+                      {parsedData.missingMenus.map((m, i) => {
+                         const mapping = missingMenuMappings[m.name] || { type: 'ignore' };
+                         return (
                          <tr key={i} style={{ borderBottom: '1px solid var(--border-light)' }}>
-                            <td style={{ padding: '8px', color: 'var(--text-primary)', fontWeight: 600 }}>{m.name}</td>
+                            <td style={{ padding: '8px', color: 'var(--text-primary)', fontWeight: 600 }}>{m.name} <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--text-muted)' }}>({m.category})</span></td>
                             <td style={{ padding: '8px', color: 'var(--text-muted)' }}>{m.qty} terjual</td>
+                            <td style={{ padding: '8px', textAlign: 'right' }}>
+                              <select
+                                className="form-control"
+                                style={{ width: '180px', padding: '6px 8px', fontSize: '0.8rem', height: 'auto', display: 'inline-block' }}
+                                value={mapping.type}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setMissingMenuMappings(prev => ({
+                                    ...prev,
+                                    [m.name]: { type: val, targetName: val === 'map' ? (recipes[0]?.menu_name || '') : null }
+                                  }));
+                                }}
+                              >
+                                <option value="ignore">Abaikan</option>
+                                <option value="new">Buat Menu Baru</option>
+                                <option value="map">Map ke Menu Ada</option>
+                              </select>
+
+                              {mapping.type === 'map' && (
+                                <select
+                                  className="form-control"
+                                  style={{ width: '180px', padding: '6px 8px', fontSize: '0.8rem', height: 'auto', display: 'inline-block', marginLeft: '8px' }}
+                                  value={mapping.targetName || ''}
+                                  onChange={(e) => setMissingMenuMappings(prev => ({ ...prev, [m.name]: { ...prev[m.name], targetName: e.target.value } }))}
+                                >
+                                  {recipes.map(r => (
+                                    <option key={r.id} value={r.menu_name}>{r.menu_name}</option>
+                                  ))}
+                                </select>
+                              )}
+                            </td>
                          </tr>
-                      ))}
+                      )})}
                     </tbody>
                   </table>
                </div>
