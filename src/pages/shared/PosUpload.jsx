@@ -22,7 +22,7 @@ function useDebouncedValue(value, delay) {
   return debounced;
 }
 
-function RecipeCombobox({ recipes, value, onSelect, placeholder }) {
+function RecipeCombobox({ recipes, materials, value, onSelect, placeholder }) {
   const [query, setQuery] = useState(value || '');
   const [open, setOpen] = useState(false);
   const [hoverIdx, setHoverIdx] = useState(-1);
@@ -39,20 +39,29 @@ function RecipeCombobox({ recipes, value, onSelect, placeholder }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Gabungkan resep + bahan baku jadi satu daftar pencarian. Milih bahan baku
+  // di sini cuma rename nama menu di sales (bukan bikin resep baru) — deduksi
+  // stok 1:1-nya sudah ditangani fallback materialMapByName di processESBAndDeduct.
+  const allTargets = useMemo(() => {
+    const recipeItems = recipes.map(r => ({ id: 'r-' + r.id, name: r.menu_name, sub: r.category, kind: 'Resep' }));
+    const materialItems = (materials || []).map(m => ({ id: 'm-' + m.id, name: m.name, sub: m.category, kind: 'Bahan' }));
+    return [...recipeItems, ...materialItems];
+  }, [recipes, materials]);
+
   const filtered = useMemo(() => {
     const q = debouncedQuery.trim().toLowerCase();
-    const base = q ? recipes.filter(r => r.menu_name.toLowerCase().includes(q)) : recipes;
+    const base = q ? allTargets.filter(t => t.name.toLowerCase().includes(q)) : allTargets;
     return base.slice(0, 30);
-  }, [recipes, debouncedQuery]);
+  }, [allTargets, debouncedQuery]);
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative', display: 'inline-block', width: '180px', marginLeft: '8px', verticalAlign: 'top' }}>
+    <div ref={wrapRef} style={{ position: 'relative', display: 'inline-block', width: '200px', marginLeft: '8px', verticalAlign: 'top' }}>
       <input
         type="text"
         className="form-control"
         style={{ width: '100%', padding: '6px 8px', fontSize: '0.8rem', height: 'auto' }}
         value={query}
-        placeholder={placeholder || 'Cari menu...'}
+        placeholder={placeholder || 'Cari resep atau bahan...'}
         onFocus={() => setOpen(true)}
         onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
       />
@@ -64,18 +73,24 @@ function RecipeCombobox({ recipes, value, onSelect, placeholder }) {
           borderRadius: 'var(--radius-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.25)'
         }}>
           {filtered.length === 0 ? (
-            <div style={{ padding: '8px 10px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Tidak ada menu cocok</div>
-          ) : filtered.map((r, idx) => (
+            <div style={{ padding: '8px 10px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Tidak ada yang cocok</div>
+          ) : filtered.map((t, idx) => (
             <div
-              key={r.id}
-              onClick={() => { onSelect(r.menu_name); setQuery(r.menu_name); setOpen(false); }}
+              key={t.id}
+              onClick={() => { onSelect(t.name); setQuery(t.name); setOpen(false); }}
               onMouseEnter={() => setHoverIdx(idx)}
               style={{
                 padding: '8px 10px', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--text-primary)',
-                background: hoverIdx === idx ? 'var(--bg-tertiary)' : 'transparent'
+                background: hoverIdx === idx ? 'var(--bg-tertiary)' : 'transparent',
+                display: 'flex', justifyContent: 'space-between', gap: '8px'
               }}
             >
-              {r.menu_name} <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>({r.category})</span>
+              <span>{t.name} <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>({t.sub})</span></span>
+              <span style={{
+                fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px', borderRadius: '999px',
+                background: t.kind === 'Bahan' ? 'rgba(16,185,129,0.15)' : 'rgba(99,102,241,0.15)',
+                color: t.kind === 'Bahan' ? 'var(--success)' : 'var(--accent)', flexShrink: 0
+              }}>{t.kind}</span>
             </div>
           ))}
         </div>
@@ -707,8 +722,9 @@ export default function PosUpload() {
                               {mapping.type === 'map' && (
                                 <RecipeCombobox
                                   recipes={recipes}
+                                  materials={materials}
                                   value={mapping.targetName}
-                                  placeholder="Cari & pilih menu..."
+                                  placeholder="Cari resep atau bahan..."
                                   onSelect={(name) => setMissingMenuMappings(prev => ({ ...prev, [m.name]: { ...prev[m.name], targetName: name } }))}
                                 />
                               )}
