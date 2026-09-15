@@ -196,7 +196,16 @@ export const api = {
       const salesByDate = new Map();
       const transactionRows = [];
       const unmappedItems = new Set();
+      const dataIssues = new Set();
       let totalTheoreticalUsage = 0;
+
+      // DEBUG: null/undefined qty_in_use atau harga bahan bikin NaN yang di-JSON.stringify
+      // jadi `null` — itu yang nabrak NOT NULL constraint di transactions.amount. Fallback ke 0
+      // + catat di dataIssues, daripada nge-crash seluruh batch commit di tengah jalan.
+      const toFiniteNumber = (v, fallback = 0) => {
+        const n = parseFloat(v);
+        return Number.isFinite(n) ? n : fallback;
+      };
 
       for (const item of posDataArray) {
         const sDate = item.salesDate || today;
@@ -219,9 +228,13 @@ export const api = {
         if (recipe && recipe.recipe_ingredients) {
            for (const ing of recipe.recipe_ingredients) {
                const matId = ing.material_id;
-               const qtyTheoretical = parseFloat(ing.qty_in_use) * qtySold;
                const mat = ing.materials;
-               const costUnit = (mat.new_price > 0 ? mat.new_price : mat.price) / (mat.full_pack || 1);
+               const rawPrice = mat.new_price > 0 ? mat.new_price : mat.price;
+               if (!Number.isFinite(parseFloat(ing.qty_in_use)) || !Number.isFinite(parseFloat(rawPrice))) {
+                   dataIssues.add(`${item.menu_name} → bahan "${mat?.name || matId}" punya qty_in_use/harga tidak valid (dilewati dari perhitungan biaya)`);
+               }
+               const qtyTheoretical = toFiniteNumber(ing.qty_in_use) * qtySold;
+               const costUnit = toFiniteNumber(rawPrice) / (mat.full_pack || 1);
                const costTheoretical = qtyTheoretical * costUnit;
 
                if (materialDeductMap.has(matId)) {
@@ -237,7 +250,11 @@ export const api = {
            let material = materialMapByName.get(lookupName);
            if (material) {
                const qtyTheoretical = qtySold;
-               const costUnit = (material.new_price > 0 ? material.new_price : material.price) / (material.full_pack || 1);
+               const rawPrice = material.new_price > 0 ? material.new_price : material.price;
+               if (!Number.isFinite(parseFloat(rawPrice))) {
+                   dataIssues.add(`${item.menu_name} → bahan "${material.name}" tidak punya harga valid (biaya dihitung 0)`);
+               }
+               const costUnit = toFiniteNumber(rawPrice) / (material.full_pack || 1);
                const costTheoretical = qtyTheoretical * costUnit;
 
                if (materialDeductMap.has(material.id)) {
@@ -280,7 +297,7 @@ export const api = {
               type: 'POS_DEDUCTION',
               location: 'RESTO',
               qty: -deductQty,
-              amount: -data.costAmount,
+              amount: -toFiniteNumber(data.costAmount),
               notes: `Auto Deduct ESB Upload (${options.periodMonth}/${options.periodYear})`,
               created_by: userId
           });
@@ -303,7 +320,7 @@ export const api = {
               date: date,
               type: 'POS_SALE',
               qty: 0,
-              amount: amount,
+              amount: toFiniteNumber(amount),
               notes: `ESB Daily Sales Aggregation`,
               created_by: userId
           });
@@ -347,6 +364,7 @@ export const api = {
           deducted_materials: materialDeductMap.size,
           negative_warnings: negativeWarnings,
           unmapped_items: Array.from(unmappedItems),
+          data_issues: Array.from(dataIssues),
           errors: deductionErrors
       };
 

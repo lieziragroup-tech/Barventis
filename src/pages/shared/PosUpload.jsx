@@ -433,7 +433,11 @@ export default function PosUpload() {
       if (createdFailed.length > 0) {
           msg += ` ${createdFailed.length} resep baru GAGAL dibuat: ${createdFailed.map(r => r.name).join(', ')}.`;
       }
-      setUploadStatus({ type: createdFailed.length > 0 ? 'warning' : 'success', message: msg });
+      if (res.data_issues?.length > 0) {
+          msg += ` ${res.data_issues.length} bahan punya data qty/harga tidak valid (dilewati dari perhitungan biaya) — cek Recipe Builder.`;
+          console.warn('[PosUpload] Data issues saat commit:', res.data_issues);
+      }
+      setUploadStatus({ type: (createdFailed.length > 0 || res.data_issues?.length > 0) ? 'warning' : 'success', message: msg });
 
       if (createdOk.length > 0) {
         setPendingRecipeReview(prev => [...prev, ...createdOk]);
