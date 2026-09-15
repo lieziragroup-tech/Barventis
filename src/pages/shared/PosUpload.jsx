@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Upload, FileSpreadsheet, CheckCircle,
   Calendar, Database, ShieldAlert, X, AlertTriangle
@@ -22,7 +22,32 @@ export default function PosUpload() {
   const [duplicateInfo, setDuplicateInfo] = useState(null);
   const [activeTab, setActiveTab] = useState('summary');
   const [searchMenu, setSearchMenu] = useState('');
+  const [missingMenuMappings, setMissingMenuMappings] = useState({});
+  const [categories, setCategories] = useState([]);
+  const [selectedCategories, setSelectedCategories] = useState([]);
   const fileInputRef = useRef(null);
+
+  // Derived state untuk summary dinamis
+  const filteredSales = React.useMemo(() => {
+    if (!parsedData) return [];
+    return parsedData.sales.filter(s => selectedCategories.includes(s.category));
+  }, [parsedData, selectedCategories]);
+
+  const summaryStats = React.useMemo(() => {
+    let tQty = 0;
+    let tRev = 0;
+    const uniq = new Set();
+    filteredSales.forEach(s => {
+      tQty += s.qty;
+      tRev += s.total;
+      uniq.add(s.menu_name);
+    });
+
+    // Filter missing menus based on selected categories
+    const activeMissing = parsedData ? parsedData.missingMenus.filter(m => selectedCategories.includes(m.category)) : [];
+
+    return { totalQty: tQty, totalRevenue: tRev, uniqueMenus: uniq.size, missingMenus: activeMissing };
+  }, [filteredSales, parsedData, selectedCategories]);
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -67,27 +92,29 @@ export default function PosUpload() {
       let colTotal = -1;
       let colDate = -1;
       let colCode = -1;
+      let colCategory = -1;
 
       for (let i = 0; i < Math.min(20, jsonData.length); i++) {
         const row = jsonData[i];
         if (!row) continue;
-        for (let j = 0; j < row.length; j++) {
-          const val = String(row[j] || '').toLowerCase().trim();
-          if (val === 'menu name') {
-            headerRowIdx = i;
-            colName = j;
-          } else if (val === 'qty') {
-            colQty = j;
-          } else if (val === 'total' || val === 'subtotal') {
-            // Prefer Total
-            if (colTotal === -1 || val === 'total') colTotal = j;
-          } else if (val === 'sales date') {
-            colDate = j;
-          } else if (val === 'menu code') {
-            colCode = j;
-          }
+        const lowerRow = row.map(c => String(c || '').toLowerCase().trim());
+
+        if (lowerRow.includes('menu name') && lowerRow.includes('qty')) {
+          headerRowIdx = i;
+          colName = lowerRow.indexOf('menu name');
+          colQty = lowerRow.indexOf('qty');
+
+          if (lowerRow.includes('total')) colTotal = lowerRow.indexOf('total');
+          else if (lowerRow.includes('subtotal')) colTotal = lowerRow.indexOf('subtotal');
+
+          if (lowerRow.includes('sales date')) colDate = lowerRow.indexOf('sales date');
+          if (lowerRow.includes('menu code')) colCode = lowerRow.indexOf('menu code');
+          if (lowerRow.includes('category')) colCategory = lowerRow.indexOf('category');
+          else if (lowerRow.includes('kategori')) colCategory = lowerRow.indexOf('kategori');
+          else if (lowerRow.includes('menu category')) colCategory = lowerRow.indexOf('menu category');
+
+          break;
         }
-        if (headerRowIdx !== -1) break;
       }
 
       if (headerRowIdx === -1 || colName === -1 || colQty === -1) {
@@ -100,6 +127,23 @@ export default function PosUpload() {
       const menuAggr = {};
 
       let sampleDate = null;
+
+      // FIX: banyak template ESB (mis. "Penjualan Beverage (ESB).xlsx") sudah
+      // di-export per jenis oleh software kasir, jadi file-nya sendiri TIDAK
+      // punya kolom Category/Kategori sama sekali (colCategory === -1). Kalau
+      // dibiarkan, semua baris jatuh ke satu bucket generik "Lainnya" dan chip
+      // filter kategori jadi nggak berguna (cuma 1 opsi, bukan Minuman/Makanan).
+      // Fallback: kalau file tidak menyediakan kategori untuk sebuah baris,
+      // kita ambil dari `recipes.category` (menu tsb sudah dikategorikan saat
+      // dibuat resepnya), baru jatuh ke 'Lainnya' kalau memang tidak ketemu.
+      const recipeCatByCode = new Map(recipes.filter(r => r.pos_code).map(r => [r.pos_code.toLowerCase().trim(), r.category]));
+      const recipeCatByName = new Map(recipes.map(r => [r.menu_name.toLowerCase().trim(), r.category]));
+      const resolveCategory = (mName, code, rawCategory) => {
+        if (rawCategory) return rawCategory; // Kolom di file selalu diprioritaskan kalau memang ada isinya
+        const lookupCode = String(code || '').toLowerCase().trim();
+        const lookupName = String(mName).toLowerCase().trim();
+        return recipeCatByCode.get(lookupCode) || recipeCatByName.get(lookupName) || 'Lainnya';
+      };
 
       for (let i = headerRowIdx + 1; i < jsonData.length; i++) {
         const row = jsonData[i];
@@ -126,16 +170,26 @@ export default function PosUpload() {
         totalQty += qty;
         totalRevenue += total;
 
+        const menuCode = colCode !== -1 ? String(row[colCode] || '') : '';
+        const rawCategory = colCategory !== -1 ? String(row[colCategory] || '').trim() : '';
+        const category = resolveCategory(mName, menuCode, rawCategory);
+
         salesRows.push({
           menu_name: mName,
-          menu_code: colCode !== -1 ? String(row[colCode] || '') : '',
+          menu_code: menuCode,
           qty: qty,
           total: total,
-          salesDate: sDate
+          salesDate: sDate,
+          category
         });
 
         if (!menuAggr[mName]) {
-           menuAggr[mName] = { qty: 0, revenue: 0, code: colCode !== -1 ? String(row[colCode] || '') : '' };
+           menuAggr[mName] = {
+             qty: 0,
+             revenue: 0,
+             code: menuCode,
+             category
+           };
         }
         menuAggr[mName].qty += qty;
         menuAggr[mName].revenue += total;
@@ -147,6 +201,11 @@ export default function PosUpload() {
       const parts = periodStr.split('-');
       const periodYear = parts[0];
       const periodMonth = parts[1];
+
+      // Kumpulkan kategori unik dari data
+      const uniqueCategories = [...new Set(Object.values(menuAggr).map(m => m.category))];
+      setCategories(uniqueCategories);
+      setSelectedCategories(uniqueCategories); // default: semua dipilih
 
       // Missing Recipe Check
       const missingMenus = [];
@@ -198,6 +257,11 @@ export default function PosUpload() {
         uploadMode: 'append'
       });
 
+      // Setup default mappings: semua missing menu → ignore
+      const initMappings = {};
+      missingMenus.forEach(m => { initMappings[m.name] = { type: 'ignore' }; });
+      setMissingMenuMappings(initMappings);
+
     } catch (err) {
       setUploadStatus({ type: 'error', message: err.message });
     } finally {
@@ -209,12 +273,48 @@ export default function PosUpload() {
     if (!parsedData) return;
     setLoading(true);
     try {
-      const res = await api.processESBAndDeduct(parsedData.sales, {
+      // 1. Proses mappings untuk missing menus
+      const mappedSales = parsedData.sales.map(s => ({ ...s }));
+
+      for (const [mName, config] of Object.entries(missingMenuMappings)) {
+        if (config.type === 'new') {
+          // Buat resep baru dengan ingredient kosong
+          const item = parsedData.missingMenus.find(m => m.name === mName);
+          if (item) {
+            try {
+              await api.createRecipe({
+                menu_name: mName,
+                category: item.category || 'Lainnya',
+                ingredients: [],
+                selling_price: item.qty > 0 ? Math.round(item.revenue / item.qty) : 0
+              });
+            } catch (e) {
+              console.warn('[PosUpload] Gagal buat resep baru untuk:', mName, e);
+            }
+          }
+        } else if (config.type === 'map' && config.targetName) {
+          // Ganti nama menu di sales agar cocok dengan resep yang dipilih
+          mappedSales.forEach(s => {
+            if (s.menu_name === mName) s.menu_name = config.targetName;
+          });
+        }
+        // type 'ignore' → tidak lakukan apa-apa
+      }
+
+      // 2. Filter berdasarkan kategori yang dipilih
+      const activeCats = selectedCategories.length > 0 ? selectedCategories : categories;
+      const finalSales = activeCats.length > 0 && activeCats.length < categories.length
+        ? mappedSales.filter(s => activeCats.includes(s.category))
+        : mappedSales;
+
+      const res = await api.processESBAndDeduct(finalSales, {
           mode: parsedData.uploadMode || 'append',
           periodMonth: parsedData.periodMonth,
           periodYear: parsedData.periodYear,
           filename: parsedData.filename,
-          fileHash: parsedData.fileHash
+          fileHash: parsedData.fileHash,
+          // Catat kategori yang benar-benar dipilih user, bukan selalu 'ALL'
+          categoryFilter: activeCats.length > 0 && activeCats.length < categories.length ? activeCats.join(',') : 'ALL'
       });
 
       const confetti = await getConfetti();
@@ -281,6 +381,13 @@ export default function PosUpload() {
               const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(duplicateInfo.filename + JSON.stringify(duplicateInfo.sales)));
               const hashArray = Array.from(new Uint8Array(hashBuffer));
               const fileHash = 'sha256-' + hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+              // Re-derive categories from duplicateInfo sales
+              const dupCats = [...new Set(duplicateInfo.sales.map(s => s.category || 'Lainnya'))];
+              setCategories(dupCats);
+              setSelectedCategories(dupCats);
+              const initMap = {};
+              (duplicateInfo.missingMenus || []).forEach(m => { initMap[m.name] = { type: 'ignore' }; });
+              setMissingMenuMappings(initMap);
               setParsedData({ ...duplicateInfo, uploadMode: 'append', fileHash });
               setDuplicateInfo(null);
               setUploadStatus(null);
@@ -289,6 +396,12 @@ export default function PosUpload() {
               const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(duplicateInfo.filename + JSON.stringify(duplicateInfo.sales)));
               const hashArray = Array.from(new Uint8Array(hashBuffer));
               const fileHash = 'sha256-' + hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+              const dupCats = [...new Set(duplicateInfo.sales.map(s => s.category || 'Lainnya'))];
+              setCategories(dupCats);
+              setSelectedCategories(dupCats);
+              const initMap = {};
+              (duplicateInfo.missingMenus || []).forEach(m => { initMap[m.name] = { type: 'ignore' }; });
+              setMissingMenuMappings(initMap);
               setParsedData({ ...duplicateInfo, uploadMode: 'overwrite', fileHash });
               setDuplicateInfo(null);
               setUploadStatus(null);
@@ -328,6 +441,38 @@ export default function PosUpload() {
         </div>
       ) : (
         <div className="glass-card" style={{ padding: '24px' }}>
+
+          {/* CATEGORY FILTER */}
+          {categories.length > 0 && (
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>Filter Kategori:</div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {categories.map(cat => {
+                  const isSelected = selectedCategories.includes(cat);
+                  return (
+                    <button
+                      key={cat}
+                      className="btn"
+                      style={{
+                        padding: '6px 14px', fontSize: '0.8rem', borderRadius: 'var(--radius-md)',
+                        border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
+                        background: isSelected ? 'var(--accent-glow)' : 'var(--bg-secondary)',
+                        color: isSelected ? 'var(--accent)' : 'var(--text-muted)',
+                        fontWeight: isSelected ? 600 : 400
+                      }}
+                      onClick={() => {
+                        setSelectedCategories(prev =>
+                          prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
+                        );
+                      }}
+                    >
+                      {cat}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* TABS */}
           <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', borderBottom: '1px solid var(--border)' }}>
@@ -378,7 +523,7 @@ export default function PosUpload() {
               </div>
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Item Terjual</div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{parsedData.totalQty.toLocaleString('id-ID')} Pcs</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{summaryStats.totalQty.toLocaleString('id-ID')} Pcs</div>
               </div>
             </div>
 
@@ -388,7 +533,7 @@ export default function PosUpload() {
               </div>
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Menu Unik</div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{parsedData.uniqueMenus} Menu</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{summaryStats.uniqueMenus} Menu</div>
               </div>
             </div>
 
@@ -398,12 +543,12 @@ export default function PosUpload() {
               </div>
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Subtotal Revenue</div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{formatIDR(parsedData.totalRevenue)}</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{formatIDR(summaryStats.totalRevenue)}</div>
               </div>
             </div>
           </div>
 
-          {parsedData.missingMenus.length > 0 ? (
+          {summaryStats.missingMenus.length > 0 ? (
             <div style={{
               marginBottom: '24px',
               padding: '20px',
@@ -412,22 +557,54 @@ export default function PosUpload() {
               background: 'rgba(239, 68, 68, 0.05)'
             }}>
                <h3 style={{ color: 'var(--danger)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <AlertTriangle size={20} /> Warning: {parsedData.missingMenus.length} Menu Tanpa Resep & Bahan
+                  <AlertTriangle size={20} /> Warning: {summaryStats.missingMenus.length} Menu Tanpa Resep & Bahan
                </h3>
                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '16px', marginTop: '8px' }}>
-                  Menu di bawah ini ada di laporan ESB tapi tidak ditemukan di Database Resep / Bahan Baku Barventis. HPP tidak akan terpotong untuk menu ini.
-                  Anda tetap bisa melanjutkan (Sistem akan mengabaikan pemotongan stok untuk menu ini saja).
+                  Pilih aksi untuk setiap menu yang tidak dikenali: <strong>Abaikan</strong> (stok tidak dipotong), <strong>Buat Menu Baru</strong>, atau <strong>Map ke Menu Ada</strong>.
                </p>
 
-               <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+               <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
                   <table style={{ width: '100%', fontSize: '0.85rem' }}>
                     <tbody>
-                      {parsedData.missingMenus.map((m, i) => (
+                      {summaryStats.missingMenus.map((m, i) => {
+                         const mapping = missingMenuMappings[m.name] || { type: 'ignore' };
+                         return (
                          <tr key={i} style={{ borderBottom: '1px solid var(--border-light)' }}>
-                            <td style={{ padding: '8px', color: 'var(--text-primary)', fontWeight: 600 }}>{m.name}</td>
+                            <td style={{ padding: '8px', color: 'var(--text-primary)', fontWeight: 600 }}>{m.name} <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--text-muted)' }}>({m.category})</span></td>
                             <td style={{ padding: '8px', color: 'var(--text-muted)' }}>{m.qty} terjual</td>
+                            <td style={{ padding: '8px', textAlign: 'right' }}>
+                              <select
+                                className="form-control"
+                                style={{ width: '180px', padding: '6px 8px', fontSize: '0.8rem', height: 'auto', display: 'inline-block' }}
+                                value={mapping.type}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setMissingMenuMappings(prev => ({
+                                    ...prev,
+                                    [m.name]: { type: val, targetName: val === 'map' ? (recipes[0]?.menu_name || '') : null }
+                                  }));
+                                }}
+                              >
+                                <option value="ignore">Abaikan</option>
+                                <option value="new">Buat Menu Baru</option>
+                                <option value="map">Map ke Menu Ada</option>
+                              </select>
+
+                              {mapping.type === 'map' && (
+                                <select
+                                  className="form-control"
+                                  style={{ width: '180px', padding: '6px 8px', fontSize: '0.8rem', height: 'auto', display: 'inline-block', marginLeft: '8px' }}
+                                  value={mapping.targetName || ''}
+                                  onChange={(e) => setMissingMenuMappings(prev => ({ ...prev, [m.name]: { ...prev[m.name], targetName: e.target.value } }))}
+                                >
+                                  {recipes.map(r => (
+                                    <option key={r.id} value={r.menu_name}>{r.menu_name}</option>
+                                  ))}
+                                </select>
+                              )}
+                            </td>
                          </tr>
-                      ))}
+                      )})}
                     </tbody>
                   </table>
                </div>
@@ -459,7 +636,7 @@ export default function PosUpload() {
                   style={{ maxWidth: '300px' }}
                 />
                 <div style={{ padding: '10px 16px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)', fontSize: '0.85rem', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
-                  Total Baris Excel: <strong>{parsedData.sales.length}</strong>
+                  Total Baris Excel: <strong>{filteredSales.length}</strong>
                 </div>
               </div>
               <div className="table-container" style={{ maxHeight: '400px', overflowY: 'auto' }}>
@@ -473,7 +650,7 @@ export default function PosUpload() {
                     </tr>
                   </thead>
                   <tbody>
-                    {parsedData.sales
+                    {filteredSales
                       .filter(r => r.menu_name.toLowerCase().includes(searchMenu.toLowerCase()))
                       .slice(0, 500) // limit display for performance
                       .map((row, i) => (
@@ -484,10 +661,10 @@ export default function PosUpload() {
                         <td style={{ textAlign: 'right' }}>{formatIDR(row.total)}</td>
                       </tr>
                     ))}
-                    {parsedData.sales.filter(r => r.menu_name.toLowerCase().includes(searchMenu.toLowerCase())).length > 500 && (
+                    {filteredSales.filter(r => r.menu_name.toLowerCase().includes(searchMenu.toLowerCase())).length > 500 && (
                       <tr>
                         <td colSpan="4" style={{ textAlign: 'center', padding: '12px', color: 'var(--text-muted)' }}>
-                          ... dan {parsedData.sales.length - 500} baris lainnya (dibatasi 500 untuk performa UI).
+                          ... dan {filteredSales.length - 500} baris lainnya (dibatasi 500 untuk performa UI).
                         </td>
                       </tr>
                     )}
