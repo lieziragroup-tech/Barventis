@@ -72,65 +72,6 @@ const logAudit = async (action, description) => {
 export { parsePackSize, calculateIngredientCost };
 
 export const api = {
-  bulkDeletePurchaseEntries: async (ids) => {
-    const tenantId = await getActiveTenantId();
-    if (!tenantId || !ids || ids.length === 0) return { successCount: 0, failedItems: [] };
-
-    // Fetch target purchase entries
-    const { data: p, error: fetchErr } = await supabase
-      .from('purchase_entries')
-      .select('id, material_id, qty, date')
-      .eq('tenant_id', tenantId)
-      .in('id', ids);
-
-    if (fetchErr) throw new Error("Gagal memuat data pembelian: " + fetchErr.message);
-    if (!p || p.length === 0) return { successCount: 0, failedItems: [] };
-
-    const failedItems = [];
-    let successCount = 0;
-
-    // Process deduct_stock_atomic sequentially to avoid DB locks
-    for (const entry of p) {
-      const { error } = await supabase.rpc('deduct_stock_atomic', {
-        p_material_id: entry.material_id,
-        // positive deduct_qty means RESTORE stock because it was PURCHASE (we added stock previously)
-        p_deduct_qty: parseFloat(entry.qty)
-      });
-
-      if (error) {
-        failedItems.push({ id: entry.id, error: error.message });
-      } else {
-        successCount++;
-      }
-    }
-
-    const okIds = p.filter(x => !failedItems.find(f => f.id === x.id)).map(x => x.id);
-
-    if (okIds.length > 0) {
-      // Create concurrent delete promises for transactions
-      const txDeletePromises = p.filter(x => okIds.includes(x.id)).map(entry =>
-        supabase.from('transactions')
-          .delete()
-          .eq('tenant_id', tenantId)
-          .eq('type', 'PURCHASE_IN')
-          .eq('material_id', entry.material_id)
-          .eq('date', entry.date)
-          .ilike('notes', `%[ID:${entry.id}]%`)
-      );
-
-      await Promise.allSettled(txDeletePromises);
-
-      // Batch delete purchase entries in one query
-      await supabase.from('purchase_entries')
-        .delete()
-        .eq('tenant_id', tenantId)
-        .in('id', okIds);
-    }
-
-    try { await logAudit('DELETE_PURCHASE', `Menghapus ${successCount} riwayat pembelian harian secara massal.`); } catch { /* ignore */ }
-
-    return { successCount, failedItems };
-  },
   // ═══════════════════════════════════════════════════════════════════
   // REFACTOR: Qty_resto is NOT modified here. Expected usage is logged
   // to expected_usage table for comparison against actual physical inventory.
@@ -1348,13 +1289,11 @@ export const api = {
       ...row
     }));
 
-    if (rowsToInsert.length > 0) {
-      const { error: ingErr } = await supabase.from('recipe_ingredients').insert(rowsToInsert);
-      if (ingErr) {
-        // Rollback
-        await supabase.from('recipes').delete().eq('id', recipe.id);
-        throw new Error("Gagal menyimpan bahan resep: " + ingErr.message);
-      }
+    const { error: ingErr } = await supabase.from('recipe_ingredients').insert(rowsToInsert);
+    if (ingErr) {
+      // Rollback
+      await supabase.from('recipes').delete().eq('id', recipe.id);
+      throw new Error("Gagal menyimpan bahan resep: " + ingErr.message);
     }
 
     const formattedHpp = new Intl.NumberFormat('id-ID').format(recipe.basic_cost);
