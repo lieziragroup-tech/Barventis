@@ -277,6 +277,13 @@ export const api = {
 
       await Promise.all(Array.from(materialDeductMap.entries()).map(async ([matId, data]) => {
           const deductQty = data.qty;
+          // Guard: kalau qty_in_use di resep = 0 (data kotor) sehingga hasil kalkulasi
+          // deduction jadi 0, jangan lanjut ke stock RPC / insert transactions —
+          // akan tetap kena chk_qty_not_zero. Cukup catat sebagai data issue.
+          if (deductQty === 0) {
+              dataIssues.add(`${data.matInfo.name} → jumlah deduksi terhitung 0 (cek qty_in_use di resep), baris dilewati.`);
+              return;
+          }
           const currentResto = parseFloat(data.matInfo.qty_resto || 0);
 
           if (currentResto - deductQty < 0) {
@@ -320,7 +327,12 @@ export const api = {
               date: date,
               type: 'POS_SALE',
               location: 'RESTO',
-              qty: 0,
+              // FIX: kolom `qty` di tabel `transactions` punya CHECK (qty <> 0)
+              // (chk_qty_not_zero). Baris ini hanya representasi agregasi omzet
+              // harian (nilai riil ada di `amount`), bukan pergerakan stok, jadi
+              // qty diisi placeholder non-zero — konsisten dengan fix yang sama
+              // yang sudah diterapkan di processPOSSync (FIX 2026-09, QA finding 3B).
+              qty: 1,
               amount: toFiniteNumber(amount),
               notes: `ESB Daily Sales Aggregation`,
               created_by: userId
@@ -1343,7 +1355,11 @@ export const api = {
         tenant_id: tenantId,
         menu_name: recipeData.menu_name,
         category: recipeData.category || 'NON-KOPI',
-        image_url: recipeData.image_url || null,
+        // FIX: jangan selalu kirim `image_url` — kolom ini belum tentu ada di
+        // schema cache PostgREST (lihat migrasi 0004_add_recipe_image_url.sql).
+        // Sama seperti pola aman di updateRecipe: hanya ikutkan key ini kalau
+        // caller memang secara eksplisit mengisi image_url.
+        ...(recipeData.image_url !== undefined ? { image_url: recipeData.image_url || null } : {}),
         selling_price: sellingPrice,
         subtotal: parseFloat(subtotal.toFixed(2)),
         fix_cost_pct: fixCostPct,
