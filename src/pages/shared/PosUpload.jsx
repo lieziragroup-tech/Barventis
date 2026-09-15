@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Upload, FileSpreadsheet, CheckCircle,
   Calendar, Database, ShieldAlert, X, AlertTriangle
@@ -12,9 +13,83 @@ const getXLSX = async () => { if (!_XLSX) _XLSX = await import('xlsx'); return _
 let _confetti;
 const getConfetti = async () => { if (!_confetti) _confetti = (await import('canvas-confetti')).default; return _confetti; };
 
+function useDebouncedValue(value, delay) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
+
+function RecipeCombobox({ recipes, value, onSelect, placeholder }) {
+  const [query, setQuery] = useState(value || '');
+  const [open, setOpen] = useState(false);
+  const [hoverIdx, setHoverIdx] = useState(-1);
+  const wrapRef = useRef(null);
+  const debouncedQuery = useDebouncedValue(query, 250);
+
+  useEffect(() => { setQuery(value || ''); }, [value]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = debouncedQuery.trim().toLowerCase();
+    const base = q ? recipes.filter(r => r.menu_name.toLowerCase().includes(q)) : recipes;
+    return base.slice(0, 30);
+  }, [recipes, debouncedQuery]);
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative', display: 'inline-block', width: '180px', marginLeft: '8px', verticalAlign: 'top' }}>
+      <input
+        type="text"
+        className="form-control"
+        style={{ width: '100%', padding: '6px 8px', fontSize: '0.8rem', height: 'auto' }}
+        value={query}
+        placeholder={placeholder || 'Cari menu...'}
+        onFocus={() => setOpen(true)}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+      />
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30,
+          maxHeight: '220px', overflowY: 'auto', marginTop: '4px', textAlign: 'left',
+          background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.25)'
+        }}>
+          {filtered.length === 0 ? (
+            <div style={{ padding: '8px 10px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Tidak ada menu cocok</div>
+          ) : filtered.map((r, idx) => (
+            <div
+              key={r.id}
+              onClick={() => { onSelect(r.menu_name); setQuery(r.menu_name); setOpen(false); }}
+              onMouseEnter={() => setHoverIdx(idx)}
+              style={{
+                padding: '8px 10px', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--text-primary)',
+                background: hoverIdx === idx ? 'var(--bg-tertiary)' : 'transparent'
+              }}
+            >
+              {r.menu_name} <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>({r.category})</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PosUpload() {
   const { recipes, stock, fetchAllData } = useData();
   const materials = stock; // alias for readability
+  const navigate = useNavigate();
+  const location = useLocation();
+  const recipesPath = location.pathname.replace(/\/pos$/, '/recipes');
   const [dragActive, setDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [parsedData, setParsedData] = useState(null);
@@ -25,7 +100,15 @@ export default function PosUpload() {
   const [missingMenuMappings, setMissingMenuMappings] = useState({});
   const [categories, setCategories] = useState([]);
   const [selectedCategories, setSelectedCategories] = useState([]);
+  const [pendingRecipeReview, setPendingRecipeReview] = useState([]);
   const fileInputRef = useRef(null);
+
+  const categoryOptions = useMemo(() => {
+    const set = new Set(['Lainnya']);
+    categories.forEach(c => c && set.add(c));
+    recipes.forEach(r => r.category && set.add(r.category));
+    return Array.from(set);
+  }, [categories, recipes]);
 
   // Derived state untuk summary dinamis
   const filteredSales = React.useMemo(() => {
@@ -275,21 +358,26 @@ export default function PosUpload() {
     try {
       // 1. Proses mappings untuk missing menus
       const mappedSales = parsedData.sales.map(s => ({ ...s }));
+      const newRecipeResults = [];
 
       for (const [mName, config] of Object.entries(missingMenuMappings)) {
         if (config.type === 'new') {
-          // Buat resep baru dengan ingredient kosong
+          // Buat resep baru dengan ingredient kosong; kategori & harga bisa dioverride user di modal
           const item = parsedData.missingMenus.find(m => m.name === mName);
           if (item) {
+            const category = config.category || item.category || 'Lainnya';
+            const price = config.price != null ? config.price : (item.qty > 0 ? Math.round(item.revenue / item.qty) : 0);
             try {
               await api.createRecipe({
                 menu_name: mName,
-                category: item.category || 'Lainnya',
+                category,
                 ingredients: [],
-                selling_price: item.qty > 0 ? Math.round(item.revenue / item.qty) : 0
+                selling_price: price
               });
+              newRecipeResults.push({ name: mName, category, success: true });
             } catch (e) {
               console.warn('[PosUpload] Gagal buat resep baru untuk:', mName, e);
+              newRecipeResults.push({ name: mName, category, success: false, error: e.message });
             }
           }
         } else if (config.type === 'map' && config.targetName) {
@@ -320,11 +408,21 @@ export default function PosUpload() {
       const confetti = await getConfetti();
       await confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
 
+      const createdOk = newRecipeResults.filter(r => r.success);
+      const createdFailed = newRecipeResults.filter(r => !r.success);
+
       let msg = `Sukses memproses ESB! Memotong stok untuk ${res.deducted_materials} bahan.`;
       if (res.unmapped_items?.length > 0) {
           msg += ` Ada ${res.unmapped_items.length} menu yang dilewati (tidak ada resep).`;
       }
-      setUploadStatus({ type: 'success', message: msg });
+      if (createdFailed.length > 0) {
+          msg += ` ${createdFailed.length} resep baru GAGAL dibuat: ${createdFailed.map(r => r.name).join(', ')}.`;
+      }
+      setUploadStatus({ type: createdFailed.length > 0 ? 'warning' : 'success', message: msg });
+
+      if (createdOk.length > 0) {
+        setPendingRecipeReview(prev => [...prev, ...createdOk]);
+      }
 
       setParsedData(null);
       await fetchAllData(); // refresh app state
@@ -360,6 +458,21 @@ export default function PosUpload() {
           {uploadStatus.type === 'error' && <ShieldAlert size={18} style={{ color: 'var(--danger)' }} />}
           <span style={{ flex: 1, fontSize: '0.875rem', color: 'var(--text-primary)' }}>{uploadStatus.message}</span>
           <button onClick={() => { setUploadStatus(null); setDuplicateInfo(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={16} /></button>
+        </div>
+      )}
+
+      {pendingRecipeReview.length > 0 && (
+        <div style={{
+          padding: '14px 20px', borderRadius: 'var(--radius-lg)', marginBottom: '20px',
+          display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap',
+          background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)'
+        }}>
+          <ShieldAlert size={18} style={{ color: 'var(--warning)', flexShrink: 0 }} />
+          <span style={{ flex: 1, minWidth: '240px', fontSize: '0.875rem', color: 'var(--text-primary)' }}>
+            {pendingRecipeReview.length} resep baru ({pendingRecipeReview.map(r => r.name).join(', ')}) masih tanpa bahan baku — Food Cost 0% & stok tidak terpotong sampai bahannya diisi.
+          </span>
+          <button className="btn btn-secondary" onClick={() => navigate(recipesPath)}>Isi Resep Sekarang</button>
+          <button onClick={() => setPendingRecipeReview([])} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={16} /></button>
         </div>
       )}
 
@@ -570,19 +683,20 @@ export default function PosUpload() {
                          const mapping = missingMenuMappings[m.name] || { type: 'ignore' };
                          return (
                          <tr key={i} style={{ borderBottom: '1px solid var(--border-light)' }}>
-                            <td style={{ padding: '8px', color: 'var(--text-primary)', fontWeight: 600 }}>{m.name} <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--text-muted)' }}>({m.category})</span></td>
-                            <td style={{ padding: '8px', color: 'var(--text-muted)' }}>{m.qty} terjual</td>
-                            <td style={{ padding: '8px', textAlign: 'right' }}>
+                            <td style={{ padding: '8px', color: 'var(--text-primary)', fontWeight: 600, verticalAlign: 'top' }}>{m.name} <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--text-muted)' }}>({m.category})</span></td>
+                            <td style={{ padding: '8px', color: 'var(--text-muted)', verticalAlign: 'top' }}>{m.qty} terjual</td>
+                            <td style={{ padding: '8px', textAlign: 'right', verticalAlign: 'top' }}>
                               <select
                                 className="form-control"
                                 style={{ width: '180px', padding: '6px 8px', fontSize: '0.8rem', height: 'auto', display: 'inline-block' }}
                                 value={mapping.type}
                                 onChange={(e) => {
                                   const val = e.target.value;
-                                  setMissingMenuMappings(prev => ({
-                                    ...prev,
-                                    [m.name]: { type: val, targetName: val === 'map' ? (recipes[0]?.menu_name || '') : null }
-                                  }));
+                                  setMissingMenuMappings(prev => {
+                                    if (val === 'map') return { ...prev, [m.name]: { type: 'map', targetName: '' } };
+                                    if (val === 'new') return { ...prev, [m.name]: { type: 'new', category: m.category || 'Lainnya', price: m.qty > 0 ? Math.round(m.revenue / m.qty) : 0 } };
+                                    return { ...prev, [m.name]: { type: 'ignore' } };
+                                  });
                                 }}
                               >
                                 <option value="ignore">Abaikan</option>
@@ -591,16 +705,37 @@ export default function PosUpload() {
                               </select>
 
                               {mapping.type === 'map' && (
-                                <select
-                                  className="form-control"
-                                  style={{ width: '180px', padding: '6px 8px', fontSize: '0.8rem', height: 'auto', display: 'inline-block', marginLeft: '8px' }}
-                                  value={mapping.targetName || ''}
-                                  onChange={(e) => setMissingMenuMappings(prev => ({ ...prev, [m.name]: { ...prev[m.name], targetName: e.target.value } }))}
-                                >
-                                  {recipes.map(r => (
-                                    <option key={r.id} value={r.menu_name}>{r.menu_name}</option>
-                                  ))}
-                                </select>
+                                <RecipeCombobox
+                                  recipes={recipes}
+                                  value={mapping.targetName}
+                                  placeholder="Cari & pilih menu..."
+                                  onSelect={(name) => setMissingMenuMappings(prev => ({ ...prev, [m.name]: { ...prev[m.name], targetName: name } }))}
+                                />
+                              )}
+
+                              {mapping.type === 'new' && (
+                                <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+                                  <div style={{ display: 'flex', gap: '8px' }}>
+                                    <select
+                                      className="form-control"
+                                      style={{ width: '130px', padding: '6px 8px', fontSize: '0.8rem', height: 'auto' }}
+                                      value={mapping.category || m.category || 'Lainnya'}
+                                      onChange={(e) => setMissingMenuMappings(prev => ({ ...prev, [m.name]: { ...prev[m.name], category: e.target.value } }))}
+                                    >
+                                      {categoryOptions.map(c => (<option key={c} value={c}>{c}</option>))}
+                                    </select>
+                                    <input
+                                      type="number"
+                                      className="form-control"
+                                      style={{ width: '110px', padding: '6px 8px', fontSize: '0.8rem', height: 'auto' }}
+                                      value={mapping.price ?? (m.qty > 0 ? Math.round(m.revenue / m.qty) : 0)}
+                                      onChange={(e) => setMissingMenuMappings(prev => ({ ...prev, [m.name]: { ...prev[m.name], price: parseFloat(e.target.value) || 0 } }))}
+                                    />
+                                  </div>
+                                  <span style={{ fontSize: '0.7rem', color: 'var(--warning)', maxWidth: '260px', textAlign: 'right' }}>
+                                    ⚠ Bahan baku kosong — stok tidak terpotong & Food Cost 0% sampai diisi manual.
+                                  </span>
+                                </div>
                               )}
                             </td>
                          </tr>
