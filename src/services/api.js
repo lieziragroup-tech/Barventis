@@ -319,6 +319,7 @@ export const api = {
               tenant_id: tenantId,
               date: date,
               type: 'POS_SALE',
+              location: 'RESTO',
               qty: 0,
               amount: toFiniteNumber(amount),
               notes: `ESB Daily Sales Aggregation`,
