@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import BulkImport from '../../components/BulkImport';
 import { useData } from '../../contexts/DataContext';
+import { supabase } from '../../lib/supabase';
 import { formatIDR, calculateIngredientCost } from '../../services/costUtils';
 
 let _confetti;
@@ -26,24 +27,42 @@ export default function StockOpname() {
 
   const categories = useMemo(() => [...new Set(stock.map(item => item.category))], [stock]);
 
+  const [isInitializing, setIsInitializing] = useState(false);
+
   // 2. Initialize Opname
-  const handleStartOpname = () => {
-    // Populate items with their book stock at the selected location
-    const items = stock.map(item => ({
-      name: item.name,
-      category: item.category,
-      unit: item.unit,
-      price: item.new_price || item.price,
-      // BUG-FIX 2026-08: full_pack wasn't carried over, so valAdjustment below
-      // had no pack-size info to divide by and used the raw per-pack price instead.
-      full_pack: item.full_pack,
-      book_qty: location === 'RESTO' ? (item.qty_resto || 0) : (item.qty_central || 0),
-      physical_qty: '',
-      notes: ''
-    }));
-    setOpnameItems(items);
-    setActiveCategory(categories[0] || '');
-    setStep(2);
+  const handleStartOpname = async () => {
+    setIsInitializing(true);
+    try {
+      // Populate items with their real-time book stock at the selected location
+      const items = stock.map(item => {
+        const bookQty = location === 'RESTO' ? item.qty_resto : item.qty_central;
+
+        return {
+          name: item.name,
+          category: item.category,
+          unit: item.unit,
+          price: item.new_price || item.price,
+          // BUG-FIX 2026-08: full_pack wasn't carried over, so valAdjustment below
+          // had no pack-size info to divide by and used the raw per-pack price instead.
+          full_pack: item.full_pack,
+          book_qty: bookQty || 0,
+          physical_qty: '',
+          notes: ''
+        };
+      });
+
+      // Sort alphabetically
+      items.sort((a, b) => a.name.localeCompare(b.name));
+
+      setOpnameItems(items);
+      setActiveCategory(categories[0] || '');
+      setStep(2);
+    } catch (error) {
+      console.error('Failed to init opname:', error);
+      showToast('Gagal memuat snapshot stok: ' + error.message, 'error');
+    } finally {
+      setIsInitializing(false);
+    }
   };
 
   // 3. Row Qty updates
@@ -258,8 +277,8 @@ export default function StockOpname() {
             </div>
           </div>
 
-          <button className="btn btn-primary" style={{ width: '100%', marginTop: '16px', display: 'flex', justifyContent: 'center' }} onClick={handleStartOpname}>
-            Start Stocktaking Wizard <ArrowRight size={16} />
+          <button className="btn btn-primary" style={{ width: '100%', marginTop: '16px', display: 'flex', justifyContent: 'center' }} onClick={handleStartOpname} disabled={isInitializing}>
+            {isInitializing ? 'Memuat Snapshot...' : 'Start Stocktaking Wizard'} <ArrowRight size={16} />
           </button>
         </div>
       )}

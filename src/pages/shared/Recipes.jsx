@@ -218,16 +218,16 @@ export default function Recipes() {
   const subtotal = useMemo(() => editedIngredients.reduce((acc, ing) => acc + calcRowAmount(ing), 0), [editedIngredients, stockMap, unitConversionMap]);
 
   const fixCostPctFraction = (parseFloat(editedFixCostPct) || 0) / 100;
-  const fixCost = useMemo(() => subtotal * fixCostPctFraction, [subtotal, fixCostPctFraction]);
-  const basicCost = useMemo(() => subtotal + fixCost, [subtotal, fixCost]);
+  const fixCost = useMemo(() => Math.round(subtotal * fixCostPctFraction), [subtotal, fixCostPctFraction]);
+  const basicCost = useMemo(() => Math.round(subtotal + fixCost), [subtotal, fixCost]);
   const foodCostPct = useMemo(() => editedSellingPrice > 0 ? (basicCost / editedSellingPrice) : 0, [basicCost, editedSellingPrice]);
 
   const computeLiveRecipeCost = (recipe) => {
     const liveSubtotal = (recipe.ingredients || []).reduce((acc, ing) => acc + calcRowAmount(ing), 0);
- 
+
     const liveFixCostPct = recipe.fix_cost_pct != null ? parseFloat(recipe.fix_cost_pct) : api.getOverheadPct();
-    const liveFixCost = liveSubtotal * liveFixCostPct;
-    const liveBasicCost = liveSubtotal + liveFixCost;
+    const liveFixCost = Math.round(liveSubtotal * liveFixCostPct);
+    const liveBasicCost = Math.round(liveSubtotal + liveFixCost);
     const sellingPrice = Number(recipe.selling_price) || 0;
     const liveFoodCostPct = sellingPrice > 0 ? liveBasicCost / sellingPrice : 0;
     return { liveBasicCost, liveFoodCostPct };
@@ -339,7 +339,7 @@ export default function Recipes() {
       ingredients: [],
       subtotal: 0, fix_cost: 0, basic_cost: 0,
       food_cost_pct: 0,
-      selling_price: parseFloat(newMenuPrice) || 0
+      selling_price: Math.round(Number(newMenuPrice) || 0)
     };
     try {
       if (onAddRecipe) await onAddRecipe(newRecipe);
@@ -1022,7 +1022,7 @@ export default function Recipes() {
               if (!isNaN(n)) out.food_cost_pct = n / 100;
             }
             if (row.price_adjustment_input !== undefined && row.price_adjustment_input !== '') {
-              const n = parseFloat(row.price_adjustment_input);
+              const n = Math.round(Number(row.price_adjustment_input));
               if (!isNaN(n)) out.price_adjustment = n;
             }
             const arah = (row.rounding_direction_input || '').toString().trim().toLowerCase();

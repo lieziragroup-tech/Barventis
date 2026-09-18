@@ -8,13 +8,14 @@ import './App.css';
 import ErrorBoundary from './components/ErrorBoundary';
 import AuthScreen from './pages/auth/AuthScreen';
 
-const DashboardLayout = React.lazy(() => import('./components/layout/DashboardLayout'));
+const AppLayout = React.lazy(() => import('./components/AppLayout'));
 const Dashboard = React.lazy(() => import('./pages/shared/Dashboard'));
 const StockLedger = React.lazy(() => import('./pages/shared/StockLedger'));
 const PosUpload = React.lazy(() => import('./pages/shared/PosUpload'));
 const PosRawData = React.lazy(() => import('./pages/shared/PosRawData'));
 const Recipes = React.lazy(() => import('./pages/shared/Recipes'));
 const MenuPricing = React.lazy(() => import('./pages/shared/MenuPricing'));
+const Marketlist = React.lazy(() => import('./pages/shared/Marketlist'));
 const StockOpname = React.lazy(() => import('./pages/shared/StockOpname'));
 const PhysicalCheck = React.lazy(() => import('./pages/shared/PhysicalCheck'));
 const DailyInventory = React.lazy(() => import('./pages/shared/DailyInventory'));
@@ -28,6 +29,7 @@ const Maintenance = React.lazy(() => import('./pages/shared/Maintenance'));
 const SuperAdminPanel = React.lazy(() => import('./pages/superadmin/SuperAdminPanel'));
 const TenantAdminPanel = React.lazy(() => import('./pages/owner/TenantAdminPanel'));
 const PosTerminal = React.lazy(() => import('./pages/pos/PosTerminal'));
+const TrimmingProduction = React.lazy(() => import('./pages/shared/TrimmingProduction'));
 const BaristaReport = React.lazy(() => import('./pages/shared/BaristaReport'));
 const LandingPage = React.lazy(() => import('./pages/landing/NewLandingPage.tsx'));
 
@@ -53,15 +55,15 @@ const LoadingSpinner = () => (
 // Protected Route Component
 const ProtectedRoute = ({ allowedRoles, children }) => {
   const { isAuthenticated, activeUser, loading } = useAuth();
-  
+
   if (loading) return <LoadingSpinner />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  
+
   const role = activeUser?.role === 'SuperAdmin' ? 'Super Admin' : activeUser?.role;
   if (!activeUser || !allowedRoles.includes(role)) {
     return <Navigate to="/unauthorized" replace />;
   }
-  
+
   return children;
 };
 
@@ -70,13 +72,11 @@ const RootRedirect = () => {
   const { activeUser, loading, isAuthenticated } = useAuth();
   if (loading) return <LoadingSpinner />;
   if (!isAuthenticated || !activeUser) return <LandingPage />;
-  
+
   const role = activeUser.role === 'SuperAdmin' ? 'Super Admin' : activeUser.role;
   if (role === 'Super Admin') return <Navigate to="/superadmin" replace />;
-  if (role === 'Admin / Owner') return <Navigate to="/owner" replace />;
-  if (role === 'Staff') return <Navigate to="/staff" replace />;
-  
-  return <Navigate to="/unauthorized" replace />;
+
+  return <Navigate to="/dashboard" replace />;
 };
 
 // Auth Guard Component
@@ -86,6 +86,8 @@ const AuthRoute = ({ children }) => {
   if (isAuthenticated) return <RootRedirect />;
   return children;
 };
+
+const ALL_TENANT = ['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Service', 'Purchasing', 'Staff'];
 
 export default function App() {
   const { activeUser } = useAuth();
@@ -112,7 +114,7 @@ export default function App() {
         {/* SUPER ADMIN */}
         <Route path="/superadmin" element={
           <ProtectedRoute allowedRoles={['Super Admin']}>
-            <DashboardLayout />
+            <AppLayout />
           </ProtectedRoute>
         }>
           <Route index element={<RouteErrorBoundary><SuperAdminPanel tab="tenants" activeUser={activeUser} /></RouteErrorBoundary>} />
@@ -121,56 +123,132 @@ export default function App() {
           <Route path="reset-approvals" element={<RouteErrorBoundary><SuperAdminPanel tab="reset-approvals" activeUser={activeUser} /></RouteErrorBoundary>} />
         </Route>
 
-        {/* OWNER */}
-        <Route path="/owner" element={
-          <ProtectedRoute allowedRoles={['Admin / Owner']}>
-            <DashboardLayout />
+        {/* TENANT DASHBOARD */}
+        <Route path="/dashboard" element={
+          <ProtectedRoute allowedRoles={ALL_TENANT}>
+            <AppLayout />
           </ProtectedRoute>
         }>
           <Route index element={<RouteErrorBoundary><Dashboard /></RouteErrorBoundary>} />
-          <Route path="stock" element={<RouteErrorBoundary><StockLedger /></RouteErrorBoundary>} />
-          <Route path="daily-inventory" element={<RouteErrorBoundary><DailyInventory /></RouteErrorBoundary>} />
-          <Route path="pos" element={<RouteErrorBoundary><PosUpload /></RouteErrorBoundary>} />
-          <Route path="pos-raw" element={<RouteErrorBoundary><PosRawData /></RouteErrorBoundary>} />
-          <Route path="recipes" element={<RouteErrorBoundary><Recipes /></RouteErrorBoundary>} />
-          <Route path="pricing" element={<RouteErrorBoundary><MenuPricing /></RouteErrorBoundary>} />
-          <Route path="invoicing" element={<RouteErrorBoundary><Invoicing /></RouteErrorBoundary>} />
-          <Route path="purchasing" element={<RouteErrorBoundary><Purchasing /></RouteErrorBoundary>} />
-          <Route path="opname" element={<RouteErrorBoundary><StockOpname /></RouteErrorBoundary>} />
-          <Route path="physical-check" element={<RouteErrorBoundary><PhysicalCheck /></RouteErrorBoundary>} />
-          <Route path="audit" element={<RouteErrorBoundary><AuditLogs /></RouteErrorBoundary>} />
-          <Route path="assets" element={<RouteErrorBoundary><AssetManagement /></RouteErrorBoundary>} />
-          <Route path="cost-control" element={<RouteErrorBoundary><CostControl /></RouteErrorBoundary>} />
-          <Route path="backup" element={<RouteErrorBoundary><BackupCenter /></RouteErrorBoundary>} />
-          <Route path="maintenance" element={<RouteErrorBoundary><Maintenance /></RouteErrorBoundary>} />
-          <Route path="settings" element={<RouteErrorBoundary><TenantAdminPanel /></RouteErrorBoundary>} />
-          <Route path="barista-report" element={<RouteErrorBoundary><BaristaReport /></RouteErrorBoundary>} />
+
+          {/* Roles based on features */}
+          <Route path="stock" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Purchasing', 'Staff']}>
+              <RouteErrorBoundary><StockLedger /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="daily-inventory" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Service', 'Purchasing', 'Staff']}>
+              <RouteErrorBoundary><DailyInventory /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="pos" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Service', 'Central', 'Staff']}>
+              <RouteErrorBoundary><PosUpload /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="pos-raw" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Service', 'Central', 'Staff']}>
+              <RouteErrorBoundary><PosRawData /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="recipes" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Staff']}>
+              <RouteErrorBoundary><Recipes /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="pricing" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central']}>
+              <RouteErrorBoundary><MenuPricing /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="invoicing" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central', 'Purchasing']}>
+              <RouteErrorBoundary><Invoicing /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="purchasing" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central', 'Purchasing']}>
+              <RouteErrorBoundary><Purchasing /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="marketlist" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central', 'Purchasing']}>
+              <RouteErrorBoundary><Marketlist /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="opname" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Staff']}>
+              <RouteErrorBoundary><StockOpname /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="physical-check" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central', 'Purchasing']}>
+              <RouteErrorBoundary><PhysicalCheck /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="audit" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central']}>
+              <RouteErrorBoundary><AuditLogs /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="assets" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central']}>
+              <RouteErrorBoundary><AssetManagement /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="cost-control" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central']}>
+              <RouteErrorBoundary><CostControl /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="trimming" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Kitchen', 'Central', 'Staff']}>
+              <RouteErrorBoundary><TrimmingProduction /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="backup" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central']}>
+              <RouteErrorBoundary><BackupCenter /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="maintenance" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen', 'Staff']}>
+              <RouteErrorBoundary><Maintenance /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="settings" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner']}>
+              <RouteErrorBoundary><TenantAdminPanel /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="barista-report" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Bar', 'Central', 'Staff']}>
+              <RouteErrorBoundary><BaristaReport /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
         </Route>
 
-        <Route path="/owner/pos-terminal" element={
-          <ProtectedRoute allowedRoles={['Admin / Owner']}>
-            <RouteErrorBoundary><PosTerminal /></RouteErrorBoundary>
-          </ProtectedRoute>
-        } />
-
-        {/* STAFF */}
-        <Route path="/staff" element={
-          <ProtectedRoute allowedRoles={['Staff']}>
-            <DashboardLayout />
-          </ProtectedRoute>
-        }>
-          <Route index element={<RouteErrorBoundary><Dashboard /></RouteErrorBoundary>} />
-          <Route path="stock" element={<RouteErrorBoundary><StockLedger /></RouteErrorBoundary>} />
-          <Route path="daily-inventory" element={<RouteErrorBoundary><DailyInventory /></RouteErrorBoundary>} />
-          <Route path="pos" element={<RouteErrorBoundary><PosUpload /></RouteErrorBoundary>} />
-          <Route path="pos-raw" element={<RouteErrorBoundary><PosRawData /></RouteErrorBoundary>} />
-          <Route path="recipes" element={<RouteErrorBoundary><Recipes /></RouteErrorBoundary>} />
-          <Route path="maintenance" element={<RouteErrorBoundary><Maintenance /></RouteErrorBoundary>} />
-          <Route path="barista-report" element={<RouteErrorBoundary><BaristaReport /></RouteErrorBoundary>} />
-        </Route>
-
-        <Route path="/staff/pos-terminal" element={
-          <ProtectedRoute allowedRoles={['Staff']}>
+        <Route path="/dashboard/pos-terminal" element={
+          <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Service', 'Bar', 'Staff']}>
             <RouteErrorBoundary><PosTerminal /></RouteErrorBoundary>
           </ProtectedRoute>
         } />

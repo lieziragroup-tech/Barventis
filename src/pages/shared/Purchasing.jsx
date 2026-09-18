@@ -1,7 +1,8 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Plus, Edit2, Search, Trash2, Calendar, ShoppingCart, User, UploadCloud } from 'lucide-react';
+import { Plus, Edit2, Search, Trash2, Calendar, ShoppingCart, User, UploadCloud, Camera, CheckCircle } from 'lucide-react';
 import { api } from '../../services/api';
+import { supabase } from '../../lib/supabase';
 import ExportButton from '../../components/shared/ExportButton';
 import { exportWithAudit } from '../../services/export/exportAudit';
 import Pagination from '../../components/shared/Pagination';
@@ -13,7 +14,18 @@ const PAGE_SIZE = 15;
 export default function Purchasing() {
   const { activeUser } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('PURCHASES'); // 'PURCHASES' or 'SUPPLIERS'
+  const [tab, setTab] = useState('PURCHASES'); // 'PURCHASES', 'SUPPLIERS', 'PO'
+
+  // PO States
+  const [poList, setPoList] = useState([]);
+  const [poPage, setPoPage] = useState(1);
+  const [poTotalCount, setPoTotalCount] = useState(0);
+  const [showGoodsReceiptModal, setShowGoodsReceiptModal] = useState(null);
+  const [receiptPhoto, setReceiptPhoto] = useState(null);
+  const [receiptGps, setReceiptGps] = useState('');
+  const [isReceiving, setIsReceiving] = useState(false);
+  const sigCanvasRef = useRef(null);
+  const [isDrawing, setIsDrawing] = useState(false);
 
   // Supplier State
   const [suppliers, setSuppliers] = useState([]);
@@ -112,6 +124,24 @@ export default function Purchasing() {
     }
   }, []);
 
+  const fetchPOs = useCallback(async () => {
+    if (tab !== 'PO') return;
+    setLoading(true);
+    try {
+      const { data, totalCount } = await api.getInvoicesPaged({ page: poPage, pageSize: PAGE_SIZE, search: '' });
+      setPoList(data);
+      setPoTotalCount(totalCount);
+    } catch (err) {
+      setNotification({ type: 'error', text: err.message });
+    } finally {
+      setLoading(false);
+    }
+  }, [tab, poPage]);
+
+  useEffect(() => {
+    fetchPOs();
+  }, [fetchPOs]);
+
   const fetchMasterData = async () => {
     setLoading(true);
     try {
@@ -150,6 +180,99 @@ export default function Purchasing() {
   }, []);
 
   // --- Handlers ---
+  const handleKirimPO = async (id) => {
+    if (!window.confirm("Kirim PO ke Supplier?")) return;
+    setLoading(true);
+    try {
+      await api.updateInvoiceStatus(id, 'SENT');
+      setNotification({ type: 'success', text: 'PO dikirim (SENT).' });
+      fetchPOs();
+    } catch (err) {
+      setNotification({ type: 'error', text: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation tidak didukung browser ini");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition((position) => {
+      setReceiptGps(`${position.coords.latitude}, ${position.coords.longitude}`);
+    }, (err) => {
+      alert("Gagal ambil GPS: " + err.message);
+    });
+  };
+
+  const startDrawing = (e) => {
+    const canvas = sigCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
+    const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    setIsDrawing(true);
+  };
+
+  const draw = (e) => {
+    if (!isDrawing) return;
+    e.preventDefault();
+    const canvas = sigCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
+    const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+
+  const stopDrawing = () => {
+    setIsDrawing(false);
+  };
+
+  const handleSubmitReceipt = async () => {
+    if (!receiptPhoto) return alert("Wajib upload foto penerimaan");
+    if (!receiptGps) return alert("Wajib ambil lokasi GPS");
+
+    setIsReceiving(true);
+    try {
+      let photoUrl = null;
+      let signatureUrl = null;
+
+      // Upload Photo
+      const photoName = `receipt_${showGoodsReceiptModal.id}_${Date.now()}.jpg`;
+      const { error: photoErr } = await supabase.storage.from('signatures').upload(photoName, receiptPhoto);
+      if (photoErr) throw photoErr;
+      photoUrl = supabase.storage.from('signatures').getPublicUrl(photoName).data.publicUrl;
+
+      // Upload Signature
+      const canvas = sigCanvasRef.current;
+      const sigData = canvas.toDataURL('image/png');
+      const sigBlob = await (await fetch(sigData)).blob();
+      const sigName = `sig_${showGoodsReceiptModal.id}_${Date.now()}.png`;
+      const { error: sigErr } = await supabase.storage.from('signatures').upload(sigName, sigBlob);
+      if (sigErr) throw sigErr;
+      signatureUrl = supabase.storage.from('signatures').getPublicUrl(sigName).data.publicUrl;
+
+      await api.receiveInvoice(showGoodsReceiptModal.id, { photoUrl, signatureUrl, gps: receiptGps });
+
+      setNotification({ type: 'success', text: 'Barang berhasil diterima' });
+      setShowGoodsReceiptModal(null);
+      setReceiptPhoto(null);
+      setReceiptGps('');
+      fetchPOs();
+    } catch (err) {
+      alert("Error: " + err.message);
+    } finally {
+      setIsReceiving(false);
+    }
+  };
+
   const handleSaveSupplier = async (e) => {
     e.preventDefault();
     if (!window.confirm(`Konfirmasi simpan data supplier ${editingSupplier.name}?`)) return;
@@ -437,7 +560,7 @@ export default function Purchasing() {
     }
   };
 
-    const filteredSearch = useMemo(() => {
+  const filteredSearch = useMemo(() => {
     const q = debouncedQuery.trim().toLowerCase();
     if (q === '') return [];
     return materials.filter(m => m.name.toLowerCase().includes(q)).slice(0, 8);
@@ -466,6 +589,7 @@ export default function Purchasing() {
       <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-tertiary)', padding: '4px', borderRadius: 'var(--radius-md)', width: 'fit-content', marginBottom: '20px' }}>
         <button className={`btn ${tab === 'PURCHASES' ? 'btn-primary' : ''}`} style={{ background: tab === 'PURCHASES' ? '' : 'transparent', color: tab === 'PURCHASES' ? '' : 'var(--text-secondary)' }} onClick={() => setTab('PURCHASES')}>Daily Purchases</button>
         <button className={`btn ${tab === 'SUPPLIERS' ? 'btn-primary' : ''}`} style={{ background: tab === 'SUPPLIERS' ? '' : 'transparent', color: tab === 'SUPPLIERS' ? '' : 'var(--text-secondary)' }} onClick={() => setTab('SUPPLIERS')}>Supplier Master</button>
+        <button className={`btn ${tab === 'PO' ? 'btn-primary' : ''}`} style={{ background: tab === 'PO' ? '' : 'transparent', color: tab === 'PO' ? '' : 'var(--text-secondary)' }} onClick={() => setTab('PO')}>Purchase Orders</button>
       </div>
 
       {tab === 'SUPPLIERS' && (
@@ -501,6 +625,149 @@ export default function Purchasing() {
                 {suppliers.length === 0 && <tr><td colSpan="5" style={{ textAlign: 'center' }}>Belum ada data supplier.</td></tr>}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {tab === 'PO' && (
+        <div className="glass-card" style={{ padding: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Daftar Purchase Order</h3>
+          </div>
+          <div className="table-container">
+            <table className="custom-table">
+              <thead>
+                <tr>
+                  <th>No PO</th>
+                  <th>Tanggal</th>
+                  <th>Supplier</th>
+                  <th>Total</th>
+                  <th>Status</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {poList.map(po => (
+                  <tr key={po.id}>
+                    <td style={{ fontWeight: 600 }}>{po.invoice_no}</td>
+                    <td>{po.date}</td>
+                    <td>{po.supplier}</td>
+                    <td style={{ fontWeight: 600 }}>Rp {po.total.toLocaleString('id-ID')}</td>
+                    <td>
+                      <span style={{
+                        padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem',
+                        background: po.status === 'RECEIVED' ? 'var(--success)' : (po.status === 'SENT' ? 'var(--primary)' : 'var(--warning)'),
+                        color: po.status === 'DRAFT' ? 'black' : 'white'
+                      }}>{po.status}</span>
+                    </td>
+                    <td>
+                      {po.status === 'DRAFT' && (
+                        <button className="btn btn-primary btn-sm" onClick={() => handleKirimPO(po.id)}>
+                          Kirim PO
+                        </button>
+                      )}
+                      {po.status === 'SENT' && (
+                        <button className="btn btn-secondary btn-sm" onClick={() => setShowGoodsReceiptModal(po)}>
+                          Terima Barang
+                        </button>
+                      )}
+                      {po.status === 'RECEIVED' && (
+                        <span style={{ color: 'var(--success)', fontSize: '0.8rem', fontWeight: 600 }}>Selesai</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {poList.length === 0 && <tr><td colSpan="6" style={{ textAlign: 'center' }}>Belum ada Purchase Order.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          <Pagination page={poPage} pageSize={PAGE_SIZE} totalCount={poTotalCount} onPageChange={setPoPage} itemLabel="PO" />
+        </div>
+      )}
+
+      {/* Goods Receipt Modal - MOBILE NATIVE UX */}
+      {showGoodsReceiptModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[1000] flex flex-col" onClick={() => !isReceiving && setShowGoodsReceiptModal(null)}>
+          <div className="bg-[var(--bg-primary)] mt-auto rounded-t-3xl h-[90vh] flex flex-col shadow-2xl relative" onClick={e => e.stopPropagation()}>
+            <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto my-3"></div>
+            <div className="px-6 pb-2 border-b border-[var(--border)]">
+              <h3 className="text-xl font-bold">Terima Barang (Goods Receipt)</h3>
+              <p className="text-sm text-[var(--text-secondary)] mt-1">PO: {showGoodsReceiptModal.invoice_no}</p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-6">
+
+              {/* Camera Area */}
+              <div className="flex flex-col gap-2">
+                <label className="font-bold text-[var(--text-primary)]">1. Jepret Foto Bukti (Kamera)</label>
+                <div className="relative group cursor-pointer w-full">
+                  <input type="file" accept="image/*" capture="environment" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onChange={(e) => setReceiptPhoto(e.target.files[0])} />
+                  <div className={`flex flex-col items-center justify-center p-6 h-36 border-2 border-dashed rounded-2xl transition-all ${receiptPhoto ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-[var(--bg-secondary)] border-[var(--border)]'}`}>
+                    {receiptPhoto ? (
+                      <>
+                        <div className="bg-emerald-500 rounded-full p-2 mb-2"><CheckCircle size={28} className="text-white" /></div>
+                        <span className="font-bold text-emerald-600">Foto Tersimpan</span>
+                      </>
+                    ) : (
+                      <>
+                        <div className="bg-[var(--bg-primary)] rounded-full p-4 mb-3 shadow-md border border-[var(--border)]"><Camera size={32} className="text-[var(--accent)]" /></div>
+                        <span className="font-bold text-[var(--text-primary)]">Buka Kamera HP</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* GPS Area */}
+              <div className="flex flex-col gap-2">
+                <label className="font-bold text-[var(--text-primary)]">2. Rekam Titik GPS (Lokasi)</label>
+                <div className={`flex items-center gap-3 p-4 border-2 rounded-2xl transition-all ${receiptGps ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-[var(--bg-secondary)] border-[var(--border)]'}`}>
+                  <button type="button" className={`p-4 rounded-xl shadow-sm ${receiptGps ? 'bg-emerald-500 text-white' : 'bg-[var(--accent)] text-white'}`} onClick={handleGetLocation}>
+                    {receiptGps ? <CheckCircle size={24} /> : <div style={{width:24,height:24,borderRadius:'50%',border:'3px solid white',borderTopColor:'transparent',animation:'spin 1s linear infinite',display:isReceiving?'block':'none'}}></div>}
+                    {!receiptGps && !isReceiving && <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>}
+                  </button>
+                  <div className="flex-1 overflow-hidden">
+                    <div className="font-bold text-sm">{receiptGps ? 'Lokasi Terkunci' : 'Tekan tombol untuk rekam'}</div>
+                    <div className="text-xs text-[var(--text-muted)] truncate">{receiptGps || 'Koordinat diperlukan untuk audit'}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Signature Area */}
+              <div className="flex flex-col gap-2">
+                <label className="font-bold text-[var(--text-primary)]">3. Tanda Tangan Penerima</label>
+                <div className="relative border-2 border-[var(--border)] rounded-2xl overflow-hidden bg-white shadow-inner">
+                  <canvas
+                    ref={sigCanvasRef}
+                    width={400}
+                    height={180}
+                    className="w-full touch-none cursor-crosshair"
+                    onMouseDown={startDrawing}
+                    onMouseMove={draw}
+                    onMouseUp={stopDrawing}
+                    onMouseLeave={stopDrawing}
+                    onTouchStart={startDrawing}
+                    onTouchMove={draw}
+                    onTouchEnd={stopDrawing}
+                  ></canvas>
+                  <button type="button" className="absolute top-2 right-2 bg-gray-100/80 backdrop-blur text-gray-600 px-3 py-1 rounded-lg text-xs font-bold shadow-sm" onClick={() => {
+                    const canvas = sigCanvasRef.current;
+                    if (!canvas) return;
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                  }}>Hapus TTD</button>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="p-6 border-t border-[var(--border)] bg-[var(--bg-primary)] pb-[calc(1.5rem+env(safe-area-inset-bottom))] flex gap-3">
+              <button type="button" className="btn btn-secondary flex-1 py-4 text-base font-bold rounded-xl" onClick={() => setShowGoodsReceiptModal(null)} disabled={isReceiving}>Batal</button>
+              <button type="button" className={`btn btn-primary flex-1 py-4 text-base font-bold rounded-xl ${receiptPhoto && receiptGps ? '' : 'opacity-50'}`} onClick={handleSubmitReceipt} disabled={isReceiving || !receiptPhoto || !receiptGps}>
+                {isReceiving ? 'Menyimpan...' : 'Selesaikan'}
+              </button>
+            </div>
           </div>
         </div>
       )}

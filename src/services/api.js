@@ -16,6 +16,7 @@ let activeOverheadPct = 0.05;
 let activeWhatsappNumber = null;
 let activeWhatsappToken = null;
 let activeWhatsappEnabled = false;
+let activeBranchId = null;
 
 // Helper to sanitize search strings for PostgREST .or() filters to prevent injection
 const sanitizePostgrest = (str) => String(str).replace(/[,.()"'\\]/g, ' ').trim();
@@ -31,7 +32,7 @@ const getActiveTenantId = async () => {
 
   const { data: user, error } = await supabase
     .from('users')
-    .select('tenant_id')
+    .select('tenant_id, branch_id')
     .eq('id', session.user.id)
     .maybeSingle();
 
@@ -39,7 +40,22 @@ const getActiveTenantId = async () => {
 
   // SuperAdmin may not have a tenant_id — return null so read-only guards gracefully return empty data.
   activeTenantId = user?.tenant_id ?? null;
+  activeBranchId = user?.branch_id ?? null;
   return activeTenantId;
+};
+
+// Helper to get active branch info — uses cached memory first, falls back to Supabase session
+const getActiveBranchId = async () => {
+  if (activeBranchId !== null) return activeBranchId;
+  await getActiveTenantId(); // Call this to populate activeBranchId as well
+  return activeBranchId;
+};
+
+// Strict variant: throws when branch_id is null
+const requireBranchId = async () => {
+  const branchId = await getActiveBranchId();
+  if (!branchId) throw new Error("Operasi ini membutuhkan cabang aktif. User tidak memiliki cabang.");
+  return branchId;
 };
 
 // Strict variant: throws when tenant_id is null (use for CRUD/mutating operations only)
@@ -72,6 +88,24 @@ const logAudit = async (action, description) => {
 export { parsePackSize, calculateIngredientCost };
 
 export const api = {
+  getNearestExpiry: async () => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return {};
+    const { data, error } = await supabase
+      .from('stock_ledger_entries')
+      .select('material_id, expiry_date')
+      .eq('tenant_id', tenantId)
+      .gt('remaining_qty', 0)
+      .not('expiry_date', 'is', null)
+      .order('expiry_date', { ascending: true });
+    if (error) throw error;
+
+    const map = {};
+    for (const row of data) {
+      if (!map[row.material_id]) map[row.material_id] = row.expiry_date;
+    }
+    return map;
+  },
   bulkDeletePurchaseEntries: async (ids) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId || !ids || ids.length === 0) return { successCount: 0, failedItems: [] };
@@ -673,7 +707,7 @@ export const api = {
     }
   },
 
-  setSessionData: (tenantId, userId, overheadPct, whatsappNumber, whatsappToken, whatsappEnabled) => {
+  setSessionData: (tenantId, userId, overheadPct, whatsappNumber, whatsappToken, whatsappEnabled, branchId) => {
     activeTenantId = tenantId;
     activeUserId = userId;
     if (overheadPct !== undefined && overheadPct !== null) {
@@ -682,6 +716,8 @@ export const api = {
     activeWhatsappNumber = whatsappNumber || null;
     activeWhatsappToken = whatsappToken || null;
     activeWhatsappEnabled = !!whatsappEnabled;
+    activeBranchId = branchId || null;
+    window.__activeBranchId = activeBranchId;
   },
 
   getOverheadPct: () => activeOverheadPct,
@@ -962,7 +998,7 @@ export const api = {
 
     let { data: userProfile, error } = await supabase
       .from('users')
-      .select('id, tenant_id, name, email, role')
+      .select('id, tenant_id, branch_id, name, email, role')
       .eq('id', session.user.id)
       .maybeSingle();
 
@@ -1118,6 +1154,51 @@ export const api = {
   },
 
   // --- STOCK / MATERIALS ---
+  getStockSnapshotAt: async (location, targetDate) => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return [];
+
+    // 1. Get current stock
+    const materials = await materialsRepo.getAll(tenantId);
+
+    // If targetDate is in the future or within the current day, just return current stock
+    if (new Date(targetDate) >= new Date()) return materials;
+
+    // 2. Fetch all transactions AFTER targetDate
+    const { data: txs } = await supabase.from('transactions')
+      .select('material_id, qty, location, type')
+      .eq('tenant_id', tenantId)
+      .gt('date', targetDate);
+
+    // 3. Reverse transactions
+    const stockMap = {};
+    materials.forEach(m => {
+      stockMap[m.id] = {
+        ...m,
+        qty_resto: parseFloat(m.qty_resto || 0),
+        qty_central: parseFloat(m.qty_central || 0)
+      };
+    });
+
+    if (txs) {
+      txs.forEach(tx => {
+        const mat = stockMap[tx.material_id];
+        // Only process transactions that have a valid qty and material
+        // Ignore POS_SALE since it doesn't affect stock (qty=1 for revenue)
+        if (mat && tx.type !== 'POS_SALE' && tx.qty) {
+          const qtyDelta = parseFloat(tx.qty);
+          if (tx.location === 'RESTO' || tx.location === 'Bar' || tx.location === 'Kitchen') {
+            mat.qty_resto -= qtyDelta;
+          } else if (tx.location === 'CENTRAL' || tx.location === 'Central') {
+            mat.qty_central -= qtyDelta;
+          }
+        }
+      });
+    }
+
+    return Object.values(stockMap);
+  },
+
   getMaterials: async () => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return []; // H-2: Super Admin / no-tenant — avoid malformed .eq('tenant_id', null) query
@@ -1768,7 +1849,8 @@ export const api = {
     return data;
   },
 
-  receiveInvoice: async (id) => {
+  receiveInvoice: async (id, payload = {}) => {
+    const { photoUrl = null, signatureUrl = null, gps = null } = payload;
     const tenantId = await getActiveTenantId();
     const userId = await getActiveUserId();
 
@@ -1779,6 +1861,14 @@ export const api = {
     });
 
     if (rpcErr) throw new Error("Gagal menerima PO secara atomik: " + rpcErr.message);
+
+    if (photoUrl || signatureUrl || gps) {
+      await supabase.from('invoices').update({
+        receipt_photo_url: photoUrl,
+        receipt_signature_url: signatureUrl,
+        receipt_gps: gps
+      }).eq('id', id);
+    }
 
     // Fetch the updated invoice to return to the UI
     const { data: updatedInvoice, error: fetchErr } = await supabase
@@ -4174,5 +4264,48 @@ export const api = {
 
     await logAudit('EDIT_TRANSACTION', `Mengubah transaksi tipe "${tx.type}" tgl ${tx.date}.`);
     return true;
+  },
+
+  // --- MARKET LISTS ---
+  getMarketLists: async () => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return [];
+    const { data, error } = await supabase.from('market_lists').select('*, market_list_items(*, materials(name, price, unit))').eq('tenant_id', tenantId).order('created_at', { ascending: false });
+    if (error) throw new Error("Gagal mengambil market list: " + error.message);
+    return data;
+  },
+
+  createMarketList: async (payload) => {
+    const tenantId = await requireTenantId();
+    const { data, error } = await supabase.from('market_lists').insert({ ...payload, tenant_id: tenantId }).select().single();
+    if (error) throw new Error("Gagal membuat market list: " + error.message);
+    return data;
+  },
+
+  updateMarketList: async (id, payload) => {
+    const tenantId = await getActiveTenantId();
+    const { data, error } = await supabase.from('market_lists').update(payload).eq('id', id).eq('tenant_id', tenantId).select().single();
+    if (error) throw new Error("Gagal update market list: " + error.message);
+    return data;
+  },
+
+  deleteMarketList: async (id) => {
+    const tenantId = await getActiveTenantId();
+    const { error } = await supabase.from('market_lists').delete().eq('id', id).eq('tenant_id', tenantId);
+    if (error) throw new Error("Gagal menghapus market list: " + error.message);
+  },
+
+  upsertMarketListItems: async (marketListId, items) => {
+    const tenantId = await requireTenantId();
+    await supabase.from('market_list_items').delete().eq('market_list_id', marketListId).eq('tenant_id', tenantId);
+    if (items && items.length > 0) {
+      const payload = items.map(item => ({
+        ...item,
+        market_list_id: marketListId,
+        tenant_id: tenantId
+      }));
+      const { error } = await supabase.from('market_list_items').insert(payload);
+      if (error) throw new Error("Gagal update item market list: " + error.message);
+    }
   }
 };

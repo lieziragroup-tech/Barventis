@@ -98,7 +98,7 @@ export default function CostControl() {
     (reportData?.transactions || []).forEach(tx => {
       const dateStr = tx.date || '';
       if (!dateStr.startsWith(period) || !checkTabMatch(tx, activeTab)) return;
-      const amt = Math.abs(parseFloat(tx.amount || 0));
+      const amt = Math.round(Math.abs(Number(tx.amount || 0)));
 
       if (tx.type === 'PURCHASE_IN') {
         purchases += amt;
@@ -121,7 +121,7 @@ export default function CostControl() {
       else if (activeTab === 'BEVERAGE') include = !isBeer;
 
       if (include) {
-        closing += (item.totalValuation || 0);
+        closing += Math.round(item.totalValuation || 0);
         filteredOpnames.push(item);
       }
     });
@@ -176,7 +176,7 @@ export default function CostControl() {
         if (dateStr.startsWith(period)) {
           const day = dateStr.substring(5).replace('-', '/');
           if (!dailyMap[day]) dailyMap[day] = { date: day, purchase: 0, sales: 0 };
-          dailyMap[day].sales += Math.abs(tx.amount || 0);
+          dailyMap[day].sales += Math.round(Math.abs(Number(tx.amount || 0)));
         }
       });
 
@@ -188,7 +188,7 @@ export default function CostControl() {
         if (dateStr.startsWith(period)) {
           const day = dateStr.substring(5).replace('-', '/');
           if (!dailyMap[day]) dailyMap[day] = { date: day, purchase: 0, sales: 0 };
-          dailyMap[day].purchase += Math.abs(tx.amount || 0);
+          dailyMap[day].purchase += Math.round(Math.abs(Number(tx.amount || 0)));
         }
       });
 

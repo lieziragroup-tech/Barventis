@@ -112,6 +112,11 @@ export default function StockLedger() {
   const [purchaseHistory, setPurchaseHistory] = useState([]);
   const [historyTab, setHistoryTab] = useState('LEDGER');
 
+  const [expiryMap, setExpiryMap] = useState({});
+  useEffect(() => {
+    api.getNearestExpiry().then(setExpiryMap).catch(console.error);
+  }, []);
+
   useEffect(() => {
     api.getSuppliers().then(setSuppliers).catch(console.error);
   }, []);
@@ -376,9 +381,6 @@ export default function StockLedger() {
       api.getTransactionsPaged({ materialName: selectedItem.name, pageSize: 50 }).then(res => setItemHistory(res.data)).catch(console.error);
     }
   }, [selectedItem, historyTab]);
-  // 
-    
-    
 
   return (
     <div className="stock-ledger-layout fade-in" style={{ display: 'flex', gap: '24px', position: 'relative' }}>
@@ -402,6 +404,7 @@ export default function StockLedger() {
                 </div>
                 <select className="form-control" style={{ width: '170px' }} value={catFilter} onChange={e => { setCatFilter(e.target.value); setCurrentPage(1); }}>
                   {categories.map(cat => <option key={cat} value={cat}>{cat === 'ALL' ? 'All Categories' : cat}</option>)}
+                  {!categories.includes('BEER') && <option value="BEER">BEER</option>}
                 </select>
                 <select className="form-control" style={{ width: '170px' }} value={supFilter} onChange={e => { setSupFilter(e.target.value); setCurrentPage(1); }}>
                   {uniqueSuppliersInStock.map(sup => <option key={sup} value={sup}>{sup === 'ALL' ? 'All Suppliers' : sup}</option>)}
@@ -438,7 +441,8 @@ export default function StockLedger() {
         {/* Stock Table */}
         <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
           <div className="table-container">
-            <table className="custom-table">
+            {/* DESKTOP TABLE */}
+            <table className="custom-table hidden md:table">
               <thead>
                 <tr>
                   <th style={{ width: '40px', textAlign: 'center', padding: '14px 10px' }}>
@@ -450,7 +454,7 @@ export default function StockLedger() {
                   <th style={{ textAlign: 'right' }}>Stock (Pack)</th>
                   <th style={{ textAlign: 'right' }}>Stock (Converted)</th>
                   <th style={{ textAlign: 'right' }}>Price/Pack</th>
-                  <th style={{ textAlign: 'center' }}>Status</th>
+                  <th style={{ textAlign: 'center' }}>Expiry / Status</th>
                   <th style={{ textAlign: 'center' }}>Actions</th>
                 </tr>
               </thead>
@@ -467,6 +471,23 @@ export default function StockLedger() {
                   let badge = <span className="badge badge-success">Safe</span>;
                   if (total === 0) badge = <span className="badge badge-danger">Out</span>;
                   else if (total < min) badge = <span className="badge badge-warning">Low</span>;
+
+                  // Expiry visual
+                  const nearestExpiry = expiryMap[item.id];
+                  const daysToExpiry = nearestExpiry
+                    ? Math.ceil((new Date(nearestExpiry) - new Date()) / 86400000)
+                    : null;
+
+                  let expiryBadge = null;
+                  if (daysToExpiry === null) {
+                    expiryBadge = <div style={{width: 10, height: 10, borderRadius: '50%', background: '#9ca3af', display: 'inline-block'}} title="Tidak ada data" />;
+                  } else if (daysToExpiry > 14) {
+                    expiryBadge = <div style={{width: 10, height: 10, borderRadius: '50%', background: '#10b981', display: 'inline-block'}} title="Aman (>14 hari)" />;
+                  } else if (daysToExpiry >= 4) {
+                    expiryBadge = <div style={{width: 10, height: 10, borderRadius: '50%', background: '#f59e0b', display: 'inline-block'}} title="Peringatan (4-14 hari)" />;
+                  } else {
+                    expiryBadge = <div style={{width: 10, height: 10, borderRadius: '50%', background: '#ef4444', display: 'inline-block', animation: 'pulse 2s infinite'}} title="Kritis (<=3 hari)" />;
+                  }
 
                   return (
                     <tr key={item.id ?? item.name} style={{ background: selectedItems.includes(item.name) ? 'rgba(59,130,246,0.05)' : 'transparent', transition: 'background 0.2s' }}>
@@ -497,7 +518,9 @@ export default function StockLedger() {
                       <td style={{ textAlign: 'right', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                         {formatIDR(item.new_price || item.price)}
                       </td>
-                      <td style={{ textAlign: 'center' }}>{badge}</td>
+                      <td style={{ textAlign: 'center', display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
+                        {expiryBadge} {badge}
+                      </td>
                       <td style={{ textAlign: 'center' }}>
                         <div style={{ display: 'inline-flex', gap: '4px' }}>
                           <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)' }} title="Edit Item" onClick={() => setEditItem({ ...item, originalName: item.name })}>
@@ -522,6 +545,87 @@ export default function StockLedger() {
                 )}
               </tbody>
             </table>
+
+            {/* MOBILE CARD LIST */}
+            <div className="md:hidden flex flex-col gap-3 p-2">
+              {paginatedStock.map(item => {
+                const rQty = item.qty_resto || 0;
+                const cQty = item.qty_central || 0;
+                const total = rQty + cQty;
+                const min = item.min_stock || 15;
+                const pack = parseFullPack(item.full_pack, item.unit);
+                const convertedTotal = total * pack.size;
+                const convertedUnit = pack.unit.toUpperCase();
+
+                let badge = <span className="badge badge-success text-[0.6rem] px-1.5 py-0.5">Safe</span>;
+                if (total === 0) badge = <span className="badge badge-danger text-[0.6rem] px-1.5 py-0.5">Out</span>;
+                else if (total < min) badge = <span className="badge badge-warning text-[0.6rem] px-1.5 py-0.5">Low</span>;
+
+                const nearestExpiry = expiryMap[item.id];
+                const daysToExpiry = nearestExpiry ? Math.ceil((new Date(nearestExpiry) - new Date()) / 86400000) : null;
+                let expiryBadge = null;
+                if (daysToExpiry === null) {
+                  expiryBadge = <div style={{width: 10, height: 10, borderRadius: '50%', background: '#9ca3af', display: 'inline-block'}} title="Tidak ada data" />;
+                } else if (daysToExpiry > 14) {
+                  expiryBadge = <div style={{width: 10, height: 10, borderRadius: '50%', background: '#10b981', display: 'inline-block'}} title="Aman (>14 hari)" />;
+                } else if (daysToExpiry >= 4) {
+                  expiryBadge = <div style={{width: 10, height: 10, borderRadius: '50%', background: '#f59e0b', display: 'inline-block'}} title="Peringatan (4-14 hari)" />;
+                } else {
+                  expiryBadge = <div style={{width: 10, height: 10, borderRadius: '50%', background: '#ef4444', display: 'inline-block', animation: 'pulse 2s infinite'}} title="Kritis (<=3 hari)" />;
+                }
+
+                return (
+                  <div key={item.id ?? item.name} className="bg-[var(--bg-primary)] p-4 rounded-xl border border-[var(--border)] shadow-sm flex flex-col gap-2 relative overflow-hidden" style={{ background: selectedItems.includes(item.name) ? 'rgba(59,130,246,0.05)' : 'var(--bg-primary)' }}>
+                    <div className="flex justify-between items-start">
+                      <div className="flex gap-2 items-start">
+                        <input type="checkbox" checked={selectedItems.includes(item.name)} onChange={() => toggleSelectItem(item.name)} style={{ cursor: 'pointer', marginTop: '4px' }} className="w-4 h-4 rounded border-gray-300" />
+                        <div>
+                          <div className="font-bold text-[var(--text-primary)] text-sm flex items-center gap-2">
+                            {item.name} {expiryBadge}
+                          </div>
+                          <div className="text-[0.65rem] text-[var(--text-secondary)] mt-0.5">{item.supplier || 'No Supplier'} · {item.category}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="flex items-center justify-end gap-1 mb-1">{badge}</div>
+                        <div className={`font-bold text-sm ${total < min ? 'text-[var(--warning)]' : 'text-[var(--text-primary)]'}`}>
+                          {total.toFixed(1)} <span className="text-[0.6rem] text-[var(--text-muted)]">{item.unit}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center bg-[var(--bg-secondary)] p-2 rounded-lg mt-1 text-xs">
+                      <div>
+                        <div className="text-[0.6rem] text-[var(--text-muted)]">Harga Beli</div>
+                        <div className="font-semibold">{formatIDR(item.new_price || item.price)}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[0.6rem] text-[var(--text-muted)]">Konversi</div>
+                        <div className="font-semibold text-[var(--accent)]">{convertedTotal.toFixed(0)} <span className="text-[0.6rem]">{convertedUnit}</span></div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-[var(--border)]">
+                      <button className="flex flex-col items-center p-2 rounded-lg bg-[var(--bg-secondary)] text-[var(--text-secondary)] flex-1" onClick={() => setEditItem({ ...item, originalName: item.name })}>
+                        <Edit size={16} /><span className="text-[0.6rem] mt-1">Edit</span>
+                      </button>
+                      <button className="flex flex-col items-center p-2 rounded-lg bg-[var(--bg-secondary)] text-[var(--accent)] flex-1" onClick={() => { setAdjustItem(item); setAdjustLoc('RESTO'); }}>
+                        <Package size={16} /><span className="text-[0.6rem] mt-1">Adjust</span>
+                      </button>
+                      <button className="flex flex-col items-center p-2 rounded-lg bg-[var(--bg-secondary)] text-[var(--text-secondary)] flex-1" onClick={() => setSelectedItem(item)}>
+                        <History size={16} /><span className="text-[0.6rem] mt-1">History</span>
+                      </button>
+                      <button className="flex flex-col items-center p-2 rounded-lg bg-[var(--danger)]/10 text-[var(--danger)] flex-1" onClick={() => handleAttemptDelete(item.name)}>
+                        <Trash2 size={16} /><span className="text-[0.6rem] mt-1">Delete</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              {filteredStock.length === 0 && (
+                <div className="text-center p-6 text-[var(--text-muted)] text-sm">Tidak ada barang ditemukan</div>
+              )}
+            </div>
           </div>
           <div style={{ padding: '0 20px 16px' }}>
             <Pagination

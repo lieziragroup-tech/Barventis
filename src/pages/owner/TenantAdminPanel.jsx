@@ -296,12 +296,30 @@ export default function TenantAdminPanel() {
                   Kelola staf yang memiliki akses ke modul restoran Anda.
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button className="btn btn-secondary" onClick={() => handleGenerateInvite('Staff')} disabled={isSaving} style={{ display: 'flex', gap: '4px', alignItems: 'center', fontSize: '0.78rem', padding: '6px 10px' }}>
-                  <LinkIcon size={12} /> Undang Staff
-                </button>
-                <button className="btn btn-primary" onClick={() => handleGenerateInvite('Admin / Owner')} disabled={isSaving} style={{ display: 'flex', gap: '4px', alignItems: 'center', fontSize: '0.78rem', padding: '6px 10px' }}>
-                  <LinkIcon size={12} /> Undang Owner
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <select
+                  id={`inviteRoleSelect-${tab}`}
+                  className="input-field"
+                  style={{ padding: '6px 10px', fontSize: '0.78rem', height: '32px' }}
+                >
+                  <option value="Admin / Owner">Owner</option>
+                  <option value="Bar">Bar</option>
+                  <option value="Kitchen">Kitchen</option>
+                  <option value="Central">Central</option>
+                  <option value="Service">Service</option>
+                  <option value="Purchasing">Purchasing</option>
+                  <option value="Staff">Staff (General)</option>
+                </select>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    const role = document.getElementById(`inviteRoleSelect-${tab}`).value;
+                    handleGenerateInvite(role);
+                  }}
+                  disabled={isSaving}
+                  style={{ display: 'flex', gap: '4px', alignItems: 'center', fontSize: '0.78rem', padding: '6px 10px', height: '32px' }}
+                >
+                  <LinkIcon size={12} /> Buat Link Undangan
                 </button>
               </div>
             </div>
@@ -372,12 +390,30 @@ export default function TenantAdminPanel() {
                   Buat link undangan untuk merekrut staf baru ke sistem Anda.
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button className="btn btn-secondary" onClick={() => handleGenerateInvite('Staff')} disabled={isSaving} style={{ display: 'flex', gap: '4px', alignItems: 'center', fontSize: '0.78rem', padding: '6px 10px' }}>
-                  <LinkIcon size={12} /> Undang Staff
-                </button>
-                <button className="btn btn-primary" onClick={() => handleGenerateInvite('Admin / Owner')} disabled={isSaving} style={{ display: 'flex', gap: '4px', alignItems: 'center', fontSize: '0.78rem', padding: '6px 10px' }}>
-                  <LinkIcon size={12} /> Undang Owner
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <select
+                  id={`inviteRoleSelect-${tab}`}
+                  className="input-field"
+                  style={{ padding: '6px 10px', fontSize: '0.78rem', height: '32px' }}
+                >
+                  <option value="Admin / Owner">Owner</option>
+                  <option value="Bar">Bar</option>
+                  <option value="Kitchen">Kitchen</option>
+                  <option value="Central">Central</option>
+                  <option value="Service">Service</option>
+                  <option value="Purchasing">Purchasing</option>
+                  <option value="Staff">Staff (General)</option>
+                </select>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    const role = document.getElementById(`inviteRoleSelect-${tab}`).value;
+                    handleGenerateInvite(role);
+                  }}
+                  disabled={isSaving}
+                  style={{ display: 'flex', gap: '4px', alignItems: 'center', fontSize: '0.78rem', padding: '6px 10px', height: '32px' }}
+                >
+                  <LinkIcon size={12} /> Buat Link Undangan
                 </button>
               </div>
             </div>

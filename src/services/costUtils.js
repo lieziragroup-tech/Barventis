@@ -152,7 +152,7 @@ export function getPackUnitInfo(fullPack, materialUnit) {
  *        where factor = how many content units are in ONE pack.
  */
 export function getUnitPrice(material, unitConversionMap) {
-  const price = parseFloat(material?.price ?? 0);
+  const price = Number(material?.price ?? 0);
 
   if (unitConversionMap && material?.id != null && unitConversionMap.has(material.id)) {
     const factor = unitConversionMap.get(material.id);
@@ -199,7 +199,7 @@ export function getUnitPrice(material, unitConversionMap) {
  */
 export function calculateIngredientCost(material, qtyInUse, recipeUnit, unitConversionMap) {
   const { unitPrice, resolved, packSize, packUnitLabel, contentUnit } = getUnitPrice(material, unitConversionMap);
-  let qty = parseFloat(qtyInUse ?? 0);
+  let qty = Number(qtyInUse ?? 0);
   if (!resolved) {
     // Never crash a report/import over one bad material — return 0. The
     // human-readable reason is available via getUnitPrice() directly for
@@ -212,7 +212,7 @@ export function calculateIngredientCost(material, qtyInUse, recipeUnit, unitConv
   if (packUnitLabel && contentUnit && ru && ru === packUnitLabel && ru !== contentUnit) {
     qty = qty * (packSize || 1);
   }
-  return qty * unitPrice;
+  return Math.round(qty * unitPrice);
 }
 
 /**
@@ -228,7 +228,7 @@ export function calculateIngredientCost(material, qtyInUse, recipeUnit, unitConv
  * related, so the caller should fall back to deducting the raw qty as-is.
  */
 export function convertQtyToStockUnit(material, qty, fromUnit) {
-  const q = parseFloat(qty ?? 0);
+  const q = Number(qty ?? 0);
   const from = normalizeUnitToken(fromUnit);
   const matUnit = normalizeUnitToken(material?.unit);
   if (!from || from === matUnit) return { qty: q, resolved: true };
@@ -247,22 +247,22 @@ export function convertQtyToStockUnit(material, qty, fromUnit) {
 }
 
 export const formatIDR = (value) => {
-  const num = parseFloat(value);
+  const num = Math.round(Number(value) || 0);
   if (isNaN(num)) return 'Rp 0';
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num);
 };
 
 export const calculatePhysicalUsage = (stockAwal, pembelian, stockAkhir) => {
-  return (parseFloat(stockAwal || 0) + parseFloat(pembelian || 0)) - parseFloat(stockAkhir || 0);
+  return Math.round((Number(stockAwal || 0) + Number(pembelian || 0)) - Number(stockAkhir || 0));
 };
 
 export const calculateVariance = (posUsage, physicalUsage) => {
-  return parseFloat(posUsage || 0) - parseFloat(physicalUsage || 0);
+  return Math.round(Number(posUsage || 0) - Number(physicalUsage || 0));
 };
 
 export const calculateHppPercentage = (totalPemakaian, totalPenjualan) => {
-  const pemakaian = parseFloat(totalPemakaian || 0);
-  const penjualan = parseFloat(totalPenjualan || 0);
+  const pemakaian = Number(totalPemakaian || 0);
+  const penjualan = Number(totalPenjualan || 0);
   if (penjualan === 0) return 0;
   return (pemakaian / penjualan) * 100;
 };
@@ -294,12 +294,12 @@ export const DEFAULT_PRICE_ADJUSTMENT = 0;
  * roundSellingPrice(39361.45, 'down', 2000) === 38000.
  */
 export function roundSellingPrice(rawPrice, direction = DEFAULT_ROUNDING_DIRECTION, increment = DEFAULT_ROUNDING_INCREMENT) {
-  const price = parseFloat(rawPrice || 0);
-  const inc = parseFloat(increment || DEFAULT_ROUNDING_INCREMENT);
+  const price = Number(rawPrice || 0);
+  const inc = Number(increment || DEFAULT_ROUNDING_INCREMENT);
   if (inc <= 0) return Math.round(price);
   const steps = price / inc;
   const roundedSteps = direction === 'up' ? Math.ceil(steps) : Math.floor(steps);
-  return roundedSteps * inc;
+  return Math.round(roundedSteps * inc);
 }
 
 /**
@@ -326,18 +326,18 @@ export function computeRecipeCosts({
   roundingIncrement = DEFAULT_ROUNDING_INCREMENT,
   priceAdjustment = DEFAULT_PRICE_ADJUSTMENT,
 }) {
-  const sub = parseFloat(subtotal || 0);
-  const fcPct = parseFloat(fixCostPct ?? DEFAULT_FIX_COST_PCT);
-  const targetPct = parseFloat(foodCostPct || 0);
-  const adjustment = parseFloat(priceAdjustment || 0);
+  const sub = Math.round(Number(subtotal || 0));
+  const fcPct = Number(fixCostPct ?? DEFAULT_FIX_COST_PCT);
+  const targetPct = Number(foodCostPct || 0);
+  const adjustment = Math.round(Number(priceAdjustment || 0));
 
-  const fixCost = sub * fcPct;
-  const basicCost = sub + fixCost;
-  const sellingPriceRaw = targetPct > 0 ? basicCost / targetPct : 0;
+  const fixCost = Math.round(sub * fcPct);
+  const basicCost = Math.round(sub + fixCost);
+  const sellingPriceRaw = targetPct > 0 ? Math.round(basicCost / targetPct) : 0;
   const sellingPriceRounded = sellingPriceRaw > 0
-    ? roundSellingPrice(sellingPriceRaw, roundingDirection, roundingIncrement)
+    ? Math.round(roundSellingPrice(sellingPriceRaw, roundingDirection, roundingIncrement))
     : 0;
-  const sellingPriceFinal = sellingPriceRounded > 0 ? sellingPriceRounded + adjustment : 0;
+  const sellingPriceFinal = sellingPriceRounded > 0 ? Math.round(sellingPriceRounded + adjustment) : 0;
   // Reality-check ratio using the price actually charged (post-adjustment),
   // not the pre-adjustment target.
   const actualFoodCostPctAtFinalPrice = sellingPriceFinal > 0 ? basicCost / sellingPriceFinal : 0;

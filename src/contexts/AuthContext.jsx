@@ -26,7 +26,7 @@ export const AuthProvider = ({ children }) => {
         setIsAuthenticated(false);
         setActiveUser(null);
         setTenantName('');
-        api.setSessionData(null, null, null, null, null, false);
+        api.setSessionData(null, null, null, null, null, false, null);
         stopAutoFlush();
         setLoading(false);
       }
@@ -53,7 +53,7 @@ export const AuthProvider = ({ children }) => {
           if (profile && isMounted) {
             setActiveUser(profile);
             setTenantName(profile.tenant_name || '');
-            api.setSessionData(profile.tenant_id, profile.id, profile.overhead_pct, profile.whatsapp_number, profile.whatsapp_token, profile.whatsapp_enabled);
+            api.setSessionData(profile.tenant_id, profile.id, profile.overhead_pct, profile.whatsapp_number, profile.whatsapp_token, profile.whatsapp_enabled, profile.branch_id);
             setIsAuthenticated(true);
             initAutoFlush();
           }
@@ -62,7 +62,7 @@ export const AuthProvider = ({ children }) => {
           if (isMounted) {
             setIsAuthenticated(false);
             setActiveUser(null);
-            api.setSessionData(null, null, null, null, null, false);
+            api.setSessionData(null, null, null, null, null, false, null);
             // Sign out if profile failed to load but session exists
             const { data: { session: currentSession } } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
             if (currentSession) await supabase.auth.signOut();
@@ -76,7 +76,7 @@ export const AuthProvider = ({ children }) => {
           setIsAuthenticated(false);
           setActiveUser(null);
           setTenantName('');
-          api.setSessionData(null, null, null, null, null, false);
+          api.setSessionData(null, null, null, null, null, false, null);
           setLoading(false);
         }
       }

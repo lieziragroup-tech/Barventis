@@ -1,0 +1,54 @@
+Berdasarkan analisis pada struktur database V2 (`SQL.txt` dan `migrations`) serta arsitektur Frontend, berikut adalah rencana eksekusi teknis langkah-demi-langkah untuk mengimplementasikan skema Multi-Cabang (Multi-Branch).
+
+### Rencana Eksekusi Teknis
+
+**Langkah 1: Modifikasi Skema Database Inti (Tabel Cabang & User)**
+- Buat tabel `public.branches` (kolom: `id`, `tenant_id`, `name`, `address`, `is_central`, `created_at`, `updated_at`).
+- Ubah tabel `public.users` dengan menambahkan kolom `branch_id` (Foreign Key ke `branches`) agar staf/operator langsung terikat ke cabang tempat mereka ditugaskan.
+- Migrasikan data kolom `branch_name` yang ada di tabel `public.tenants` menjadi record cabang pertama (default) ke dalam tabel `branches`.
+
+**Langkah 2: Restrukturisasi Manajemen Stok (Pemisahan Master vs Stok)**
+- Biarkan master data (`materials`, `recipes`, `suppliers`) berada di level `tenant_id` karena katalog barang biasanya seragam antar cabang.
+- Hapus/deprecate kolom `qty_resto` dan `qty_central` pada tabel `materials` yang bersifat statis.
+- Buat tabel agregasi stok per cabang `public.material_stocks` (kolom: `id`, `tenant_id`, `branch_id`, `material_id`, `qty`).
+
+**Langkah 3: Pembaruan Relasi Tabel Operasional & Transaksional**
+- Tambahkan kolom `branch_id` pada seluruh tabel operasional agar tercatat di cabang mana pergerakan terjadi:
+  - Inventory: `daily_inventories`, `stock_opnames`, `physical_checks`
+  - Transaksi: `transactions`, `stock_ledger_entries`, `purchase_entries`, `invoices`, `usage_variance`
+  - Produksi: `production_batches`
+  - POS: `pos_orders`, `pos_transactions`, `pos_daily_aggregates`
+
+**Langkah 4: Modifikasi Logic RLS (Row Level Security) & Functions Supabase**
+- Buat fungsi SQL `public.get_auth_branch_id()` untuk mendeteksi cabang sesi pengguna yang sedang login.
+- Update semua policy RLS tabel operasional agar juga memvalidasi `branch_id = public.get_auth_branch_id()` khusus untuk role staf (Owner/Admin tetap bebas akses semua cabang dalam `tenant_id` yang sama).
+- Perbarui prosedur tersimpan (Stored Procedures) terkait perhitungan stok (seperti trigger pengurangan FIFO) agar menyertakan kriteria `branch_id`.
+
+**Langkah 5: Penyesuaian Layer Data & API di Frontend (React)**
+- Sesuaikan `AuthContext` agar memuat properti `branch_id` ke dalam state pengguna yang terautentikasi.
+- Sesuaikan `DataContext` agar setiap fetch data operasional dan stok (kecuali katalog master) memberikan filter Supabase tambahan `.eq('branch_id', userBranchId)`.
+- Sesuaikan skema request di `api.js` agar rutin menyuntikkan (inject) `branch_id` pada payload data mutasi/pencatatan.
+
+**Langkah 6: Penyesuaian Antarmuka Pengguna (UI)**
+- Tambahkan UI/Form manajemen Cabang di halaman `TenantAdminPanel` (tambah/edit cabang).
+- Tambahkan komponen *Branch Switcher* (Dropdown Ganti Cabang) pada `DashboardLayout` khusus untuk Owner/Manajer yang memiliki hak memantau banyak cabang.
+
+---
+
+### File yang Perlu Diubah / Ditambahkan
+
+**1. Database / Migrations:**
+- `supabase/migrations/0009_multi_branch.sql` *(Buat file migrasi baru untuk pembuatan tabel `branches`, tabel `material_stocks`, update relasi FK, dan RLS update)*
+
+**2. Frontend - Context & API:**
+- `src/contexts/AuthContext.jsx` *(Load preferensi `branch_id`)*
+- `src/contexts/DataContext.jsx` *(Append filter `branch_id` saat fetch state aplikasi)*
+- `src/services/api.js` & `src/data/materialsRepo.js` *(Update payload POST/PATCH untuk mencakup cabang)*
+
+**3. Frontend - Layout & Halaman (Pages):**
+- `src/components/layout/DashboardLayout.jsx` *(Tambahan navigasi pindah cabang)*
+- `src/pages/owner/TenantAdminPanel.jsx` *(Modul CRUD tabel Cabang)*
+- `src/pages/shared/DailyInventory.jsx`
+- `src/pages/shared/Purchasing.jsx`
+- `src/pages/shared/TrimmingProduction.jsx` 
+- *(Penyesuaian render data agar mengacu pada stock masing-masing cabang, bukan `qty_resto`/`qty_central`)*
