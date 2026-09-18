@@ -7,13 +7,13 @@ import {
   Utensils, Tag, ShoppingCart, FileText, Boxes, Trash2, Package,
   Calculator, History, Settings, Archive, Wrench, Building2, Layout, Edit, MonitorSmartphone, BookOpen, Clock, Box
 } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
-import { useData } from '../../contexts/DataContext';
-import { api } from '../../services/api';
-import Onboarding from '../Onboarding';
-import AIAssistant from '../AIAssistant';
-import GuidebookModal from '../GuidebookModal';
-import barventisIcon from '../../assets/barventis-icon.png';
+import { useAuth } from '../contexts/AuthContext';
+import { useData } from '../contexts/DataContext';
+import { api } from '../services/api';
+import Onboarding from './Onboarding';
+import AIAssistant from './AIAssistant';
+import GuidebookModal from './GuidebookModal';
+import barventisIcon from '../assets/barventis-icon.png';
 
 const NavItem = ({ to, exact, label, icon: Icon, isHovered, onClick }) => {
   return (
