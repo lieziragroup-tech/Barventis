@@ -29,6 +29,7 @@ function RecipeCombobox({ recipes, materials, value, onSelect, placeholder }) {
   const wrapRef = useRef(null);
   const debouncedQuery = useDebouncedValue(query, 250);
 
+  // eslint-disable-next-line
   useEffect(() => { setQuery(value || ''); }, [value]);
 
   useEffect(() => {

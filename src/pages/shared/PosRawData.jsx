@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, Calendar, FileText as Database, FileText as FileSpreadsheet } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -52,6 +52,7 @@ export default function PosRawData() {
   }, [currentTenant, page, pageSize, searchTerm, dateFrom, dateTo]);
 
   useEffect(() => {
+    // eslint-disable-next-line
     fetchData();
   }, [fetchData]);
 

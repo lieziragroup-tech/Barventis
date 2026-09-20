@@ -189,7 +189,7 @@ export default function Recipes() {
       if (id) {
         try {
           await onDeleteRecipe(id);
-        } catch (err) {
+        } catch {
           failed.push(id);
         }
       }

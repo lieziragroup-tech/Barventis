@@ -92,18 +92,6 @@ const MobileBottomNav = ({ isSuperAdmin, isTenant, basePath, hasAccess }) => {
           )}
           {hasAccess(['Owner', 'Bar', 'Kitchen', 'Central']) && (
             <NavLink to={`${basePath}/daily-inventory`} className={({isActive}) => `flex flex-col items-center p-2 rounded-lg transition-colors ${isActive ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}`}>
-                  {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/transfer`} label="Inter-Branch Transfer" icon={ArrowRightLeft} isHovered={true} index={12.5} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/waste`} label="Waste Logs" icon={Trash2} isHovered={true} index={12.6} />}
-
-
-
-
-                      {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen']) && <NavItem to={`${basePath}/transfer`} label="Inter-Branch Transfer" icon={ArrowRightLeft} isHovered={isHovered} index={7.5} />}
-                      {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen']) && <NavItem to={`${basePath}/waste`} label="Waste Logs" icon={Trash2} isHovered={isHovered} index={7.6} />}
-
-
-
-
               <ClipboardList size={20} /><span className="text-[0.65rem] mt-1 font-medium">EOD</span>
             </NavLink>
           )}
@@ -208,7 +196,6 @@ export default function DashboardLayout() {
   // match here is not a behavior regression, it's the bug fix.
   const role = activeUser?.role === 'SuperAdmin' ? 'Super Admin' : activeUser?.role;
   const isSuperAdmin = role === 'Super Admin';
-  const isOwner = role === 'Admin / Owner' || role === 'Owner';
   const isTenant = ['Admin / Owner', 'Owner', 'Staff', 'Bar', 'Kitchen', 'Central', 'Service', 'Purchasing'].includes(role);
 
   const hasAccess = (allowedRoles) => allowedRoles.includes(role);
@@ -371,18 +358,8 @@ export default function DashboardLayout() {
                       )}
                       {hasAccess(['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Purchasing', 'Staff']) && <NavItem to={`${basePath}/stock`} label="Stock Ledger" icon={BookOpen}  isHovered={isHovered} index={6} />}
                       {hasAccess(['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Service', 'Purchasing', 'Staff']) && <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" icon={ClipboardList}  isHovered={isHovered} index={7} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/transfer`} label="Inter-Branch Transfer" icon={ArrowRightLeft} isHovered={true} index={12.5} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/waste`} label="Waste Logs" icon={Trash2} isHovered={true} index={12.6} />}
-
-
-
-
                       {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen']) && <NavItem to={`${basePath}/transfer`} label="Inter-Branch Transfer" icon={ArrowRightLeft} isHovered={isHovered} index={7.5} />}
                       {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen']) && <NavItem to={`${basePath}/waste`} label="Waste Logs" icon={Trash2} isHovered={isHovered} index={7.6} />}
-
-
-
-
                       {hasAccess(['Admin / Owner', 'Owner', 'Kitchen', 'Central', 'Staff']) && <NavItem to={`${basePath}/trimming`} label="Trimming Produksi" icon={Box}  isHovered={isHovered} index={8} />}
                       {hasAccess(['Admin / Owner', 'Owner', 'Service', 'Central', 'Staff']) && <NavItem to={`${basePath}/pos`} label="Upload POS Sales" icon={UploadCloud}  isHovered={isHovered} index={8} />}
                       {hasAccess(['Admin / Owner', 'Owner', 'Service', 'Central', 'Staff']) && <NavItem to={`${basePath}/pos-raw`} label="Data Mentah POS" icon={DatabaseIcon}  isHovered={isHovered} index={8.5} />}
@@ -519,16 +496,6 @@ export default function DashboardLayout() {
                   {hasAccess(['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Service', 'Purchasing', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory" icon={ClipboardList}  isHovered={true} index={12} />}
                   {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/transfer`} label="Inter-Branch Transfer" icon={ArrowRightLeft} isHovered={true} index={12.5} />}
                   {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/waste`} label="Waste Logs" icon={Trash2} isHovered={true} index={12.6} />}
-
-
-
-
-                      {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen']) && <NavItem to={`${basePath}/transfer`} label="Inter-Branch Transfer" icon={ArrowRightLeft} isHovered={isHovered} index={7.5} />}
-                      {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen']) && <NavItem to={`${basePath}/waste`} label="Waste Logs" icon={Trash2} isHovered={isHovered} index={7.6} />}
-
-
-
-
                   {hasAccess(['Admin / Owner', 'Owner', 'Kitchen', 'Central', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/trimming`} label="Trimming Produksi" icon={Box}  isHovered={true} index={13} />}
                   {hasAccess(['Admin / Owner', 'Owner', 'Service', 'Central', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos`} label="Upload POS Sales" icon={UploadCloud}  isHovered={true} index={13} />}
                   {hasAccess(['Admin / Owner', 'Owner', 'Service', 'Central', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos-raw`} label="Data Mentah POS" icon={DatabaseIcon}  isHovered={true} index={13.2} />}

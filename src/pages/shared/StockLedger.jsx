@@ -133,7 +133,7 @@ export default function StockLedger() {
   const uniqueSuppliersInStock = useMemo(() => ['ALL', ...new Set(stock.map(item => item.supplier).filter(Boolean))], [stock]);
 
   // Filtered stock
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
+   
   const filteredStock = useMemo(() => stock.filter(item => {
     const totalQty = (item.qty_resto || 0) + (item.qty_central || 0);
     const minLevel = item.min_stock || 15;
@@ -196,7 +196,7 @@ export default function StockLedger() {
     for (const name of selectedItems) {
       try {
         await onDeleteItem(name);
-      } catch (err) {
+      } catch {
         failedCount++;
         failedNames.push(name);
       }
@@ -478,7 +478,7 @@ export default function StockLedger() {
                     ? Math.ceil((new Date(nearestExpiry) - new Date()) / 86400000)
                     : null;
 
-                  let expiryBadge = null;
+                  let expiryBadge;
                   if (daysToExpiry === null) {
                     expiryBadge = <div style={{width: 10, height: 10, borderRadius: '50%', background: '#9ca3af', display: 'inline-block'}} title="Tidak ada data" />;
                   } else if (daysToExpiry > 14) {
@@ -563,7 +563,7 @@ export default function StockLedger() {
 
                 const nearestExpiry = expiryMap[item.id];
                 const daysToExpiry = nearestExpiry ? Math.ceil((new Date(nearestExpiry) - new Date()) / 86400000) : null;
-                let expiryBadge = null;
+                let expiryBadge;
                 if (daysToExpiry === null) {
                   expiryBadge = <div style={{width: 10, height: 10, borderRadius: '50%', background: '#9ca3af', display: 'inline-block'}} title="Tidak ada data" />;
                 } else if (daysToExpiry > 14) {

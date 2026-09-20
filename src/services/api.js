@@ -44,20 +44,6 @@ const getActiveTenantId = async () => {
   return activeTenantId;
 };
 
-// Helper to get active branch info — uses cached memory first, falls back to Supabase session
-const getActiveBranchId = async () => {
-  if (activeBranchId !== null) return activeBranchId;
-  await getActiveTenantId(); // Call this to populate activeBranchId as well
-  return activeBranchId;
-};
-
-// Strict variant: throws when branch_id is null
-const requireBranchId = async () => {
-  const branchId = await getActiveBranchId();
-  if (!branchId) throw new Error("Operasi ini membutuhkan cabang aktif. User tidak memiliki cabang.");
-  return branchId;
-};
-
 // Strict variant: throws when tenant_id is null (use for CRUD/mutating operations only)
 const requireTenantId = async () => {
   const tenantId = await getActiveTenantId();
@@ -231,7 +217,6 @@ export const api = {
       const transactionRows = [];
       const unmappedItems = new Set();
       const dataIssues = new Set();
-      let totalTheoreticalUsage = 0;
 
       // DEBUG: null/undefined qty_in_use atau harga bahan bikin NaN yang di-JSON.stringify
       // jadi `null` — itu yang nabrak NOT NULL constraint di transactions.amount. Fallback ke 0
@@ -352,7 +337,6 @@ export const api = {
               total_sold: data.totalSold,
               created_by: userId
           });
-          totalTheoreticalUsage += deductQty;
       }));
 
       for (const [date, amount] of salesByDate.entries()) {

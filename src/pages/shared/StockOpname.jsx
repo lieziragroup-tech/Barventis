@@ -5,7 +5,6 @@ import {
 } from 'lucide-react';
 import BulkImport from '../../components/BulkImport';
 import { useData } from '../../contexts/DataContext';
-import { supabase } from '../../lib/supabase';
 import { formatIDR, calculateIngredientCost } from '../../services/costUtils';
 
 let _confetti;
