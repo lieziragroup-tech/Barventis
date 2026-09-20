@@ -23,6 +23,7 @@ export default function AuditLogs() {
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [humanOnly, setHumanOnly] = useState(true);
   const [page, setPage] = useState(1);
   const [selectedLog, setSelectedLog] = useState(null);
   const debounceRef = useRef(null);
@@ -37,15 +38,15 @@ export default function AuditLogs() {
     return () => clearTimeout(debounceRef.current);
   }, [searchInput]);
 
-  // Reset to page 1 whenever category changes
-  useEffect(() => { setPage(1); }, [categoryFilter]);
+  // Reset to page 1 whenever category or humanOnly changes
+  useEffect(() => { setPage(1); }, [categoryFilter, humanOnly]);
 
-  const fetchLogs = useCallback(async (targetPage = page, targetSearch = searchQuery, targetCategory = categoryFilter) => {
+  const fetchLogs = useCallback(async (targetPage = page, targetSearch = searchQuery, targetCategory = categoryFilter, targetHuman = humanOnly) => {
     setLoading(true);
     setError(null);
     try {
       const [{ data: syncedData, totalCount: count }, freshStats] = await Promise.all([
-        api.getAuditLogsPaged({ page: targetPage, pageSize: PAGE_SIZE, search: targetSearch, category: targetCategory }).catch(() => ({ data: [], totalCount: 0 })),
+        api.getAuditLogsPaged({ page: targetPage, pageSize: PAGE_SIZE, search: targetSearch, category: targetCategory, humanOnly: targetHuman }).catch(() => ({ data: [], totalCount: 0 })),
         api.getAuditLogsStats().catch(() => ({ total: 0, uniqueUsers: 0, securityAlerts: 0, syncs: 0 })),
       ]);
 
@@ -77,13 +78,13 @@ export default function AuditLogs() {
   }, [activeUser]);
 
   useEffect(() => {
-    fetchLogs(page, searchQuery, categoryFilter);
+    fetchLogs(page, searchQuery, categoryFilter, humanOnly);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, searchQuery, categoryFilter]);
+  }, [page, searchQuery, categoryFilter, humanOnly]);
 
   const handleSyncNow = async () => {
     await flushLogs();
-    await fetchLogs(page, searchQuery, categoryFilter);
+    await fetchLogs(page, searchQuery, categoryFilter, humanOnly);
   };
 
   const getActionColor = (action) => {
@@ -286,10 +287,23 @@ export default function AuditLogs() {
             ))}
           </div>
 
+          {/* Human Only Toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <input
+                type="checkbox"
+                checked={humanOnly}
+                onChange={(e) => setHumanOnly(e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+              Tindakan Manusia Saja
+            </label>
+          </div>
+
           {/* Refresh Button */}
           <button
             className="btn btn-secondary"
-            onClick={() => fetchLogs(page, searchQuery, categoryFilter)}
+            onClick={() => fetchLogs(page, searchQuery, categoryFilter, humanOnly)}
             disabled={loading}
             style={{ padding: '10px 14px', height: '42px', display: 'flex', gap: '8px', alignItems: 'center' }}
           >
@@ -356,7 +370,7 @@ export default function AuditLogs() {
             <AlertTriangle size={48} style={{ margin: '0 auto 16px' }} />
             <h3 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '8px' }}>Terjadi Kesalahan</h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '20px' }}>{error}</p>
-            <button className="btn btn-primary" onClick={() => fetchLogs(page, searchQuery, categoryFilter)}>Coba Lagi</button>
+            <button className="btn btn-primary" onClick={() => fetchLogs(page, searchQuery, categoryFilter, humanOnly)}>Coba Lagi</button>
           </div>
         ) : displayedLogs.length === 0 ? (
           <div style={{ padding: '80px 40px', textAlign: 'center' }}>

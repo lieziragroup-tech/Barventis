@@ -31,11 +31,6 @@ export default function TrimmingProduction() {
   });
   const [stage, setStage] = useState(1); // 1 = raw input, 2 = trimming result
 
-  useEffect(() => {
-    fetchMaterials();
-    fetchBatches();
-  }, []);
-
   const fetchMaterials = async () => {
     try {
       const tenantId = await api.getActiveTenantId();
@@ -46,8 +41,7 @@ export default function TrimmingProduction() {
         .eq('is_active', true)
         .order('name');
       setMaterials(data || []);
-    } catch (err) {
-    }
+    } catch { /* ignore */ }
   };
 
   const fetchBatches = async () => {
@@ -60,68 +54,66 @@ export default function TrimmingProduction() {
         .order('created_at', { ascending: false })
         .limit(50);
       setBatches(data || []);
-    } catch (err) {
-    }
+    } catch { /* ignore */ }
   };
 
-  const compressImage = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target.result;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 800;
-          const MAX_HEIGHT = 800;
-          let width = img.width;
-          let height = img.height;
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchMaterials();
+     
+    fetchBatches();
+  }, []);
 
-          if (width > height) {
-            if (width > MAX_WIDTH) {
-              height *= MAX_WIDTH / width;
-              width = MAX_WIDTH;
-            }
-          } else {
-            if (height > MAX_HEIGHT) {
-              width *= MAX_HEIGHT / height;
-              height = MAX_HEIGHT;
-            }
-          }
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
+  
+  const applyWatermark = (file, coords, field) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
 
-          canvas.toBlob((blob) => {
-            resolve(new File([blob], file.name, {
-              type: 'image/jpeg',
-              lastModified: Date.now()
-            }));
-          }, 'image/jpeg', 0.7);
-        };
-        img.onerror = (error) => reject(error);
-      };
-      reader.onerror = (error) => reject(error);
-    });
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.fillRect(20, img.height - 120, img.width - 40, 100);
+
+      ctx.font = 'bold 24px monospace';
+      ctx.fillStyle = '#ffffff';
+      const timestamp = new Date().toISOString();
+      ctx.fillText(`TIMESTAMP: ${timestamp}`, 40, img.height - 80);
+      const userName = profile?.full_name || profile?.email || 'Operator';
+      ctx.fillText(`GPS: ${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)} | OPR: ${userName}`, 40, img.height - 40);
+
+      canvas.toBlob((blob) => {
+        const watermarkedFile = new File([blob], file.name, { type: 'image/jpeg' });
+        setForm(prev => ({ ...prev, [field]: watermarkedFile }));
+      }, 'image/jpeg', 0.85);
+    };
+    img.src = URL.createObjectURL(file);
+  };
+
+  const handleCameraCapture = (e, field) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => applyWatermark(file, { lat: pos.coords.latitude, lng: pos.coords.longitude }, field),
+        () => applyWatermark(file, { lat: 0, lng: 0 }, field),
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    } else {
+      applyWatermark(file, { lat: 0, lng: 0 }, field);
+    }
   };
 
   const uploadPhoto = async (file, prefix) => {
     if (!file) return null;
 
-    let fileToUpload = file;
-    if (file.type.startsWith('image/')) {
-      try {
-        fileToUpload = await compressImage(file);
-      } catch (err) {
-      }
-    }
-
     const fileName = `${prefix}_${Date.now()}.jpg`;
     const { error } = await supabase.storage
       .from('production-batches')
-      .upload(fileName, fileToUpload, { contentType: 'image/jpeg' });
+      .upload(fileName, file, { contentType: 'image/jpeg' });
     if (error) throw error;
     const { data: { publicUrl } } = supabase.storage
       .from('production-batches')
@@ -289,7 +281,7 @@ export default function TrimmingProduction() {
                 <div className="form-group">
                   <label className="form-label text-xs">Foto Bukti Mentah *</label>
                   <div className="relative group cursor-pointer h-full">
-                    <input type="file" accept="image/*" capture="environment" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onChange={e => setForm({ ...form, gross_photo: e.target.files?.[0] || null })} />
+                    <input type="file" accept="image/*" capture="environment" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onChange={e => handleCameraCapture(e, 'gross_photo')} />
                     <div className={`flex flex-col items-center justify-center p-4 h-24 border-2 border-dashed rounded-2xl transition-all ${form.gross_photo ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-[var(--bg-secondary)] border-[var(--border)]'}`}>
                       {form.gross_photo ? (
                         <>
@@ -353,7 +345,7 @@ export default function TrimmingProduction() {
                 <div className="form-group">
                   <label className="form-label text-xs">Foto Hasil (Bersih)</label>
                   <div className="relative group cursor-pointer h-full">
-                    <input type="file" accept="image/*" capture="environment" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onChange={e => setForm({ ...form, clean_photo: e.target.files?.[0] || null })} />
+                    <input type="file" accept="image/*" capture="environment" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onChange={e => handleCameraCapture(e, 'clean_photo')} />
                     <div className={`flex flex-col items-center justify-center p-4 h-24 border-2 border-dashed rounded-2xl transition-all ${form.clean_photo ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-[var(--bg-secondary)] border-[var(--border)]'}`}>
                       {form.clean_photo ? <CheckCircle size={24} className="text-emerald-500" /> : <Camera size={24} className="text-[var(--text-muted)] mb-1" />}
                       <span className="font-bold text-xs mt-1 text-center">{form.clean_photo ? 'Tersimpan' : 'Jepret Foto'}</span>
@@ -363,7 +355,7 @@ export default function TrimmingProduction() {
                 <div className="form-group">
                   <label className="form-label text-xs">Foto Limbah (Waste)</label>
                   <div className="relative group cursor-pointer h-full">
-                    <input type="file" accept="image/*" capture="environment" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onChange={e => setForm({ ...form, waste_photo: e.target.files?.[0] || null })} />
+                    <input type="file" accept="image/*" capture="environment" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onChange={e => handleCameraCapture(e, 'waste_photo')} />
                     <div className={`flex flex-col items-center justify-center p-4 h-24 border-2 border-dashed rounded-2xl transition-all ${form.waste_photo ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-[var(--bg-secondary)] border-[var(--border)]'}`}>
                       {form.waste_photo ? <CheckCircle size={24} className="text-emerald-500" /> : <Camera size={24} className="text-[var(--text-muted)] mb-1" />}
                       <span className="font-bold text-xs mt-1 text-center">{form.waste_photo ? 'Tersimpan' : 'Jepret Foto'}</span>

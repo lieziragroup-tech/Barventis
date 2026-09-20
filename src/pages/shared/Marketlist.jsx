@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit2, Trash2, Save, X, ArrowLeft, ArrowRight, Loader2, ListPlus, CheckSquare } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Edit2, Trash2, Save, X, ArrowLeft, ArrowRight, Loader2, ListPlus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -17,10 +17,6 @@ export default function Marketlist() {
   // Form state
   const [formData, setFormData] = useState({ name: '', description: '', is_active: true });
   const [itemsData, setItemsData] = useState([]);
-
-  useEffect(() => {
-    fetchLists();
-  }, []);
 
   const getTenantId = () => activeUser?.tenant_id || 'UNKNOWN';
 
@@ -43,6 +39,12 @@ export default function Marketlist() {
     }
   };
 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchLists();
+  }, []);
+
+  
   const handleSaveHeader = async (e) => {
     e.preventDefault();
     if (!formData.name.trim()) return showToast('Nama Market List wajib diisi', 'error');
@@ -80,7 +82,11 @@ export default function Marketlist() {
         const fullList = lists.find(l => l.id === saved.id);
         setItemsData(fullList?.market_list_items?.map(item => ({
           material_id: item.material_id,
-          quantity: item.quantity,
+          par_stock: item.par_stock || 0,
+          min_stock: item.min_stock || 0,
+          quantity: item.quantity || 0,
+          approved_qty: item.approved_qty || 0,
+          vendor: item.vendor || '',
           unit: item.unit
         })) || []);
         setView('edit-items');
@@ -108,10 +114,14 @@ export default function Marketlist() {
   const handleSaveItems = async () => {
     try {
       setLoading(true);
-      const validItems = itemsData.filter(i => i.material_id && i.quantity > 0).map(i => ({
+      const validItems = itemsData.filter(i => i.material_id).map(i => ({
         market_list_id: currentList.id,
         material_id: i.material_id,
-        quantity: i.quantity,
+        par_stock: i.par_stock || 0,
+        min_stock: i.min_stock || 0,
+        quantity: i.quantity || 0,
+        approved_qty: i.approved_qty || 0,
+        vendor: i.vendor || '',
         unit: i.unit
       }));
 
@@ -135,7 +145,7 @@ export default function Marketlist() {
   };
 
   const handleAddItemRow = () => {
-    setItemsData([...itemsData, { material_id: '', quantity: 1, unit: '' }]);
+    setItemsData([...itemsData, { material_id: '', par_stock: 0, min_stock: 0, quantity: 0, approved_qty: 0, vendor: '', unit: '' }]);
   };
 
   const updateItemRow = (index, field, value) => {
@@ -143,7 +153,11 @@ export default function Marketlist() {
     updated[index][field] = value;
     if (field === 'material_id') {
       const mat = stock.find(s => s.id === value);
-      if (mat) updated[index].unit = mat.unit || '';
+      if (mat) {
+        updated[index].unit = mat.unit || '';
+        const parStock = updated[index].par_stock || 0;
+        updated[index].quantity = Math.max(0, parStock - (mat.stock || 0));
+      }
     }
     setItemsData(updated);
   };
@@ -206,7 +220,11 @@ export default function Marketlist() {
                     setCurrentList(list);
                     setItemsData(list.market_list_items?.map(item => ({
                       material_id: item.material_id,
-                      quantity: item.quantity,
+                      par_stock: item.par_stock || 0,
+                      min_stock: item.min_stock || 0,
+                      quantity: item.quantity || 0,
+                      approved_qty: item.approved_qty || 0,
+                      vendor: item.vendor || '',
                       unit: item.unit
                     })) || []);
                     setView('edit-items');
@@ -284,14 +302,60 @@ export default function Marketlist() {
                     ))}
                   </select>
                 </div>
-                <div className="w-32">
-                  <label className="text-xs text-muted-foreground mb-1 block">Qty</label>
+                <div className="w-24">
+                  <label className="text-xs text-muted-foreground mb-1 block">Par Stock</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={item.par_stock || 0}
+                    onChange={e => {
+                      const parStock = parseFloat(e.target.value) || 0;
+                      const currentStock = stock.find(s => s.id === item.material_id)?.stock || 0;
+                      const reqQty = Math.max(0, parStock - currentStock);
+                      updateItemRow(idx, 'par_stock', parStock);
+                      updateItemRow(idx, 'quantity', reqQty);
+                    }}
+                    min="0" step="any"
+                  />
+                </div>
+                <div className="w-24">
+                  <label className="text-xs text-muted-foreground mb-1 block">Min Stock</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={item.min_stock || 0}
+                    onChange={e => updateItemRow(idx, 'min_stock', parseFloat(e.target.value) || 0)}
+                    min="0" step="any"
+                  />
+                </div>
+                <div className="w-24">
+                  <label className="text-xs text-muted-foreground mb-1 block">Req Qty</label>
                   <input
                     type="number"
                     className="form-control"
                     value={item.quantity}
                     onChange={e => updateItemRow(idx, 'quantity', parseFloat(e.target.value) || 0)}
                     min="0" step="any"
+                    readOnly
+                  />
+                </div>
+                <div className="w-24">
+                  <label className="text-xs text-muted-foreground mb-1 block">Apprv Qty</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={item.approved_qty || 0}
+                    onChange={e => updateItemRow(idx, 'approved_qty', parseFloat(e.target.value) || 0)}
+                    min="0" step="any"
+                  />
+                </div>
+                <div className="w-32">
+                  <label className="text-xs text-muted-foreground mb-1 block">Vendor</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={item.vendor || ''}
+                    onChange={e => updateItemRow(idx, 'vendor', e.target.value)}
                   />
                 </div>
                 <div className="w-24">

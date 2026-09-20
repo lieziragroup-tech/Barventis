@@ -1,5 +1,5 @@
+import { UploadCloud, ClipboardCheck, Plus, CheckCircle, Edit2, Trash2, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, CheckCircle, Database, Trash2, X, UploadCloud } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
 import BulkImport from '../../components/BulkImport';
@@ -8,16 +8,15 @@ export default function AssetManagement() {
   const [loading, setLoading] = useState(true);
   const [assets, setAssets] = useState([]);
   const [editingAsset, setEditAsset] = useState(null);
-  const [showOpnameModal, setShowOpnameModal] = useState(false);
+  const [showChecklistModal, setShowChecklistModal] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
-  const [opnameItems, setOpnameItems] = useState({});
+  const [checklistItems, setChecklistItems] = useState({});
   const [notification, setNotification] = useState(null);
 
   const fetchAssets = async () => {
     setLoading(true);
     try {
       const tenantId = await api.getActiveTenantId();
-      // Use materials table but categorized as ASSET
       const { data, error } = await supabase
         .from('materials')
         .select('*')
@@ -37,6 +36,7 @@ export default function AssetManagement() {
   };
 
   useEffect(() => {
+     
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAssets();
   }, []);
@@ -49,9 +49,10 @@ export default function AssetManagement() {
         tenant_id: tenantId,
         name: editingAsset.name,
         category: 'ASSET',
-        supplier: editingAsset.supplier || '-',
+        supplier: editingAsset.supplier || '-', // using supplier for maintenance notes
+        brand: editingAsset.brand || 'Baik', // using brand for condition
         unit: 'pcs',
-        full_pack: editingAsset.full_pack || '1 pcs',
+        full_pack: '1 pcs',
         price: parseFloat(editingAsset.price) || 0,
         new_price: parseFloat(editingAsset.price) || 0,
         qty_resto: parseFloat(editingAsset.qty_resto) || 0,
@@ -67,7 +68,9 @@ export default function AssetManagement() {
       }
       setEditAsset(null);
       setNotification({ type: 'success', text: 'Aset berhasil disimpan.' });
-      fetchAssets();
+       
+     
+    fetchAssets();
     } catch (err) {
       setNotification({ type: 'error', text: err.message });
     }
@@ -78,82 +81,62 @@ export default function AssetManagement() {
     try {
       await supabase.from('materials').update({ is_active: false }).eq('id', id);
       setNotification({ type: 'success', text: 'Aset berhasil dihapus.' });
-      fetchAssets();
+       
+     
+    fetchAssets();
     } catch (err) {
       setNotification({ type: 'error', text: err.message });
     }
   };
 
-  const openOpnameModal = () => {
-    const initialCounts = {};
+  const openChecklistModal = () => {
+    const initialChecks = {};
     assets.forEach(a => {
-      initialCounts[a.id] = { physical_qty: a.qty_resto + a.qty_central, notes: '' };
+      initialChecks[a.id] = { condition: a.brand || 'Baik', notes: '' };
     });
-    setOpnameItems(initialCounts);
-    setShowOpnameModal(true);
+    setChecklistItems(initialChecks);
+    setShowChecklistModal(true);
   };
 
-  const handleSaveOpname = async () => {
+  const handleSaveChecklist = async () => {
     try {
-      const tenantId = await api.getActiveTenantId();
-      const userId = await api.getActiveUserId();
-
-      const txRows = [];
-      
-      // We will perform a simplified stock adjustment for assets
-      for (const asset of assets) {
-        const physical = parseFloat(opnameItems[asset.id].physical_qty || 0);
-        const system = parseFloat(asset.qty_resto || 0) + parseFloat(asset.qty_central || 0);
-        const variance = physical - system;
-
-        if (Math.abs(variance) > 0) {
-          // Adjust stock (we'll just use resto to represent global asset count for simplicity in MVP)
-          await supabase.rpc('deduct_stock_atomic', {
-            p_material_id: asset.id,
-            p_deduct_qty: -variance
-          });
-
-          txRows.push({
-            tenant_id: tenantId,
-            date: new Date().toISOString().split('T')[0],
-            material_id: asset.id,
-            type: variance < 0 ? 'BREAKAGE' : 'IN',
-            location: 'RESTO',
-            qty: variance,
-            amount: variance * parseFloat(asset.new_price || 0),
-            notes: 'Asset Opname: ' + opnameItems[asset.id].notes,
-            created_by: userId
-          });
-        }
+      for (const assetId in checklistItems) {
+        const item = checklistItems[assetId];
+        await supabase.from('materials').update({ brand: item.condition }).eq('id', assetId);
       }
-
-      if (txRows.length > 0) {
-        await supabase.from('transactions').insert(txRows);
-      }
-
-      setShowOpnameModal(false);
-      setNotification({ type: 'success', text: 'Opname aset berhasil diselesaikan.' });
-      fetchAssets();
+      setNotification({ type: 'success', text: 'Checklist kondisi berhasil disimpan.' });
+      setShowChecklistModal(false);
+       
+     
+    fetchAssets();
     } catch (err) {
       setNotification({ type: 'error', text: err.message });
     }
   };
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+        <div className="animate-spin h-8 w-8 border-4 border-accent border-t-transparent rounded-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="fade-in">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ minWidth: 0 }}>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Asset Management</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Kelola aset restoran (mesin, gelas, tools) dan opname kerusakan.</p>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Asset Registry & Kondisi</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Kelola inventaris aset dan jadwal maintenance rutin.</p>
         </div>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <button className="btn btn-secondary" onClick={() => setShowBulkImport(true)}>
             <UploadCloud size={16} style={{ marginRight: '8px' }}/> Import Excel
           </button>
-          <button className="btn btn-secondary" onClick={openOpnameModal} disabled={loading || assets.length === 0}>
-            <Database size={16} style={{ marginRight: '8px' }}/> Stock Opname Aset
+          <button className="btn btn-secondary" onClick={openChecklistModal} disabled={loading || assets.length === 0}>
+            <ClipboardCheck size={16} style={{ marginRight: '8px' }}/> Checklist Kondisi
           </button>
-          <button className="btn btn-primary" onClick={() => setEditAsset({ name: '', supplier: '', full_pack: '1 pcs', price: 0, qty_resto: 0, qty_central: 0, min_stock: 0 })}>
+          <button className="btn btn-primary" onClick={() => setEditAsset({ name: '', supplier: '', brand: 'Baik', price: 0, qty_resto: 0 })}>
             <Plus size={16} style={{ marginRight: '8px' }}/> Tambah Aset
           </button>
         </div>
@@ -171,109 +154,131 @@ export default function AssetManagement() {
           <thead>
             <tr>
               <th>Nama Aset</th>
-              <th>Kategori (Sub)</th>
-              <th style={{ textAlign: 'right' }}>Nilai Satuan</th>
-              <th style={{ textAlign: 'right' }}>Stok Fisik</th>
-              <th style={{ textAlign: 'right' }}>Total Valuasi</th>
+              <th>Kondisi Saat Ini</th>
+              <th>Jadwal Maintenance</th>
+              <th style={{ textAlign: 'right' }}>Nilai / Harga</th>
               <th style={{ textAlign: 'center' }}>Aksi</th>
             </tr>
           </thead>
           <tbody>
-            {assets.map(a => {
-              const totalQty = parseFloat(a.qty_resto || 0) + parseFloat(a.qty_central || 0);
-              const val = totalQty * parseFloat(a.new_price || 0);
-              return (
+            {assets.length === 0 ? (
+              <tr><td colSpan="5" style={{ textAlign: 'center', padding: '20px' }}>Belum ada data aset.</td></tr>
+            ) : (
+              assets.map(a => (
                 <tr key={a.id}>
                   <td style={{ fontWeight: 600 }}>{a.name}</td>
-                  <td>{a.supplier}</td> {/* using supplier field for sub-category/group */}
-                  <td style={{ textAlign: 'right' }}>Rp {parseFloat(a.new_price || 0).toLocaleString('id-ID')}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600, color: totalQty < a.min_stock ? 'var(--warning)' : '' }}>{totalQty} {a.unit}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600 }}>Rp {val.toLocaleString('id-ID')}</td>
+                  <td>
+                    <span className="badge" style={{
+                      backgroundColor: a.brand === 'Baik' ? 'rgba(16, 185, 129, 0.1)' : a.brand === 'Rusak Ringan' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                      color: a.brand === 'Baik' ? 'rgb(16, 185, 129)' : a.brand === 'Rusak Ringan' ? 'rgb(245, 158, 11)' : 'rgb(239, 68, 68)'
+                    }}>
+                      {a.brand || 'Baik'}
+                    </span>
+                  </td>
+                  <td>{a.supplier || '-'}</td>
+                  <td style={{ textAlign: 'right' }}>Rp {(parseFloat(a.new_price) || parseFloat(a.price) || 0).toLocaleString('id-ID')}</td>
                   <td style={{ textAlign: 'center' }}>
-                    <button className="btn" style={{ padding: '4px', color: 'var(--accent)' }} onClick={() => setEditAsset(a)}><Edit2 size={16}/></button>
-                    <button className="btn" style={{ padding: '4px', color: 'var(--danger)' }} onClick={() => handleDeleteAsset(a.id)}><Trash2 size={16}/></button>
+                    <button className="btn" style={{ padding: '4px', color: 'var(--accent)' }} onClick={() => setEditAsset(a)} title="Edit"><Edit2 size={16}/></button>
+                    <button className="btn" style={{ padding: '4px', color: 'var(--danger)' }} onClick={() => handleDeleteAsset(a.id)} title="Hapus"><Trash2 size={16}/></button>
                   </td>
                 </tr>
-              );
-            })}
-            {assets.length === 0 && <tr><td colSpan="6" style={{ textAlign: 'center', padding: '20px' }}>Belum ada data aset.</td></tr>}
+              ))
+            )}
           </tbody>
         </table>
       </div>
 
-      {/* Asset Form Modal */}
       {editingAsset && (
         <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setEditAsset(null)}>
           <div className="glass-card modal-card" style={{ width: '400px', maxWidth: 'calc(100vw - 32px)', maxHeight: '90vh', overflowY: 'auto', padding: '24px' }} onClick={e => e.stopPropagation()}>
             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '20px' }}>{editingAsset.id ? 'Edit' : 'Tambah'} Aset</h3>
             <form onSubmit={handleSaveAsset} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="form-group"><label className="form-label">Nama Aset / Peralatan</label><input type="text" required className="form-control" value={editingAsset.name} onChange={e => setEditAsset({...editingAsset, name: e.target.value})} /></div>
-              <div className="form-group"><label className="form-label">Grup (Gelas, Tool, Mesin)</label><input type="text" className="form-control" value={editingAsset.supplier} onChange={e => setEditAsset({...editingAsset, supplier: e.target.value})} /></div>
-              <div className="form-group"><label className="form-label">Harga Pembelian (IDR)</label><input type="number" required className="form-control" value={editingAsset.price} onChange={e => setEditAsset({...editingAsset, price: e.target.value})} /></div>
-              <div style={{ display: 'flex', gap: '16px' }}>
-                <div className="form-group"><label className="form-label">Stok Resto</label><input type="number" className="form-control" value={editingAsset.qty_resto} onChange={e => setEditAsset({...editingAsset, qty_resto: e.target.value})} /></div>
-                <div className="form-group"><label className="form-label">Stok Central</label><input type="number" className="form-control" value={editingAsset.qty_central} onChange={e => setEditAsset({...editingAsset, qty_central: e.target.value})} /></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="form-group">
+                  <label className="form-label">Kondisi</label>
+                  <select className="form-control" value={editingAsset.brand || 'Baik'} onChange={e => setEditAsset({...editingAsset, brand: e.target.value})}>
+                    <option value="Baik">Baik</option>
+                    <option value="Rusak Ringan">Rusak Ringan</option>
+                    <option value="Rusak Berat">Rusak Berat</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Nilai Aset (Rp)</label>
+                  <input type="number" required className="form-control" value={editingAsset.price} onChange={e => setEditAsset({...editingAsset, price: e.target.value})} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Jadwal / Catatan Maintenance</label>
+                <textarea className="form-control" rows="2" placeholder="Cth: Cek filter tiap 3 bulan" value={editingAsset.supplier || ''} onChange={e => setEditAsset({...editingAsset, supplier: e.target.value})}></textarea>
               </div>
               <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
                 <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setEditAsset(null)}>Batal</button>
-                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Simpan</button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Simpan Aset</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Opname Modal */}
-      {showOpnameModal && (
+      {showChecklistModal && (
         <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div className="glass-card modal-card" style={{ width: '800px', maxWidth: 'calc(100vw - 32px)', padding: '24px', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Stock Opname Aset</h3>
-              <button className="btn" onClick={() => setShowOpnameModal(false)}><X size={20} /></button>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Checklist Kondisi Berkala</h3>
+              <button className="btn" onClick={() => setShowChecklistModal(false)}><X size={20} /></button>
             </div>
             <table className="custom-table" style={{ marginBottom: '20px' }}>
               <thead>
                 <tr>
                   <th>Nama Aset</th>
-                  <th style={{ textAlign: 'center' }}>Sistem Qty</th>
-                  <th style={{ textAlign: 'center' }}>Fisik Qty</th>
-                  <th>Keterangan Rusak/Hilang</th>
+                  <th style={{ width: '200px' }}>Update Kondisi</th>
+                  <th>Catatan (Opsional)</th>
                 </tr>
               </thead>
               <tbody>
-                {assets.map(a => {
-                  const systemQty = parseFloat(a.qty_resto || 0) + parseFloat(a.qty_central || 0);
-                  const physQty = opnameItems[a.id]?.physical_qty || 0;
-                  const isDiff = physQty !== systemQty;
-                  return (
-                    <tr key={a.id}>
-                      <td style={{ fontWeight: 600 }}>{a.name}</td>
-                      <td style={{ textAlign: 'center' }}>{systemQty}</td>
-                      <td style={{ textAlign: 'center' }}>
-                        <input type="number" className="form-control" style={{ textAlign: 'center', width: '80px', color: isDiff ? 'var(--warning)' : 'inherit', fontWeight: isDiff ? 700 : 400 }} value={physQty} onChange={e => setOpnameItems(prev => ({ ...prev, [a.id]: { ...prev[a.id], physical_qty: e.target.value } }))} />
-                      </td>
-                      <td>
-                        <input type="text" className="form-control" placeholder="Opsional..." value={opnameItems[a.id]?.notes || ''} onChange={e => setOpnameItems(prev => ({ ...prev, [a.id]: { ...prev[a.id], notes: e.target.value } }))} />
-                      </td>
-                    </tr>
-                  )
-                })}
+                {assets.map(a => (
+                  <tr key={a.id}>
+                    <td style={{ fontWeight: 600 }}>{a.name}</td>
+                    <td>
+                      <select
+                        className="form-control"
+                        value={checklistItems[a.id]?.condition || 'Baik'}
+                        onChange={e => setChecklistItems({...checklistItems, [a.id]: {...checklistItems[a.id], condition: e.target.value}})}
+                      >
+                        <option value="Baik">Baik</option>
+                        <option value="Rusak Ringan">Rusak Ringan</option>
+                        <option value="Rusak Berat">Rusak Berat</option>
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Catatan kerusakan..."
+                        value={checklistItems[a.id]?.notes || ''}
+                        onChange={e => setChecklistItems({...checklistItems, [a.id]: {...checklistItems[a.id], notes: e.target.value}})}
+                      />
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-              <button className="btn btn-secondary" onClick={() => setShowOpnameModal(false)}>Batal</button>
-              <button className="btn btn-primary" onClick={handleSaveOpname}>Submit Opname Aset</button>
+              <button className="btn btn-secondary" onClick={() => setShowChecklistModal(false)}>Batal</button>
+              <button className="btn btn-primary" onClick={handleSaveChecklist}>Simpan Checklist</button>
             </div>
           </div>
         </div>
       )}
+
       {/* Bulk Import Modal */}
       <BulkImport
         isOpen={showBulkImport}
         onClose={() => setShowBulkImport(false)}
         type="assets"
         title="Bulk Import Data Aset"
-        description="Upload data aset dari Excel. Pastikan header sesuai dengan format di bawah."
+        description="Upload data aset dari Excel."
         currentData={[]}
         onCommit={async (rows) => {
           const tenantId = await api.getActiveTenantId();
@@ -293,14 +298,12 @@ export default function AssetManagement() {
               tenant_id: tenantId,
               name: name,
               category: 'ASSET',
-              supplier: row.supplier || row['GRUP'] || '-',
+              supplier: row['JADWAL MAINTENANCE'] || '-',
+              brand: row['KONDISI'] || 'Baik',
               unit: 'pcs',
               full_pack: '1 pcs',
-              price: parseFloat(row.price || row['NILAI SATUAN']) || 0,
-              new_price: parseFloat(row.price || row['NILAI SATUAN']) || 0,
-              qty_resto: parseFloat(row.qty_resto || row['STOK FISIK']) || 0,
-              qty_central: parseFloat(row.qty_central) || 0,
-              min_stock: parseFloat(row.min_stock) || 0,
+              price: parseFloat(row['NILAI SATUAN']) || 0,
+              new_price: parseFloat(row['NILAI SATUAN']) || 0,
               is_active: true
             };
           }).filter(p => p !== null);
@@ -308,13 +311,10 @@ export default function AssetManagement() {
           if (payloads.length > 0) {
             try {
               const { error } = await supabase.from('materials').insert(payloads);
-              if (error) {
-                 failed += payloads.length;
-                 success -= payloads.length;
-                 errors.push({ row: 'Insert Database', error: error.message });
-              } else {
-                 fetchAssets();
-              }
+              if (error) throw error;
+               
+     
+    fetchAssets();
             } catch (err) {
                failed += payloads.length;
                success -= payloads.length;
@@ -325,9 +325,9 @@ export default function AssetManagement() {
         }}
         expectedColumns={[
           { key: 'NAMA ASET', label: 'NAMA ASET', required: true, type: 'string', description: 'Nama Aset', sample: 'Mesin Espresso' },
-          { key: 'GRUP', label: 'GRUP (KATEGORI SUB)', required: false, type: 'string', description: 'Kelompok/Grup aset', sample: 'Mesin' },
-          { key: 'NILAI SATUAN', label: 'NILAI SATUAN (RP)', required: true, type: 'number', description: 'Harga Beli Satuan', sample: 15000000 },
-          { key: 'STOK FISIK', label: 'STOK FISIK', required: true, type: 'number', description: 'Total jumlah fisik', sample: 2 }
+          { key: 'KONDISI', label: 'KONDISI', required: false, type: 'string', description: 'Baik/Rusak Ringan/Rusak Berat', sample: 'Baik' },
+          { key: 'NILAI SATUAN', label: 'NILAI SATUAN', required: false, type: 'number', description: 'Harga Aset', sample: 15000000 },
+          { key: 'JADWAL MAINTENANCE', label: 'JADWAL MAINTENANCE', required: false, type: 'string', description: 'Catatan jadwal', sample: 'Cek 3 bulan' }
         ]}
       />
     </div>

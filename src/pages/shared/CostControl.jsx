@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   FileSpreadsheet, FileText, CheckCircle, AlertTriangle,
-  TrendingDown, TrendingUp, Info, Calendar, Loader, ChevronDown
+    Info, Calendar, Loader, ChevronDown
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { formatIDR } from '../../services/costUtils';
@@ -454,34 +454,41 @@ export default function CostControl() {
               </div>
             </div>
           )}
-          {/* HPP Card */}
-          <div style={{
-            background: beverageCostPct <= 27 ? 'rgba(81,207,102,0.04)' : 'rgba(255,107,107,0.04)',
-            border: `1px solid ${beverageCostPct <= 27 ? 'rgba(81,207,102,0.15)' : 'rgba(255,107,107,0.15)'}`,
-            borderRadius: 'var(--radius-xl)', padding: '24px 32px', marginBottom: '24px',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '24px'
-          }}>
-            <div>
-              <span className="badge badge-info" style={{ marginBottom: '8px' }}>Period {activeTab === 'BEER' ? 'Beer Cost' : 'Beverage Cost'}</span>
-              <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '6px' }}>
-                HPP: <span style={{ color: beverageCostPct <= 27 ? 'var(--success)' : 'var(--danger)' }}>{beverageCostPct.toFixed(2)}%</span>
-              </h2>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                {beverageCostPct <= 27 ? (
-                  <><CheckCircle size={16} style={{ color: 'var(--success)' }} /> Target aman (&lt;27%)</>
-                ) : statusLabel === 'ANOMALY' ? (
-                  <><AlertTriangle size={16} style={{ color: 'var(--warning)' }} /> Anomali data — lihat peringatan di atas</>
-                ) : (
-                  <><AlertTriangle size={16} style={{ color: 'var(--danger)' }} /> Melebihi target 27%</>
-                )}
-              </p>
+          {/* Dashboard 4 Cards Redesign */}
+          <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+            <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Total Beverage Sales</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)' }}>{formatIDR(totalSalesBeverage)}</div>
             </div>
-            <div className="kpi-icon-wrap" style={{
-              width: '64px', height: '64px', borderRadius: 'var(--radius-lg)',
-              background: beverageCostPct <= 27 ? 'var(--success-glow)' : 'var(--danger-glow)',
-              color: beverageCostPct <= 27 ? 'var(--success)' : 'var(--danger)'
+            
+            <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Actual COGS vs Theoretical</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>{formatIDR(pemakaianBulan)} <span style={{fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 500}}>vs {formatIDR(totalSalesBeverage * 0.27)}</span></div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Theoretical computed at 27% target</div>
+            </div>
+            
+            <div className="glass-card" style={{ 
+              padding: '20px', display: 'flex', flexDirection: 'column',
+              background: beverageCostPct <= 27 ? 'rgba(81,207,102,0.04)' : 'rgba(255,107,107,0.04)',
+              border: `1px solid ${beverageCostPct <= 27 ? 'rgba(81,207,102,0.2)' : 'rgba(255,107,107,0.2)'}` 
             }}>
-              {beverageCostPct <= 27 ? <TrendingDown size={32} /> : <TrendingUp size={32} />}
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Cost Variance Rate</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: beverageCostPct <= 27 ? 'var(--success)' : 'var(--danger)' }}>
+                {beverageCostPct.toFixed(2)}%
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {beverageCostPct <= 27 ? <CheckCircle size={12} color="var(--success)"/> : <AlertTriangle size={12} color="var(--danger)"/>}
+                Variance vs 27% target: {(beverageCostPct - 27).toFixed(2)}%
+              </div>
+            </div>
+            
+            <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'var(--bg-secondary)' }}>
+              <button className="btn btn-primary" style={{ width: '100%', textAlign: 'center', display: 'block', padding: '12px' }} onClick={() => {
+                const tr = document.querySelector('.table-container');
+                if (tr) tr.scrollIntoView({behavior: 'smooth'});
+              }}>
+                View Variance Details (Leaks)
+              </button>
             </div>
           </div>
 

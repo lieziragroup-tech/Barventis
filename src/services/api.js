@@ -2970,7 +2970,7 @@ export const api = {
     };
   },
 
-  getAuditLogsPaged: async ({ page = 1, pageSize = 20, search = '', category = 'ALL' } = {}) => {
+  getAuditLogsPaged: async ({ page = 1, pageSize = 20, search = '', category = 'ALL', humanOnly = false } = {}) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { data: [], totalCount: 0 };
     const from = (page - 1) * pageSize;
@@ -2988,6 +2988,10 @@ export const api = {
       .from('audit_logs')
       .select('*, users(name, role)', { count: 'exact' })
       .eq('tenant_id', tenantId);
+
+    if (humanOnly) {
+      query = query.not('actor_id', 'is', null);
+    }
 
     if (search && search.trim()) {
       const s = sanitizePostgrest(search);

@@ -26,6 +26,8 @@ const AuditLogs = React.lazy(() => import('./pages/shared/AuditLogs'));
 const AssetManagement = React.lazy(() => import('./pages/shared/AssetManagement'));
 const BackupCenter = React.lazy(() => import('./pages/shared/BackupCenter'));
 const Maintenance = React.lazy(() => import('./pages/shared/Maintenance'));
+const InterBranchTransfer = React.lazy(() => import('./pages/shared/InterBranchTransfer'));
+const WasteLogs = React.lazy(() => import('./pages/shared/WasteLogs'));
 const SuperAdminPanel = React.lazy(() => import('./pages/superadmin/SuperAdminPanel'));
 const TenantAdminPanel = React.lazy(() => import('./pages/owner/TenantAdminPanel'));
 const PosTerminal = React.lazy(() => import('./pages/pos/PosTerminal'));
@@ -225,6 +227,18 @@ export default function App() {
           <Route path="backup" element={
             <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central']}>
               <RouteErrorBoundary><BackupCenter /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="transfer" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen']}>
+              <RouteErrorBoundary><InterBranchTransfer /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
+          <Route path="waste" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen']}>
+              <RouteErrorBoundary><WasteLogs /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 

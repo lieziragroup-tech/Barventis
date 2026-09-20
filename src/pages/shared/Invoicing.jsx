@@ -134,6 +134,7 @@ export default function Invoicing() {
       DRAFT: 'badge-info',
       SENT: 'badge-warning',
       RECEIVED: 'badge-success',
+      GOODS_RECEIVED: 'badge-success',
       CANCELLED: 'badge-danger'
     };
     return <span className={`badge ${map[status] || 'badge-info'}`} style={{ fontSize: '0.65rem' }}>{status}</span>;
@@ -200,6 +201,7 @@ Catatan: ${inv.notes || '-'}`,
             <option value="DRAFT">Draft</option>
             <option value="SENT">Sent</option>
             <option value="RECEIVED">Received</option>
+            <option value="GOODS_RECEIVED">Goods Received</option>
             <option value="CANCELLED">Cancelled</option>
           </select>
           <button className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '0.85rem' }} onClick={() => setShowBulkImport(true)}>
@@ -271,6 +273,27 @@ Catatan: ${inv.notes || '-'}`,
                     <div style={{ display: 'inline-flex', gap: '4px' }}>
                       <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)' }} title="View Detail" onClick={() => setViewInvoice(inv)}>
                         <Eye size={13} />
+                      </button>
+                      <button
+                        className="btn btn-primary"
+                        style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.7rem', opacity: (inv.status === 'GOODS_RECEIVED' && inv.validated) ? 1 : 0.5 }}
+                        disabled={inv.status !== 'GOODS_RECEIVED' || !inv.validated}
+                        title="Generate Invoice"
+                        onClick={() => {
+                          const actualItems = (inv.items || []).map(i => ({
+                            ...i,
+                            qty: i.received_qty ?? i.qty
+                          }));
+                          const finalTotal = actualItems.reduce((acc, i) => acc + (i.qty * i.unit_price), 0);
+                          setInvoiceToSubmit({
+                            ...inv,
+                            items: actualItems,
+                            total: finalTotal
+                          });
+                          setShowConfirmModal(true);
+                        }}
+                      >
+                        <FileText size={13} /> Generate Invoice
                       </button>
                       {(inv.status === 'DRAFT' || inv.status === 'SENT') && (
                         <button className="btn btn-success" style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.7rem' }} title="Mark Received — Stock In" onClick={async () => {
