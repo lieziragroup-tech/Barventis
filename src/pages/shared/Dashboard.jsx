@@ -19,7 +19,6 @@ export default function Dashboard() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
-  const [activeTab, setActiveTab] = useState('ALL');
 
   const periodOptions = useMemo(() => {
     const opts = [];
@@ -45,50 +44,21 @@ export default function Dashboard() {
     return map;
   }, [recipes]);
 
-  const checkTabMatch = useCallback((tx, tab) => {
-    if (tab === 'ALL') return true;
-    let menuName = tx.notes || '';
-    if (menuName.startsWith('POS Sync:')) {
-      menuName = menuName.replace('POS Sync:', '').trim();
-    }
-
-    let matchedCategory = null;
-    // Attempt exact match from recipes state
-    const exactMatchCategory = menuCategoryMap[menuName.toLowerCase()];
-    if (exactMatchCategory) {
-      matchedCategory = exactMatchCategory;
-    } else {
-      // Fallback: search string inclusion just in case notes have extra text
-      const rMatch = (recipes || []).find(r => r.menu_name && menuName.toLowerCase().includes(r.menu_name.toLowerCase()));
-      if (rMatch) matchedCategory = rMatch.category?.toUpperCase() || '';
-    }
-
-    // If still unmatched, allow it through 'ALL' but default it away from specific filtered tabs
-    // unless you want to classify unknowns differently
-    if (!matchedCategory) return true;
-
-    const isBeer = matchedCategory.includes('BEER');
-    if (tab === 'BEER') return isBeer;
-    if (tab === 'BEVERAGE') return !isBeer;
-
-    return true;
-  }, [menuCategoryMap, recipes]);
-
   const stockValuation = useMemo(() => stock.reduce((acc, item) => acc + calculateIngredientCost(item, (item.qty_resto || 0) + (item.qty_central || 0), item.unit, unitConversionMap), 0), [stock, unitConversionMap]);
   const lowStockItems = useMemo(() => stock.filter(item => ((item.qty_resto || 0) + (item.qty_central || 0)) < (item.min_stock || 15)), [stock]);
 
   // Calculate real metrics from live transaction data
   const realSalesRevenue = useMemo(() => {
     return (transactions || [])
-      .filter(tx => tx.type === 'POS_SALE' && tx.date && tx.date.startsWith(period) && checkTabMatch(tx, activeTab))
+      .filter(tx => tx.type === 'POS_SALE' && tx.date && tx.date.startsWith(period))
       .reduce((sum, tx) => sum + Math.abs(parseFloat(tx.amount || 0)), 0);
-  }, [transactions, period, activeTab, checkTabMatch]);
+  }, [transactions, period]);
 
   const realCogsCost = useMemo(() => {
     return (transactions || [])
-      .filter(tx => tx.type === 'POS_DEDUCTION' && tx.date && tx.date.startsWith(period) && checkTabMatch(tx, activeTab))
+      .filter(tx => tx.type === 'POS_DEDUCTION' && tx.date && tx.date.startsWith(period))
       .reduce((sum, tx) => sum + Math.abs(parseFloat(tx.amount || 0)), 0);
-  }, [transactions, period, activeTab, checkTabMatch]);
+  }, [transactions, period]);
 
   const realCostPct = useMemo(() => realSalesRevenue > 0 ? (realCogsCost / realSalesRevenue) * 100 : 0, [realSalesRevenue, realCogsCost]);
 
@@ -109,7 +79,7 @@ export default function Dashboard() {
 
     (transactions || []).forEach(tx => {
       const dateStr = tx.date || '';
-      if (dateStr && dateStr.startsWith(period) && dayMap[dateStr] && checkTabMatch(tx, activeTab)) {
+      if (dateStr && dateStr.startsWith(period) && dayMap[dateStr]) {
         if (tx.type === 'POS_DEDUCTION') dayMap[dateStr].cost += Math.abs(parseFloat(tx.amount || 0));
         if (tx.type === 'POS_SALE') dayMap[dateStr].revenue += Math.abs(parseFloat(tx.amount || 0));
       }
@@ -119,7 +89,7 @@ export default function Dashboard() {
       ...dayMap[key],
       cost: dayMap[key].revenue > 0 ? parseFloat(((dayMap[key].cost / dayMap[key].revenue) * 100).toFixed(1)) : 0
     }));
-  }, [transactions, period, activeTab, checkTabMatch]);
+  }, [transactions, period]);
 
   // Top 5 cost contributors from stock value
   const topContributors = useMemo(() => {
@@ -171,37 +141,13 @@ export default function Dashboard() {
             ))}
           </select>
         </div>
-
-        <div style={{ display: 'flex', background: 'var(--bg-tertiary)', padding: '4px', borderRadius: 'var(--radius-md)', width: 'fit-content' }}>
-          <button
-            className={`btn ${activeTab === 'ALL' ? 'btn-primary' : ''}`}
-            style={{ padding: '6px 16px', fontSize: '0.8rem', background: activeTab === 'ALL' ? '' : 'transparent', color: activeTab === 'ALL' ? '' : 'var(--text-secondary)', border: 'none' }}
-            onClick={() => setActiveTab('ALL')}
-          >
-            All Sales
-          </button>
-          <button
-            className={`btn ${activeTab === 'BEVERAGE' ? 'btn-primary' : ''}`}
-            style={{ padding: '6px 16px', fontSize: '0.8rem', background: activeTab === 'BEVERAGE' ? '' : 'transparent', color: activeTab === 'BEVERAGE' ? '' : 'var(--text-secondary)', border: 'none' }}
-            onClick={() => setActiveTab('BEVERAGE')}
-          >
-            Beverage (Non-Beer)
-          </button>
-          <button
-            className={`btn ${activeTab === 'BEER' ? 'btn-primary' : ''}`}
-            style={{ padding: '6px 16px', fontSize: '0.8rem', background: activeTab === 'BEER' ? '' : 'transparent', color: activeTab === 'BEER' ? '' : 'var(--text-secondary)', border: 'none' }}
-            onClick={() => setActiveTab('BEER')}
-          >
-            Beer Only
-          </button>
-        </div>
       </div>
 
-      {/* KPI Cards */}
+        {/* KPI Cards */}
       <div className="kpi-grid">
         <div className="glass-card kpi-card">
           <div className="kpi-header">
-            <span className="kpi-title">{activeTab === 'BEER' ? 'Beer Cost %' : 'Beverage Cost %'}</span>
+            <span className="kpi-title">Total F&B Cost %</span>
             <div className="kpi-icon-wrap" style={{ background: 'var(--success-glow)', color: 'var(--success)' }}>
               <TrendingDown size={20} />
             </div>
@@ -212,7 +158,7 @@ export default function Dashboard() {
 
         <div className="glass-card kpi-card">
           <div className="kpi-header">
-            <span className="kpi-title">{activeTab === 'BEER' ? 'Beer Sales' : 'Beverage Sales'}</span>
+            <span className="kpi-title">Total F&B Sales</span>
             <div className="kpi-icon-wrap" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>
               <DollarSign size={20} />
             </div>
@@ -252,7 +198,7 @@ export default function Dashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginBottom: '24px' }}>
         <div className="glass-card" style={{ padding: '24px' }}>
           <div className="chart-title">
-            <span>{activeTab === 'BEER' ? 'Beer Cost Trend' : 'Beverage Cost Trend'} ({period.split('-')[1]}/{period.split('-')[0]})</span>
+            <span>Total F&B Cost Trend ({period.split('-')[1]}/{period.split('-')[0]})</span>
             <span className="badge badge-info">Target: 27%</span>
           </div>
           <WidgetErrorBoundary name="Grafik Dasbor">
@@ -263,7 +209,7 @@ export default function Dashboard() {
               <YAxis domain={[20, 32]} stroke="var(--text-muted)" tick={{ fontSize: 12 }} unit="%" />
               <Tooltip contentStyle={tooltipStyle} />
               <Legend verticalAlign="top" height={36} />
-              <Line type="monotone" dataKey="cost" name={activeTab === 'BEER' ? 'Beer Cost %' : 'Beverage Cost %'} stroke="var(--accent)" strokeWidth={2} dot={{ r: 4 }} />
+              <Line type="monotone" dataKey="cost" name={'Total F&B Cost %'} stroke="var(--accent)" strokeWidth={2} dot={{ r: 4 }} />
               <Line type="monotone" dataKey="target" name="Target" stroke="var(--danger)" strokeDasharray="5 5" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>

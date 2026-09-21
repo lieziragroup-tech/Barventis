@@ -18,7 +18,6 @@ export default function CostControl() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
-  const [activeTab, setActiveTab] = useState('ALL');
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -34,35 +33,6 @@ export default function CostControl() {
     });
     return map;
   }, [recipes]);
-
-  const checkTabMatch = useCallback((tx, tab) => {
-    if (tab === 'ALL') return true;
-
-    let matchedCategory = null;
-
-    if (tx.type === 'POS_SALE' || tx.type === 'POS_DEDUCTION' || tx.type === 'OUT') {
-      let menuName = tx.notes || '';
-      if (menuName.startsWith('POS Sync:')) menuName = menuName.replace('POS Sync:', '').trim();
-
-      const exactMatch = menuCategoryMap[menuName.toLowerCase()];
-      if (exactMatch) {
-        matchedCategory = exactMatch;
-      } else {
-        const rMatch = (recipes || []).find(r => r.menu_name && menuName.toLowerCase().includes(r.menu_name.toLowerCase()));
-        if (rMatch) matchedCategory = rMatch.category?.toUpperCase() || '';
-      }
-    } else {
-      // PURCHASE_IN, WASTE, etc. rely on the attached material category from API
-      matchedCategory = tx.materials?.category?.toUpperCase() || '';
-    }
-
-    if (!matchedCategory) return true; // Fail-safe let it through ALL
-
-    const isBeer = matchedCategory.includes('BEER');
-    if (tab === 'BEER') return isBeer;
-    if (tab === 'BEVERAGE') return !isBeer;
-    return true;
-  }, [menuCategoryMap, recipes]);
 
   useEffect(() => {
     let active = true;
@@ -97,7 +67,7 @@ export default function CostControl() {
     // 1. Accumulate Transactions
     (reportData?.transactions || []).forEach(tx => {
       const dateStr = tx.date || '';
-      if (!dateStr.startsWith(period) || !checkTabMatch(tx, activeTab)) return;
+      if (!dateStr.startsWith(period)) return;
       const amt = Math.round(Math.abs(Number(tx.amount || 0)));
 
       if (tx.type === 'PURCHASE_IN') {
@@ -115,25 +85,15 @@ export default function CostControl() {
     let closing = 0;
     const filteredOpnames = [];
     (reportData?.detailed_opname_items || []).forEach(item => {
-      const isBeer = (item.category || '').toUpperCase().includes('BEER');
-      let include = true;
-      if (activeTab === 'BEER') include = isBeer;
-      else if (activeTab === 'BEVERAGE') include = !isBeer;
-
-      if (include) {
-        closing += Math.round(item.totalValuation || 0);
-        filteredOpnames.push(item);
-      }
+      closing += Math.round(item.totalValuation || 0);
+      filteredOpnames.push(item);
     });
 
-    // 3. Reverse-engineer Opening Stock dynamically
-    // Opening = COGS + Closing - Purchases + Waste
-    // Wait, the backend formula is: COGS = Opening + Purchases - Closing -> Opening = COGS - Purchases + Closing
+    // 3. Backend metrics fallback
     let opening = cogsIngredients - purchases + closing;
-    if (opening < 0) opening = 0; // Fallback bound
+    if (opening < 0) opening = 0;
 
-    // In case of ALL, we can just use the backend's opening stock if it differs from the derivation
-    if (activeTab === 'ALL' && reportData.metrics) {
+    if (reportData.metrics) {
       opening = reportData.metrics.opening_stock;
       closing = reportData.metrics.closing_stock;
     }
@@ -161,7 +121,7 @@ export default function CostControl() {
       statusLabel: stat,
       filteredOpnameItems: filteredOpnames
     };
-  }, [reportData, activeTab, checkTabMatch, period]);
+  }, [reportData, period]);
 
   // The daily breakdown must also count OUT transactions with POS Sync notes as COGS, and respect Tabs.
   const dailyColumns = useMemo(() => {
@@ -170,7 +130,7 @@ export default function CostControl() {
 
     // Group POS OUT deductions (stock consumed from POS sync) by date
     txs
-      .filter(tx => (tx.type === 'POS_SALE' || (tx.type === 'OUT' && (tx.notes || '').startsWith('POS Sync:'))) && checkTabMatch(tx, activeTab))
+      .filter(tx => (tx.type === 'POS_SALE' || (tx.type === 'OUT' && (tx.notes || '').startsWith('POS Sync:'))))
       .forEach(tx => {
         const dateStr = tx.date || '';
         if (dateStr.startsWith(period)) {
@@ -182,7 +142,7 @@ export default function CostControl() {
 
     // Group PURCHASE_IN (stock received from invoices) by date
     txs
-      .filter(tx => tx.type === 'PURCHASE_IN' && checkTabMatch(tx, activeTab))
+      .filter(tx => tx.type === 'PURCHASE_IN')
       .forEach(tx => {
         const dateStr = tx.date || '';
         if (dateStr.startsWith(period)) {
@@ -217,7 +177,7 @@ export default function CostControl() {
 
       return passFrom && passTo;
     });
-  }, [reportData?.transactions, period, activeTab, checkTabMatch, dateFrom, dateTo]);
+  }, [reportData?.transactions, period, dateFrom, dateTo]);
 
   // Generate last 18 months dynamically
   const periodOptions = useMemo(() => {
@@ -239,8 +199,8 @@ export default function CostControl() {
     { item: 'Total Stock Akhir (Closing)', value: closingStock },
     { item: 'Total Waste / Kerugian (Spoilage, Broken)', value: wasteValuation },
     { item: 'Total Pemakaian (COGS Aktual + Overhead)', value: pemakaianBulan },
-    { item: 'Total Sales Beverage', value: totalSalesBeverage },
-    { item: 'Beverage Cost %', value: `${beverageCostPct.toFixed(2)}%` },
+    { item: 'Total F&B Sales', value: totalSalesBeverage },
+    { item: 'Total F&B Cost %', value: `${beverageCostPct.toFixed(2)}%` },
     { item: 'Status', value: statusLabel }
   ];
 
@@ -364,29 +324,7 @@ export default function CostControl() {
           </select>
         </div>
 
-        <div style={{ display: 'flex', background: 'var(--bg-tertiary)', padding: '4px', borderRadius: 'var(--radius-md)', width: 'fit-content' }}>
-          <button
-            className={`btn ${activeTab === 'ALL' ? 'btn-primary' : ''}`}
-            style={{ padding: '6px 16px', fontSize: '0.8rem', background: activeTab === 'ALL' ? '' : 'transparent', color: activeTab === 'ALL' ? '' : 'var(--text-secondary)', border: 'none' }}
-            onClick={() => setActiveTab('ALL')}
-          >
-            Semua (Global)
-          </button>
-          <button
-            className={`btn ${activeTab === 'BEVERAGE' ? 'btn-primary' : ''}`}
-            style={{ padding: '6px 16px', fontSize: '0.8rem', background: activeTab === 'BEVERAGE' ? '' : 'transparent', color: activeTab === 'BEVERAGE' ? '' : 'var(--text-secondary)', border: 'none' }}
-            onClick={() => setActiveTab('BEVERAGE')}
-          >
-            Beverage (Non-Beer)
-          </button>
-          <button
-            className={`btn ${activeTab === 'BEER' ? 'btn-primary' : ''}`}
-            style={{ padding: '6px 16px', fontSize: '0.8rem', background: activeTab === 'BEER' ? '' : 'transparent', color: activeTab === 'BEER' ? '' : 'var(--text-secondary)', border: 'none' }}
-            onClick={() => setActiveTab('BEER')}
-          >
-            Beer Only
-          </button>
-        </div>
+        {/* Removed Tab Buttons */}
 
         <div style={{ position: 'relative' }}>
           <button
@@ -557,13 +495,13 @@ export default function CostControl() {
               <div className="table-container">
                 <table className="custom-table">
                   <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th style={{ textAlign: 'right' }}>Purchases</th>
-                      <th style={{ textAlign: 'right' }}>Sales Revenue</th>
-                      <th style={{ textAlign: 'right' }} title="Rasio pembelian terhadap penjualan harian — BUKAN HPP/beverage cost %. HPP periode ada di kartu atas.">Beli/Jual %</th>
-                      <th>Status</th>
-                    </tr>
+                      <tr>
+                        <th>Date</th>
+                        <th style={{ textAlign: 'right' }}>Purchases</th>
+                        <th style={{ textAlign: 'right' }}>Sales Revenue</th>
+                        <th style={{ textAlign: 'right' }} title="Rasio pembelian terhadap penjualan harian">Beli/Jual %</th>
+                        <th>Status</th>
+                      </tr>
                   </thead>
                   <tbody>
                     {dailyColumns.map(row => {

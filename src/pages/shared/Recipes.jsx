@@ -104,18 +104,13 @@ export default function Recipes() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recipes]);
 
-  const [activeTab, setActiveTab] = useState('BEVERAGE');
-
   // Filter recipe list
   const filteredRecipes = useMemo(() => {
     return recipes.filter(r => {
       const matchSearch = r.menu_name.toLowerCase().includes(search.toLowerCase());
-      const cat = (r.category || '').toUpperCase();
-      const isBeer = cat.includes('BEER');
-      const matchTab = activeTab === 'BEER' ? isBeer : !isBeer;
-      return matchSearch && matchTab;
+      return matchSearch;
     });
-  }, [recipes, search, activeTab]);
+  }, [recipes, search]);
 
   const RECIPES_PAGE_SIZE = 15;
   const [recipesPage, setRecipesPage] = useState(1);
@@ -129,16 +124,11 @@ export default function Recipes() {
     else setSelectedItems([]);
   };
 
-  const handleExportData = async (type) => {
+  const handleExportData = async () => {
     const XLSX = await import('xlsx');
 
     // Determine which recipes to export
     let exportData = recipes;
-    if (type === 'BEVERAGE') {
-      exportData = recipes.filter(r => !(r.category || '').toUpperCase().includes('BEER'));
-    } else if (type === 'BEER') {
-      exportData = recipes.filter(r => (r.category || '').toUpperCase().includes('BEER'));
-    }
 
     if (exportData.length === 0) {
       showToast?.('Tidak ada data resep untuk diekspor', 'warning');
@@ -385,36 +375,18 @@ export default function Recipes() {
     <div className="recipes-layout" style={{ display: 'flex', gap: '24px', height: 'calc(100vh - 180px)', fontFamily: 'var(--font-sans)', animation: 'fadeIn 0.3s ease' }}>
       {/* Left: Recipe List */}
       <div className="glass-card recipes-list-panel" style={{ width: '310px', display: 'flex', flexDirection: 'column', padding: '20px', flexShrink: 0, border: '1px solid var(--border)' }}>
-        {/* Tab Switcher */}
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-          <button
-            className={`btn premium-btn ${activeTab === 'BEVERAGE' ? 'premium-btn-primary' : 'premium-btn-secondary'}`}
-            style={{ flex: 1, fontSize: '0.8rem', padding: '8px 0', borderRadius: 'var(--radius-md)' }}
-            onClick={() => { setActiveTab('BEVERAGE'); setRecipesPage(1); setSelectedItems([]); }}
-          >
-            BEVERAGE
-          </button>
-          <button
-            className={`btn premium-btn ${activeTab === 'BEER' ? 'premium-btn-primary' : 'premium-btn-secondary'}`}
-            style={{ flex: 1, fontSize: '0.8rem', padding: '8px 0', borderRadius: 'var(--radius-md)' }}
-            onClick={() => { setActiveTab('BEER'); setRecipesPage(1); setSelectedItems([]); }}
-          >
-            BEER
-          </button>
-        </div>
-
-        {/* Search */}
-        <div style={{ position: 'relative', marginBottom: '14px' }}>
-          <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-          <input 
-            type="text" 
-            placeholder="Cari resep menu..." 
-            className="form-control premium-input" 
-            style={{ paddingLeft: '38px', height: '40px' }} 
-            value={search} 
-            onChange={e => { setSearch(e.target.value); setRecipesPage(1); }} 
-          />
-        </div>
+          {/* Search */}
+          <div style={{ position: 'relative', marginBottom: '14px' }}>
+            <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <input 
+              type="text" 
+              placeholder="Cari resep menu..." 
+              className="form-control premium-input" 
+              style={{ paddingLeft: '38px', height: '40px' }} 
+              value={search} 
+              onChange={e => { setSearch(e.target.value); setRecipesPage(1); }} 
+            />
+          </div>
 
         {selectedItems.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', padding: '10px', borderRadius: 'var(--radius-md)' }}>
@@ -484,24 +456,16 @@ export default function Recipes() {
                     >
                       Export Semua Resep
                     </button>
-                    <button
-                      style={{ width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: '0.8rem', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-primary)', borderRadius: 'var(--radius-sm)' }}
-                      onMouseEnter={e => e.target.style.background = 'var(--bg-secondary)'}
-                      onMouseLeave={e => e.target.style.background = 'transparent'}
-                      onClick={() => { handleExportData('BEVERAGE'); setShowExportMenu(false); }}
-                    >
-                      Export Beverage Only
-                    </button>
-                    <button
-                      style={{ width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: '0.8rem', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-primary)', borderRadius: 'var(--radius-sm)' }}
-                      onMouseEnter={e => e.target.style.background = 'var(--bg-secondary)'}
-                      onMouseLeave={e => e.target.style.background = 'transparent'}
-                      onClick={() => { handleExportData('BEER'); setShowExportMenu(false); }}
-                    >
-                      Export Beer Only
-                    </button>
-                  </div>
-                </>
+                      <button
+                        style={{ width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: '0.8rem', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-primary)', borderRadius: 'var(--radius-sm)' }}
+                        onMouseEnter={e => e.target.style.background = 'var(--bg-secondary)'}
+                        onMouseLeave={e => e.target.style.background = 'transparent'}
+                        onClick={() => { handleExportData(); setShowExportMenu(false); }}
+                      >
+                        Export Data
+                      </button>
+                    </div>
+                  </>
               )}
             </div>
           </div>

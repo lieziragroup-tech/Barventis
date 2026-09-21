@@ -286,97 +286,117 @@ export default function Marketlist() {
             <button className="btn btn-secondary" onClick={() => setView('list')}><ArrowLeft size={16} /> Kembali</button>
           </div>
 
-          <div className="space-y-3 mb-6 max-h-[500px] overflow-y-auto pr-2">
-            {itemsData.map((item, idx) => (
-              <div key={idx} className="flex gap-3 items-end p-3 bg-secondary/20 rounded-xl border border-border">
-                <div className="flex-1">
-                  <label className="text-xs text-muted-foreground mb-1 block">Bahan Baku</label>
-                  <select
-                    className="form-control"
-                    value={item.material_id}
-                    onChange={e => updateItemRow(idx, 'material_id', e.target.value)}
-                  >
-                    <option value="">-- Pilih Bahan --</option>
-                    {stock.map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.unit})</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="w-24">
-                  <label className="text-xs text-muted-foreground mb-1 block">Par Stock</label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    value={item.par_stock || 0}
-                    onChange={e => {
-                      const parStock = parseFloat(e.target.value) || 0;
-                      const currentStock = stock.find(s => s.id === item.material_id)?.stock || 0;
-                      const reqQty = Math.max(0, parStock - currentStock);
-                      updateItemRow(idx, 'par_stock', parStock);
-                      updateItemRow(idx, 'quantity', reqQty);
-                    }}
-                    min="0" step="any"
-                  />
-                </div>
-                <div className="w-24">
-                  <label className="text-xs text-muted-foreground mb-1 block">Min Stock</label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    value={item.min_stock || 0}
-                    onChange={e => updateItemRow(idx, 'min_stock', parseFloat(e.target.value) || 0)}
-                    min="0" step="any"
-                  />
-                </div>
-                <div className="w-24">
-                  <label className="text-xs text-muted-foreground mb-1 block">Req Qty</label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    value={item.quantity}
-                    onChange={e => updateItemRow(idx, 'quantity', parseFloat(e.target.value) || 0)}
-                    min="0" step="any"
-                    readOnly
-                  />
-                </div>
-                <div className="w-24">
-                  <label className="text-xs text-muted-foreground mb-1 block">Apprv Qty</label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    value={item.approved_qty || 0}
-                    onChange={e => updateItemRow(idx, 'approved_qty', parseFloat(e.target.value) || 0)}
-                    min="0" step="any"
-                  />
-                </div>
-                <div className="w-32">
-                  <label className="text-xs text-muted-foreground mb-1 block">Vendor</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    value={item.vendor || ''}
-                    onChange={e => updateItemRow(idx, 'vendor', e.target.value)}
-                  />
-                </div>
-                <div className="w-24">
-                  <label className="text-xs text-muted-foreground mb-1 block">Satuan</label>
-                  <input type="text" className="form-control bg-secondary" value={item.unit} readOnly />
-                </div>
-                <button
-                  className="btn btn-secondary h-[42px] px-3 hover:bg-danger/10 hover:text-danger hover:border-danger/30"
-                  onClick={() => removeItemRow(idx)}
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            ))}
-
-            <button
-              className="w-full py-4 border-2 border-dashed border-border rounded-xl text-muted-foreground hover:border-primary hover:text-primary transition-colors flex justify-center items-center gap-2"
-              onClick={handleAddItemRow}
-            >
-              <Plus size={16} /> Tambah Item Baru
-            </button>
+          <div className="mb-6 max-h-[500px] overflow-y-auto">
+            <table className="custom-table" style={{ width: '100%', minWidth: '800px' }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '12px', textAlign: 'left' }}>Bahan Baku</th>
+                  <th style={{ padding: '12px', width: '100px' }}>Satuan</th>
+                  <th style={{ padding: '12px', width: '100px', textAlign: 'center' }}>Min Stock</th>
+                  <th style={{ padding: '12px', width: '100px', textAlign: 'center' }}>Par Stock</th>
+                  <th style={{ padding: '12px', width: '100px', textAlign: 'center' }}>Req Qty</th>
+                  <th style={{ padding: '12px', width: '100px', textAlign: 'center' }}>Apprv Qty</th>
+                  <th style={{ padding: '12px', width: '150px' }}>Vendor</th>
+                  <th style={{ padding: '12px', width: '50px' }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {itemsData.map((item, idx) => (
+                  <tr key={idx}>
+                    <td style={{ padding: '8px' }}>
+                      <select
+                        className="form-control"
+                        style={{ width: '100%', padding: '6px' }}
+                        value={item.material_id}
+                        onChange={e => updateItemRow(idx, 'material_id', e.target.value)}
+                      >
+                        <option value="">-- Pilih Bahan --</option>
+                        {stock.map(s => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td style={{ padding: '8px' }}>
+                      <input type="text" className="form-control" style={{ width: '100%', padding: '6px', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' }} value={item.unit} readOnly />
+                    </td>
+                    <td style={{ padding: '8px' }}>
+                      <input
+                        type="number"
+                        className="form-control"
+                        style={{ width: '100%', padding: '6px', textAlign: 'center' }}
+                        value={item.min_stock || ''}
+                        onChange={e => updateItemRow(idx, 'min_stock', parseFloat(e.target.value) || 0)}
+                        min="0" step="any"
+                      />
+                    </td>
+                    <td style={{ padding: '8px' }}>
+                      <input
+                        type="number"
+                        className="form-control"
+                        style={{ width: '100%', padding: '6px', textAlign: 'center' }}
+                        value={item.par_stock || ''}
+                        onChange={e => {
+                          const parStock = parseFloat(e.target.value) || 0;
+                          const currentStock = stock.find(s => s.id === item.material_id)?.stock || 0;
+                          const reqQty = Math.max(0, parStock - currentStock);
+                          updateItemRow(idx, 'par_stock', parStock);
+                          updateItemRow(idx, 'quantity', reqQty);
+                        }}
+                        min="0" step="any"
+                      />
+                    </td>
+                    <td style={{ padding: '8px' }}>
+                      <input
+                        type="number"
+                        className="form-control"
+                        style={{ width: '100%', padding: '6px', textAlign: 'center', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' }}
+                        value={item.quantity}
+                        onChange={e => updateItemRow(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                        min="0" step="any"
+                        readOnly
+                      />
+                    </td>
+                    <td style={{ padding: '8px' }}>
+                      <input
+                        type="number"
+                        className="form-control"
+                        style={{ width: '100%', padding: '6px', textAlign: 'center' }}
+                        value={item.approved_qty || ''}
+                        onChange={e => updateItemRow(idx, 'approved_qty', parseFloat(e.target.value) || 0)}
+                        min="0" step="any"
+                      />
+                    </td>
+                    <td style={{ padding: '8px' }}>
+                      <input
+                        type="text"
+                        className="form-control"
+                        style={{ width: '100%', padding: '6px' }}
+                        value={item.vendor || ''}
+                        onChange={e => updateItemRow(idx, 'vendor', e.target.value)}
+                      />
+                    </td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>
+                      <button
+                        className="btn btn-secondary h-8 w-8 p-0 flex items-center justify-center hover:bg-danger/10 hover:text-danger hover:border-danger/30 mx-auto"
+                        onClick={() => removeItemRow(idx)}
+                      >
+                        <X size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                <tr>
+                  <td colSpan="8" style={{ padding: '8px' }}>
+                    <button
+                      className="w-full py-3 border border-dashed border-border rounded-lg text-muted-foreground hover:border-primary hover:text-primary transition-colors flex justify-center items-center gap-2 text-sm"
+                      onClick={handleAddItemRow}
+                    >
+                      <Plus size={14} /> Tambah Item Baru
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-border">

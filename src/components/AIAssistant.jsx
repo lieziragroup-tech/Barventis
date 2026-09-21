@@ -53,14 +53,14 @@ function buildAIResponse(input, { stock, recipes, transactions, unitConversionMa
     return resp.trim() || 'Semua stok dalam kondisi aman.';
   }
 
-  // Cost % / HPP / beverage cost
+  // Cost % / HPP / F&B cost
   if (/cost|hpp|beverage|persen|%|target/.test(q)) {
     if (!costPct) {
-      return '📊 Belum ada data penjualan POS bulan ini. Upload file POS terlebih dahulu melalui menu **Upload POS Sales** agar Beverage Cost % dapat dihitung.';
+      return '📊 Belum ada data penjualan POS bulan ini. Upload file POS terlebih dahulu melalui menu **Upload POS Sales** agar Total F&B Cost % dapat dihitung.';
     }
     const pctNum = parseFloat(costPct);
     const status = pctNum < 27 ? '✅ **Aman** — di bawah target 27%' : '🔴 **Perhatian** — melebihi target 27%!';
-    return `📊 **Beverage Cost % Bulan Ini: ${costPct}%**\n\nStatus: ${status}\n\nDetail:\n• Penjualan POS: ${fmtIDR(monthSales)}\n• Pemakaian Bahan: ${fmtIDR(monthCogs)}\n\nUntuk analisis lebih detail, buka menu **Cost Control**.`;
+    return `📊 **Total F&B Cost % Bulan Ini: ${costPct}%**\n\nStatus: ${status}\n\nDetail:\n• Penjualan POS: ${fmtIDR(monthSales)}\n• Pemakaian Bahan: ${fmtIDR(monthCogs)}\n\nUntuk analisis lebih detail, buka menu **Cost Control**.`;
   }
 
   // Valuasi stok
@@ -114,20 +114,20 @@ function buildAIResponse(input, { stock, recipes, transactions, unitConversionMa
   if (/saran|tips|rekomendasi|cara.*efisien|optimas/.test(q)) {
     const tips = [];
     if (criticalStock.length > 0) tips.push(`🔴 Segera restock ${criticalStock.length} bahan yang habis`);
-    if (costPct && parseFloat(costPct) > 27) tips.push(`📉 Beverage Cost ${costPct}% melebihi target — review resep berbiaya tinggi`);
+    if (costPct && parseFloat(costPct) > 27) tips.push(`📉 F&B cost ${costPct}% melebihi target — review resep berbiaya tinggi`);
     if (recipes.length === 0) tips.push(`🍹 Tambahkan resep agar deduction POS bisa berjalan`);
     if (tips.length === 0) tips.push('✅ Sistem berjalan dengan baik. Lanjutkan upload POS harian dan opname bulanan secara rutin.');
     return `💡 **Rekomendasi Saat Ini:**\n\n${tips.join('\n')}`;
   }
 
   // Default — navigasi help
-  return `Saya bisa membantu Anda dengan:\n\n• **"stok habis"** — cek bahan yang low/critical\n• **"beverage cost"** — lihat HPP bulan ini\n• **"valuasi stok"** — total nilai inventory\n• **"resep"** — info COGS & food cost %\n• **"cara upload POS"** — panduan integrasi kasir\n• **"saran"** — rekomendasi berdasarkan data\n\nCoba ketik salah satu di atas! 😊`;
+  return `Saya bisa membantu Anda dengan:\n\n• **"stok habis"** — cek bahan yang low/critical\n• **"F&B cost"** — lihat HPP bulan ini\n• **"valuasi stok"** — total nilai inventory\n• **"resep"** — info COGS & food cost %\n• **"cara upload POS"** — panduan integrasi kasir\n• **"saran"** — rekomendasi berdasarkan data\n\nCoba ketik salah satu di atas! 😊`;
 }
 
 // Quick suggestion chips
 const QUICK_CHIPS = [
   'Stok habis?',
-  'Beverage cost bulan ini',
+  'F&B cost bulan ini',
   'Valuasi stok',
   'Saran optimasi',
 ];

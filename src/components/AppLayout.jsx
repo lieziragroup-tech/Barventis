@@ -591,9 +591,9 @@ export default function DashboardLayout() {
 
                 {isTenant && (
                   <>
-                    {location.pathname === basePath && "Real-time F&B Beverage HPP analytics, top variance and metrics."}
+                    {location.pathname === basePath && "Real-time F&B HPP analytics, top variance and metrics."}
                     {location.pathname === `${basePath}/stock` && "Manage raw materials — edit supplier, price, stock levels. Dual-unit display."}
-                    {location.pathname === `${basePath}/daily-inventory` && "Daily stock count per shift, waste, and beer grouping."}
+                    {location.pathname === `${basePath}/daily-inventory` && "Daily stock count per shift, waste, and item grouping."}
                     {location.pathname === `${basePath}/trimming` && "Proses bahan mentah menjadi porsi siap pakai."}
                     {location.pathname === `${basePath}/pos` && "Browser-side Excel parser. Drag and drop POS reports to deduct raw stock."}
                     {location.pathname === `${basePath}/pos-raw` && "Review history data mentah POS yang sudah berhasil diupload ke sistem."}
