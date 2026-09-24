@@ -6,14 +6,25 @@ import {
 import BulkImport from '../../components/BulkImport';
 import { useData } from '../../contexts/DataContext';
 import { formatIDR, calculateIngredientCost } from '../../services/costUtils';
+import { locationService } from '../../services/locationService';
 
 let _confetti;
 const getConfetti = async () => { if (!_confetti) _confetti = (await import('canvas-confetti')).default; return _confetti; };
 
-export default function StockOpname() {
-  const { stock, showToast, handleCompleteOpname: onCompleteOpname, unitConversionMap } = useData();
+export default function StockOpname({ defaultLocation } = {}) {
+  const { currentTenant, stock, showToast, handleCompleteOpname: onCompleteOpname, unitConversionMap } = useData();
   const [step, setStep] = useState(1); // 1: Init, 2: Count, 3: Reconcile, 4: Approve & Sign
-  const [location, setLocation] = useState('RESTO'); // RESTO, CENTRAL
+  
+  const [locations, setLocations] = useState(() => locationService.getLocations(currentTenant?.id));
+  useEffect(() => {
+    const updateLocs = () => {
+      setLocations(locationService.getLocations(currentTenant?.id));
+    };
+    updateLocs();
+    return locationService.subscribe(updateLocs);
+  }, [currentTenant]);
+
+  const [location, setLocation] = useState(defaultLocation || 'RESTO'); // RESTO, CENTRAL, KITCHEN, SERVICE, etc.
   const [periodMonth, setPeriodMonth] = useState(() => (new Date().getMonth() + 1).toString());
   const [periodYear, setPeriodYear] = useState(() => new Date().getFullYear().toString());
   const [opnameItems, setOpnameItems] = useState([]);
@@ -37,6 +48,8 @@ export default function StockOpname() {
         const bookQty = location === 'RESTO' ? item.qty_resto : item.qty_central;
 
         return {
+          id: item.id,
+          sku: item.sku,
           name: item.name,
           category: item.category,
           unit: item.unit,
@@ -64,7 +77,7 @@ export default function StockOpname() {
     }
   };
 
-  // 3. Row Qty updates
+  // 3. Row Qty updates — supports split Full + Broken input
   const handlePhysicalQtyChange = (name, val) => {
     const updated = opnameItems.map(item => {
       if (item.name === name) {
@@ -72,6 +85,20 @@ export default function StockOpname() {
           ...item,
           physical_qty: val === '' ? '' : parseFloat(val) || 0
         };
+      }
+      return item;
+    });
+    setOpnameItems(updated);
+  };
+
+  const handleFullBrokenChange = (name, field, val) => {
+    const updated = opnameItems.map(item => {
+      if (item.name === name) {
+        const newItem = { ...item, [field]: val === '' ? '' : parseFloat(val) || 0 };
+        const full = newItem.full_count === '' || newItem.full_count === undefined ? 0 : parseFloat(newItem.full_count) || 0;
+        const broken = newItem.broken_count === '' || newItem.broken_count === undefined ? 0 : parseFloat(newItem.broken_count) || 0;
+        newItem.physical_qty = full + broken;
+        return newItem;
       }
       return item;
     });
@@ -240,8 +267,9 @@ export default function StockOpname() {
           <div className="form-group">
             <label className="form-label">Audit Warehouse Location</label>
             <select className="form-control" value={location} onChange={e => setLocation(e.target.value)}>
-              <option value="RESTO">Resto Bar (Main Outlet)</option>
-              <option value="CENTRAL">Central Warehouse (Storage)</option>
+              {locations.filter(l => l.code !== 'ALL').map(l => (
+                <option key={l.code} value={l.code}>{l.name} ({l.code})</option>
+              ))}
             </select>
           </div>
 
@@ -318,11 +346,13 @@ export default function StockOpname() {
             <table className="custom-table">
               <thead>
                 <tr>
-                  <th style={{ width: '40%' }}>Raw Material Name</th>
-                  <th style={{ width: '15%', textAlign: 'right' }}>Book Qty</th>
-                  <th style={{ width: '10%' }}>Unit</th>
-                  <th style={{ width: '20%', textAlign: 'right' }}>Physical Qty</th>
-                  <th style={{ width: '15%', textAlign: 'right' }}>Live Variance</th>
+                  <th style={{ width: '30%' }}>Raw Material Name</th>
+                  <th style={{ width: '12%', textAlign: 'right' }}>Book Qty</th>
+                  <th style={{ width: '8%' }}>Unit</th>
+                  <th style={{ width: '15%', textAlign: 'right' }}>Full (Utuh)</th>
+                  <th style={{ width: '15%', textAlign: 'right' }}>Broken (Terbuka)</th>
+                  <th style={{ width: '10%', textAlign: 'right' }}>Physical Qty</th>
+                  <th style={{ width: '10%', textAlign: 'right' }}>Live Variance</th>
                 </tr>
               </thead>
               <tbody>
@@ -339,7 +369,14 @@ export default function StockOpname() {
 
                   return (
                     <tr key={item.name}>
-                      <td style={{ fontWeight: 600 }}>{item.name}</td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontFamily: 'monospace', fontSize: '0.65rem', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
+                            {item.sku || ('#MAT-' + String(item.id || '').slice(0, 6).toUpperCase())}
+                          </span>
+                          <span style={{ fontWeight: 600 }}>{item.name}</span>
+                        </div>
+                      </td>
                       <td style={{ textAlign: 'right', fontWeight: 600 }}>{item.book_qty.toFixed(0)}</td>
                       <td>{item.unit}</td>
                       <td style={{ textAlign: 'right' }}>
@@ -347,11 +384,25 @@ export default function StockOpname() {
                           type="number"
                           step="any"
                           className="form-control"
-                          style={{ padding: '6px 12px', fontSize: '0.85rem', textAlign: 'right', width: '120px', marginLeft: 'auto' }}
-                          placeholder={item.book_qty.toFixed(0)}
-                          value={item.physical_qty}
-                          onChange={e => handlePhysicalQtyChange(item.name, e.target.value)}
+                          style={{ padding: '6px 10px', fontSize: '0.85rem', textAlign: 'right', width: '100px', marginLeft: 'auto' }}
+                          placeholder="0"
+                          value={item.full_count ?? ''}
+                          onChange={e => handleFullBrokenChange(item.name, 'full_count', e.target.value)}
                         />
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <input 
+                          type="number"
+                          step="any"
+                          className="form-control"
+                          style={{ padding: '6px 10px', fontSize: '0.85rem', textAlign: 'right', width: '100px', marginLeft: 'auto' }}
+                          placeholder="0"
+                          value={item.broken_count ?? ''}
+                          onChange={e => handleFullBrokenChange(item.name, 'broken_count', e.target.value)}
+                        />
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {item.physical_qty === '' ? '-' : (typeof item.physical_qty === 'number' ? item.physical_qty.toFixed(0) : item.physical_qty)}
                       </td>
                       <td style={{ textAlign: 'right', fontWeight: 700, color: varianceStyle }}>
                         {variance === 0 ? '0' : variance > 0 ? `+${variance.toFixed(0)}` : variance.toFixed(0)}
@@ -407,7 +458,14 @@ export default function StockOpname() {
 
                   return (
                     <tr key={item.name}>
-                      <td style={{ fontWeight: 600 }}>{item.name}</td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontFamily: 'monospace', fontSize: '0.65rem', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
+                            {item.sku || ('#MAT-' + String(item.id || '').slice(0, 6).toUpperCase())}
+                          </span>
+                          <span style={{ fontWeight: 600 }}>{item.name}</span>
+                        </div>
+                      </td>
                       <td style={{ textAlign: 'right' }}>{item.book_qty.toFixed(0)}</td>
                       <td style={{ textAlign: 'right', fontWeight: 600 }}>{pQty.toFixed(0)}</td>
                       <td style={{ textAlign: 'right', fontWeight: 700, color: variance > 0 ? 'var(--success)' : 'var(--danger)' }}>

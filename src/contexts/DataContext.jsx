@@ -247,19 +247,20 @@ export const DataProvider = ({ children }) => {
     await fetchAllData();
   }, [stock, fetchAllData]);
 
-  const handleReceiveInvoice = useCallback(async (invoiceId) => {
-    const match = invoices.find(inv => inv.id === invoiceId);
-    if (!match) throw new Error("Invoice tidak ditemukan di data lokal.");
-    await api.receiveInvoice(match.id);
+  const handleReceiveInvoice = useCallback(async (invoiceId, payload = {}) => {
+    await api.receiveInvoice(invoiceId, payload);
     await fetchAllData();
-  }, [invoices, fetchAllData]);
+  }, [fetchAllData]);
 
   const handleCancelInvoice = useCallback(async (invoiceId) => {
-    const match = invoices.find(inv => inv.id === invoiceId);
-    if (!match) throw new Error("Invoice tidak ditemukan di data lokal.");
-    await api.updateInvoiceStatus(match.id, 'CANCELLED');
+    await api.updateInvoiceStatus(invoiceId, 'CANCELLED');
     await fetchAllData();
-  }, [invoices, fetchAllData]);
+  }, [fetchAllData]);
+
+  const handleSendInvoice = useCallback(async (invoiceId) => {
+    await api.updateInvoiceStatus(invoiceId, 'SENT');
+    await fetchAllData();
+  }, [fetchAllData]);
 
   // Build a Map<material_id, factor> from unit_conversions for costUtils
   const unitConversionMap = useMemo(() => {
@@ -302,8 +303,9 @@ export const DataProvider = ({ children }) => {
     handleCompleteOpname,
     handleCreateInvoice,
     handleReceiveInvoice,
-    handleCancelInvoice
-  }), [stock, recipes, transactions, invoices, unitConversions, unitConversionMap, loadingData, fetchAllData, showToast, activeUser, handleAdjustStock, handleUpdateItem, handleAddItem, handleDeleteItem, handleProcessPosSales, handleSaveRecipe, handleAddRecipe, handleDeleteRecipe, handleCompleteOpname, handleCreateInvoice, handleReceiveInvoice, handleCancelInvoice]);
+    handleCancelInvoice,
+    handleSendInvoice
+  }), [stock, recipes, transactions, invoices, unitConversions, unitConversionMap, loadingData, fetchAllData, showToast, activeUser, handleAdjustStock, handleUpdateItem, handleAddItem, handleDeleteItem, handleProcessPosSales, handleSaveRecipe, handleAddRecipe, handleDeleteRecipe, handleCompleteOpname, handleCreateInvoice, handleReceiveInvoice, handleCancelInvoice, handleSendInvoice]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 };

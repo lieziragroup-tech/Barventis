@@ -3,9 +3,9 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LogOut, Bell, X, RefreshCw, Menu,
-  LayoutDashboard, ClipboardList, UploadCloud, FileText as DatabaseIcon,
-  Utensils, Tag, ShoppingCart, FileText, Boxes, Trash2, Package, ArrowRightLeft,
-  Calculator, History, Settings, Archive, Wrench, Building2, Layout, Edit, MonitorSmartphone, BookOpen, Clock, Box
+  LayoutDashboard, ClipboardList, UploadCloud,
+  Tag, ShoppingCart, Boxes, Package,
+  Calculator, Settings, Wrench, Building2, Layout, Edit, MonitorSmartphone, BookOpen, Clock, Box, Scissors, FileSpreadsheet, Warehouse
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
@@ -75,7 +75,7 @@ const MobileBottomNav = ({ isSuperAdmin, isTenant, basePath, hasAccess }) => {
             <Building2 size={20} /><span className="text-[0.65rem] mt-1 font-medium">Tenants</span>
           </NavLink>
           <NavLink to="/superadmin/logs" className={({isActive}) => `flex flex-col items-center p-2 rounded-lg transition-colors ${isActive ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}`}>
-            <History size={20} /><span className="text-[0.65rem] mt-1 font-medium">Logs</span>
+            <Clock size={20} /><span className="text-[0.65rem] mt-1 font-medium">Logs</span>
           </NavLink>
         </>
       ) : isTenant ? (
@@ -85,19 +85,19 @@ const MobileBottomNav = ({ isSuperAdmin, isTenant, basePath, hasAccess }) => {
               <LayoutDashboard size={20} /><span className="text-[0.65rem] mt-1 font-medium">Home</span>
             </NavLink>
           )}
-          {hasAccess(['Owner', 'Bar', 'Kitchen', 'Central']) && (
-            <NavLink to={`${basePath}/stock`} className={({isActive}) => `flex flex-col items-center p-2 rounded-lg transition-colors ${isActive ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}`}>
-              <Boxes size={20} /><span className="text-[0.65rem] mt-1 font-medium">Stok</span>
-            </NavLink>
-          )}
-          {hasAccess(['Owner', 'Bar', 'Kitchen', 'Central']) && (
+          {hasAccess(['Owner', 'Bar', 'Kitchen', 'Central', 'Service', 'Purchasing', 'Staff']) && (
             <NavLink to={`${basePath}/daily-inventory`} className={({isActive}) => `flex flex-col items-center p-2 rounded-lg transition-colors ${isActive ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}`}>
               <ClipboardList size={20} /><span className="text-[0.65rem] mt-1 font-medium">EOD</span>
             </NavLink>
           )}
-          {hasAccess(['Owner', 'Purchasing']) && (
-            <NavLink to={`${basePath}/purchasing`} className={({isActive}) => `flex flex-col items-center p-2 rounded-lg transition-colors ${isActive ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}`}>
-              <ShoppingCart size={20} /><span className="text-[0.65rem] mt-1 font-medium">PO</span>
+          {hasAccess(['Owner', 'Service', 'Central', 'Bar', 'Staff']) && (
+            <NavLink to={`${basePath}/penjualan`} className={({isActive}) => `flex flex-col items-center p-2 rounded-lg transition-colors ${isActive ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}`}>
+              <UploadCloud size={20} /><span className="text-[0.65rem] mt-1 font-medium">POS</span>
+            </NavLink>
+          )}
+          {hasAccess(['Owner', 'Central', 'Purchasing']) && (
+            <NavLink to={`${basePath}/procurement`} className={({isActive}) => `flex flex-col items-center p-2 rounded-lg transition-colors ${isActive ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}`}>
+              <ShoppingCart size={20} /><span className="text-[0.65rem] mt-1 font-medium">Belanja</span>
             </NavLink>
           )}
           <button onClick={() => document.getElementById('mobile-more-menu').classList.toggle('hidden')} className="flex flex-col items-center p-2 rounded-lg text-[var(--text-secondary)]">
@@ -351,38 +351,25 @@ export default function DashboardLayout() {
 
                 {isTenant && (
                   <>
-                    <NavGroup title="Menu Utama" isHovered={isHovered} isFirst={!isSuperAdmin}>
-                      <NavItem to={basePath} exact label="Dashboard" icon={LayoutDashboard}  isHovered={isHovered} index={4} />
+                    <NavGroup title="Operasional Harian" isHovered={isHovered} isFirst={!isSuperAdmin}>
+                      <NavItem to={basePath} exact label="Dashboard" icon={LayoutDashboard} isHovered={isHovered} />
                       {currentTenant?.is_pos_enabled && hasAccess(['Admin / Owner', 'Owner', 'Service', 'Bar', 'Staff']) && (
-                        <NavItem to={`${basePath}/pos-terminal`} label="Kasir (POS)" icon={MonitorSmartphone}  isHovered={isHovered} index={5} />
+                        <NavItem to={`${basePath}/pos-terminal`} label="Kasir (POS)" icon={MonitorSmartphone} isHovered={isHovered} />
                       )}
-                      {hasAccess(['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Purchasing', 'Staff']) && <NavItem to={`${basePath}/stock`} label="Stock Ledger" icon={BookOpen}  isHovered={isHovered} index={6} />}
-                      {hasAccess(['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Service', 'Purchasing', 'Staff']) && <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" icon={ClipboardList}  isHovered={isHovered} index={7} />}
-                      {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen']) && <NavItem to={`${basePath}/transfer`} label="Inter-Branch Transfer" icon={ArrowRightLeft} isHovered={isHovered} index={7.5} />}
-                      {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen']) && <NavItem to={`${basePath}/waste`} label="Waste Logs" icon={Trash2} isHovered={isHovered} index={7.6} />}
-                      {hasAccess(['Admin / Owner', 'Owner', 'Kitchen', 'Central', 'Staff']) && <NavItem to={`${basePath}/trimming`} label="Trimming Produksi" icon={Box}  isHovered={isHovered} index={8} />}
-                      {hasAccess(['Admin / Owner', 'Owner', 'Service', 'Central', 'Staff']) && <NavItem to={`${basePath}/pos`} label="Upload POS Sales" icon={UploadCloud}  isHovered={isHovered} index={8} />}
-                      {hasAccess(['Admin / Owner', 'Owner', 'Service', 'Central', 'Staff']) && <NavItem to={`${basePath}/pos-raw`} label="Data Mentah POS" icon={DatabaseIcon}  isHovered={isHovered} index={8.5} />}
-                      {hasAccess(['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Staff']) && <NavItem to={`${basePath}/recipes`} label="F&B Recipes" icon={Utensils}  isHovered={isHovered} index={9} />}
-                      {hasAccess(['Admin / Owner', 'Owner', 'Central']) && <NavItem to={`${basePath}/pricing`} label="Menu Pricing" icon={Tag}  isHovered={isHovered} index={10} />}
+                      {hasAccess(['Admin / Owner', 'Owner', 'Service', 'Central', 'Bar', 'Staff']) && <NavItem to={`${basePath}/penjualan`} label="Penjualan Beverage (POS)" icon={UploadCloud} isHovered={isHovered} />}
+                      {hasAccess(['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Service', 'Purchasing', 'Staff']) && <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory & Waste" icon={ClipboardList} isHovered={isHovered} />}
+                      {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Purchasing']) && <NavItem to={`${basePath}/procurement`} label="Marketlist & Pembelian" icon={ShoppingCart} isHovered={isHovered} />}
+                      {hasAccess(['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Staff']) && <NavItem to={`${basePath}/pricing-cogs`} label="Menu Pricing & COGS" icon={Tag} isHovered={isHovered} />}
+                      {hasAccess(['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Staff']) && <NavItem to={`${basePath}/opname-assets`} label="Stock Opname & Aset" icon={Boxes} isHovered={isHovered} />}
+                      {hasAccess(['Admin / Owner', 'Owner', 'Kitchen', 'Central', 'Staff']) && <NavItem to={`${basePath}/produksi`} label="Proses Produksi Bahan" icon={Scissors} isHovered={isHovered} />}
+                      {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Staff']) && <NavItem to={`${basePath}/cost-report`} label="Cost Control & Laporan" icon={Calculator} isHovered={isHovered} />}
                     </NavGroup>
 
-                    <NavGroup title="Operasional" isHovered={isHovered}>
-                      {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Purchasing']) && <NavItem to={`${basePath}/marketlist`} label="Market List" icon={ClipboardList}  isHovered={isHovered} index={10.5} />}
-                      {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Purchasing']) && <NavItem to={`${basePath}/purchasing`} label="Pembelian & Supplier" icon={ShoppingCart}  isHovered={isHovered} index={11} />}
-                      {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Purchasing']) && <NavItem to={`${basePath}/invoicing`} label="Invoicing / PO" icon={FileText}  isHovered={isHovered} index={12} />}
-                      {hasAccess(['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Staff']) && <NavItem to={`${basePath}/opname`} label="Stock Opname" icon={Boxes}  isHovered={isHovered} index={13} />}
-                      {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Purchasing']) && <NavItem to={`${basePath}/physical-check`} label="Cek Fisik & Waste" icon={Trash2}  isHovered={isHovered} index={14} />}
-                      {hasAccess(['Admin / Owner', 'Owner', 'Central']) && <NavItem to={`${basePath}/assets`} label="Asset & Equipment" icon={Package}  isHovered={isHovered} index={0} />}
-                      {hasAccess(['Admin / Owner', 'Owner', 'Central']) && <NavItem to={`${basePath}/cost-control`} label="Cost Control" icon={Calculator}  isHovered={isHovered} index={1} />}
-                    </NavGroup>
-
-                    <NavGroup title="System" isHovered={isHovered}>
-                      {hasAccess(['Admin / Owner', 'Owner', 'Central']) && <NavItem to={`${basePath}/audit`} label="Audit Logs" icon={History}  isHovered={isHovered} index={2} />}
-                      {hasAccess(['Admin / Owner', 'Owner']) && <NavItem to={`${basePath}/settings`} label="Tenant Settings" icon={Settings}  isHovered={isHovered} index={3} />}
-                      {hasAccess(['Admin / Owner', 'Owner', 'Central']) && <NavItem to={`${basePath}/backup`} label="Backup & Restore" icon={Archive}  isHovered={isHovered} index={4} />}
-                      {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen', 'Staff']) && <NavItem to={`${basePath}/maintenance`} label="Maintenance" icon={Wrench}  isHovered={isHovered} index={5} />}
-                    </NavGroup>
+                    {hasAccess(['Admin / Owner', 'Owner']) && (
+                      <NavGroup title="Pengaturan & Sistem" isHovered={isHovered}>
+                        <NavItem to={`${basePath}/sistem`} label="Pengaturan & Sistem (Adm)" icon={Settings} isHovered={isHovered} />
+                      </NavGroup>
+                    )}
                   </>
                 )}
               </div>
@@ -487,39 +474,25 @@ export default function DashboardLayout() {
 
             {isTenant && (
               <>
-                <NavGroup title="Menu Utama" isHovered={true} isFirst={!isSuperAdmin}>
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" icon={LayoutDashboard}  isHovered={true} index={9} />
+                <NavGroup title="Operasional Harian" isHovered={true} isFirst={!isSuperAdmin}>
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" icon={LayoutDashboard} isHovered={true} />
                   {currentTenant?.is_pos_enabled && hasAccess(['Admin / Owner', 'Owner', 'Service', 'Bar', 'Staff']) && (
-                    <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos-terminal`} label="Kasir (POS)" icon={MonitorSmartphone}  isHovered={true} index={10} />
+                    <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos-terminal`} label="Kasir (POS)" icon={MonitorSmartphone} isHovered={true} />
                   )}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Purchasing', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/stock`} label="Stock Ledger" icon={BookOpen}  isHovered={true} index={11} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Service', 'Purchasing', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory" icon={ClipboardList}  isHovered={true} index={12} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/transfer`} label="Inter-Branch Transfer" icon={ArrowRightLeft} isHovered={true} index={12.5} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/waste`} label="Waste Logs" icon={Trash2} isHovered={true} index={12.6} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Kitchen', 'Central', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/trimming`} label="Trimming Produksi" icon={Box}  isHovered={true} index={13} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Service', 'Central', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos`} label="Upload POS Sales" icon={UploadCloud}  isHovered={true} index={13} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Service', 'Central', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos-raw`} label="Data Mentah POS" icon={DatabaseIcon}  isHovered={true} index={13.2} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Service', 'Central', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/esb-upload`} label="Upload POS (ESB)" icon={UploadCloud}  isHovered={true} index={13.5} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/recipes`} label="F&B Recipes" icon={Utensils}  isHovered={true} index={14} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Central']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pricing`} label="Menu Pricing" icon={Tag}  isHovered={true} index={0} />}
+                  {hasAccess(['Admin / Owner', 'Owner', 'Service', 'Central', 'Bar', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/penjualan`} label="Penjualan Beverage (POS)" icon={UploadCloud} isHovered={true} />}
+                  {hasAccess(['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Service', 'Purchasing', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory & Waste" icon={ClipboardList} isHovered={true} />}
+                  {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Purchasing']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/procurement`} label="Marketlist & Pembelian" icon={ShoppingCart} isHovered={true} />}
+                  {hasAccess(['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pricing-cogs`} label="Menu Pricing & COGS" icon={Tag} isHovered={true} />}
+                  {hasAccess(['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/opname-assets`} label="Stock Opname & Aset" icon={Boxes} isHovered={true} />}
+                  {hasAccess(['Admin / Owner', 'Owner', 'Kitchen', 'Central', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/produksi`} label="Proses Produksi Bahan" icon={Scissors} isHovered={true} />}
+                  {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/cost-report`} label="Cost Control & Laporan" icon={Calculator} isHovered={true} />}
                 </NavGroup>
 
-                <NavGroup title="Operasional" isHovered={true}>
-                  {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Purchasing']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/marketlist`} label="Market List" icon={ClipboardList}  isHovered={true} index={0.5} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Purchasing']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/purchasing`} label="Pembelian & Supplier" icon={ShoppingCart}  isHovered={true} index={1} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Purchasing']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/invoicing`} label="Invoicing / PO" icon={FileText}  isHovered={true} index={2} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/opname`} label="Stock Opname" icon={Boxes}  isHovered={true} index={3} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Purchasing']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/physical-check`} label="Cek Fisik & Waste" icon={Trash2}  isHovered={true} index={4} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Central']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/assets`} label="Asset & Equipment" icon={Package}  isHovered={true} index={5} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Central']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/cost-control`} label="Cost Control" icon={Calculator}  isHovered={true} index={6} />}
-                </NavGroup>
-
-                <NavGroup title="System" isHovered={true}>
-                  {hasAccess(['Admin / Owner', 'Owner', 'Central']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/audit`} label="Audit Logs" icon={History}  isHovered={true} index={7} />}
-                  {hasAccess(['Admin / Owner', 'Owner']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/settings`} label="Tenant Settings" icon={Settings}  isHovered={true} index={8} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Central']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/backup`} label="Backup & Restore" icon={Archive}  isHovered={true} index={9} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/maintenance`} label="Maintenance" icon={Wrench}  isHovered={true} index={10} />}
-                </NavGroup>
+                {hasAccess(['Admin / Owner', 'Owner']) && (
+                  <NavGroup title="Pengaturan & Sistem" isHovered={true}>
+                    <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/sistem`} label="Pengaturan & Sistem (Adm)" icon={Settings} isHovered={true} />
+                  </NavGroup>
+                )}
               </>
             )}
           </div>
@@ -562,25 +535,14 @@ export default function DashboardLayout() {
                 {isTenant && (
                   <>
                     {location.pathname === basePath && "Cost Control Dashboard"}
-                    {location.pathname === `${basePath}/stock` && "Warehouse Stocks & Ledgers"}
-                    {location.pathname === `${basePath}/daily-inventory` && "Pencatatan Stok Harian"}
-                    {location.pathname === `${basePath}/trimming` && "Trimming Produksi"}
-                    {location.pathname === `${basePath}/pos` && "POS Kasir Integration"}
-                    {location.pathname === `${basePath}/pos-raw` && "Data Mentah POS"}
-                    {location.pathname === `${basePath}/esb-upload` && "ESB POS Sync & Deduct"}
-                    {location.pathname === `${basePath}/recipes` && "Menu COGS & Recipe Builder"}
-                    {location.pathname === `${basePath}/pricing` && "Menu Pricing Simulator"}
-                    {location.pathname === `${basePath}/marketlist` && "Market List Belanja"}
-                    {location.pathname === `${basePath}/purchasing` && "Pembelian Harian & Supplier"}
-                    {location.pathname === `${basePath}/invoicing` && "Purchase Invoicing"}
-                    {location.pathname === `${basePath}/opname` && "Stock Opname & Auditing"}
-                    {location.pathname === `${basePath}/physical-check` && "Pengecekan Fisik Mingguan"}
-                    {location.pathname === `${basePath}/assets` && "Asset & Equipment Tracker"}
-                    {location.pathname === `${basePath}/audit` && "Jejak Audit Sistem (Audit Logs)"}
-                    {location.pathname === `${basePath}/cost-control` && "Monthly Cost Control Sheet"}
-                    {location.pathname === `${basePath}/backup` && "Backup & Restore Center"}
-                    {location.pathname === `${basePath}/settings` && "Pengaturan Profil & Akses Staf"}
-                    {location.pathname === `${basePath}/maintenance` && "System Maintenance"}
+                    {location.pathname === `${basePath}/penjualan` && "Penjualan Beverage (POS)"}
+                    {location.pathname === `${basePath}/daily-inventory` && "Daily Inventory & Waste"}
+                    {location.pathname === `${basePath}/procurement` && "Marketlist & Pembelian Harian"}
+                    {location.pathname === `${basePath}/pricing-cogs` && "Menu Pricing & COGS"}
+                    {location.pathname === `${basePath}/opname-assets` && "Stock Opname & Aset"}
+                    {location.pathname === `${basePath}/produksi` && "Proses Produksi Bahan (Trimming)"}
+                    {location.pathname === `${basePath}/cost-report` && "Cost Control & Laporan SO Barista"}
+                    {location.pathname === `${basePath}/sistem` && "Pengaturan & Sistem"}
                   </>
                 )}
               </h1>
@@ -592,24 +554,14 @@ export default function DashboardLayout() {
                 {isTenant && (
                   <>
                     {location.pathname === basePath && "Real-time F&B HPP analytics, top variance and metrics."}
-                    {location.pathname === `${basePath}/stock` && "Manage raw materials — edit supplier, price, stock levels. Dual-unit display."}
-                    {location.pathname === `${basePath}/daily-inventory` && "Daily stock count per shift, waste, and item grouping."}
-                    {location.pathname === `${basePath}/trimming` && "Proses bahan mentah menjadi porsi siap pakai."}
-                    {location.pathname === `${basePath}/pos` && "Browser-side Excel parser. Drag and drop POS reports to deduct raw stock."}
-                    {location.pathname === `${basePath}/pos-raw` && "Review history data mentah POS yang sudah berhasil diupload ke sistem."}
-                    {location.pathname === `${basePath}/esb-upload` && "Smart parser for ESB format with auto-deduct, missing-recipe detection, and auto-rollback."}
-                    {location.pathname === `${basePath}/recipes` && "Configure ingredients, fixed costs, and selling HPP percentages."}
-                    {location.pathname === `${basePath}/pricing` && "Simulate selling price changes and see margin impact instantly."}
-                    {location.pathname === `${basePath}/marketlist` && "Kelola daftar belanja rutin untuk outlet/cabang."}
-                    {location.pathname === `${basePath}/purchasing` && "Quick entry daily purchase and manage supplier data."}
-                    {location.pathname === `${basePath}/invoicing` && "Create purchase orders, track invoices, auto stock-in on receive."}
-                    {location.pathname === `${basePath}/opname` && "Wizard-style month-end counting sheet with digital signature."}
-                    {location.pathname === `${basePath}/physical-check` && "Bandingkan pemakaian bahan di POS dengan stok fisik."}
-                    {location.pathname === `${basePath}/assets` && "Track valuable restaurant assets and record breakages."}
-                    {location.pathname === `${basePath}/audit` && "Linimasa riwayat log aktivitas, perubahan operasional dan parameter sistem."}
-                    {location.pathname === `${basePath}/cost-control` && "Compare opening, purchasing, and closing opnames to hit <27% target."}
-                    {location.pathname === `${basePath}/backup` && "Unduh, unggah, buat, dan kelola file cadangan database SQLite Barventis."}
-                    {location.pathname === `${basePath}/maintenance` && "Status kesehatan sistem, pemeriksaan integritas data, hitung ulang HPP, dan manajemen role staff."}
+                    {location.pathname === `${basePath}/penjualan` && "Upload file POS (ESB), riwayat data mentah POS, dan terminal kasir web."}
+                    {location.pathname === `${basePath}/daily-inventory` && "Pencatatan stok harian bahan & bir, pemakaian, dan log limbah."}
+                    {location.pathname === `${basePath}/procurement` && "Rencana belanja (marketlist), purchase order, dan penerimaan barang."}
+                    {location.pathname === `${basePath}/pricing-cogs` && "Simulasi harga jual, resep minuman racikan (COGS Beverage), dan katalog bir."}
+                    {location.pathname === `${basePath}/opname-assets` && "Stock opname resto & central, serta checklist kondisi peralatan bar."}
+                    {location.pathname === `${basePath}/produksi` && "Kalkulator susut trimming buah segar dan batching porsi olahan."}
+                    {location.pathname === `${basePath}/cost-report` && "Audit variansi biaya bulanan dan ekspor 13 sheet laporan SO Barista."}
+                    {location.pathname === `${basePath}/sistem` && "Buku stok, mutasi antar cabang, konfigurasi toko & RBAC, audit trail & backup."}
                   </>
                 )}
               </p>
@@ -793,17 +745,20 @@ export default function DashboardLayout() {
         </button>
         <h2 className="text-xl font-bold mb-6">Menu Lainnya</h2>
         <div className="flex flex-col gap-2">
-          {isTenant && hasAccess(['Owner', 'Kitchen', 'Central']) && (
-            <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/trimming`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Utensils size={20} /> Trimming Produksi</NavLink>
+          {isTenant && hasAccess(['Owner', 'Bar', 'Kitchen', 'Central', 'Staff']) && (
+            <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/pricing-cogs`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Tag size={20} /> Menu Pricing & COGS</NavLink>
           )}
-          {isTenant && hasAccess(['Owner', 'Bar', 'Kitchen', 'Central']) && (
-            <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/marketlist`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><ClipboardList size={20} /> Daftar Belanja (Marketlist)</NavLink>
+          {isTenant && hasAccess(['Owner', 'Bar', 'Kitchen', 'Central', 'Staff']) && (
+            <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/opname-assets`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Boxes size={20} /> Stock Opname & Aset</NavLink>
           )}
-          {isTenant && hasAccess(['Owner', 'Service', 'Bar']) && (
-            <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/recipes`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><BookOpen size={20} /> Resep & COGS</NavLink>
+          {isTenant && hasAccess(['Owner', 'Kitchen', 'Central', 'Staff']) && (
+            <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/produksi`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Scissors size={20} /> Proses Produksi Bahan</NavLink>
           )}
-          {isTenant && hasAccess(['Owner', 'Central']) && (
-            <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/assets`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><MonitorSmartphone size={20} /> Aset Tetap</NavLink>
+          {isTenant && hasAccess(['Owner', 'Central', 'Bar', 'Staff']) && (
+            <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/cost-report`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Calculator size={20} /> Cost Control & Laporan</NavLink>
+          )}
+          {isTenant && hasAccess(['Owner']) && (
+            <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/sistem`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Settings size={20} /> Pengaturan & Sistem</NavLink>
           )}
           <button onClick={() => { document.getElementById('mobile-more-menu').classList.add('hidden'); logout(); }} className="p-4 rounded-xl bg-red-500/10 text-red-500 mt-4 flex items-center gap-3 text-left"><LogOut size={20} /> Keluar (Logout)</button>
         </div>
@@ -875,8 +830,8 @@ export default function DashboardLayout() {
             setShowOnboarding(false);
             sessionStorage.setItem('barventis_onboarding_dismissed', 'true');
             // Route dynamically based on Onboarding output
-            if (tab === 'stock') navigate(`${basePath}/stock`);
-            if (tab === 'recipes') navigate(`${basePath}/recipes`);
+            if (tab === 'stock') navigate(`${basePath}/sistem?tab=stock-ledger`);
+            if (tab === 'recipes') navigate(`${basePath}/pricing-cogs?tab=cogs-beverage`);
           }}
           onDismiss={() => {
             setShowOnboarding(false);

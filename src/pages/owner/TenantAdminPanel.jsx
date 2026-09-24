@@ -4,8 +4,9 @@ import { api } from '../../services/api';
 import { translateDbError } from '../../utils/errorHandler';
 import { useData } from '../../contexts/DataContext';
 import {
-  Users, Building, Link as LinkIcon, Trash2, Copy, Clock, CheckCircle, XCircle, Store
+  Users, Building, Link as LinkIcon, Trash2, Copy, Clock, CheckCircle, XCircle, Store, MapPin, Plus, RotateCcw, AlertCircle
 } from 'lucide-react';
+import { locationService } from '../../services/locationService';
 
 export default function TenantAdminPanel() {
   const { currentTenant, sessionUser, showToast: displayToast } = useData();
@@ -31,11 +32,26 @@ export default function TenantAdminPanel() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmActionState, setConfirmActionState] = useState(null);
 
+  // Locations management
+  const [locations, setLocations] = useState([]);
+  const [showAddLocationModal, setShowAddLocationModal] = useState(false);
+  const [newLocName, setNewLocName] = useState('');
+  const [newLocCode, setNewLocCode] = useState('');
+  const [newLocDesc, setNewLocDesc] = useState('');
+
   // Helper for Double Confirmation
   const requestConfirmation = (title, message, onConfirm) => {
     setConfirmActionState({ title, message, onConfirm });
     setShowConfirmModal(true);
   };
+
+  useEffect(() => {
+    if (currentTenant) {
+      const update = () => setLocations(locationService.getLocations(currentTenant.id));
+      update();
+      return locationService.subscribe(update);
+    }
+  }, [currentTenant]);
 
   useEffect(() => {
     if (currentTenant) {
@@ -224,6 +240,61 @@ export default function TenantAdminPanel() {
     );
   };
 
+  const handleAddLocation = (e) => {
+    e.preventDefault();
+    if (!newLocName.trim()) {
+      displayToast('Nama lokasi wajib diisi.', 'error');
+      return;
+    }
+    try {
+      locationService.addLocation(currentTenant?.id, {
+        name: newLocName.trim(),
+        code: newLocCode.trim(),
+        description: newLocDesc.trim()
+      });
+      setLocations(locationService.getLocations(currentTenant?.id));
+      setShowAddLocationModal(false);
+      setNewLocName('');
+      setNewLocCode('');
+      setNewLocDesc('');
+      displayToast('Lokasi baru berhasil ditambahkan!', 'success');
+    } catch (err) {
+      displayToast(err.message, 'error');
+    }
+  };
+
+  const handleDeleteLocation = (loc) => {
+    if (loc.isSystem) {
+      displayToast('Lokasi bawaan sistem tidak dapat dihapus.', 'error');
+      return;
+    }
+    requestConfirmation(
+      'Hapus Lokasi Operasional',
+      `Apakah Anda yakin ingin menghapus lokasi "${loc.name}" (${loc.code})? Filterisasi di Stock Ledger dan modul operasional lainnya akan diperbarui.`,
+      () => {
+        try {
+          locationService.deleteLocation(currentTenant?.id, loc.id);
+          setLocations(locationService.getLocations(currentTenant?.id));
+          displayToast(`Lokasi "${loc.name}" berhasil dihapus.`, 'success');
+        } catch (err) {
+          displayToast(err.message, 'error');
+        }
+      }
+    );
+  };
+
+  const handleResetLocations = () => {
+    requestConfirmation(
+      'Reset Lokasi ke Default',
+      'Kembalikan daftar lokasi ke konfigurasi standar sistem (Resto, Central, Kitchen, Service)? Semua lokasi kustom akan dihapus.',
+      () => {
+        const defs = locationService.resetToDefault(currentTenant?.id);
+        setLocations(defs);
+        displayToast('Daftar lokasi berhasil dikembalikan ke default.', 'success');
+      }
+    );
+  };
+
   return (
     <div style={{ paddingBottom: '30px' }}>
       <div style={{ marginBottom: '18px' }}>
@@ -283,6 +354,18 @@ export default function TenantAdminPanel() {
           }}
         >
           <Store size={14} /> Add-Ons & Kuota
+        </button>
+        <button
+          className="btn"
+          onClick={() => setTab('locations')}
+          style={{
+            background: tab === 'locations' ? 'rgba(59, 130, 246, 0.12)' : 'transparent',
+            border: tab === 'locations' ? '1px solid rgba(59, 130, 246, 0.25)' : '1px solid rgba(255,255,255,0.08)',
+            color: tab === 'locations' ? 'var(--accent)' : 'var(--text-secondary)',
+            padding: '6px 12px', fontSize: '0.78rem', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer'
+          }}
+        >
+          <MapPin size={14} /> Manajemen Lokasi
         </button>
       </div>
 
@@ -693,7 +776,213 @@ export default function TenantAdminPanel() {
             </div>
           </div>
         )}
+
+        {tab === 'locations' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', gap: '12px', flexWrap: 'wrap' }}>
+              <div>
+                <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1rem', fontWeight: 700 }}>Daftar Lokasi & Gudang Operasional</h3>
+                <p style={{ margin: '2px 0 0 0', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                  Kelola lokasi gudang, dapur (Kitchen), area floor (Service), dan titik penyimpanan bahan baku. Lokasi ini otomatis muncul pada filter Stock Ledger dan pencatatan mutasi.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  className="btn btn-secondary"
+                  onClick={handleResetLocations}
+                  style={{ padding: '6px 12px', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  title="Kembalikan ke konfigurasi default sistem"
+                >
+                  <RotateCcw size={13} /> Reset Default
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => setShowAddLocationModal(true)}
+                  style={{ padding: '6px 14px', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Plus size={14} /> Tambah Lokasi
+                </button>
+              </div>
+            </div>
+
+            <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
+              <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                <thead>
+                  <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
+                    <th style={{ padding: '10px 14px' }}>Kode Filter</th>
+                    <th style={{ padding: '10px 14px' }}>Nama Lokasi</th>
+                    <th style={{ padding: '10px 14px' }}>Tipe</th>
+                    <th style={{ padding: '10px 14px' }}>Deskripsi & Peruntukan</th>
+                    <th style={{ padding: '10px 14px', textAlign: 'center', width: '100px' }}>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {locations.map((loc) => (
+                    <tr key={loc.id || loc.code} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '10px 14px' }}>
+                        <span style={{ 
+                          fontFamily: 'monospace', 
+                          fontWeight: 700, 
+                          padding: '2px 8px', 
+                          borderRadius: '4px', 
+                          background: 'var(--bg-secondary)', 
+                          border: '1px solid var(--border)',
+                          color: 'var(--accent)',
+                          fontSize: '0.75rem'
+                        }}>
+                          {loc.code}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {loc.name}
+                      </td>
+                      <td style={{ padding: '10px 14px' }}>
+                        {loc.isSystem ? (
+                          <span style={{ 
+                            fontSize: '0.68rem', 
+                            padding: '2px 8px', 
+                            borderRadius: '12px', 
+                            background: 'rgba(59, 130, 246, 0.12)', 
+                            color: 'var(--accent)',
+                            fontWeight: 600 
+                          }}>
+                            Bawaan Sistem
+                          </span>
+                        ) : (
+                          <span style={{ 
+                            fontSize: '0.68rem', 
+                            padding: '2px 8px', 
+                            borderRadius: '12px', 
+                            background: 'rgba(16, 185, 129, 0.12)', 
+                            color: 'var(--success)',
+                            fontWeight: 600 
+                          }}>
+                            Kustom Resto
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '10px 14px', color: 'var(--text-secondary)' }}>
+                        {loc.description || '-'}
+                      </td>
+                      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                        {loc.isSystem ? (
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Terkunci</span>
+                        ) : (
+                          <button
+                            className="btn btn-secondary"
+                            style={{ padding: '4px 8px', color: 'var(--danger)', borderRadius: 'var(--radius-sm)' }}
+                            onClick={() => handleDeleteLocation(loc)}
+                            title="Hapus Lokasi Kustom"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+              <AlertCircle size={14} />
+              <span>Lokasi yang aktif di sini langsung tersedia sebagai opsi filter tab di halaman Stock Ledger dan modul penyesuaian stok.</span>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Add Location Modal */}
+      {showAddLocationModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="p-5">
+              <h3 className="text-base font-bold text-[var(--text-primary)] mb-1 flex items-center gap-2">
+                <MapPin size={18} className="text-[var(--accent)]" /> Tambah Lokasi / Gudang Baru
+              </h3>
+              <p className="text-xs text-[var(--text-secondary)] mb-4">
+                Tambahkan divisi, dapur, atau area penyimpanan baru untuk mempermudah filterisasi stok.
+              </p>
+
+              <form onSubmit={handleAddLocation} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div>
+                  <label className="form-label" style={{ display: 'block', marginBottom: '4px', fontSize: '0.75rem', fontWeight: 600 }}>
+                    Nama Lokasi / Area *
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Contoh: Dapur Pastry, Cold Storage, Bar Lt 2"
+                    value={newLocName}
+                    onChange={(e) => {
+                      setNewLocName(e.target.value);
+                      if (!newLocCode || newLocCode === newLocName.toUpperCase().replace(/[^a-zA-Z0-9]/g, '_')) {
+                        setNewLocCode(e.target.value.toUpperCase().replace(/[^a-zA-Z0-9]/g, '_').slice(0, 15));
+                      }
+                    }}
+                    required
+                    style={{ width: '100%', fontSize: '0.8rem', padding: '8px 10px' }}
+                  />
+                </div>
+
+                <div>
+                  <label className="form-label" style={{ display: 'block', marginBottom: '4px', fontSize: '0.75rem', fontWeight: 600 }}>
+                    Kode Singkatan (Filter ID) *
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Contoh: PASTRY, CHILLER, BAR_2"
+                    value={newLocCode}
+                    onChange={(e) => setNewLocCode(e.target.value.toUpperCase().replace(/[^a-zA-Z0-9_]/g, ''))}
+                    required
+                    style={{ width: '100%', fontSize: '0.8rem', fontFamily: 'monospace', padding: '8px 10px' }}
+                  />
+                  <small style={{ color: 'var(--text-muted)', fontSize: '0.68rem', marginTop: '2px', display: 'block' }}>
+                    Kode unik huruf kapital untuk filter tab Stock Ledger (maksimal 15 karakter).
+                  </small>
+                </div>
+
+                <div>
+                  <label className="form-label" style={{ display: 'block', marginBottom: '4px', fontSize: '0.75rem', fontWeight: 600 }}>
+                    Deskripsi / Peruntukan (Opsional)
+                  </label>
+                  <textarea
+                    className="form-control"
+                    rows={2}
+                    placeholder="Keterangan area penyimpanan atau staf yang bertanggung jawab..."
+                    value={newLocDesc}
+                    onChange={(e) => setNewLocDesc(e.target.value)}
+                    style={{ width: '100%', fontSize: '0.8rem', padding: '8px 10px' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setShowAddLocationModal(false);
+                      setNewLocName('');
+                      setNewLocCode('');
+                      setNewLocDesc('');
+                    }}
+                    style={{ padding: '6px 14px', fontSize: '0.8rem' }}
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    style={{ padding: '6px 16px', fontSize: '0.8rem' }}
+                  >
+                    Simpan Lokasi
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Confirmation Modal (Generic) — z-[60], intentionally higher than every
           other modal in this file (all z-50). This dialog is a generic

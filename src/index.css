@@ -531,7 +531,31 @@ body::before {
 /* Tables and Datagrids */
 .table-container {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
   margin-top: 12px;
+  width: 100%;
+  position: relative;
+  scrollbar-width: thin;
+}
+
+.table-container::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+.table-container::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+}
+
+.table-container::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.table-container::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 .custom-table {
@@ -542,7 +566,7 @@ body::before {
 }
 
 .custom-table th {
-  padding: 12px 14px;
+  padding: 13px 16px;
   font-weight: 600;
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border);
@@ -554,13 +578,15 @@ body::before {
   position: sticky;
   top: 0;
   z-index: 10;
+  line-height: 1.4;
 }
 
 .custom-table td {
-  padding: 12px 14px;
+  padding: 15px 16px;
   color: var(--text-primary);
   border-bottom: 1px solid var(--border-light);
   vertical-align: middle;
+  line-height: 1.45;
 }
 
 .custom-table tbody tr {
@@ -574,6 +600,194 @@ body::before {
 .custom-table tbody tr:last-child td {
   border-bottom: none;
 }
+
+/* Touch-friendly buttons & interactive controls within table rows */
+.custom-table td .btn,
+.custom-table td button {
+  min-height: 34px;
+  min-width: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+}
+
+.custom-table td input[type="checkbox"],
+.custom-table th input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+.custom-table td .badge,
+.custom-table td .font-mono {
+  white-space: nowrap;
+}
+
+/* =========================================================================
+   Table Skeleton & Subtle Loading Overlay
+   ========================================================================= */
+
+/* Shimmer pulse animation */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--border-light) 0%,
+    var(--border) 45%,
+    var(--border-light) 85%
+  );
+  background-size: 250% 100%;
+  animation: skeleton-shimmer 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  border-radius: var(--radius-sm);
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* Skeleton table row */
+.table-skeleton-row {
+  pointer-events: none;
+}
+
+.table-skeleton-row td {
+  padding: 15px 16px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.skeleton-line {
+  height: 14px;
+  border-radius: 4px;
+}
+
+.skeleton-line-sm {
+  height: 10px;
+  border-radius: 3px;
+}
+
+.skeleton-line-lg {
+  height: 18px;
+  border-radius: 6px;
+}
+
+.skeleton-box {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+}
+
+.skeleton-badge {
+  height: 22px;
+  width: 64px;
+  border-radius: 9999px;
+}
+
+.skeleton-btn {
+  height: 30px;
+  width: 30px;
+  border-radius: var(--radius-sm);
+}
+
+/* Subtle Top Loading / Syncing Progress Bar for Tables */
+@keyframes table-indeterminate-bar {
+  0% {
+    left: -35%;
+    right: 100%;
+  }
+  60% {
+    left: 100%;
+    right: -90%;
+  }
+  100% {
+    left: 100%;
+    right: -90%;
+  }
+}
+
+@keyframes table-indeterminate-short {
+  0% {
+    left: -200%;
+    right: 100%;
+  }
+  60% {
+    left: 107%;
+    right: -8%;
+  }
+  100% {
+    left: 107%;
+    right: -8%;
+  }
+}
+
+.table-progress-bar-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  overflow: hidden;
+  background-color: var(--accent-glow);
+  z-index: 20;
+}
+
+.table-progress-bar-active {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background-color: var(--accent);
+  border-radius: 2px;
+  animation: table-indeterminate-bar 1.8s cubic-bezier(0.65, 0.815, 0.735, 0.395) infinite;
+}
+
+.table-progress-bar-active-secondary {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background-color: var(--accent);
+  opacity: 0.7;
+  border-radius: 2px;
+  animation: table-indeterminate-short 1.8s cubic-bezier(0.165, 0.84, 0.44, 1) infinite;
+  animation-delay: 0.9s;
+}
+
+/* Subtle Loading Overlay */
+.table-loading-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(250, 249, 247, 0.45);
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 15;
+  transition: opacity 0.2s ease-in-out;
+  pointer-events: none;
+}
+
+.table-loading-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  padding: 6px 14px;
+  border-radius: 9999px;
+  box-shadow: var(--shadow-md);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.2px;
+}
+
 
 /* Inputs & Form styling */
 .form-group {
@@ -916,11 +1130,33 @@ input[type='number']::-webkit-outer-spin-button {
     height: 16px !important;
   }
 
-  /* Tables smaller and compact */
-  .custom-table th, .custom-table td,
-  .table th, .table td {
-    padding: 8px 10px !important;
+  /* Tables on mobile: generous vertical padding for touch readability and tap ergonomics without bloating horizontal footprint */
+  .custom-table th,
+  .table th {
+    padding: 12px 14px !important;
     font-size: 0.75rem !important;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+  }
+
+  .custom-table td,
+  .table td {
+    padding: 14px 14px !important;
+    font-size: 0.8125rem !important;
+    line-height: 1.4;
+  }
+
+  /* Interactive touch targets in tables on mobile */
+  .custom-table td .btn,
+  .custom-table td button {
+    min-height: 36px !important;
+    min-width: 36px !important;
+  }
+
+  .custom-table td input[type="checkbox"],
+  .custom-table th input[type="checkbox"] {
+    width: 18px !important;
+    height: 18px !important;
   }
 
   /* General buttons and inputs smaller on mobile */
@@ -964,6 +1200,20 @@ input[type='number']::-webkit-outer-spin-button {
 
   .mobile-menu-btn {
     display: flex !important;
+  }
+
+  /* Tablet table ergonomics: comfortable reading height and tap spacing */
+  .custom-table th,
+  .table th {
+    padding: 12px 14px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+
+  .custom-table td,
+  .table td {
+    padding: 14px 14px;
+    font-size: 0.83rem;
   }
 }
 
@@ -1614,5 +1864,237 @@ input[type='number']::-webkit-outer-spin-button {
     width: 100%;
     margin-left: 0 !important;
     justify-content: space-between;
+  }
+}
+
+/* ====================================================================
+   PRINT STYLES FOR TABLE LAYOUTS
+   Specially styled for printing tables cleanly on A4/Letter paper:
+   Hides sidebar, header, buttons, navigation, interactive controls.
+   Expands table to 100% width with sharp borders and legible contrast.
+   ==================================================================== */
+
+.print-only {
+  display: none !important;
+}
+
+@media print {
+  @page {
+    size: auto;
+    margin: 10mm 12mm 12mm 12mm;
+  }
+
+  /* Global background & text resets */
+  *,
+  *::before,
+  *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #111827 !important;
+    font-size: 10pt !important;
+    line-height: 1.4 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide navigation, sidebar, and layout chrome */
+  aside,
+  .sidebar,
+  header,
+  nav,
+  .topbar,
+  .app-header,
+  .ai-fab-btn,
+  .guidebook-modal,
+  .toast,
+  .notification-panel,
+  .bottom-nav,
+  footer {
+    display: none !important;
+  }
+
+  /* Hide interactive controls, buttons, toolbars, and search */
+  button,
+  .btn,
+  input[type="button"],
+  input[type="submit"],
+  .no-print,
+  [data-no-print="true"],
+  .export-btn,
+  .print-btn,
+  .dropdown,
+  .pagination-bar,
+  .pagination-controls,
+  .pagination-btn,
+  .kpi-grid,
+  .info-banner,
+  .tab-buttons,
+  .search-box,
+  .filter-controls,
+  .table-loading-overlay,
+  .table-skeleton {
+    display: none !important;
+  }
+
+  /* Reset main content container */
+  .main-content,
+  main,
+  section,
+  .page-scroll-area {
+    margin: 0 !important;
+    margin-left: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* Reset glass cards to clean printable containers */
+  .glass-card,
+  .card {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 0 16px 0 !important;
+    border-radius: 0 !important;
+  }
+
+  /* Expand table container and remove scroll clipping */
+  .table-container {
+    overflow: visible !important;
+    max-height: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Typography headings on print */
+  h1, h2, h3, h4 {
+    color: #111827 !important;
+    page-break-after: avoid !important;
+    margin-top: 0 !important;
+  }
+
+  /* Table styling */
+  table,
+  .custom-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 8.5pt !important;
+    page-break-inside: auto !important;
+    background: #ffffff !important;
+    margin-top: 8px !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  tfoot {
+    display: table-footer-group !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    page-break-after: auto !important;
+  }
+
+  th {
+    background-color: #f3f4f6 !important;
+    color: #111827 !important;
+    border: 1px solid #9ca3af !important;
+    padding: 6px 8px !important;
+    font-weight: 700 !important;
+    text-align: left !important;
+    font-size: 8pt !important;
+    text-transform: uppercase !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  td {
+    border: 1px solid #d1d5db !important;
+    padding: 6px 8px !important;
+    color: #111827 !important;
+    background: transparent !important;
+    font-size: 8.5pt !important;
+    vertical-align: middle !important;
+  }
+
+  /* Checkboxes inside tables */
+  th input[type="checkbox"],
+  td input[type="checkbox"] {
+    display: none !important;
+  }
+
+  /* Form inputs inside table cells (e.g. Daily Inventory inputs) */
+  td input {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: #111827 !important;
+    font-size: inherit !important;
+    font-weight: inherit !important;
+    padding: 0 !important;
+    width: 100% !important;
+    text-align: inherit !important;
+  }
+
+  /* Status badges on paper */
+  .badge,
+  .status-badge {
+    border: 1px solid #9ca3af !important;
+    background: transparent !important;
+    color: #111827 !important;
+    font-size: 7.5pt !important;
+    padding: 2px 4px !important;
+    border-radius: 3px !important;
+    display: inline-block !important;
+  }
+
+  /* Action columns & buttons inside table rows */
+  th.no-print,
+  td.no-print,
+  th.action-col,
+  td.action-col {
+    display: none !important;
+  }
+
+  /* Show elements marked for print-only */
+  .print-only {
+    display: block !important;
+    margin-bottom: 12px !important;
+  }
+
+  .print-header {
+    border-bottom: 2px solid #111827;
+    padding-bottom: 6px;
+    margin-bottom: 12px;
+  }
+
+  .print-header-brand {
+    font-size: 14pt;
+    font-weight: 800;
+    color: #111827;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .print-header-meta {
+    font-size: 8pt;
+    color: #4b5563;
+    margin-top: 2px;
   }
 }

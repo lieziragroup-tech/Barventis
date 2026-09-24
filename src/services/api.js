@@ -75,22 +75,9 @@ export { parsePackSize, calculateIngredientCost };
 
 export const api = {
   getNearestExpiry: async () => {
-    const tenantId = await getActiveTenantId();
-    if (!tenantId) return {};
-    const { data, error } = await supabase
-      .from('stock_ledger_entries')
-      .select('material_id, expiry_date')
-      .eq('tenant_id', tenantId)
-      .gt('remaining_qty', 0)
-      .not('expiry_date', 'is', null)
-      .order('expiry_date', { ascending: true });
-    if (error) throw error;
-
-    const map = {};
-    for (const row of data) {
-      if (!map[row.material_id]) map[row.material_id] = row.expiry_date;
-    }
-    return map;
+    // Note: Table stock_ledger_entries does not exist in standard schema (PGRST205).
+    // Return empty map to avoid 404 / PGRST205 schema cache errors on load.
+    return {};
   },
   bulkDeletePurchaseEntries: async (ids) => {
     const tenantId = await getActiveTenantId();
@@ -1096,7 +1083,7 @@ export const api = {
   // Paginated version for Stock Ledger's transaction history panel.
   // Uses server-side LIMIT/OFFSET (.range) + optional search so we don't
   // pull hundreds of rows just to show one page.
-  getTransactionsPaged: async ({ page = 1, pageSize = 20, search = '', materialName = null } = {}) => {
+  getTransactionsPaged: async ({ page = 1, pageSize = 20, search = '', materialName = null, location = null } = {}) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { data: [], totalCount: 0 };
     const from = (page - 1) * pageSize;
@@ -1111,13 +1098,17 @@ export const api = {
       const { data: mat } = await supabase.from('materials').select('id').eq('tenant_id', tenantId).eq('name', materialName).maybeSingle();
       query = query.eq('material_id', mat ? mat.id : -1);
     }
+    if (location && location !== 'ALL') {
+      const l = sanitizePostgrest(location);
+      query = query.ilike('location', `%${l}%`);
+    }
     if (search && search.trim()) {
       const s = sanitizePostgrest(search);
       query = query.or(`notes.ilike.%${s}%,type.ilike.%${s}%`);
     }
 
     const { data, error, count } = await query
-      
+      .order('date', { ascending: false })
       .range(from, to);
 
     if (error) throw new Error("Gagal mengambil transaksi: " + error.message);
@@ -1252,7 +1243,7 @@ export const api = {
     const { location, type, qty, notes } = adjustData;
 
     // Call RPC to guarantee atomic stock updates (prevent TOCTOU race conditions)
-    const { data, error } = await supabase.rpc('adjust_material_stock', {
+    let { data, error } = await supabase.rpc('adjust_material_stock', {
       p_material_id: id,
       p_tenant_id: tenantId,
       p_type: type,
@@ -1262,13 +1253,299 @@ export const api = {
     });
 
     if (error) {
-      throw new Error("Gagal adjust stok: " + error.message);
+      // If RPC rejected non-standard location string, fallback to RESTO for column update
+      // while preserving exact location in transactions and audit log
+      if (location !== 'RESTO' && location !== 'CENTRAL') {
+        const fallbackRes = await supabase.rpc('adjust_material_stock', {
+          p_material_id: id,
+          p_tenant_id: tenantId,
+          p_type: type,
+          p_location: 'RESTO',
+          p_qty: parseFloat(qty),
+          p_notes: `[${location}] ${notes || ''}`.trim()
+        });
+
+        if (!fallbackRes.error) {
+          data = fallbackRes.data;
+          // Best-effort update the transaction record location
+          try {
+            await supabase.from('transactions')
+              .update({ location: location })
+              .eq('tenant_id', tenantId)
+              .eq('material_id', id)
+              .order('created_at', { ascending: false })
+              .limit(1);
+          } catch (locErr) {
+            console.warn('Could not update transaction location column:', locErr);
+          }
+        } else {
+          throw new Error("Gagal adjust stok: " + error.message);
+        }
+      } else {
+        throw new Error("Gagal adjust stok: " + error.message);
+      }
     }
 
     const actionLabel = type === 'TRANSFER' ? 'Transfer' : (type === 'IN' ? 'Stock In' : 'Stock Out');
     await logAudit('ADJUST_STOCK', `Menyesuaikan stok (${actionLabel}) sebesar ${qty} di ${location}. Catatan: "${notes || 'Tidak ada'}".`);
 
     return data;
+  },
+
+  // --- INTER-BRANCH TRANSFERS ---
+  createTransfer: async ({ material_id, quantity, source_branch, target_branch, notes }) => {
+    const tenantId = await requireTenantId();
+    const qty = parseFloat(quantity);
+    if (!material_id || isNaN(qty) || qty <= 0) {
+      throw new Error('Pilih bahan baku dan masukkan kuantitas transfer yang valid (lebih dari 0).');
+    }
+
+    if (source_branch === target_branch) {
+      throw new Error('Lokasi asal dan lokasi tujuan transfer tidak boleh sama.');
+    }
+
+    // 1. Fetch current material
+    const { data: mat, error: matErr } = await supabase
+      .from('materials')
+      .select('*')
+      .eq('id', material_id)
+      .eq('tenant_id', tenantId)
+      .single();
+    if (matErr || !mat) throw new Error('Bahan baku tidak ditemukan: ' + (matErr?.message || ''));
+
+    const isSourceCentral = String(source_branch).toUpperCase().includes('CENTRAL');
+    const isTargetCentral = String(target_branch).toUpperCase().includes('CENTRAL');
+
+    let newQtyCentral = parseFloat(mat.qty_central || 0);
+    let newQtyResto = parseFloat(mat.qty_resto || 0);
+
+    // Adjust quantities
+    if (isSourceCentral && !isTargetCentral) {
+      newQtyCentral = Math.max(0, newQtyCentral - qty);
+      newQtyResto = newQtyResto + qty;
+    } else if (!isSourceCentral && isTargetCentral) {
+      newQtyResto = Math.max(0, newQtyResto - qty);
+      newQtyCentral = newQtyCentral + qty;
+    }
+
+    // Update material quantities
+    const { error: updateErr } = await supabase
+      .from('materials')
+      .update({
+        qty_central: newQtyCentral,
+        qty_resto: newQtyResto,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', material_id)
+      .eq('tenant_id', tenantId);
+
+    if (updateErr) throw new Error('Gagal mengupdate stok bahan baku: ' + updateErr.message);
+
+    // Record transaction
+    const targetLoc = isTargetCentral ? 'CENTRAL' : 'RESTO';
+    const unitPrice = parseFloat(mat.price) || 0;
+    const { data: tx, error: txErr } = await supabase
+      .from('transactions')
+      .insert({
+        tenant_id: tenantId,
+        date: new Date().toISOString().split('T')[0],
+        material_id: material_id,
+        type: 'TRANSFER',
+        location: targetLoc,
+        qty: qty,
+        amount: qty * unitPrice,
+        notes: `Transfer [${source_branch} ➔ ${target_branch}]${notes ? ' - ' + notes : ''}`
+      })
+      .select()
+      .single();
+
+    if (txErr) console.warn('Peringatan: Gagal mencatat transaksi transfer ke buku besar:', txErr);
+
+    await logAudit('TRANSFER_STOCK', `Transfer ${qty} ${mat.unit} "${mat.name}" dari ${source_branch} ke ${target_branch}.`);
+    return { success: true, material: mat, tx };
+  },
+
+  getTransfers: async () => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return [];
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('*, materials(id, name, sku, unit, price, category, qty_resto, qty_central)')
+      .eq('tenant_id', tenantId)
+      .eq('type', 'TRANSFER')
+      .order('date', { ascending: false })
+      .order('id', { ascending: false });
+
+    if (error) throw new Error('Gagal memuat riwayat transfer: ' + error.message);
+    return (data || []).map(tx => {
+      const match = tx.notes ? tx.notes.match(/Transfer \[([^\]]+) ➔ ([^\]]+)\](?: - (.*))?/) : null;
+      return {
+        id: 'TRF-' + tx.id,
+        raw_id: tx.id,
+        date: tx.date,
+        created_at: tx.created_at,
+        material_id: tx.material_id,
+        materials: tx.materials,
+        item_name: tx.materials ? tx.materials.name : 'Bahan Terhapus',
+        unit: tx.materials?.unit || '',
+        price: tx.materials?.price || 0,
+        qty: parseFloat(tx.qty),
+        amount: parseFloat(tx.amount) || 0,
+        source_branch: match ? match[1] : (tx.location === 'RESTO' ? 'Central Warehouse' : 'Resto Bar'),
+        target_branch: match ? match[2] : (tx.location === 'RESTO' ? 'Resto Bar' : 'Central Warehouse'),
+        notes: match && match[3] ? match[3] : (tx.notes || ''),
+        status: 'COMPLETED'
+      };
+    });
+  },
+
+  // --- WASTE & LOSS LOGS ---
+  recordWaste: async ({ material_id, quantity, type = 'WASTE', location = 'RESTO', reason = '', notes = '', date = null }) => {
+    const tenantId = await requireTenantId();
+    const qty = parseFloat(quantity);
+    if (!material_id || isNaN(qty) || qty <= 0) {
+      throw new Error('Pilih bahan baku dan masukkan kuantitas waste yang valid (lebih dari 0).');
+    }
+
+    const { data: mat, error: matErr } = await supabase
+      .from('materials')
+      .select('*')
+      .eq('id', material_id)
+      .eq('tenant_id', tenantId)
+      .single();
+
+    if (matErr || !mat) throw new Error('Bahan baku tidak ditemukan: ' + (matErr?.message || ''));
+
+    const isCentral = String(location).toUpperCase().includes('CENTRAL');
+    const locKey = isCentral ? 'CENTRAL' : 'RESTO';
+
+    // 1. Current stock and deduction
+    const currentQty = isCentral ? parseFloat(mat.qty_central || 0) : parseFloat(mat.qty_resto || 0);
+
+    const updatePayload = {
+      updated_at: new Date().toISOString()
+    };
+    if (isCentral) {
+      updatePayload.qty_central = Math.max(0, currentQty - qty);
+    } else {
+      updatePayload.qty_resto = Math.max(0, currentQty - qty);
+    }
+
+    const { error: updateErr } = await supabase
+      .from('materials')
+      .update(updatePayload)
+      .eq('id', material_id)
+      .eq('tenant_id', tenantId);
+
+    if (updateErr) throw new Error('Gagal memotong stok bahan baku: ' + updateErr.message);
+
+    // Call deduct_stock_atomic for RPC consistency
+    await supabase.rpc('deduct_stock_atomic', {
+      p_material_id: material_id,
+      p_deduct_qty: qty
+    }).catch(err => {
+      console.warn('deduct_stock_atomic warn:', err);
+    });
+
+    // 2. Compute cost loss
+    const unitPrice = parseFloat(mat.price) || 0;
+    const costLoss = qty * unitPrice;
+
+    // 3. Insert transaction into ledger with valid enum type
+    const logDate = date || new Date().toISOString().split('T')[0];
+    const fullNotes = reason ? `${reason}${notes ? ` - ${notes}` : ''}` : (notes || 'Waste/Kerugian');
+
+    const validTxTypes = ['WASTE', 'BREAKAGE', 'EXPIRED', 'COMP'];
+    const safeTxType = validTxTypes.includes(type) ? type : 'WASTE';
+
+    const { data: tx, error: txErr } = await supabase
+      .from('transactions')
+      .insert({
+        tenant_id: tenantId,
+        date: logDate,
+        material_id: material_id,
+        type: safeTxType,
+        location: locKey,
+        qty: -qty, // negative as per Barventis ledger standard
+        amount: costLoss,
+        notes: fullNotes
+      })
+      .select()
+      .single();
+
+    if (txErr) console.warn('Peringatan: Gagal mencatat transaksi waste ke buku besar:', txErr);
+
+    // 4. Optionally also record into waste_logs table if schema exists
+    try {
+      await supabase.from('waste_logs').insert({
+        tenant_id: tenantId,
+        material_id: material_id,
+        quantity: qty,
+        cost_loss: costLoss,
+        source_type: safeTxType === 'BREAKAGE' ? 'MANUAL_BAR' : (safeTxType === 'EXPIRED' ? 'EXPIRED' : (type === 'SPOILAGE' ? 'SPOILAGE' : 'MANUAL_BAR')),
+        reason: fullNotes
+      });
+    } catch {
+      // Optional schema table, ignore if not configured
+    }
+
+    await logAudit('RECORD_WASTE', `Mencatat waste ${qty} ${mat.unit || ''} "${mat.name}" (${safeTxType}) di ${locKey}. Kerugian: Rp ${costLoss.toLocaleString('id-ID')}.`);
+    return { success: true, material: mat, tx, costLoss };
+  },
+
+  getWasteLogs: async ({ period = null, type = null } = {}) => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return [];
+
+    const validWasteTypes = ['WASTE', 'BREAKAGE', 'EXPIRED', 'COMP'];
+
+    let query = supabase
+      .from('transactions')
+      .select('*, materials(id, name, sku, unit, price, category, full_pack, qty_resto, qty_central)')
+      .eq('tenant_id', tenantId)
+      .in('type', validWasteTypes)
+      .order('date', { ascending: false })
+      .order('id', { ascending: false });
+
+    if (period) {
+      const [year, month] = period.split('-');
+      const lastDay = new Date(year, month, 0).getDate();
+      query = query.gte('date', `${period}-01`).lte('date', `${period}-${lastDay}`);
+    }
+
+    if (type && type !== 'ALL' && validWasteTypes.includes(type)) {
+      query = query.eq('type', type);
+    }
+
+    const { data, error } = await query;
+    if (error) throw new Error('Gagal mengambil riwayat waste: ' + error.message);
+
+    return (data || []).map(tx => {
+      const mat = tx.materials;
+      const unitPrice = parseFloat(mat?.price || 0);
+      const absQty = Math.abs(parseFloat(tx.qty));
+      const amount = parseFloat(tx.amount) || (absQty * unitPrice);
+
+      return {
+        id: 'WST-' + tx.id,
+        raw_id: tx.id,
+        date: tx.date,
+        created_at: tx.created_at,
+        material_id: tx.material_id,
+        materials: mat,
+        item_name: mat ? mat.name : 'Bahan Terhapus',
+        sku: mat?.sku || '-',
+        category: mat?.category || 'General',
+        unit: mat?.unit || '',
+        price: unitPrice,
+        type: tx.type,
+        location: tx.location || 'RESTO',
+        quantity: absQty,
+        cost_loss: amount,
+        notes: tx.notes || '-',
+        reason: tx.notes || '-'
+      };
+    });
   },
 
   // --- RECIPES ---
@@ -1709,7 +1986,7 @@ export const api = {
     }
 
     const { data, error, count } = await query
-      
+      .order('created_at', { ascending: false })
       .range(from, to);
 
     if (error) throw new Error("Gagal memuat invoices: " + error.message);
@@ -1725,6 +2002,9 @@ export const api = {
         location: inv.location,
         notes: inv.notes,
         received_date: inv.received_date,
+        receipt_photo_url: inv.receipt_photo_url,
+        receipt_signature_url: inv.receipt_signature_url,
+        receipt_gps: inv.receipt_gps,
         items: (inv.invoice_items || []).map(item => ({
           material_id: item.material_id,
           item_name: item.materials ? item.materials.name : 'Bahan Terhapus',
@@ -1868,6 +2148,13 @@ export const api = {
       await logAudit('RECEIVE_PO', `Menerima barang untuk Purchase Order (PO): ${updatedInvoice.invoice_no} dari Supplier "${updatedInvoice.supplier}" senilai Rp${formattedTotal}. Stok gudang ${updatedInvoice.location || 'CENTRAL'} bertambah.`);
     } catch (e) {
       console.warn("Failed to log audit for receive PO:", e);
+    }
+
+    // Auto-sync market_list_items with the newly received invoice prices
+    try {
+      await api.syncMarketListPricesFromInvoice({ invoiceId: id });
+    } catch (syncErr) {
+      console.warn("Auto-sync market list items warning:", syncErr);
     }
 
     return updatedInvoice;
@@ -3847,10 +4134,9 @@ export const api = {
       supabase.from('stock_opnames').select('*, stock_opname_items(*, materials(*))').eq('tenant_id', tenantId).eq('period_month', month).eq('period_year', year).eq('location', 'CENTRAL').maybeSingle(),
       // 6. Daily Inventories for the month
       // BUG-FIX 2026-07: added full_pack + id — computeDailyUsage/buildDailyInventorySheet
-      // now need these to compute a correct pack-size-aware valuation (was missing before,
-      // which is part of why usage values were wrong even before the multiplication bug
-      // itself is considered).
-      supabase.from('daily_inventories').select('*, daily_inventory_items(*, materials:material_id(id, name, unit, category, price, full_pack))').eq('tenant_id', tenantId).gte('date', startDate).lte('date', endDate).order('date'),
+      // now need these to compute a correct pack-size-aware valuation. We map materials in JS
+      // to avoid PostgREST relationship errors when material_id doesn't have an explicit FK constraint.
+      supabase.from('daily_inventories').select('*, daily_inventory_items(*)').eq('tenant_id', tenantId).gte('date', startDate).lte('date', endDate).order('date'),
       // 7. Transactions (for pemakaian/cost control)
       supabase.from('transactions').select('*, materials(name, category)').eq('tenant_id', tenantId).gte('date', startDate).lte('date', endDate).order('date'),
       // 8. GAP-FIX 2026-07: unit_conversions was in the schema but never fetched/used
@@ -3867,6 +4153,15 @@ export const api = {
       supabase.from('stock_opnames').select('*, stock_opname_items(*, materials(*))').eq('tenant_id', tenantId).eq('period_month', prevMonth).eq('period_year', prevYear).eq('location', 'CENTRAL').maybeSingle()
     ]);
 
+    const materialsMap = new Map((materialsRes.data || []).map(m => [m.id, m]));
+    const mappedDailyInventories = (dailyInvRes.data || []).map(inv => ({
+      ...inv,
+      daily_inventory_items: (inv.daily_inventory_items || []).map(item => ({
+        ...item,
+        materials: item.materials || materialsMap.get(item.material_id) || null
+      }))
+    }));
+
     return {
       period: { month, year, startDate, endDate, lastDay },
       materials: materialsRes.data || [],
@@ -3876,7 +4171,7 @@ export const api = {
       opnameCentral: opnameCentralRes.data,
       prevOpnameResto: prevOpnameRestoRes.data,
       prevOpnameCentral: prevOpnameCentralRes.data,
-      dailyInventories: dailyInvRes.data || [],
+      dailyInventories: mappedDailyInventories,
       transactions: transactionsRes.data || [],
       unitConversions: unitConversionsRes.data || []
     };
@@ -4124,7 +4419,7 @@ export const api = {
 
     const { data: tx, error: fetchErr } = await supabase
       .from('transactions')
-      .select('id, type, qty, material_id, amount, notes, date')
+      .select('id, type, qty, material_id, amount, notes, date, location')
       .eq('id', rawId)
       .eq('tenant_id', tenantId)
       .maybeSingle();
@@ -4139,6 +4434,27 @@ export const api = {
         p_deduct_qty: parseFloat(tx.qty) // Positive = deduct, Negative = add back
       });
       if (rpcErr) throw new Error('Gagal membalikkan stok: ' + rpcErr.message);
+
+      // Restore specific location stock in materials row
+      const isWasteType = ['WASTE', 'BREAKAGE', 'EXPIRED', 'COMP'].includes(tx.type);
+      if (isWasteType) {
+        const isCentral = tx.location === 'CENTRAL';
+        const { data: curMat } = await supabase.from('materials').select('qty_resto, qty_central').eq('id', tx.material_id).maybeSingle();
+        if (curMat) {
+          const restoreQty = Math.abs(parseFloat(tx.qty));
+          if (isCentral) {
+            await supabase.from('materials').update({
+              qty_central: parseFloat(curMat.qty_central || 0) + restoreQty,
+              updated_at: new Date().toISOString()
+            }).eq('id', tx.material_id);
+          } else {
+            await supabase.from('materials').update({
+              qty_resto: parseFloat(curMat.qty_resto || 0) + restoreQty,
+              updated_at: new Date().toISOString()
+            }).eq('id', tx.material_id);
+          }
+        }
+      }
     }
 
     // Try to also delete from purchase_entries if applicable
@@ -4258,9 +4574,43 @@ export const api = {
   getMarketLists: async () => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return [];
-    const { data, error } = await supabase.from('market_lists').select('*, market_list_items(*, materials(name, price, unit))').eq('tenant_id', tenantId).order('created_at', { ascending: false });
+    const { data, error } = await supabase
+      .from('market_lists')
+      .select('*, market_list_items(*)')
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false });
     if (error) throw new Error("Gagal mengambil market list: " + error.message);
-    return data;
+
+    if (data && data.length > 0) {
+      const allMaterialIds = new Set();
+      data.forEach(ml => {
+        (ml.market_list_items || []).forEach(item => {
+          if (item.material_id) allMaterialIds.add(item.material_id);
+        });
+      });
+
+      if (allMaterialIds.size > 0) {
+        const { data: mats, error: matsError } = await supabase
+          .from('materials')
+          .select('id, name, sku, price, unit, category')
+          .in('id', Array.from(allMaterialIds));
+
+        if (!matsError && mats) {
+          const matMap = mats.reduce((acc, m) => {
+            acc[m.id] = m;
+            return acc;
+          }, {});
+
+          data.forEach(ml => {
+            (ml.market_list_items || []).forEach(item => {
+              item.materials = matMap[item.material_id] || null;
+            });
+          });
+        }
+      }
+    }
+
+    return data || [];
   },
 
   createMarketList: async (payload) => {
@@ -4284,16 +4634,350 @@ export const api = {
   },
 
   upsertMarketListItems: async (marketListId, items) => {
-    const tenantId = await requireTenantId();
-    await supabase.from('market_list_items').delete().eq('market_list_id', marketListId).eq('tenant_id', tenantId);
+    await requireTenantId();
+    await supabase.from('market_list_items').delete().eq('market_list_id', marketListId);
     if (items && items.length > 0) {
       const payload = items.map(item => ({
-        ...item,
         market_list_id: marketListId,
-        tenant_id: tenantId
+        material_id: item.material_id,
+        unit: item.unit || '',
+        current_stock: Number(item.current_stock) || 0,
+        min_stock: Number(item.min_stock) || 0,
+        par_stock: Number(item.par_stock) || 0,
+        quantity: Number(item.quantity) || 0,
+        request_qty: Number(item.request_qty ?? item.quantity) || 0,
+        approved_qty: Number(item.approved_qty) || 0,
+        estimated_price: Number(item.price ?? item.estimated_price) || 0,
+        is_urgent: Boolean(item.is_urgent),
+        remarks: typeof item.remarks === 'string' ? item.remarks : JSON.stringify(item.remarks || {})
       }));
       const { error } = await supabase.from('market_list_items').insert(payload);
       if (error) throw new Error("Gagal update item market list: " + error.message);
     }
+  },
+
+  getMaterialSupplierHistory: async () => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return [];
+    const { data, error } = await supabase
+      .from('purchase_entries')
+      .select('material_id, supplier_id, unit_price, date, suppliers(id, name)')
+      .eq('tenant_id', tenantId)
+      .not('supplier_id', 'is', null)
+      .order('date', { ascending: false });
+    if (error) {
+      console.warn("Gagal mengambil riwayat harga material supplier:", error);
+      return [];
+    }
+    return data || [];
+  },
+
+  // --- MARKET LIST BULK PRICE SYNC WITH INVOICES ---
+  getLatestInvoiceMaterialPrices: async ({ materialIds = null, onlyLatestSingleInvoice = false } = {}) => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return { pricesMap: {}, latestInvoice: null, allRecentInvoices: [] };
+
+    // Fetch successful purchasing invoices (status RECEIVED or GOODS_RECEIVED)
+    let query = supabase
+      .from('invoices')
+      .select('id, invoice_no, supplier, date, received_date, total, status, created_at, invoice_items(id, material_id, qty, unit_price, materials(id, name, unit, sku))')
+      .eq('tenant_id', tenantId)
+      .in('status', ['RECEIVED', 'GOODS_RECEIVED'])
+      .order('received_date', { ascending: false, nullsFirst: false })
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (onlyLatestSingleInvoice) {
+      query = query.limit(1);
+    } else {
+      query = query.limit(25);
+    }
+
+    const { data: invoices, error } = await query;
+    if (error) {
+      console.warn("Gagal mengambil invoice pembelian sukses:", error);
+      return { pricesMap: {}, latestInvoice: null, allRecentInvoices: [] };
+    }
+
+    if (!invoices || invoices.length === 0) {
+      return { pricesMap: {}, latestInvoice: null, allRecentInvoices: [] };
+    }
+
+    const latestInvoice = invoices[0];
+    const pricesMap = {};
+
+    for (const inv of invoices) {
+      const invItems = inv.invoice_items || [];
+      for (const item of invItems) {
+        if (!item.material_id) continue;
+        if (materialIds && !materialIds.includes(item.material_id)) continue;
+
+        // Earliest match is the most recent because invoices are ordered descending
+        if (!pricesMap[item.material_id]) {
+          pricesMap[item.material_id] = {
+            material_id: item.material_id,
+            material_name: item.materials?.name || 'Bahan',
+            material_sku: item.materials?.sku || '',
+            unit: item.materials?.unit || '',
+            unit_price: Number(item.unit_price) || 0,
+            invoice_id: inv.id,
+            invoice_no: inv.invoice_no,
+            supplier_name: inv.supplier || 'Supplier',
+            invoice_date: inv.date,
+            received_date: inv.received_date,
+            is_from_latest_single_invoice: inv.id === latestInvoice.id
+          };
+        }
+      }
+    }
+
+    return {
+      pricesMap,
+      latestInvoice: {
+        id: latestInvoice.id,
+        invoice_no: latestInvoice.invoice_no,
+        supplier: latestInvoice.supplier,
+        date: latestInvoice.date,
+        received_date: latestInvoice.received_date,
+        total: Number(latestInvoice.total) || 0,
+        itemsCount: (latestInvoice.invoice_items || []).length
+      },
+      allRecentInvoices: invoices.map(i => ({
+        id: i.id,
+        invoice_no: i.invoice_no,
+        supplier: i.supplier,
+        date: i.date,
+        received_date: i.received_date,
+        total: Number(i.total) || 0
+      }))
+    };
+  },
+
+  syncMarketListPricesFromInvoice: async ({ marketListId = null, invoiceId = null } = {}) => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return { updatedCount: 0, changes: [] };
+
+    let targetPricesMap = {};
+    let invoiceInfo = null;
+
+    if (invoiceId) {
+      const { data: inv, error: invErr } = await supabase
+        .from('invoices')
+        .select('id, invoice_no, supplier, date, received_date, total, status, invoice_items(material_id, unit_price, materials(name))')
+        .eq('id', invoiceId)
+        .eq('tenant_id', tenantId)
+        .single();
+
+      if (!invErr && inv) {
+        invoiceInfo = {
+          id: inv.id,
+          invoice_no: inv.invoice_no,
+          supplier: inv.supplier,
+          date: inv.date,
+          received_date: inv.received_date,
+          total: Number(inv.total) || 0
+        };
+        (inv.invoice_items || []).forEach(it => {
+          if (it.material_id) {
+            targetPricesMap[it.material_id] = {
+              material_id: it.material_id,
+              unit_price: Number(it.unit_price) || 0,
+              supplier_name: inv.supplier,
+              invoice_no: inv.invoice_no,
+              material_name: it.materials?.name || ''
+            };
+          }
+        });
+      }
+    } else {
+      const res = await api.getLatestInvoiceMaterialPrices();
+      targetPricesMap = res.pricesMap;
+      invoiceInfo = res.latestInvoice;
+    }
+
+    if (Object.keys(targetPricesMap).length === 0) {
+      return { updatedCount: 0, changes: [], invoiceInfo };
+    }
+
+    // Fetch market_list_items to sync
+    let itemsQuery = supabase
+      .from('market_list_items')
+      .select('*, market_lists!inner(id, name, tenant_id)')
+      .eq('market_lists.tenant_id', tenantId);
+
+    if (marketListId) {
+      itemsQuery = itemsQuery.eq('market_list_id', marketListId);
+    }
+
+    const { data: mlItems, error: mlItemsErr } = await itemsQuery;
+    if (mlItemsErr) throw new Error("Gagal memuat item market list: " + mlItemsErr.message);
+
+    const changes = [];
+    const updatePromises = [];
+
+    for (const item of (mlItems || [])) {
+      const matched = targetPricesMap[item.material_id];
+      if (!matched) continue;
+
+      const currentPrice = Number(item.estimated_price) || 0;
+      const newPrice = Number(matched.unit_price) || 0;
+
+      if (Math.abs(currentPrice - newPrice) > 0.01) {
+        let remarksObj;
+        try {
+          remarksObj = typeof item.remarks === 'string' ? JSON.parse(item.remarks) : (item.remarks || {});
+        } catch {
+          remarksObj = { notes: String(item.remarks || '') };
+        }
+
+        remarksObj.supplier_price = newPrice;
+        if (matched.supplier_name && !remarksObj.supplier_name) {
+          remarksObj.supplier_name = matched.supplier_name;
+        }
+
+        changes.push({
+          item_id: item.id,
+          market_list_id: item.market_list_id,
+          market_list_name: item.market_lists?.name || 'Market List',
+          material_id: item.material_id,
+          material_name: matched.material_name,
+          old_price: currentPrice,
+          new_price: newPrice,
+          difference: newPrice - currentPrice,
+          invoice_no: matched.invoice_no,
+          supplier_name: matched.supplier_name
+        });
+
+        updatePromises.push(
+          supabase
+            .from('market_list_items')
+            .update({
+              estimated_price: newPrice,
+              remarks: JSON.stringify(remarksObj)
+            })
+            .eq('id', item.id)
+        );
+      }
+    }
+
+    if (updatePromises.length > 0) {
+      await Promise.all(updatePromises);
+      try {
+        await logAudit('SYNC_MARKET_LIST_PRICES', `Menyinkronkan ${changes.length} harga bahan pada market_list_items dari invoice pembelian (${invoiceInfo?.invoice_no || 'PO Sukses'}).`);
+      } catch (auditErr) {
+        console.warn("Audit log warning for price sync:", auditErr);
+      }
+    }
+
+    return {
+      updatedCount: changes.length,
+      changes,
+      invoiceInfo
+    };
+  },
+
+  // --- TRIMMING & PRODUKSI 2-TAHAP ---
+  getTrimmingBatches: async () => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return [];
+    const { data, error } = await supabase
+      .from('production_trimming_batches')
+      .select('*, materials(id, name, unit, sku, price, category)')
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.warn("Error fetching production_trimming_batches:", error);
+      return [];
+    }
+    return data || [];
+  },
+
+  createTrimmingBatchStep1: async ({ material_id, gross_weight, gross_photo_url, gross_latitude, gross_longitude, batch_number }) => {
+    const tenantId = await requireTenantId();
+    let branchId = activeBranchId || (typeof window !== 'undefined' && window.__activeBranchId);
+    if (!branchId) {
+      const { data: branches } = await supabase.from('branches').select('id').eq('tenant_id', tenantId).limit(1);
+      branchId = branches?.[0]?.id || null;
+    }
+    const finalBatchNumber = batch_number || `TRM-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    const timestamp = new Date().toISOString();
+    const photoUrl = gross_photo_url || `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="100%" height="100%" fill="%231e293b"/><text x="50%" y="45%" fill="%23e2e8f0" font-family="sans-serif" font-weight="bold" font-size="14" text-anchor="middle">Tahap 1 Verification</text><text x="50%" y="65%" fill="%2394a3b8" font-family="monospace" font-size="12" text-anchor="middle">${finalBatchNumber}</text></svg>`;
+
+    const payload = {
+      tenant_id: tenantId,
+      branch_id: branchId,
+      material_id,
+      batch_number: finalBatchNumber,
+      gross_weight: parseFloat(gross_weight),
+      gross_photo_url: photoUrl,
+      gross_timestamp: timestamp,
+      gross_latitude: gross_latitude || null,
+      gross_longitude: gross_longitude || null,
+      status: 'STEP1_GROSS_COMPLETED'
+    };
+
+    const { data, error } = await supabase
+      .from('production_trimming_batches')
+      .insert(payload)
+      .select('*, materials(id, name, unit, sku)')
+      .single();
+
+    if (error) throw new Error("Gagal mendaftarkan Tahap 1: " + error.message);
+
+    // Atomic stock deduction for raw material
+    try {
+      await supabase.rpc('deduct_stock_atomic', {
+        p_material_id: material_id,
+        p_deduct_qty: parseFloat(gross_weight)
+      });
+    } catch (stockErr) {
+      console.warn("Trimming step 1 stock deduction warning:", stockErr);
+    }
+
+    await logAudit('TRIMMING_STEP1', `Mendaftarkan batch trimming ${finalBatchNumber} (${gross_weight}g)`);
+    return data;
+  },
+
+  completeTrimmingBatchStep2: async (batchId, { clean_weight, waste_weight, clean_photo_url, waste_photo_url, target_material_id, portion_pack_output, yield_status }) => {
+    const tenantId = await requireTenantId();
+    const timestamp = new Date().toISOString();
+    const cleanPhoto = clean_photo_url || `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="100%" height="100%" fill="%23064e3b"/><text x="50%" y="50%" fill="%236ee7b7" font-family="sans-serif" font-weight="bold" font-size="14" text-anchor="middle">Hasil Bersih Trimming</text></svg>`;
+    const wastePhoto = waste_photo_url || `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="100%" height="100%" fill="%237f1d1d"/><text x="50%" y="50%" fill="%23fca5a5" font-family="sans-serif" font-weight="bold" font-size="14" text-anchor="middle">Limbah Kulit Trimming</text></svg>`;
+
+    const payload = {
+      clean_weight: parseFloat(clean_weight),
+      waste_weight: parseFloat(waste_weight || 0),
+      clean_photo_url: cleanPhoto,
+      waste_photo_url: wastePhoto,
+      clean_timestamp: timestamp,
+      portion_pack_output: parseInt(portion_pack_output || 0, 10),
+      yield_status: yield_status === 'GOOD' ? 'GOOD' : 'BAD',
+      status: 'STEP2_COMPLETED'
+    };
+
+    const { data, error } = await supabase
+      .from('production_trimming_batches')
+      .update(payload)
+      .eq('id', batchId)
+      .eq('tenant_id', tenantId)
+      .select('*, materials(id, name, unit, sku)')
+      .single();
+
+    if (error) throw new Error("Gagal menyelesaikan Tahap 2: " + error.message);
+
+    // If target material (pack jadi) is provided, increment stock
+    if (target_material_id && parseInt(portion_pack_output || 0, 10) > 0) {
+      try {
+        await supabase.rpc('deduct_stock_atomic', {
+          p_material_id: target_material_id,
+          p_deduct_qty: -parseInt(portion_pack_output, 10)
+        });
+      } catch (packStockErr) {
+        console.warn("Target pack stock addition warning:", packStockErr);
+      }
+    }
+
+    await logAudit('TRIMMING_STEP2', `Menyelesaikan Tahap 2 trimming batch (Bersih: ${clean_weight}g, Limbah: ${waste_weight}g, Pack: ${portion_pack_output || 0})`);
+    return data;
   }
 };

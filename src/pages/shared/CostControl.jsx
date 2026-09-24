@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   FileSpreadsheet, FileText, CheckCircle, AlertTriangle,
     Info, Calendar, Loader, ChevronDown
@@ -6,14 +6,11 @@ import {
 import { api } from '../../services/api';
 import { formatIDR } from '../../services/costUtils';
 
-import { useData } from '../../contexts/DataContext';
-
 import { exportWithAudit } from '../../services/export/exportAudit';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function CostControl() {
   const { profile } = useAuth();
-  const { recipes } = useData();
   const [period, setPeriod] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -24,15 +21,6 @@ export default function CostControl() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-
-  // Cross-reference menu names to categories
-  const menuCategoryMap = useMemo(() => {
-    const map = {};
-    (recipes || []).forEach(r => {
-      if (r.menu_name) map[r.menu_name.toLowerCase()] = r.category?.toUpperCase() || '';
-    });
-    return map;
-  }, [recipes]);
 
   useEffect(() => {
     let active = true;

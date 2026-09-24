@@ -10,6 +10,18 @@ import AuthScreen from './pages/auth/AuthScreen';
 
 const AppLayout = React.lazy(() => import('./components/AppLayout'));
 const Dashboard = React.lazy(() => import('./pages/shared/Dashboard'));
+
+// === Hub Pages (Konsolidasi 7+1 Menu SO BARISTA 2026) ===
+const BeverageSalesHub = React.lazy(() => import('./pages/shared/BeverageSalesHub'));
+const DailyInventoryHub = React.lazy(() => import('./pages/shared/DailyInventoryHub'));
+const ProcurementHub = React.lazy(() => import('./pages/shared/ProcurementHub'));
+const PricingCogsHub = React.lazy(() => import('./pages/shared/PricingCogsHub'));
+const OpnameAssetsHub = React.lazy(() => import('./pages/shared/OpnameAssetsHub'));
+const ProductionHub = React.lazy(() => import('./pages/shared/ProductionHub'));
+const CostControlReportHub = React.lazy(() => import('./pages/shared/CostControlReportHub'));
+const SystemAdminHub = React.lazy(() => import('./pages/shared/SystemAdminHub'));
+
+// === Legacy pages (masih dipakai langsung oleh Hub atau redirect) ===
 const StockLedger = React.lazy(() => import('./pages/shared/StockLedger'));
 const PosUpload = React.lazy(() => import('./pages/shared/PosUpload'));
 const PosRawData = React.lazy(() => import('./pages/shared/PosRawData'));
@@ -90,6 +102,7 @@ const AuthRoute = ({ children }) => {
 };
 
 const ALL_TENANT = ['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Service', 'Purchasing', 'Staff'];
+const ADMIN_ROLES = ['Admin / Owner', 'Owner'];
 
 export default function App() {
   const { activeUser } = useAuth();
@@ -125,7 +138,7 @@ export default function App() {
           <Route path="reset-approvals" element={<RouteErrorBoundary><SuperAdminPanel tab="reset-approvals" activeUser={activeUser} /></RouteErrorBoundary>} />
         </Route>
 
-        {/* TENANT DASHBOARD */}
+        {/* TENANT DASHBOARD — Konsolidasi 7+1 Menu */}
         <Route path="/dashboard" element={
           <ProtectedRoute allowedRoles={ALL_TENANT}>
             <AppLayout />
@@ -133,132 +146,85 @@ export default function App() {
         }>
           <Route index element={<RouteErrorBoundary><Dashboard /></RouteErrorBoundary>} />
 
-          {/* Roles based on features */}
-          <Route path="stock" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Purchasing', 'Staff']}>
-              <RouteErrorBoundary><StockLedger /></RouteErrorBoundary>
+          {/* ====== 7 MODUL OPERASIONAL INTI ====== */}
+
+          {/* [1] Penjualan Beverage (POS) */}
+          <Route path="penjualan" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Service', 'Central', 'Bar', 'Staff']}>
+              <RouteErrorBoundary><BeverageSalesHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
+          {/* [2] Daily Inventory & Waste */}
           <Route path="daily-inventory" element={
             <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Service', 'Purchasing', 'Staff']}>
-              <RouteErrorBoundary><DailyInventory /></RouteErrorBoundary>
+              <RouteErrorBoundary><DailyInventoryHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
-          <Route path="pos" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Service', 'Central', 'Staff']}>
-              <RouteErrorBoundary><PosUpload /></RouteErrorBoundary>
+          {/* [3] Marketlist & Pembelian */}
+          <Route path="procurement" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central', 'Purchasing']}>
+              <RouteErrorBoundary><ProcurementHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
-          <Route path="pos-raw" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Service', 'Central', 'Staff']}>
-              <RouteErrorBoundary><PosRawData /></RouteErrorBoundary>
-            </ProtectedRoute>
-          } />
-
-          <Route path="recipes" element={
+          {/* [4] Menu Pricing & COGS */}
+          <Route path="pricing-cogs" element={
             <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Staff']}>
-              <RouteErrorBoundary><Recipes /></RouteErrorBoundary>
+              <RouteErrorBoundary><PricingCogsHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
-          <Route path="pricing" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central']}>
-              <RouteErrorBoundary><MenuPricing /></RouteErrorBoundary>
-            </ProtectedRoute>
-          } />
-
-          <Route path="invoicing" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central', 'Purchasing']}>
-              <RouteErrorBoundary><Invoicing /></RouteErrorBoundary>
-            </ProtectedRoute>
-          } />
-
-          <Route path="purchasing" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central', 'Purchasing']}>
-              <RouteErrorBoundary><Purchasing /></RouteErrorBoundary>
-            </ProtectedRoute>
-          } />
-
-          <Route path="marketlist" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central', 'Purchasing']}>
-              <RouteErrorBoundary><Marketlist /></RouteErrorBoundary>
-            </ProtectedRoute>
-          } />
-
-          <Route path="opname" element={
+          {/* [5] Stock Opname & Aset */}
+          <Route path="opname-assets" element={
             <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Staff']}>
-              <RouteErrorBoundary><StockOpname /></RouteErrorBoundary>
+              <RouteErrorBoundary><OpnameAssetsHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
-          <Route path="physical-check" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central', 'Purchasing']}>
-              <RouteErrorBoundary><PhysicalCheck /></RouteErrorBoundary>
-            </ProtectedRoute>
-          } />
-
-          <Route path="audit" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central']}>
-              <RouteErrorBoundary><AuditLogs /></RouteErrorBoundary>
-            </ProtectedRoute>
-          } />
-
-          <Route path="assets" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central']}>
-              <RouteErrorBoundary><AssetManagement /></RouteErrorBoundary>
-            </ProtectedRoute>
-          } />
-
-          <Route path="cost-control" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central']}>
-              <RouteErrorBoundary><CostControl /></RouteErrorBoundary>
-            </ProtectedRoute>
-          } />
-
-          <Route path="trimming" element={
+          {/* [6] Proses Produksi Bahan */}
+          <Route path="produksi" element={
             <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Kitchen', 'Central', 'Staff']}>
-              <RouteErrorBoundary><TrimmingProduction /></RouteErrorBoundary>
+              <RouteErrorBoundary><ProductionHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
-          <Route path="backup" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central']}>
-              <RouteErrorBoundary><BackupCenter /></RouteErrorBoundary>
+          {/* [7] Cost Control & Laporan */}
+          <Route path="cost-report" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central', 'Bar', 'Staff']}>
+              <RouteErrorBoundary><CostControlReportHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
-          <Route path="transfer" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen']}>
-              <RouteErrorBoundary><InterBranchTransfer /></RouteErrorBoundary>
+          {/* [*] Pengaturan & Sistem (Admin/Owner) */}
+          <Route path="sistem" element={
+            <ProtectedRoute allowedRoles={ADMIN_ROLES}>
+              <RouteErrorBoundary><SystemAdminHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
-          <Route path="waste" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen']}>
-              <RouteErrorBoundary><WasteLogs /></RouteErrorBoundary>
-            </ProtectedRoute>
-          } />
-
-          <Route path="maintenance" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central', 'Bar', 'Kitchen', 'Staff']}>
-              <RouteErrorBoundary><Maintenance /></RouteErrorBoundary>
-            </ProtectedRoute>
-          } />
-
-          <Route path="settings" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner']}>
-              <RouteErrorBoundary><TenantAdminPanel /></RouteErrorBoundary>
-            </ProtectedRoute>
-          } />
-
-          <Route path="barista-report" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Bar', 'Central', 'Staff']}>
-              <RouteErrorBoundary><BaristaReport /></RouteErrorBoundary>
-            </ProtectedRoute>
-          } />
+          {/* ====== BACKWARD COMPATIBILITY REDIRECTS ====== */}
+          <Route path="pos" element={<Navigate to="/dashboard/penjualan?tab=upload" replace />} />
+          <Route path="pos-raw" element={<Navigate to="/dashboard/penjualan?tab=raw" replace />} />
+          <Route path="waste" element={<Navigate to="/dashboard/daily-inventory?tab=waste" replace />} />
+          <Route path="marketlist" element={<Navigate to="/dashboard/procurement?tab=marketlist" replace />} />
+          <Route path="purchasing" element={<Navigate to="/dashboard/procurement?tab=pembelian" replace />} />
+          <Route path="invoicing" element={<Navigate to="/dashboard/procurement?tab=invoicing" replace />} />
+          <Route path="recipes" element={<Navigate to="/dashboard/pricing-cogs?tab=cogs-beverage" replace />} />
+          <Route path="pricing" element={<Navigate to="/dashboard/pricing-cogs?tab=pricing" replace />} />
+          <Route path="opname" element={<Navigate to="/dashboard/opname-assets?tab=resto" replace />} />
+          <Route path="assets" element={<Navigate to="/dashboard/opname-assets?tab=glass-tool" replace />} />
+          <Route path="trimming" element={<Navigate to="/dashboard/produksi?tab=trimming" replace />} />
+          <Route path="cost-control" element={<Navigate to="/dashboard/cost-report?tab=cost-control" replace />} />
+          <Route path="barista-report" element={<Navigate to="/dashboard/cost-report?tab=laporan" replace />} />
+          <Route path="physical-check" element={<Navigate to="/dashboard/opname-assets?tab=resto" replace />} />
+          <Route path="stock" element={<Navigate to="/dashboard/sistem?tab=stock-ledger" replace />} />
+          <Route path="transfer" element={<Navigate to="/dashboard/sistem?tab=transfer" replace />} />
+          <Route path="settings" element={<Navigate to="/dashboard/sistem?tab=config" replace />} />
+          <Route path="audit" element={<Navigate to="/dashboard/sistem?tab=audit-backup" replace />} />
+          <Route path="backup" element={<Navigate to="/dashboard/sistem?tab=audit-backup" replace />} />
+          <Route path="maintenance" element={<Navigate to="/dashboard/sistem?tab=audit-backup" replace />} />
         </Route>
 
         <Route path="/dashboard/pos-terminal" element={

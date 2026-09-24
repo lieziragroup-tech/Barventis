@@ -1,5 +1,5 @@
 import { api } from '../../services/api';
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   Package, ArrowRight, AlertTriangle,
   TrendingDown, DollarSign, CheckCircle, Calendar
@@ -12,7 +12,7 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, R
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { stock, unitConversionMap, recipes } = useData();
+  const { stock, unitConversionMap } = useData();
   const [transactions, setTransactions] = useState([]);
 
   const [period, setPeriod] = useState(() => {
@@ -35,14 +35,6 @@ export default function Dashboard() {
   useEffect(() => {
     api.getTransactions(period).then(setTransactions).catch(console.error);
   }, [period]);
-
-  const menuCategoryMap = useMemo(() => {
-    const map = {};
-    (recipes || []).forEach(r => {
-      if (r.menu_name) map[r.menu_name.toLowerCase()] = r.category?.toUpperCase() || '';
-    });
-    return map;
-  }, [recipes]);
 
   const stockValuation = useMemo(() => stock.reduce((acc, item) => acc + calculateIngredientCost(item, (item.qty_resto || 0) + (item.qty_central || 0), item.unit, unitConversionMap), 0), [stock, unitConversionMap]);
   const lowStockItems = useMemo(() => stock.filter(item => ((item.qty_resto || 0) + (item.qty_central || 0)) < (item.min_stock || 15)), [stock]);

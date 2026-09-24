@@ -126,8 +126,8 @@ export default function AssetManagement() {
     <div className="fade-in">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ minWidth: 0 }}>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Asset Registry & Kondisi</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Kelola inventaris aset dan jadwal maintenance rutin.</p>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>SO Glass & Tool (Peralatan Bar)</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Daftar inventaris & cek fisik kondisi peralatan operasional bar.</p>
         </div>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <button className="btn btn-secondary" onClick={() => setShowBulkImport(true)}>
@@ -169,8 +169,8 @@ export default function AssetManagement() {
                   <td style={{ fontWeight: 600 }}>{a.name}</td>
                   <td>
                     <span className="badge" style={{
-                      backgroundColor: a.brand === 'Baik' ? 'rgba(16, 185, 129, 0.1)' : a.brand === 'Rusak Ringan' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                      color: a.brand === 'Baik' ? 'rgb(16, 185, 129)' : a.brand === 'Rusak Ringan' ? 'rgb(245, 158, 11)' : 'rgb(239, 68, 68)'
+                      backgroundColor: a.brand === 'Baik' ? 'rgba(16, 185, 129, 0.1)' : a.brand === 'Rusak Ringan' ? 'rgba(245, 158, 11, 0.1)' : a.brand === 'Hilang' ? 'rgba(107, 114, 128, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                      color: a.brand === 'Baik' ? 'rgb(16, 185, 129)' : a.brand === 'Rusak Ringan' ? 'rgb(245, 158, 11)' : a.brand === 'Hilang' ? 'rgb(107, 114, 128)' : 'rgb(239, 68, 68)'
                     }}>
                       {a.brand || 'Baik'}
                     </span>
@@ -201,6 +201,7 @@ export default function AssetManagement() {
                     <option value="Baik">Baik</option>
                     <option value="Rusak Ringan">Rusak Ringan</option>
                     <option value="Rusak Berat">Rusak Berat</option>
+                    <option value="Hilang">Hilang</option>
                   </select>
                 </div>
                 <div className="form-group">
@@ -249,6 +250,7 @@ export default function AssetManagement() {
                         <option value="Baik">Baik</option>
                         <option value="Rusak Ringan">Rusak Ringan</option>
                         <option value="Rusak Berat">Rusak Berat</option>
+                        <option value="Hilang">Hilang</option>
                       </select>
                     </td>
                     <td>

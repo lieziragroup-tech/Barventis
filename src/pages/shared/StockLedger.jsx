@@ -5,13 +5,16 @@ import {
 } from 'lucide-react';
 import BulkImport from '../../components/BulkImport';
 import Pagination from '../../components/shared/Pagination';
+import { TableSkeletonRows, TableLoadingOverlay } from '../../components/shared/TableSkeleton';
 
 import { useData } from '../../contexts/DataContext';
 import ExportButton from '../../components/shared/ExportButton';
+import PrintButton from '../../components/shared/PrintButton';
 import { exportWithAudit } from '../../services/export/exportAudit';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatIDR, parsePackSize, isPackUnitConsistent, getPackUnitInfo, parseStructuredFullPack } from '../../services/costUtils';
 import { api } from '../../services/api';
+import { locationService } from '../../services/locationService';
 
 // MANUAL UNIT CONVERSION (2026-08): lets a user say e.g. "1 Carton = 24 pcs"
 // directly in the Add/Edit Material form instead of typing a free-text Full
@@ -83,13 +86,28 @@ function parseFullPack(fullPack, materialUnit) {
 export default function StockLedger() {
   const { profile } = useAuth();
   "use no memo";
-  const { stock, handleAdjustStock, handleUpdateItem, handleAddItem, handleDeleteItem, refreshData } = useData();
+  const { currentTenant, stock, loadingData, handleAdjustStock, handleUpdateItem, handleAddItem, handleDeleteItem, refreshData } = useData();
   const onAdjustStock = handleAdjustStock;
   const onUpdateItem = handleUpdateItem;
   const onAddItem = handleAddItem;
   const onDeleteItem = handleDeleteItem;
 
+  // Dynamic Locations Management
+  const [locations, setLocations] = useState(() => locationService.getLocations(currentTenant?.id));
+  useEffect(() => {
+    const updateLocs = () => {
+      setLocations(locationService.getLocations(currentTenant?.id));
+    };
+    updateLocs();
+    return locationService.subscribe(updateLocs);
+  }, [currentTenant]);
+
   const [activeLoc, setActiveLoc] = useState('ALL');
+  const safeActiveLoc = useMemo(() => {
+    if (activeLoc === 'ALL') return 'ALL';
+    return locations.some(l => l.code.toUpperCase() === activeLoc.toUpperCase()) ? activeLoc : 'ALL';
+  }, [locations, activeLoc]);
+
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('ALL');
   const [supFilter, setSupFilter] = useState('ALL');
@@ -132,20 +150,59 @@ export default function StockLedger() {
   const categories = useMemo(() => ['ALL', ...new Set(stock.map(item => item.category))], [stock]);
   const uniqueSuppliersInStock = useMemo(() => ['ALL', ...new Set(stock.map(item => item.supplier).filter(Boolean))], [stock]);
 
-  // Filtered stock
-   
+  // Filtered stock with dynamic location awareness
   const filteredStock = useMemo(() => stock.filter(item => {
-    const totalQty = (item.qty_resto || 0) + (item.qty_central || 0);
+    const rQty = item.qty_resto || 0;
+    const cQty = item.qty_central || 0;
+    const totalQty = rQty + cQty;
     const minLevel = item.min_stock || 15;
     const matchesSearch = (item.name || '').toLowerCase().includes(search.toLowerCase()) || (item.supplier || '').toLowerCase().includes(search.toLowerCase());
     const matchesCat = catFilter === 'ALL' || item.category === catFilter;
     const matchesSup = supFilter === 'ALL' || item.supplier === supFilter;
+
+    // Evaluate stock alerts based on active location view
+    let evalQty = totalQty;
+    if (safeActiveLoc === 'RESTO') evalQty = rQty;
+    else if (safeActiveLoc === 'CENTRAL') evalQty = cQty;
+
     let matchesAlert = true;
-    if (alertFilter === 'CRITICAL') matchesAlert = totalQty === 0;
-    else if (alertFilter === 'WARNING') matchesAlert = totalQty > 0 && totalQty < minLevel;
-    else if (alertFilter === 'SAFE') matchesAlert = totalQty >= minLevel;
-    return matchesSearch && matchesCat && matchesSup && matchesAlert;
-  }), [stock, search, catFilter, supFilter, alertFilter]);
+    if (alertFilter === 'CRITICAL') matchesAlert = evalQty === 0;
+    else if (alertFilter === 'WARNING') matchesAlert = evalQty > 0 && evalQty < minLevel;
+    else if (alertFilter === 'SAFE') matchesAlert = evalQty >= minLevel;
+
+    // Location filtering logic
+    let matchesLoc;
+    if (safeActiveLoc === 'ALL' || safeActiveLoc === 'RESTO' || safeActiveLoc === 'CENTRAL') {
+      matchesLoc = true;
+    } else if (safeActiveLoc === 'KITCHEN') {
+      const cat = (item.category || '').toLowerCase();
+      const name = (item.name || '').toLowerCase();
+      const loc = (item.location || item.storage_location || item.notes || '').toLowerCase();
+      const kitchenKeywords = [
+        'food', 'meat', 'poultry', 'seafood', 'vegetable', 'sauce', 'dairy', 'bakery', 
+        'spice', 'seasoning', 'dapur', 'kitchen', 'bahan makanan', 'ayam', 'daging', 
+        'ikan', 'sayur', 'bumbu', 'telur', 'beras', 'minyak', 'fresh', 'chilled', 'frozen', 
+        'pasta', 'flour', 'tepung', 'buah', 'fruit', 'cooking', 'masak'
+      ];
+      matchesLoc = loc.includes('kitchen') || loc.includes('dapur') || kitchenKeywords.some(kw => cat.includes(kw) || name.includes(kw));
+    } else if (safeActiveLoc === 'SERVICE') {
+      const cat = (item.category || '').toLowerCase();
+      const name = (item.name || '').toLowerCase();
+      const loc = (item.location || item.storage_location || item.notes || '').toLowerCase();
+      const serviceKeywords = [
+        'beverage', 'coffee', 'tea', 'syrup', 'bar', 'packaging', 'cup', 'straw', 
+        'tissue', 'service', 'minuman', 'consumable', 'sirup', 'susu', 'sedotan', 'gelas', 'takeaway', 'plastik', 'paper', 'napkin'
+      ];
+      matchesLoc = loc.includes('service') || loc.includes('bar') || loc.includes('floor') || serviceKeywords.some(kw => cat.includes(kw) || name.includes(kw));
+    } else {
+      // Custom location created in admin (e.g. PASTRY, CHILLER, BAR_2)
+      const loc = (item.location || item.storage_location || item.notes || item.category || '').toLowerCase();
+      const target = safeActiveLoc.toLowerCase();
+      matchesLoc = loc.includes(target);
+    }
+
+    return matchesSearch && matchesCat && matchesSup && matchesAlert && matchesLoc;
+  }), [stock, search, catFilter, supFilter, alertFilter, safeActiveLoc]);
 
   const PAGE_SIZE = 20;
   const [currentPage, setCurrentPage] = useState(1);
@@ -313,56 +370,95 @@ export default function StockLedger() {
         const rQty = item.qty_resto || 0;
         const cQty = item.qty_central || 0;
         const total = rQty + cQty;
+        const minLevel = item.min_stock || 15;
+        let statusLabel = 'AMAN';
+        if (total === 0) statusLabel = 'HABIS (KRITIS)';
+        else if (total < minLevel) statusLabel = 'MENIPIS (WARNING)';
+
+        const parsed = parseFullPack(item.full_pack, item.unit);
+        const conversionLabel = parsed.size > 0 ? `${(total * parsed.size).toLocaleString('id-ID')} ${parsed.unit}` : '-';
+        const price = item.new_price || item.price || 0;
+        const totalVal = total * price;
+
         return {
           'NO': rowNum++,
-          'NAMA ITEM': item.name,
-          'KUANTITI': total,
-          'UNIT': item.unit,
-          'Full': item.full_pack || '',
-          'Price': item.price || 0,
-          'NEW Price': item.new_price || 0,
-          'SUPPLIER': item.supplier || '',
+          'KODE / SKU': item.sku || item.id?.slice(0, 8) || '-',
+          'NAMA BAHAN BAKU': item.name,
+          'KATEGORI': item.category || '-',
+          'SUPPLIER': item.supplier || '-',
+          'STOK RESTO': rQty,
+          'STOK CENTRAL': cQty,
+          'TOTAL STOK (PACK)': total,
+          'SATUAN PACK': item.unit || 'pck',
+          'UKURAN PACK': item.full_pack || '-',
+          'KONVERSI RESEP': conversionLabel,
+          'MINIMUM STOK': minLevel,
+          'STATUS STOK': statusLabel,
+          'HARGA SATUAN (RP)': price,
+          'TOTAL NILAI STOK (RP)': totalVal
         };
       });
+
+      const locSuffix = activeLoc !== 'ALL' ? `_${activeLoc}` : '';
+      const catSuffix = catFilter !== 'ALL' ? `_${catFilter.replace(/[^a-zA-Z0-9]/g, '')}` : '';
+
       await exportWithAudit({
         format: 'excel',
-        filename: `SO_BARISTA`,
-        sheets: [{ name: 'Stock Report', rows: data }],
-        actionName: 'Stock Ledger Export',
+        filename: `Laporan_Stok_Ledger${locSuffix}${catSuffix}`,
+        sheets: [{ name: 'Stok Gudang', rows: data }],
+        actionName: 'Stock Ledger Export Excel',
         role: profile?.role || 'SuperAdmin'
       });
     } catch (err) {
       console.error('Export failed', err);
-      alert('Gagal mengekspor data');
+      alert('Gagal mengekspor data: ' + err.message);
     }
   };
   
   const handleExportPDF = async () => {
     try {
       const columns = [
-        { key: 'no', label: 'NO' },
-        { key: 'name', label: 'NAMA ITEM' },
-        { key: 'qty', label: 'KUANTITI' },
-        { key: 'unit', label: 'UNIT' },
-        { key: 'price', label: 'HARGA' }
+        { key: 'no', label: '#' },
+        { key: 'name', label: 'Nama Bahan Baku' },
+        { key: 'category', label: 'Kategori' },
+        { key: 'supplier', label: 'Supplier' },
+        { key: 'resto', label: 'Resto' },
+        { key: 'central', label: 'Central' },
+        { key: 'total', label: 'Total' },
+        { key: 'price', label: 'Harga Satuan' },
+        { key: 'status', label: 'Status' }
       ];
       let rowNum = 1;
       const rows = filteredStock.map(item => {
         const rQty = item.qty_resto || 0;
         const cQty = item.qty_central || 0;
         const total = rQty + cQty;
+        const minLevel = item.min_stock || 15;
+        let statusText = 'Aman';
+        if (total === 0) statusText = 'Habis';
+        else if (total < minLevel) statusText = 'Menipis';
+
         return {
           no: rowNum++,
           name: item.name,
-          qty: total,
-          unit: item.unit,
-          price: `Rp ${(item.new_price || item.price || 0).toLocaleString('id-ID')}`
+          category: item.category || '-',
+          supplier: item.supplier || '-',
+          resto: `${rQty} ${item.unit || ''}`,
+          central: `${cQty} ${item.unit || ''}`,
+          total: `${total} ${item.unit || ''}`,
+          price: `Rp ${(item.new_price || item.price || 0).toLocaleString('id-ID')}`,
+          status: statusText
         };
       });
+
+      const locText = activeLoc === 'ALL' ? 'Semua Gudang' : activeLoc;
+      const catText = catFilter === 'ALL' ? 'Semua Kategori' : catFilter;
+      const queryText = search ? ` | Pencarian: "${search}"` : '';
+
       await exportWithAudit({
         format: 'pdf',
-        filename: `SO_BARISTA`,
-        title: 'Laporan Stok Barang (Ledger)',
+        filename: `Laporan_Stok_Ledger_${activeLoc}`,
+        title: `Laporan Stok Barang (Stock Ledger)\nLokasi: ${locText} | Kategori: ${catText}${queryText} (${rows.length} item)`,
         tenantName: 'BARVENTIS - Sistem Manajemen Gudang',
         columns,
         rows,
@@ -371,16 +467,22 @@ export default function StockLedger() {
       });
     } catch (err) {
       console.error('Export PDF failed', err);
-      alert('Gagal mengekspor PDF');
+      alert('Gagal mengekspor PDF: ' + err.message);
     }
   };
 
   const [itemHistory, setItemHistory] = useState([]);
+  const [ledgerLocationFilter, setLedgerLocationFilter] = useState('ALL');
+
   useEffect(() => {
     if (selectedItem && historyTab === 'LEDGER') {
-      api.getTransactionsPaged({ materialName: selectedItem.name, pageSize: 50 }).then(res => setItemHistory(res.data)).catch(console.error);
+      api.getTransactionsPaged({ 
+        materialName: selectedItem.name, 
+        pageSize: 50,
+        location: ledgerLocationFilter !== 'ALL' ? ledgerLocationFilter : null
+      }).then(res => setItemHistory(res.data)).catch(console.error);
     }
-  }, [selectedItem, historyTab]);
+  }, [selectedItem, historyTab, ledgerLocationFilter]);
 
   return (
     <div className="stock-ledger-layout fade-in" style={{ display: 'flex', gap: '24px', position: 'relative' }}>
@@ -415,13 +517,18 @@ export default function StockLedger() {
                   <option value="WARNING">Low Stock</option>
                   <option value="CRITICAL">Out of Stock</option>
                 </select>
-                <div style={{ display: 'flex', background: 'rgba(0,0,0,0.03)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '3px' }}>
-                  {['ALL', 'RESTO', 'CENTRAL'].map(loc => (
-                    <button key={loc} className={`btn ${activeLoc === loc ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '6px 12px', fontSize: '0.8rem', boxShadow: 'none' }} onClick={() => { setActiveLoc(loc); setCurrentPage(1); }}>
-                      {loc === 'ALL' ? 'All' : loc === 'RESTO' ? 'Resto' : 'Central'}
-                    </button>
+                <select 
+                  className="form-control" 
+                  style={{ width: '170px' }} 
+                  value={safeActiveLoc} 
+                  onChange={e => { setActiveLoc(e.target.value); setCurrentPage(1); }}
+                >
+                  {locations.map(loc => (
+                    <option key={loc.code} value={loc.code}>
+                      {loc.code === 'ALL' ? 'All Locations' : loc.name}
+                    </option>
                   ))}
-                </div>
+                </select>
                 <button className="btn btn-primary" style={{ padding: '8px 14px', fontSize: '0.8rem' }} onClick={() => setShowAddModal(true)}>
                   <Plus size={14} style={{ marginRight: '4px' }}/> Tambah Bahan
                 </button>
@@ -433,44 +540,75 @@ export default function StockLedger() {
                   onExportPDF={handleExportPDF} 
                   currentRole={profile?.role || 'SuperAdmin'} 
                 />
+                <PrintButton
+                  currentRole={profile?.role || 'SuperAdmin'}
+                  title="Cetak kartu stok bahan (Stock Ledger)"
+                />
               </>
             )}
           </div>
         </div>
 
+        {/* Print-only Document Header */}
+        <div className="print-only print-header">
+          <div className="print-header-brand">BARVENTIS — SISTEM MANAJEMEN GUDANG</div>
+          <div style={{ fontSize: '13pt', fontWeight: 700, margin: '2px 0' }}>Laporan Kartu Stok Bahan Baku (Stock Ledger)</div>
+          <div className="print-header-meta">
+            Lokasi: {activeLoc} | Kategori: {catFilter} | Pencarian: {search || 'Semua'} | Tanggal Cetak: {new Date().toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' })}
+          </div>
+        </div>
+
         {/* Stock Table */}
         <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div className="table-container">
-            {/* DESKTOP TABLE */}
-            <table className="custom-table hidden md:table">
+          <div className="table-container relative">
+            <TableLoadingOverlay loading={loadingData && stock.length > 0} message="Menyinkronkan stok bahan..." />
+            {/* STOCK TABLE */}
+            <table className="custom-table">
               <thead>
                 <tr>
-                  <th style={{ width: '40px', textAlign: 'center', padding: '14px 10px' }}>
+                  <th className="no-print" style={{ width: '40px', textAlign: 'center', padding: '14px 10px' }}>
                     <input type="checkbox" checked={filteredStock.length > 0 && selectedItems.length === filteredStock.length} onChange={toggleSelectAll} style={{ cursor: 'pointer' }} />
                   </th>
                   <th>Material Name</th>
                   <th>Category</th>
                   <th>Supplier</th>
-                  <th style={{ textAlign: 'right' }}>Stock (Pack)</th>
+                  <th style={{ textAlign: 'right' }}>{activeLoc === 'ALL' ? 'Stock (Pack)' : `Stok (${activeLoc})`}</th>
                   <th style={{ textAlign: 'right' }}>Stock (Converted)</th>
                   <th style={{ textAlign: 'right' }}>Price/Pack</th>
                   <th style={{ textAlign: 'center' }}>Expiry / Status</th>
-                  <th style={{ textAlign: 'center' }}>Actions</th>
+                  <th className="no-print" style={{ textAlign: 'center' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {paginatedStock.map(item => {
+                {loadingData && stock.length === 0 ? (
+                  <TableSkeletonRows
+                    rows={8}
+                    columns={[
+                      { width: '40px', type: 'checkbox' },
+                      { width: '220px', type: 'dual-text' },
+                      { width: '130px', type: 'text' },
+                      { width: '140px', type: 'text' },
+                      { width: '110px', type: 'text', align: 'right' },
+                      { width: '130px', type: 'text', align: 'right' },
+                      { width: '110px', type: 'text', align: 'right' },
+                      { width: '120px', type: 'badge' },
+                      { width: '160px', type: 'actions' }
+                    ]}
+                  />
+                ) : (
+                  paginatedStock.map(item => {
                   const rQty = item.qty_resto || 0;
                   const cQty = item.qty_central || 0;
                   const total = rQty + cQty;
                   const min = item.min_stock || 15;
+                  const locQty = activeLoc === 'RESTO' ? rQty : (activeLoc === 'CENTRAL' ? cQty : total);
                   const pack = parseFullPack(item.full_pack, item.unit);
-                  const convertedTotal = total * pack.size;
+                  const convertedTotal = locQty * pack.size;
                   const convertedUnit = pack.unit.toUpperCase();
 
                   let badge = <span className="badge badge-success">Safe</span>;
-                  if (total === 0) badge = <span className="badge badge-danger">Out</span>;
-                  else if (total < min) badge = <span className="badge badge-warning">Low</span>;
+                  if (locQty === 0) badge = <span className="badge badge-danger">Out</span>;
+                  else if (locQty < min) badge = <span className="badge badge-warning">Low</span>;
 
                   // Expiry visual
                   const nearestExpiry = expiryMap[item.id];
@@ -491,22 +629,31 @@ export default function StockLedger() {
 
                   return (
                     <tr key={item.id ?? item.name} style={{ background: selectedItems.includes(item.name) ? 'rgba(59,130,246,0.05)' : 'transparent', transition: 'background 0.2s' }}>
-                      <td style={{ textAlign: 'center', padding: '14px 10px' }}>
+                      <td className="no-print" style={{ textAlign: 'center', padding: '14px 10px' }}>
                         <input type="checkbox" checked={selectedItems.includes(item.name)} onChange={() => toggleSelectItem(item.name)} style={{ cursor: 'pointer' }} />
                       </td>
                       <td>
-                        <div style={{ fontWeight: 600 }}>{item.name}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontFamily: 'monospace', fontSize: '0.65rem', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
+                            {item.sku || ('#MAT-' + String(item.id || '').slice(0, 6).toUpperCase())}
+                          </span>
+                          <div style={{ fontWeight: 600 }}>{item.name}</div>
+                        </div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{item.full_pack || item.unit} / {item.unit}</div>
                       </td>
                       <td><span className="badge badge-info" style={{ fontSize: '0.65rem' }}>{item.category}</span></td>
                       <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{item.supplier}</td>
                       <td style={{ textAlign: 'right' }}>
-                        <div style={{ fontWeight: 600, color: total < min ? 'var(--warning)' : 'var(--text-primary)' }}>
-                          {total.toFixed(1)} <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{item.unit}</span>
+                        <div style={{ fontWeight: 600, color: locQty < min ? 'var(--warning)' : 'var(--text-primary)' }}>
+                          {locQty.toFixed(1)} <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{item.unit}</span>
                         </div>
-                        {activeLoc === 'ALL' && (
+                        {activeLoc === 'ALL' ? (
                           <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
                             R: {rQty.toFixed(0)} | C: {cQty.toFixed(0)}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: '0.65rem', color: 'var(--accent)', fontWeight: 600 }}>
+                            {activeLoc === 'RESTO' ? `Resto: ${rQty.toFixed(0)}` : activeLoc === 'CENTRAL' ? `Central: ${cQty.toFixed(0)}` : `Area: ${activeLoc}`}
                           </div>
                         )}
                       </td>
@@ -521,15 +668,15 @@ export default function StockLedger() {
                       <td style={{ textAlign: 'center', display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
                         {expiryBadge} {badge}
                       </td>
-                      <td style={{ textAlign: 'center' }}>
+                      <td style={{ textAlign: 'center' }} className="no-print">
                         <div style={{ display: 'inline-flex', gap: '4px' }}>
                           <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)' }} title="Edit Item" onClick={() => setEditItem({ ...item, originalName: item.name })}>
                             <Edit size={13} />
                           </button>
-                          <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)' }} title="Adjust Stock" onClick={() => { setAdjustItem(item); setAdjustLoc('RESTO'); }}>
+                          <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)' }} title="Adjust Stock" onClick={() => { setAdjustItem(item); setAdjustLoc(activeLoc !== 'ALL' ? activeLoc : 'RESTO'); }}>
                             <Package size={13} />
                           </button>
-                          <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)' }} title="History" onClick={() => setSelectedItem(item)}>
+                          <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)' }} title="History" onClick={() => { setSelectedItem(item); setLedgerLocationFilter(safeActiveLoc); }}>
                             <History size={13} />
                           </button>
                           <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)', color: 'var(--danger)' }} title="Delete" onClick={() => handleAttemptDelete(item.name)}>
@@ -539,93 +686,33 @@ export default function StockLedger() {
                       </td>
                     </tr>
                   );
-                })}
-                {filteredStock.length === 0 && (
-                  <tr><td colSpan="9" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>No materials found.</td></tr>
+                }))}
+                {!loadingData && filteredStock.length === 0 && (
+                  <tr>
+                    <td colSpan="9" style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-muted)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                        <Package size={28} style={{ opacity: 0.35 }} />
+                        <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Tidak ada bahan baku ditemukan</span>
+                        <span style={{ fontSize: '0.75rem', maxWidth: '380px', color: 'var(--text-secondary)' }}>
+                          {safeActiveLoc !== 'ALL'
+                            ? `Tidak ada item yang sesuai untuk filter lokasi "${safeActiveLoc}".`
+                            : 'Coba sesuaikan kata kunci pencarian atau filter kategori Anda.'}
+                        </span>
+                        {safeActiveLoc !== 'ALL' && (
+                          <button 
+                            className="btn btn-secondary" 
+                            style={{ marginTop: '6px', fontSize: '0.75rem', padding: '4px 12px' }}
+                            onClick={() => setActiveLoc('ALL')}
+                          >
+                            Tampilkan Semua Lokasi
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
                 )}
               </tbody>
             </table>
-
-            {/* MOBILE CARD LIST */}
-            <div className="md:hidden flex flex-col gap-3 p-2">
-              {paginatedStock.map(item => {
-                const rQty = item.qty_resto || 0;
-                const cQty = item.qty_central || 0;
-                const total = rQty + cQty;
-                const min = item.min_stock || 15;
-                const pack = parseFullPack(item.full_pack, item.unit);
-                const convertedTotal = total * pack.size;
-                const convertedUnit = pack.unit.toUpperCase();
-
-                let badge = <span className="badge badge-success text-[0.6rem] px-1.5 py-0.5">Safe</span>;
-                if (total === 0) badge = <span className="badge badge-danger text-[0.6rem] px-1.5 py-0.5">Out</span>;
-                else if (total < min) badge = <span className="badge badge-warning text-[0.6rem] px-1.5 py-0.5">Low</span>;
-
-                const nearestExpiry = expiryMap[item.id];
-                const daysToExpiry = nearestExpiry ? Math.ceil((new Date(nearestExpiry) - new Date()) / 86400000) : null;
-                let expiryBadge;
-                if (daysToExpiry === null) {
-                  expiryBadge = <div style={{width: 10, height: 10, borderRadius: '50%', background: '#9ca3af', display: 'inline-block'}} title="Tidak ada data" />;
-                } else if (daysToExpiry > 14) {
-                  expiryBadge = <div style={{width: 10, height: 10, borderRadius: '50%', background: '#10b981', display: 'inline-block'}} title="Aman (>14 hari)" />;
-                } else if (daysToExpiry >= 4) {
-                  expiryBadge = <div style={{width: 10, height: 10, borderRadius: '50%', background: '#f59e0b', display: 'inline-block'}} title="Peringatan (4-14 hari)" />;
-                } else {
-                  expiryBadge = <div style={{width: 10, height: 10, borderRadius: '50%', background: '#ef4444', display: 'inline-block', animation: 'pulse 2s infinite'}} title="Kritis (<=3 hari)" />;
-                }
-
-                return (
-                  <div key={item.id ?? item.name} className="bg-[var(--bg-primary)] p-4 rounded-xl border border-[var(--border)] shadow-sm flex flex-col gap-2 relative overflow-hidden" style={{ background: selectedItems.includes(item.name) ? 'rgba(59,130,246,0.05)' : 'var(--bg-primary)' }}>
-                    <div className="flex justify-between items-start">
-                      <div className="flex gap-2 items-start">
-                        <input type="checkbox" checked={selectedItems.includes(item.name)} onChange={() => toggleSelectItem(item.name)} style={{ cursor: 'pointer', marginTop: '4px' }} className="w-4 h-4 rounded border-gray-300" />
-                        <div>
-                          <div className="font-bold text-[var(--text-primary)] text-sm flex items-center gap-2">
-                            {item.name} {expiryBadge}
-                          </div>
-                          <div className="text-[0.65rem] text-[var(--text-secondary)] mt-0.5">{item.supplier || 'No Supplier'} · {item.category}</div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="flex items-center justify-end gap-1 mb-1">{badge}</div>
-                        <div className={`font-bold text-sm ${total < min ? 'text-[var(--warning)]' : 'text-[var(--text-primary)]'}`}>
-                          {total.toFixed(1)} <span className="text-[0.6rem] text-[var(--text-muted)]">{item.unit}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-between items-center bg-[var(--bg-secondary)] p-2 rounded-lg mt-1 text-xs">
-                      <div>
-                        <div className="text-[0.6rem] text-[var(--text-muted)]">Harga Beli</div>
-                        <div className="font-semibold">{formatIDR(item.new_price || item.price)}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-[0.6rem] text-[var(--text-muted)]">Konversi</div>
-                        <div className="font-semibold text-[var(--accent)]">{convertedTotal.toFixed(0)} <span className="text-[0.6rem]">{convertedUnit}</span></div>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-[var(--border)]">
-                      <button className="flex flex-col items-center p-2 rounded-lg bg-[var(--bg-secondary)] text-[var(--text-secondary)] flex-1" onClick={() => setEditItem({ ...item, originalName: item.name })}>
-                        <Edit size={16} /><span className="text-[0.6rem] mt-1">Edit</span>
-                      </button>
-                      <button className="flex flex-col items-center p-2 rounded-lg bg-[var(--bg-secondary)] text-[var(--accent)] flex-1" onClick={() => { setAdjustItem(item); setAdjustLoc('RESTO'); }}>
-                        <Package size={16} /><span className="text-[0.6rem] mt-1">Adjust</span>
-                      </button>
-                      <button className="flex flex-col items-center p-2 rounded-lg bg-[var(--bg-secondary)] text-[var(--text-secondary)] flex-1" onClick={() => setSelectedItem(item)}>
-                        <History size={16} /><span className="text-[0.6rem] mt-1">History</span>
-                      </button>
-                      <button className="flex flex-col items-center p-2 rounded-lg bg-[var(--danger)]/10 text-[var(--danger)] flex-1" onClick={() => handleAttemptDelete(item.name)}>
-                        <Trash2 size={16} /><span className="text-[0.6rem] mt-1">Delete</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-              {filteredStock.length === 0 && (
-                <div className="text-center p-6 text-[var(--text-muted)] text-sm">Tidak ada barang ditemukan</div>
-              )}
-            </div>
           </div>
           <div style={{ padding: '0 20px 16px' }}>
             <Pagination
@@ -641,13 +728,18 @@ export default function StockLedger() {
 
       {/* History Side Panel */}
       {selectedItem && (
-        <div className="glass-card stock-ledger-detail-panel" style={{ width: '360px', flexShrink: 0, position: 'sticky', top: 0, height: 'calc(100vh - 150px)', display: 'flex', flexDirection: 'column' }}>
+        <div className="glass-card stock-ledger-detail-panel no-print" style={{ width: '360px', flexShrink: 0, position: 'sticky', top: 0, height: 'calc(100vh - 150px)', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>Stock Audit</h3>
             <button className="btn btn-secondary" style={{ padding: '4px', borderRadius: '50%' }} onClick={() => setSelectedItem(null)}><X size={16} /></button>
           </div>
           <div style={{ padding: '12px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', marginBottom: '16px' }}>
-            <h4 style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '4px' }}>{selectedItem.name}</h4>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+              <span style={{ fontFamily: 'monospace', fontSize: '0.65rem', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
+                {selectedItem.sku || ('#MAT-' + String(selectedItem.id || '').slice(0, 8).toUpperCase())}
+              </span>
+              <h4 style={{ fontWeight: 700, fontSize: '0.9rem', margin: 0 }}>{selectedItem.name}</h4>
+            </div>
             <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{selectedItem.category} · {selectedItem.supplier}</div>
             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>Pack: {selectedItem.full_pack || selectedItem.unit}</div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', borderTop: '1px solid var(--border)', paddingTop: '8px' }}>
@@ -659,11 +751,31 @@ export default function StockLedger() {
             <button className={`btn ${historyTab === 'LEDGER' ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '4px 8px', fontSize: '0.75rem', flex: 1 }} onClick={() => setHistoryTab('LEDGER')}>Mutasi Stok</button>
             <button className={`btn ${historyTab === 'PURCHASES' ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '4px 8px', fontSize: '0.75rem', flex: 1 }} onClick={() => setHistoryTab('PURCHASES')}>Riwayat Pembelian</button>
           </div>
+          {historyTab === 'LEDGER' && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '8px', padding: '0 2px' }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Filter Lokasi:</span>
+              <select
+                className="form-control"
+                style={{ padding: '2px 8px', fontSize: '0.7rem', height: '26px', width: 'auto', flex: 1, maxWidth: '180px' }}
+                value={ledgerLocationFilter}
+                onChange={e => setLedgerLocationFilter(e.target.value)}
+              >
+                {locations.map(l => (
+                  <option key={l.code} value={l.code}>{l.shortName || l.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {historyTab === 'LEDGER' && itemHistory.map(tx => (
               <div key={tx.id} style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', padding: '8px 10px', borderRadius: 'var(--radius-md)', fontSize: '0.75rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
-                  <span style={{ fontWeight: 600 }}>{tx.type}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: '0.6rem', color: 'var(--text-muted)', background: 'var(--bg-secondary)', padding: '1px 4px', borderRadius: '3px', border: '1px solid var(--border)' }}>
+                      #{String(tx.id || '').slice(0, 8)}
+                    </span>
+                    <span style={{ fontWeight: 600 }}>{tx.type}</span>
+                  </div>
                   <span style={{ color: tx.qty > 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 700 }}>{tx.qty > 0 ? `+${tx.qty}` : tx.qty}</span>
                 </div>
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>{tx.location} · {tx.date}</div>
@@ -675,7 +787,12 @@ export default function StockLedger() {
             {historyTab === 'PURCHASES' && purchaseHistory.map(p => (
               <div key={p.id} style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', padding: '8px 10px', borderRadius: 'var(--radius-md)', fontSize: '0.75rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
-                  <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{p.suppliers?.name || 'Tunai / Tanpa Supplier'}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: '0.6rem', color: 'var(--text-muted)', background: 'var(--bg-secondary)', padding: '1px 4px', borderRadius: '3px', border: '1px solid var(--border)' }}>
+                      #{String(p.id || '').slice(0, 8)}
+                    </span>
+                    <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{p.suppliers?.name || 'Tunai / Tanpa Supplier'}</span>
+                  </div>
                   <span style={{ fontWeight: 700, color: 'var(--success)' }}>+{p.qty} {p.unit}</span>
                 </div>
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem', display: 'flex', justifyContent: 'space-between' }}>
@@ -706,8 +823,9 @@ export default function StockLedger() {
               <div className="form-group">
                 <label className="form-label">Location</label>
                 <select className="form-control" value={adjustLoc} onChange={e => setAdjustLoc(e.target.value)}>
-                  <option value="RESTO">Resto Bar</option>
-                  <option value="CENTRAL">Central Warehouse</option>
+                  {locations.filter(l => l.code !== 'ALL').map(l => (
+                    <option key={l.code} value={l.code}>{l.name} ({l.code})</option>
+                  ))}
                 </select>
               </div>
               <div className="form-group">
@@ -719,10 +837,10 @@ export default function StockLedger() {
                   </optgroup>
                   <optgroup label="Stok Keluar (Pengurangan)">
                     <option value="OUT">Stock Out (Lain-lain)</option>
-                    <option value="SPOILAGE">Basi / Kedaluwarsa (Spoilage)</option>
-                    <option value="BROKEN">Pecah / Rusak (Broken)</option>
-                    <option value="STOLEN">Hilang (Stolen)</option>
-                    <option value="STAFF_MEAL">Makan Karyawan (Staff Meal)</option>
+                    <option value="WASTE">Basi / Kualitas Drop (Waste)</option>
+                    <option value="BREAKAGE">Pecah / Rusak (Breakage)</option>
+                    <option value="EXPIRED">Kedaluwarsa (Expired)</option>
+                    <option value="COMP">Makan Karyawan / Tester (Comp)</option>
                   </optgroup>
                 </select>
               </div>

@@ -13,7 +13,7 @@ import {
 const rowUid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `r${Date.now()}${Math.random()}`);
 const ensureUids = (arr = []) => arr.map(x => ({ ...x, _uid: x._uid ?? rowUid() }));
 
-export default function Recipes() {
+export default function Recipes({ categoryFilter } = {}) {
   const location = useLocation();
   const { stock, recipes, handleSaveRecipe: onSaveRecipe, handleAddRecipe: onAddRecipe, handleDeleteRecipe: onDeleteRecipe, refreshData, showToast, unitConversionMap } = useData();
   const [recalculating, setRecalculating] = useState(false);
@@ -108,9 +108,15 @@ export default function Recipes() {
   const filteredRecipes = useMemo(() => {
     return recipes.filter(r => {
       const matchSearch = r.menu_name.toLowerCase().includes(search.toLowerCase());
+      // ponytail: filter by categoryFilter prop when provided (BEER vs BEVERAGE)
+      if (categoryFilter) {
+        const cat = (r.category || '').toUpperCase();
+        const matchCategory = categoryFilter === 'BEER' ? cat === 'BEER' : cat !== 'BEER';
+        return matchSearch && matchCategory;
+      }
       return matchSearch;
     });
-  }, [recipes, search]);
+  }, [recipes, search, categoryFilter]);
 
   const RECIPES_PAGE_SIZE = 15;
   const [recipesPage, setRecipesPage] = useState(1);
@@ -124,7 +130,7 @@ export default function Recipes() {
     else setSelectedItems([]);
   };
 
-  const handleExportData = async () => {
+  const handleExportData = async (type = 'ALL') => {
     const XLSX = await import('xlsx');
 
     // Determine which recipes to export

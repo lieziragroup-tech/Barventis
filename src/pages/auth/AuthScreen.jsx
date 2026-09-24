@@ -84,7 +84,8 @@ export default function AuthScreen({ onAuthSuccess }) {
           localStorage.removeItem('rememberMe');
           localStorage.removeItem('savedEmail');
         }
-        const data = await api.login(email, password);
+        const sanitizedEmail = email.trim();
+        const data = await api.login(sanitizedEmail, password.trim());
         if (onAuthSuccess) {
           onAuthSuccess(data.user, data.tenant.name);
         }

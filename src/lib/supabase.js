@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
-let supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+let supabaseUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL) || (typeof globalThis !== 'undefined' && globalThis.process?.env?.VITE_SUPABASE_URL);
+const supabaseAnonKey = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_ANON_KEY) || (typeof globalThis !== 'undefined' && globalThis.process?.env?.VITE_SUPABASE_ANON_KEY);
 
 // Sanitize Supabase URL to remove accidental trailing "/rest/v1/" suffix or slashes
 if (supabaseUrl && typeof supabaseUrl === 'string') {
@@ -34,7 +34,7 @@ export const supabase = {
   from: (table) => {
     const builder = rawSupabase.from(table);
 
-    const getBranch = () => window && window.__activeBranchId;
+    const getBranch = () => typeof window !== 'undefined' && window && window.__activeBranchId;
     const isBranchTarget = () => getBranch() && branchTables.includes(table);
 
     const originalSelect = builder.select.bind(builder);
