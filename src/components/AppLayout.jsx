@@ -177,6 +177,64 @@ export default function DashboardLayout() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Edge Swipe Logic for Mobile (WBS 8.2)
+  const touchStartRef = useRef({ x: 0, y: 0, time: 0 });
+  const touchEndRef = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const handleTouchStart = (e) => {
+      // Only detect if touch starts from left edge (X <= 30px)
+      if (e.touches[0].clientX <= 30) {
+        touchStartRef.current = {
+          x: e.touches[0].clientX,
+          y: e.touches[0].clientY,
+          time: Date.now()
+        };
+      } else {
+        // Reset if not starting from edge to avoid conflict with table scroll
+        touchStartRef.current = { x: 0, y: 0, time: 0 };
+      }
+    };
+
+    const handleTouchMove = (e) => {
+      touchEndRef.current = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY
+      };
+    };
+
+    const handleTouchEnd = () => {
+      const start = touchStartRef.current;
+      const end = touchEndRef.current;
+      
+      // Validation: Start is valid, horizontal distance > 60px, time < 300ms
+      if (start.x > 0 && start.x <= 30 && end.x > 0) {
+        const deltaX = end.x - start.x;
+        const deltaY = Math.abs(end.y - start.y);
+        const deltaTime = Date.now() - start.time;
+
+        // Ensure it's mostly a horizontal swipe (not scrolling down)
+        if (deltaX > 60 && deltaY < 40 && deltaTime < 300) {
+          setIsSidebarOpen(true);
+        }
+      }
+      
+      // Reset
+      touchStartRef.current = { x: 0, y: 0, time: 0 };
+      touchEndRef.current = { x: 0, y: 0 };
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd);
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, []);
+
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 768) {
