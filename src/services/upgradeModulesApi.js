@@ -255,16 +255,25 @@ export const menuEngApi = {
     const { data, error } = await supabase.from('v_menu_engineering')
       .select('*').eq('tenant_id', tenantId).order('contribution', { ascending: false });
     if (error) {
-      // View might not exist yet, fallback to direct query
+      // View might not exist yet, fallback to direct query.
+      // FIX: recipes tidak punya kolom `total_cost` (itu cuma field turunan
+      // di JS — lihat DataContext.jsx `total_cost: r.basic_cost`). Kolom HPP
+      // asli di DB adalah `basic_cost`, sama seperti dipakai di view
+      // v_menu_engineering (kolom `cogs`).
       const { data: recipes } = await supabase.from('recipes')
-        .select('id, name, category, selling_price, total_cost, total_sold, menu_class, target_cost_percent')
+        .select('id, menu_name, category, selling_price, basic_cost, total_sold, menu_class, target_cost_percent')
         .eq('tenant_id', tenantId).gt('selling_price', 0);
       return (recipes || []).map(r => ({
         ...r,
-        margin: (r.selling_price || 0) - (r.total_cost || 0),
-        contribution: ((r.selling_price || 0) - (r.total_cost || 0)) * (r.total_sold || 0),
-        food_cost_pct: r.total_cost > 0 && r.selling_price > 0
-          ? +((r.total_cost / r.selling_price * 100).toFixed(1)) : 0
+        // recipes table's real column is menu_name (no `name` column exists) —
+        // aliased to `name` here so it matches the v_menu_engineering view's
+        // shape and UnifiedCogsPricing.jsx (which reads recipe.name).
+        name: r.menu_name,
+        cogs: r.basic_cost,
+        margin: (r.selling_price || 0) - (r.basic_cost || 0),
+        contribution: ((r.selling_price || 0) - (r.basic_cost || 0)) * (r.total_sold || 0),
+        food_cost_pct: r.basic_cost > 0 && r.selling_price > 0
+          ? +((r.basic_cost / r.selling_price * 100).toFixed(1)) : 0
       }));
     }
     return data || [];
