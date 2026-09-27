@@ -1,5 +1,5 @@
-import React, { Suspense } from 'react';
-import { ClipboardList, Beer, TrendingUp, Trash2, AlertTriangle } from 'lucide-react';
+import React, { useState, Suspense } from 'react';
+import { ClipboardList, Beer, TrendingUp, Trash2, AlertTriangle, FileText, PlusCircle } from 'lucide-react';
 import TabContainer from '../../components/shared/TabContainer';
 
 const DailyInventory = React.lazy(() => import('./DailyInventory'));
@@ -15,6 +15,11 @@ const TABS = [
   { key: 'expiry', label: 'Monitor Kedaluwarsa (FEFO)', icon: AlertTriangle },
 ];
 
+const INVENTORY_MODES = [
+  { key: 'REKAP', label: 'Rekap Harian', icon: FileText },
+  { key: 'EOD', label: 'Input EOD', icon: PlusCircle }
+];
+
 const Loading = () => (
   <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
     Memuat...
@@ -22,12 +27,20 @@ const Loading = () => (
 );
 
 export default function DailyInventoryHub() {
+  const [eodMode, setEodMode] = useState('REKAP');
+
   return (
-    <TabContainer tabs={TABS}>
+    <TabContainer 
+      tabs={TABS}
+      title="Daily Inventory Hub"
+      subModes={INVENTORY_MODES}
+      activeSubMode={eodMode}
+      onSelectSubMode={setEodMode}
+    >
       {(activeTab) => (
         <Suspense fallback={<Loading />}>
-          {activeTab === 'bahan' && <DailyInventory category="BAHAN" />}
-          {activeTab === 'beer' && <DailyInventory category="BEER" />}
+          {activeTab === 'bahan' && <DailyInventory category="BAHAN" externalTab={eodMode} onTabChange={setEodMode} />}
+          {activeTab === 'beer' && <DailyInventory category="BEER" externalTab={eodMode} onTabChange={setEodMode} />}
           {activeTab === 'pemakaian' && <UsageRecap />}
           {activeTab === 'waste' && <WasteLogs />}
           {activeTab === 'expiry' && <ExpiryMonitor />}

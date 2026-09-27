@@ -1,4 +1,4 @@
-/* eslint-disable react-refresh/only-export-components */
+ 
 import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { api } from '../services/api';
@@ -14,6 +14,16 @@ export const AuthProvider = ({ children }) => {
   const [activeUser, setActiveUser] = useState(null);
   const [tenantName, setTenantName] = useState('');
   const [loading, setLoading] = useState(true);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return (
+        window.location.hash.includes('type=recovery') ||
+        window.location.pathname === '/reset-password' ||
+        new URLSearchParams(window.location.search).get('type') === 'recovery'
+      );
+    }
+    return false;
+  });
   
   const isFetchingProfileRef = useRef(false);
 
@@ -22,6 +32,9 @@ export const AuthProvider = ({ children }) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log(`[Auth Event] Triggered: ${event}`, session?.user?.email);
       setAuthSession(session);
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecovery(true);
+      }
       if (!session) {
         setIsAuthenticated(false);
         setActiveUser(null);
@@ -103,7 +116,9 @@ export const AuthProvider = ({ children }) => {
     activeUser,
     tenantName,
     loading,
-    logout
+    logout,
+    isPasswordRecovery,
+    setIsPasswordRecovery
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

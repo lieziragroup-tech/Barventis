@@ -962,6 +962,53 @@ export const api = {
     if (error) throw new Error('Failed to update name: ' + error.message);
   },
 
+  // Reset Password for Email (Sends Supabase magic recovery link)
+  resetPasswordForEmail: async (email) => {
+    const cleanEmail = (email || '').trim();
+    if (!cleanEmail) throw new Error('Email tidak boleh kosong.');
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) throw new Error('Format email tidak valid.');
+
+    const redirectUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}/reset-password`
+      : undefined;
+
+    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+      redirectTo: redirectUrl
+    });
+
+    if (error) {
+      throw new Error(error.message || 'Gagal mengirim email reset password. Pastikan email terdaftar.');
+    }
+
+    try {
+      await logAudit('RESET_PASSWORD_REQUEST', `Permintaan reset password diajukan untuk email: ${cleanEmail}`);
+    } catch { /* best-effort */ }
+
+    return { success: true };
+  },
+
+  // Update Password (Sets new password for currently authenticated or recovery session)
+  updatePassword: async (newPassword) => {
+    if (!newPassword || newPassword.length < 6) {
+      throw new Error('Password baru minimal harus 6 karakter.');
+    }
+
+    const { data, error } = await supabase.auth.updateUser({
+      password: newPassword
+    });
+
+    if (error) {
+      throw new Error(error.message || 'Gagal memperbarui password.');
+    }
+
+    try {
+      await logAudit('UPDATE_PASSWORD', 'Pengguna berhasil memperbarui password akun.');
+    } catch { /* best-effort */ }
+
+    return data;
+  },
+
   // getProfile — reads from Supabase DB, not localStorage (KRITIS-01 fix)
   getProfile: async () => {
     const { data: { session } } = await supabase.auth.getSession();

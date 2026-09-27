@@ -11,7 +11,7 @@ let _confetti;
 const getConfetti = async () => { if (!_confetti) _confetti = (await import('canvas-confetti')).default; return _confetti; };
 
 export default function BackupCenter() {
-  // eslint-disable-next-line no-unused-vars
+   
   const { activeUser } = useAuth();
   const toast = useToast();
   const [backups, setBackups] = useState([]);
@@ -209,6 +209,42 @@ export default function BackupCenter() {
 
   return (
     <div className="backup-center-container fade-in">
+      {/* Standardized Sub-Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print mb-4">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 sm:p-2.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shadow-xs shrink-0">
+            <Database size={19} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-[var(--text-primary)] m-0">
+                Pusat Cadangan & Pemulihan Data
+              </h1>
+              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-400 font-bold border border-blue-500/30">
+                <CheckCircle size={10} />
+                <span>Auto-Backup Aktif</span>
+              </span>
+            </div>
+            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
+              Manajemen file cadangan database terenkripsi dan pemulihan snapshot data.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="btn btn-secondary text-xs flex items-center gap-1.5 py-1.5 px-3"
+            onClick={fetchBackups}
+            disabled={loading}
+            title="Refresh Data"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            <span>Segarkan</span>
+          </button>
+        </div>
+      </div>
+
       {/* KPI Cards */}
       <div className="kpi-grid" style={{ marginBottom: '24px' }}>
         <div className="glass-card kpi-card">

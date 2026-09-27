@@ -162,7 +162,7 @@ export default function Marketlist() {
   }, [showToast]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     fetchLists();
     fetchMasterData();
   }, [fetchLists, fetchMasterData]);
@@ -768,12 +768,20 @@ export default function Marketlist() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border)] pb-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/20">
-              <Package size={22} />
+            <div className="p-2 sm:p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-xs shrink-0">
+              <Package size={19} />
             </div>
             <div>
-              <h2 className="text-2xl font-black text-[var(--text-primary)] tracking-tight">Market List & Supplier Hub</h2>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
+                  Market List & Supplier Hub
+                </h2>
+                <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-500/30">
+                  <CheckCircle2 size={10} />
+                  <span>Pengadaan Aktif</span>
+                </span>
+              </div>
+              <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
                 Daftar belanja bahan baku dengan integrasi Supplier ID, perbandingan harga antar-supplier, dan audit catatan kualitas.
               </p>
             </div>

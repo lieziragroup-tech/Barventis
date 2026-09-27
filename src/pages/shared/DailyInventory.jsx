@@ -1,6 +1,21 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Calendar, FileText, PlusCircle, Save, Loader2, Lock, Info, Package } from 'lucide-react';
+import {
+  Calendar,
+  FileText,
+  PlusCircle,
+  Save,
+  Loader2,
+  Lock,
+  Info,
+  Package,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  Layers,
+  HelpCircle
+} from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
 import ExportButton from '../../components/shared/ExportButton';
@@ -8,9 +23,14 @@ import PrintButton from '../../components/shared/PrintButton';
 import { exportWithAudit } from '../../services/export/exportAudit';
 import { TableSkeletonRows, TableLoadingOverlay } from '../../components/shared/TableSkeleton';
 
-export default function DailyInventory({ category, initialTab }) {
+export default function DailyInventory({ category, initialTab, externalTab, onTabChange }) {
   const { activeUser } = useAuth();
-  const [activeTab, setActiveTab] = useState(initialTab || 'REKAP');
+  const [internalTab, setInternalTab] = useState(initialTab || 'REKAP');
+  const activeTab = externalTab !== undefined ? externalTab : internalTab;
+  const setActiveTab = (tab) => {
+    setInternalTab(tab);
+    if (onTabChange) onTabChange(tab);
+  };
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
 
   const [loading, setLoading] = useState(false);
@@ -18,6 +38,7 @@ export default function DailyInventory({ category, initialTab }) {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
   const [isLocked, setIsLocked] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   // REKAP state
   const [records, setRecords] = useState([]);
@@ -116,7 +137,7 @@ export default function DailyInventory({ category, initialTab }) {
     } finally {
       setLoading(false);
     }
-  }, [date]);
+  }, [date, category]);
 
   const fetchEodData = useCallback(async () => {
     setLoading(true);
@@ -182,11 +203,11 @@ export default function DailyInventory({ category, initialTab }) {
     } finally {
       setLoading(false);
     }
-  }, [date]);
+  }, [date, category]);
 
   useEffect(() => {
     if (activeTab === 'REKAP') {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       fetchRecords();
     } else {
       fetchEodData();
@@ -524,90 +545,145 @@ export default function DailyInventory({ category, initialTab }) {
     }
   };
 
+  const handlePrevDay = () => {
+    const d = new Date(date);
+    d.setDate(d.getDate() - 1);
+    setDate(d.toISOString().split('T')[0]);
+  };
+
+  const handleNextDay = () => {
+    const d = new Date(date);
+    d.setDate(d.getDate() + 1);
+    setDate(d.toISOString().split('T')[0]);
+  };
+
+  const handleToday = () => {
+    setDate(new Date().toISOString().split('T')[0]);
+  };
+
   return (
-    <div className="fade-in space-y-4">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>
-            Daily Inventory
-            {isLocked && <span style={{ marginLeft: '12px', padding: '2px 8px', background: '#fef3c7', color: '#92400e', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>TERKUNCI (EOD CLOSED)</span>}
-          </h1>
-          <p style={{ color: '#6b7280', fontSize: '0.875rem', marginTop: '4px' }}>Rekapitulasi stok akhir hari dan nilai terpakai</p>
+    <div className="fade-in space-y-3.5">
+      {/* Header with Distinct Labeled Submenu */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print">
+        {/* Left: Main Header Title & Badges */}
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 rounded-xl bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/20 shadow-xs">
+            <ClipboardList size={18} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
+                {category === 'BEER' ? 'Daily Inventory Beer' : 'Daily Inventory Bahan'}
+              </h1>
+              {isLocked && (
+                <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 font-bold border border-amber-500/30">
+                  <Lock size={10} /> Terkunci (Closed)
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-[var(--text-secondary)] m-0 mt-0.5">
+              {category === 'BEER' ? 'Pengawasan stok fisik botol bir & cider harian' : 'Kontrol stok fisik bahan baku bar & resto harian'}
+            </p>
+          </div>
         </div>
-        <div className="no-print" style={{ display: 'flex', gap: '8px' }}>
+
+        {/* Right: Distinct Sub-menu with Label Background */}
+        <div className="flex items-center gap-2 bg-[var(--bg-secondary)]/80 p-1.5 rounded-xl border border-[var(--border)] shadow-xs">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] px-1.5 flex items-center gap-1">
+            <Layers size={11} className="text-[var(--accent)]" />
+            Mode:
+          </span>
+
+          {/* Segmented Switcher */}
+          <div className="inline-flex p-0.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-xs shadow-2xs">
+            <button
+              type="button"
+              className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                activeTab === 'REKAP'
+                  ? 'bg-[var(--accent)] text-white shadow-xs font-bold'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+              onClick={() => setActiveTab('REKAP')}
+            >
+              <FileText size={13} />
+              <span>Rekap</span>
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                activeTab === 'EOD'
+                  ? 'bg-[var(--accent)] text-white shadow-xs font-bold'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+              onClick={() => setActiveTab('EOD')}
+            >
+              <PlusCircle size={13} />
+              <span>Input EOD</span>
+            </button>
+          </div>
+
+          {/* Collapsible Info Guide Toggle */}
           <button
-            className={`btn ${activeTab === 'REKAP' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-            onClick={() => setActiveTab('REKAP')}
+            type="button"
+            className={`p-1.5 rounded-lg border text-xs flex items-center gap-1 transition-all ${
+              showGuide
+                ? 'bg-[var(--accent-glow)] border-[var(--accent)] text-[var(--accent)]'
+                : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card)]'
+            }`}
+            onClick={() => setShowGuide(!showGuide)}
+            title={showGuide ? "Tutup panduan" : "Buka panduan mode"}
           >
-            <FileText size={16} />
-            Rekap Harian
-          </button>
-          <button
-            className={`btn ${activeTab === 'EOD' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-            onClick={() => setActiveTab('EOD')}
-          >
-            <PlusCircle size={16} />
-            Form Input EOD
+            <Info size={14} />
+            <span className="hidden sm:inline text-[11px] font-medium">{showGuide ? 'Tutup' : 'Panduan'}</span>
           </button>
         </div>
       </div>
 
-      {/* Info Banner: Penjelasan Perbedaan Rekap Harian vs Form Input EOD */}
-      <div
-        className="rounded-xl border p-4 text-sm transition-all no-print"
-        style={{
-          background: activeTab === 'REKAP' ? 'rgba(59, 130, 246, 0.08)' : 'rgba(245, 158, 11, 0.08)',
-          borderColor: activeTab === 'REKAP' ? 'rgba(59, 130, 246, 0.25)' : 'rgba(245, 158, 11, 0.25)',
-          color: 'var(--text-primary)'
-        }}
-      >
-        <div className="flex items-start gap-3">
-          <div
-            className="p-2 rounded-lg shrink-0 mt-0.5"
-            style={{
-              background: activeTab === 'REKAP' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-              color: activeTab === 'REKAP' ? '#2563eb' : '#d97706'
-            }}
-          >
-            <Info size={18} />
-          </div>
-          <div className="flex-1 space-y-1">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h4 className="font-semibold text-sm m-0" style={{ color: activeTab === 'REKAP' ? '#2563eb' : '#d97706' }}>
-                {activeTab === 'REKAP' ? '📊 Panduan: Rekap Harian (Monitoring & Audit)' : '📝 Panduan: Form Input EOD (End of Day Closing)'}
-              </h4>
-              <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
-                {activeTab === 'REKAP' ? 'Mode Tinjauan & Analisa' : 'Mode Pencatatan Fisik Staf'}
-              </span>
-            </div>
-
-            {activeTab === 'REKAP' ? (
-              <p className="text-xs leading-relaxed m-0 text-[var(--text-secondary)]">
-                <strong>Rekap Harian</strong> berfungsi untuk <strong>meninjau hasil kalkulasi</strong> dari stok yang telah diinput pada tanggal terpilih. Anda dapat memantau pergerakan Stok Awal, Barang Masuk (IN), Barang Keluar (OUT), Barang Terbuang (WASTE), sisa fisik (FULL/BROKEN), total kuantitas terpakai, dan nilai rupiah biaya bahan (HPP) untuk keperluan audit manajerial.
-              </p>
-            ) : (
-              <p className="text-xs leading-relaxed m-0 text-[var(--text-secondary)]">
-                <strong>Form Input EOD</strong> adalah <strong>lembar kerja operasional</strong> bagi staf bar atau kitchen di akhir shift untuk menginput hasil opname fisik malam hari. Masukkan sisa botol/kemasan utuh (<em>Full</em>), botol terbuka/sebagian (<em>Broken</em>), dan barang rusak/tumpah (<em>Waste</em>). Gunakan <strong>Simpan Draft</strong> untuk menyimpan sementara, atau <strong>Kunci & Closing EOD</strong> saat operasional selesai agar data terkunci per 23:59:59.
-              </p>
-            )}
-
-            <div className="pt-2 mt-2 border-t border-[var(--border)] grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-              <div className="flex items-center gap-1.5 text-[var(--text-secondary)]">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>
-                <span><strong>Rekap Harian:</strong> Khusus melihat rekap & nilai rupiah (Read/Review).</span>
+      {/* Collapsible Info Banner: Only shown when toggled */}
+      {showGuide && (
+        <div
+          className="rounded-xl border p-3 text-xs transition-all no-print animate-in fade-in duration-200"
+          style={{
+            background: activeTab === 'REKAP' ? 'rgba(59, 130, 246, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+            borderColor: activeTab === 'REKAP' ? 'rgba(59, 130, 246, 0.25)' : 'rgba(245, 158, 11, 0.25)',
+            color: 'var(--text-primary)'
+          }}
+        >
+          <div className="flex items-start justify-between gap-2.5">
+            <div className="flex items-start gap-2.5">
+              <div
+                className="p-1.5 rounded-lg shrink-0 mt-0.5"
+                style={{
+                  background: activeTab === 'REKAP' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                  color: activeTab === 'REKAP' ? '#2563eb' : '#d97706'
+                }}
+              >
+                <Info size={15} />
               </div>
-              <div className="flex items-center gap-1.5 text-[var(--text-secondary)]">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
-                <span><strong>Form Input EOD:</strong> Khusus menginput stok fisik & closing shift (Write/Lock).</span>
+              <div className="space-y-1">
+                <h4 className="font-semibold text-xs m-0" style={{ color: activeTab === 'REKAP' ? '#2563eb' : '#d97706' }}>
+                  {activeTab === 'REKAP' ? '📊 Panduan: Rekap Harian (Monitoring & Audit)' : '📝 Panduan: Form Input EOD (End of Day Closing)'}
+                </h4>
+                <p className="text-[11px] leading-relaxed m-0 text-[var(--text-secondary)]">
+                  {activeTab === 'REKAP'
+                    ? 'Rekap Harian berfungsi untuk meninjau hasil kalkulasi pergerakan stok (Stok Awal, In, Out, Waste, Full/Broken) dan nilai HPP untuk audit.'
+                    : 'Form Input EOD adalah lembar kerja closing shift untuk menginput sisa botol utuh (Full), terbuka (Broken), dan terbuang (Waste).'}
+                </p>
               </div>
             </div>
+            <button
+              type="button"
+              onClick={() => setShowGuide(false)}
+              className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 shrink-0"
+              title="Tutup panduan"
+            >
+              <X size={14} />
+            </button>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="glass-card" style={{ padding: '24px' }}>
+      <div className="glass-card p-3 sm:p-4 md:p-5" style={{ marginBottom: '16px' }}>
         {/* Print-only Document Header */}
         <div className="print-only print-header">
           <div className="print-header-brand">BARVENTIS — SISTEM MANAJEMEN GUDANG</div>
@@ -619,50 +695,98 @@ export default function DailyInventory({ category, initialTab }) {
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-            <label style={{ fontWeight: 600 }}>Filter Tanggal:</label>
-            <input
-              type="date"
-              className="form-control"
-              style={{ width: 'auto' }}
-              value={date}
-              onChange={e => setDate(e.target.value)}
-            />
+        {/* Integrated Minimalist Toolbar with Zero Dead Whitespace */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3 pb-3 border-b border-[var(--border)]/60">
+          {/* Left: Date controls with quick stepper buttons */}
+          <div className="flex items-center justify-between sm:justify-start gap-1.5 w-full sm:w-auto">
+            <div className="flex items-center gap-1.5 flex-1 sm:flex-initial">
+              <span className="text-xs font-bold text-[var(--text-secondary)] whitespace-nowrap mr-0.5">Tanggal:</span>
+              <div className="inline-flex items-center rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)]/50 p-0.5 shadow-2xs flex-1 sm:flex-initial justify-between">
+                <button
+                  type="button"
+                  className="p-1 hover:bg-[var(--bg-card)] rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
+                  onClick={handlePrevDay}
+                  title="Hari sebelumnya"
+                >
+                  <ChevronLeft size={15} />
+                </button>
+                <input
+                  type="date"
+                  className="bg-transparent border-0 text-xs font-semibold text-[var(--text-primary)] px-1 sm:px-2 py-1 focus:outline-none cursor-pointer text-center sm:text-left flex-1"
+                  style={{ height: '28px', minWidth: '105px' }}
+                  value={date}
+                  onChange={e => setDate(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="p-1 hover:bg-[var(--bg-card)] rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
+                  onClick={handleNextDay}
+                  title="Hari berikutnya"
+                >
+                  <ChevronRight size={15} />
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-[var(--border)] hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors shadow-2xs whitespace-nowrap shrink-0"
+              style={{ height: '32px' }}
+              onClick={handleToday}
+            >
+              Hari Ini
+            </button>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          {/* Center Info Badge: Eliminates empty gap and provides key context */}
+          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-secondary)]/60 border border-[var(--border)]/60 text-xs text-[var(--text-secondary)] shadow-2xs">
+            <span className={`w-2 h-2 rounded-full ${isLocked ? 'bg-amber-500' : 'bg-emerald-500'} animate-pulse`} />
+            <span className="font-semibold text-[var(--text-primary)]">
+              {activeTab === 'REKAP' ? `${records.length} Bahan Terdata` : `${items.length} Bahan Siap Input`}
+            </span>
+            <span className="text-[var(--border)]">•</span>
+            <span className="text-[11px]">
+              {isLocked ? 'Status EOD: Terkunci' : 'Status EOD: Siap Closing'}
+            </span>
+          </div>
+
+          {/* Right: Action Buttons Group */}
+          <div className="flex items-center gap-1.5 w-full sm:w-auto sm:ml-auto justify-end flex-wrap sm:flex-nowrap">
             <ExportButton
               onExportExcel={handleExportExcel}
               onExportPDF={handleExportPDF}
               currentRole={activeUser?.role}
               disabled={loading || (activeTab === 'REKAP' ? records.length === 0 : items.length === 0)}
+              className="flex-1 sm:flex-initial"
+              style={{ height: '32px', padding: '0 10px', fontSize: '0.78rem', gap: '5px' }}
             />
             <PrintButton
               currentRole={activeUser?.role}
               disabled={loading || (activeTab === 'REKAP' ? records.length === 0 : items.length === 0)}
               title="Cetak lembar inventaris harian"
+              className="flex-1 sm:flex-initial"
+              style={{ height: '32px', padding: '0 10px', fontSize: '0.78rem', gap: '5px' }}
             />
 
             {activeTab === 'EOD' && !isLocked && (
               <>
                 <button
-                  className="btn btn-secondary"
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                  className="btn btn-secondary text-xs"
+                  style={{ height: '32px', padding: '0 10px', display: 'flex', alignItems: 'center', gap: '5px' }}
                   onClick={handleSave}
                   disabled={saving || loading}
                 >
-                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                  Simpan Draft
+                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                  <span>Simpan</span>
                 </button>
                 <button
-                  className="btn"
-                  style={{ background: '#059669', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}
+                  className="btn text-xs font-bold"
+                  style={{ height: '32px', padding: '0 11px', background: '#059669', color: 'white', display: 'flex', alignItems: 'center', gap: '5px' }}
                   onClick={submitEODSettlement}
                   disabled={saving || loading}
                 >
-                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Lock size={16} />}
-                  Kunci & Closing EOD
+                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
+                  <span>Closing EOD</span>
                 </button>
               </>
             )}
@@ -746,9 +870,9 @@ export default function DailyInventory({ category, initialTab }) {
                 )}
                 {!loading && records.length === 0 && (
                   <tr>
-                    <td colSpan="10" style={{ textAlign: 'center', padding: '48px', color: '#6b7280' }}>
-                      <Calendar size={48} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
-                      <p style={{ fontWeight: 500, margin: 0 }}>Tidak ada data rekap untuk tanggal ini</p>
+                    <td colSpan="10" style={{ textAlign: 'center', padding: '24px 16px', color: 'var(--text-muted)' }}>
+                      <Calendar size={28} style={{ margin: '0 auto 8px', opacity: 0.3 }} />
+                      <p style={{ fontWeight: 500, margin: 0, fontSize: '0.8rem' }}>Tidak ada data rekap untuk tanggal ini</p>
                     </td>
                   </tr>
                 )}

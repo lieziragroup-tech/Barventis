@@ -202,7 +202,7 @@ export default function Maintenance() {
 
   // Initial load on mount. Setting loading flags inside the fetch is intentional
   // (standard fetch-on-mount pattern), so the related hooks rules are scoped off here.
-  /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     loadHealth();
     if (isOwner) {
@@ -211,7 +211,7 @@ export default function Maintenance() {
       loadConversions();
     }
   }, []);
-  /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   const handleRunCheck = async () => {
     setCheckLoading(true);
@@ -269,7 +269,43 @@ export default function Maintenance() {
   const spinStyle = { animation: 'spin 1s linear infinite' };
 
   return (
-    <div className="maintenance-container">
+    <div className="maintenance-container fade-in">
+      {/* Standardized Sub-Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print mb-4">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 sm:p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-xs shrink-0">
+            <Activity size={19} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-[var(--text-primary)] m-0">
+                Pemeliharaan & Kesehatan Sistem
+              </h1>
+              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-500/30">
+                <CheckCircle size={10} />
+                <span>Operasional Normal</span>
+              </span>
+            </div>
+            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
+              Monitoring metrik sistem, konversi satuan material, dan pengaturan resto.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="btn btn-secondary text-xs flex items-center gap-1.5 py-1.5 px-3"
+            onClick={loadHealth}
+            disabled={healthLoading}
+            title="Segarkan Kesehatan Sistem"
+          >
+            <RefreshCw size={13} style={healthLoading ? spinStyle : undefined} />
+            <span>Segarkan</span>
+          </button>
+        </div>
+      </div>
+
       {notice && (
         <div style={{
           marginBottom: '20px', padding: '12px 16px', borderRadius: 'var(--radius-lg)', fontSize: '0.85rem', fontWeight: 600,

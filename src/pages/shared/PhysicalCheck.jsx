@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { RefreshCw, Search, ShieldAlert, CheckCircle, Database } from 'lucide-react';
+import { RefreshCw, Search, ShieldAlert, CheckCircle, Database, CheckCircle2, ClipboardCheck } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
 
@@ -98,7 +98,7 @@ export default function PhysicalCheck() {
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     fetchExpectedUsage();
   }, []);
 
@@ -222,7 +222,7 @@ export default function PhysicalCheck() {
             location: 'RESTO',
             qty: variance, // Negative means stock went down
             amount: variance * price,
-            notes: `Cek Fisik Mingguan (${period.start}): Variance ${variance}`,
+            notes: `Cek Fisik Mingguan (${period.start}): Variance ${Number(Number(variance).toFixed(2))}`,
             created_by: userId
           });
         }
@@ -254,15 +254,41 @@ export default function PhysicalCheck() {
   );
 
   return (
-    <div className="fade-in">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
-        <div style={{ minWidth: 0 }}>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Cek Fisik & Waste</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Bandingkan pemakaian sistem (POS) dengan stok fisik aktual.</p>
+    <div className="fade-in space-y-3.5">
+      {/* Standardized Sub-Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print mb-4">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 sm:p-2.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shadow-xs shrink-0">
+            <ClipboardCheck size={19} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-[var(--text-primary)] m-0">
+                Cek Fisik & Rekonsiliasi Waste
+              </h1>
+              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 font-bold border border-amber-500/30">
+                <CheckCircle2 size={10} />
+                <span>Audit Berkala Aktif</span>
+              </span>
+            </div>
+            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
+              Bandingkan pemakaian sistem (POS) dengan stok fisik aktual untuk mendeteksi variansi.
+            </p>
+          </div>
         </div>
-        <button className="btn btn-secondary" onClick={fetchExpectedUsage} disabled={loading}>
-          <RefreshCw size={16} className={loading ? 'spin' : ''} /> Refresh
-        </button>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="btn btn-secondary text-xs flex items-center gap-1.5 py-1.5 px-3"
+            onClick={fetchExpectedUsage}
+            disabled={loading}
+            title="Refresh Data"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            <span>Segarkan</span>
+          </button>
+        </div>
       </div>
 
       {notification && (

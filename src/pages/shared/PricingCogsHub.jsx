@@ -21,7 +21,7 @@ const Loading = () => (
 
 export default function PricingCogsHub() {
   return (
-    <TabContainer tabs={TABS}>
+    <TabContainer tabs={TABS} title="Menu Pricing & COGS">
       {(activeTab) => (
         <Suspense fallback={<Loading />}>
           {activeTab === 'pricing' && <MenuPricing />}

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import {
-  FileSpreadsheet, FileText, CheckCircle, AlertTriangle,
-    Info, Calendar, Loader, ChevronDown
+  FileSpreadsheet, FileText, CheckCircle, CheckCircle2, AlertTriangle,
+  Info, Calendar, Loader, ChevronDown, DollarSign
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { formatIDR } from '../../services/costUtils';
@@ -294,15 +294,38 @@ export default function CostControl() {
   // Print PDF Lengkap
 
   return (
-    <div className="fade-in">
+    <div className="fade-in space-y-3.5">
+      {/* Standardized Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 sm:p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-xs shrink-0">
+            <DollarSign size={19} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
+                Cost Control & Laporan COGS
+              </h1>
+              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-500/30">
+                <CheckCircle2 size={10} />
+                <span>Audit Bulanan Aktif</span>
+              </span>
+            </div>
+            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
+              Rekapitulasi analisis biaya pokok penjualan (HPP), pembelian bahan, dan efisiensi margin.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Tab Switcher & Period Picker */}
-      <div className="glass-card" style={{ marginBottom: '24px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+      <div className="glass-card p-3 sm:p-4 mb-3.5 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <Calendar size={18} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-          <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Period:</span>
+          <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }} className="text-xs sm:text-sm">Period:</span>
           <select
-            className="form-control"
-            style={{ width: '160px', padding: '6px 12px', fontSize: '0.875rem' }}
+            className="form-control flex-1 sm:flex-initial"
+            style={{ minWidth: '160px', padding: '6px 12px', fontSize: '0.875rem' }}
             value={period}
             onChange={e => setPeriod(e.target.value)}
           >
@@ -314,9 +337,9 @@ export default function CostControl() {
 
         {/* Removed Tab Buttons */}
 
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative' }} className="w-full sm:w-auto">
           <button
-            className="btn btn-primary" 
+            className="btn btn-primary w-full sm:w-auto justify-center" 
             style={{ display: 'flex', gap: '8px', padding: '10px 18px', fontSize: '0.85rem', fontWeight: 600, alignItems: 'center' }} 
             onClick={() => setShowExportMenu(!showExportMenu)}
             disabled={loading || !reportData}

@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  Upload, FileSpreadsheet, CheckCircle,
-  Calendar, Database, ShieldAlert, X, AlertTriangle
+  Upload, FileSpreadsheet, CheckCircle, CheckCircle2, UploadCloud,
+  Calendar, Database, ShieldAlert, X, AlertTriangle, Layers
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useData } from '../../contexts/DataContext';
@@ -29,7 +29,7 @@ function RecipeCombobox({ recipes, materials, value, onSelect, placeholder }) {
   const wrapRef = useRef(null);
   const debouncedQuery = useDebouncedValue(query, 250);
 
-  // eslint-disable-next-line
+   
   useEffect(() => { setQuery(value || ''); }, [value]);
 
   useEffect(() => {
@@ -455,14 +455,25 @@ export default function PosUpload() {
 
   return (
     <div className="animate-in fade-in duration-500">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
-            ESB Auto-Deduct Upload
-          </h1>
-          <p style={{ color: 'var(--text-secondary)' }}>
-            Upload raw file Penjualan Beverage ESB. Sistem akan otomatis memotong stok real-time (Auto-COGS).
-          </p>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-5 pb-3 sm:pb-4 border-b border-[var(--border)]/70">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 sm:p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-xs shrink-0">
+            <UploadCloud size={19} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
+                Upload File POS (ESB)
+              </h1>
+              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-500/30">
+                <CheckCircle2 size={10} />
+                <span>Auto-COGS Aktif</span>
+              </span>
+            </div>
+            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
+              Upload raw file Penjualan Beverage ESB. Sistem akan otomatis memotong stok real-time (Auto-COGS).
+            </p>
+          </div>
         </div>
       </div>
 
@@ -551,7 +562,6 @@ export default function PosUpload() {
           onDragLeave={handleDrag}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current.click()}
-          style={{ minHeight: '340px' }}
         >
           <input
             type="file"
@@ -561,13 +571,13 @@ export default function PosUpload() {
             onChange={handleFileChange}
           />
           <div className="upload-icon-circle">
-            {loading ? <Database className="animate-spin" size={32} /> : <Upload size={32} />}
+            {loading ? <Database className="animate-spin" size={24} /> : <Upload size={24} />}
           </div>
           <div>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+            <h3 style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
               {loading ? "Memproses Data..." : "Upload Spreadsheet Penjualan POS"}
             </h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', maxWidth: '420px', margin: '0 auto' }}>
+            <p style={{ color: 'var(--text-secondary)', maxWidth: '420px', margin: '0 auto' }}>
               Drag and drop file "Penjualan Beverage (ESB).xlsx" atau format POS lainnya kesini. Sistem otomatis menghapus header sampah dan memvisualisasikan data mentahnya.
             </p>
           </div>
@@ -607,34 +617,36 @@ export default function PosUpload() {
             </div>
           )}
 
-          {/* TABS */}
-          <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', borderBottom: '1px solid var(--border)' }}>
-            <button
-              className="btn"
-              style={{
-                background: 'transparent', border: 'none', padding: '12px 20px',
-                borderBottom: activeTab === 'summary' ? '2px solid var(--accent)' : '2px solid transparent',
-                color: activeTab === 'summary' ? 'var(--accent)' : 'var(--text-muted)',
-                fontWeight: activeTab === 'summary' ? 700 : 500,
-                borderRadius: 0
-              }}
-              onClick={() => setActiveTab('summary')}
-            >
-              Summary & Validasi Resep
-            </button>
-            <button
-              className="btn"
-              style={{
-                background: 'transparent', border: 'none', padding: '12px 20px',
-                borderBottom: activeTab === 'raw' ? '2px solid var(--accent)' : '2px solid transparent',
-                color: activeTab === 'raw' ? 'var(--accent)' : 'var(--text-muted)',
-                fontWeight: activeTab === 'raw' ? 700 : 500,
-                borderRadius: 0
-              }}
-              onClick={() => setActiveTab('raw')}
-            >
-              Data Mentah (Raw Viewer)
-            </button>
+          {/* Labeled Sub-menu Switcher */}
+          <div className="flex items-center gap-2 mb-4 p-1.5 rounded-xl bg-[var(--bg-secondary)]/80 border border-[var(--border)] shadow-xs">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] px-1.5 flex items-center gap-1">
+              <Layers size={11} className="text-[var(--accent)]" />
+              Tampilan:
+            </span>
+            <div className="inline-flex p-0.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-xs shadow-2xs">
+              <button
+                type="button"
+                className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                  activeTab === 'summary'
+                    ? 'bg-[var(--accent)] text-white shadow-xs font-bold'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+                onClick={() => setActiveTab('summary')}
+              >
+                Summary & Validasi Resep
+              </button>
+              <button
+                type="button"
+                className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                  activeTab === 'raw'
+                    ? 'bg-[var(--accent)] text-white shadow-xs font-bold'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+                onClick={() => setActiveTab('raw')}
+              >
+                Data Mentah (Raw Viewer)
+              </button>
+            </div>
           </div>
 
           {activeTab === 'summary' ? (

@@ -409,28 +409,35 @@ export default function TrimmingProduction() {
   return (
     <div className="fade-in space-y-6 max-w-7xl mx-auto pb-12">
       {/* HEADER */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-[var(--border)] pb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl md:text-2xl font-black tracking-tight text-[var(--text-primary)]">
-              Trimming & Produksi Terintegrasi
-            </h1>
-            <span className="badge badge-primary text-xs font-mono font-bold px-2 py-0.5">
-              1-FLOW SYSTEM
-            </span>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-[var(--border)]/70 pb-3 sm:pb-3.5">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 sm:p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-xs shrink-0">
+            <Scale size={19} />
           </div>
-          <p className="text-xs md:text-sm text-[var(--text-muted)] mt-1">
-            Alur tunggal: Daftarkan bahan mentah (Tahap 1), lalu klik tombol pemicu langsung untuk mencatat hasil bersih & limbah (Tahap 2).
-          </p>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-[var(--text-primary)] m-0">
+                Trimming & Produksi Terintegrasi
+              </h1>
+              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-500/30">
+                <CheckCircle2 size={10} />
+                <span>1-Flow System Aktif</span>
+              </span>
+            </div>
+            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
+              Alur tunggal: Daftarkan bahan mentah (Tahap 1), lalu catat hasil bersih & limbah trimming (Tahap 2).
+            </p>
+          </div>
         </div>
         <button
           type="button"
           onClick={reloadData}
           disabled={batchesLoading}
-          className="btn btn-secondary text-xs flex items-center gap-2 self-start md:self-auto"
+          className="btn btn-secondary text-xs flex items-center gap-1.5 self-start md:self-auto"
+          style={{ height: '32px', padding: '0 12px' }}
         >
-          <RefreshCw size={14} className={batchesLoading ? 'animate-spin' : ''} />
-          Segarkan Data
+          <RefreshCw size={13} className={batchesLoading ? 'animate-spin' : ''} />
+          <span>Segarkan Data</span>
         </button>
       </div>
 

@@ -18,7 +18,7 @@ const Loading = () => (
 
 export default function CostControlReportHub() {
   return (
-    <TabContainer tabs={TABS}>
+    <TabContainer tabs={TABS} title="Cost Control & Laporan SO">
       {(activeTab) => (
         <Suspense fallback={<Loading />}>
           {activeTab === 'cost-control' && <CostControl />}

@@ -46,22 +46,45 @@ export default function ExpiryMonitor() {
 
   return (
     <div className="fade-in space-y-5">
-      <div className="glass-card" style={{ padding: '20px 24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ padding: '8px', borderRadius: '12px', background: 'rgba(239,68,68,0.1)' }}>
-              <AlertTriangle size={22} style={{ color: '#ef4444' }} />
+      {/* Header & Filter Toolbar */}
+      <div className="glass-card p-3.5 sm:p-4 mb-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-red-500/10 text-red-500 border border-red-500/20 shadow-xs">
+              <AlertTriangle size={18} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Monitor Kedaluwarsa (FEFO)</h3>
-              <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="m-0 text-base sm:text-lg font-extrabold text-[var(--text-primary)] tracking-tight">
+                  Monitor Kedaluwarsa (FEFO)
+                </h3>
+                {expired.length > 0 ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-red-500/15 text-red-700 dark:text-red-400 font-bold border border-red-500/30">
+                    <AlertTriangle size={10} />
+                    <span>{expired.length} Batch Expired</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-500/30">
+                    <ShieldCheck size={10} />
+                    <span>Stok Aman (FEFO)</span>
+                  </span>
+                )}
+              </div>
+              <p className="m-0 text-[11px] text-[var(--text-secondary)] mt-0.5">
                 Pemantauan batch bahan yang mendekati atau melewati tanggal kedaluwarsa
               </p>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <select className="form-control" style={{ width: 'auto', fontSize: '0.8rem' }}
-              value={daysFilter} onChange={e => setDaysFilter(Number(e.target.value))}>
+          <div className="flex items-center gap-2 bg-[var(--bg-secondary)]/80 p-1.5 rounded-xl border border-[var(--border)] shadow-xs">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] px-1.5">
+              Filter Rentang:
+            </span>
+            <select
+              className="form-control text-xs font-semibold"
+              style={{ width: 'auto', height: '32px', padding: '4px 10px' }}
+              value={daysFilter}
+              onChange={e => setDaysFilter(Number(e.target.value))}
+            >
               <option value={1}>H-1 (Besok)</option>
               <option value={3}>H-3 (3 Hari)</option>
               <option value={7}>H-7 (Seminggu)</option>

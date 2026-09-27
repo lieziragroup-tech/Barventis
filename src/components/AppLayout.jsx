@@ -66,48 +66,7 @@ const NavGroup = ({ children, isFirst }) => {
   );
 };
 
-const MobileBottomNav = ({ isSuperAdmin, isTenant, basePath, hasAccess }) => {
-  return (
-    <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-[var(--bg-secondary)] border-t border-[var(--border)] z-50 px-2 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] flex justify-around items-center">
-      {isSuperAdmin ? (
-        <>
-          <NavLink to="/superadmin" end className={({isActive}) => `flex flex-col items-center p-2 rounded-lg transition-colors ${isActive ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}`}>
-            <Building2 size={20} /><span className="text-[0.65rem] mt-1 font-medium">Tenants</span>
-          </NavLink>
-          <NavLink to="/superadmin/logs" className={({isActive}) => `flex flex-col items-center p-2 rounded-lg transition-colors ${isActive ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}`}>
-            <Clock size={20} /><span className="text-[0.65rem] mt-1 font-medium">Logs</span>
-          </NavLink>
-        </>
-      ) : isTenant ? (
-        <>
-          {hasAccess(['Owner', 'Bar', 'Kitchen', 'Central']) && (
-            <NavLink to={basePath} end className={({isActive}) => `flex flex-col items-center p-2 rounded-lg transition-colors ${isActive ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}`}>
-              <LayoutDashboard size={20} /><span className="text-[0.65rem] mt-1 font-medium">Home</span>
-            </NavLink>
-          )}
-          {hasAccess(['Owner', 'Bar', 'Kitchen', 'Central', 'Service', 'Purchasing', 'Staff']) && (
-            <NavLink to={`${basePath}/daily-inventory`} className={({isActive}) => `flex flex-col items-center p-2 rounded-lg transition-colors ${isActive ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}`}>
-              <ClipboardList size={20} /><span className="text-[0.65rem] mt-1 font-medium">EOD</span>
-            </NavLink>
-          )}
-          {hasAccess(['Owner', 'Service', 'Central', 'Bar', 'Staff']) && (
-            <NavLink to={`${basePath}/penjualan`} className={({isActive}) => `flex flex-col items-center p-2 rounded-lg transition-colors ${isActive ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}`}>
-              <UploadCloud size={20} /><span className="text-[0.65rem] mt-1 font-medium">POS</span>
-            </NavLink>
-          )}
-          {hasAccess(['Owner', 'Central', 'Purchasing']) && (
-            <NavLink to={`${basePath}/procurement`} className={({isActive}) => `flex flex-col items-center p-2 rounded-lg transition-colors ${isActive ? 'text-[var(--accent)]' : 'text-[var(--text-secondary)]'}`}>
-              <ShoppingCart size={20} /><span className="text-[0.65rem] mt-1 font-medium">Belanja</span>
-            </NavLink>
-          )}
-          <button onClick={() => document.getElementById('mobile-more-menu').classList.toggle('hidden')} className="flex flex-col items-center p-2 rounded-lg text-[var(--text-secondary)]">
-            <Menu size={20} /><span className="text-[0.65rem] mt-1 font-medium">Menu</span>
-          </button>
-        </>
-      ) : null}
-    </div>
-  );
-};
+// MobileBottomNav removed per user request
 
 export default function DashboardLayout() {
   const { activeUser, tenantName, logout } = useAuth();
@@ -129,7 +88,7 @@ export default function DashboardLayout() {
     if (!loadingData && activeUser?.role !== 'Super Admin' && activeUser?.role !== 'SuperAdmin') {
       const hasDismissed = sessionStorage.getItem('barventis_onboarding_dismissed') === 'true';
       if (stock.length === 0 && !hasDismissed) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+         
         setShowOnboarding(true);
       }
     }
@@ -142,7 +101,7 @@ export default function DashboardLayout() {
     if (currentTenant?.is_pos_enabled) {
       const hasSeenNotif = localStorage.getItem(`pos_notif_${currentTenant.id}`);
       if (!hasSeenNotif) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+         
         setShowPosNotif(true);
         localStorage.setItem(`pos_notif_${currentTenant.id}`, 'true');
       }
@@ -157,6 +116,9 @@ export default function DashboardLayout() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [editProfileName, setEditProfileName] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPasswordSection, setShowPasswordSection] = useState(false);
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   
   const [showNotifications, setShowNotifications] = useState(false);
@@ -177,26 +139,27 @@ export default function DashboardLayout() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Edge Swipe Logic for Mobile (WBS 8.2)
+  // Shortcut Swipe to Right for Sidebar (Mobile Ergonomics)
   const touchStartRef = useRef({ x: 0, y: 0, time: 0 });
   const touchEndRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     const handleTouchStart = (e) => {
-      // Only detect if touch starts from left edge (X <= 30px)
-      if (e.touches[0].clientX <= 30) {
-        touchStartRef.current = {
-          x: e.touches[0].clientX,
-          y: e.touches[0].clientY,
-          time: Date.now()
-        };
-      } else {
-        // Reset if not starting from edge to avoid conflict with table scroll
-        touchStartRef.current = { x: 0, y: 0, time: 0 };
-      }
+      if (window.innerWidth >= 1024) return;
+      const touch = e.touches[0];
+      touchStartRef.current = {
+        x: touch.clientX,
+        y: touch.clientY,
+        time: Date.now()
+      };
+      touchEndRef.current = {
+        x: touch.clientX,
+        y: touch.clientY
+      };
     };
 
     const handleTouchMove = (e) => {
+      if (window.innerWidth >= 1024) return;
       touchEndRef.current = {
         x: e.touches[0].clientX,
         y: e.touches[0].clientY
@@ -204,29 +167,33 @@ export default function DashboardLayout() {
     };
 
     const handleTouchEnd = () => {
+      if (window.innerWidth >= 1024) return;
       const start = touchStartRef.current;
       const end = touchEndRef.current;
       
-      // Validation: Start is valid, horizontal distance > 60px, time < 300ms
-      if (start.x > 0 && start.x <= 30 && end.x > 0) {
-        const deltaX = end.x - start.x;
-        const deltaY = Math.abs(end.y - start.y);
-        const deltaTime = Date.now() - start.time;
+      const deltaX = end.x - start.x;
+      const deltaY = Math.abs(end.y - start.y);
+      const deltaTime = Date.now() - start.time;
 
-        // Ensure it's mostly a horizontal swipe (not scrolling down)
-        if (deltaX > 60 && deltaY < 40 && deltaTime < 300) {
-          setIsSidebarOpen(true);
-        }
+      // Swipe ke kanan untuk membuka sidebar:
+      // - Berawal dari sisi kiri (startX <= 100px) atau pergeseran ke kanan yang jelas
+      // - Jarak geser horizontal >= 50px
+      // - Sudut lebih mendatar dari vertikal (deltaY < deltaX * 0.8 dan deltaY < 80px)
+      // - Waktu gesture wajar (< 600ms)
+      if (start.x <= 120 && deltaX >= 50 && deltaY < 80 && deltaTime < 600) {
+        setIsSidebarOpen(true);
+      } else if (deltaX <= -50 && deltaY < 80 && deltaTime < 600) {
+        // Swipe ke kiri untuk menutup sidebar jika sedang terbuka
+        setIsSidebarOpen(false);
       }
       
-      // Reset
       touchStartRef.current = { x: 0, y: 0, time: 0 };
       touchEndRef.current = { x: 0, y: 0 };
     };
 
     window.addEventListener('touchstart', handleTouchStart, { passive: true });
     window.addEventListener('touchmove', handleTouchMove, { passive: true });
-    window.addEventListener('touchend', handleTouchEnd);
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
 
     return () => {
       window.removeEventListener('touchstart', handleTouchStart);
@@ -310,16 +277,37 @@ export default function DashboardLayout() {
 
   const openProfileModal = () => {
     setEditProfileName(activeUser?.name || '');
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowPasswordSection(false);
     setShowProfileModal(true);
     setShowUserMenu(false);
   };
 
   const handleUpdateProfile = async () => {
     if (!editProfileName.trim()) return;
+    if (showPasswordSection && newPassword) {
+      if (newPassword.length < 6) {
+        showToast('Password baru minimal harus 6 karakter', 'error');
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        showToast('Konfirmasi password tidak cocok', 'error');
+        return;
+      }
+    }
+
     setIsUpdatingProfile(true);
     try {
-      await api.updateProfileName(editProfileName);
-      showToast('Profil berhasil diperbarui', 'success');
+      if (editProfileName !== activeUser?.name) {
+        await api.updateProfileName(editProfileName);
+      }
+      if (showPasswordSection && newPassword) {
+        await api.updatePassword(newPassword);
+        showToast('Profil & Password berhasil diperbarui', 'success');
+      } else {
+        showToast('Profil berhasil diperbarui', 'success');
+      }
       setShowProfileModal(false);
       setTimeout(() => window.location.reload(), 1000);
     } catch (error) {
@@ -574,18 +562,20 @@ export default function DashboardLayout() {
       </motion.div>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-[var(--bg-primary)] lg:pb-0 pb-[72px]">
-        <header className="flex flex-row items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--bg-primary)]/80 backdrop-blur-md z-30 shrink-0 px-4 py-3 md:px-8 md:py-4">
-          <div className="header-title-sec flex items-center gap-2 md:gap-4 flex-1 min-w-0">
+      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-[var(--bg-primary)]">
+        <header className="flex flex-row items-center justify-between gap-1.5 md:gap-2 border-b border-[var(--border)] bg-[var(--bg-primary)]/80 backdrop-blur-md z-30 shrink-0 px-2.5 py-2 md:px-8 md:py-4">
+          <div className="header-title-sec flex items-center gap-1.5 md:gap-4 flex-1 min-w-0">
             <button
-              className="btn btn-secondary mobile-menu-btn hidden"
-              style={{ padding: '6px', borderRadius: 'var(--radius-sm)' }}
+              className="btn btn-secondary mobile-menu-btn flex lg:hidden items-center justify-center shrink-0"
+              style={{ padding: '5px 7px', borderRadius: 'var(--radius-sm)' }}
               onClick={() => setIsSidebarOpen(true)}
+              title="Buka Menu Navigasi"
+              aria-label="Buka Menu"
             >
-              <Menu size={18} />
+              <Menu size={16} />
             </button>
-            <div className="min-w-0">
-              <h1 className="text-sm md:text-xl font-bold truncate m-0">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-xs sm:text-sm md:text-xl font-bold truncate m-0">
                 {isSuperAdmin && location.pathname === '/superadmin' && "Platform Tenants Management"}
                 {isSuperAdmin && location.pathname === '/superadmin/templates' && "Global POS Excel Templates"}
                 {isSuperAdmin && location.pathname === '/superadmin/logs' && "Global System Audit Trail"}
@@ -625,34 +615,34 @@ export default function DashboardLayout() {
               </p>
             </div>
           </div>
-          <div className="header-actions flex items-center gap-2 shrink-0">
+          <div className="header-actions flex items-center gap-1 sm:gap-2 shrink-0">
             {currentTenant?.is_pos_enabled && (
               <button
-                className="btn hover:opacity-80 transition-opacity flex items-center justify-center gap-1.5"
+                className="btn hover:opacity-80 transition-opacity flex items-center justify-center gap-1"
                 onClick={handleOpenPos}
                 title="Buka POS Terminal"
                 style={{
                   background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: 'var(--radius-md)',
-                  padding: '6px 10px', color: '#3b82f6',
-                  fontSize: '0.85rem', fontWeight: 600,
+                  padding: '5px 8px', color: '#3b82f6',
+                  fontSize: '0.8rem', fontWeight: 600,
                   flexShrink: 0
                 }}
               >
-                <MonitorSmartphone size={16} /> <span className="hidden md:inline">POS Terminal</span>
+                <MonitorSmartphone size={14} /> <span className="hidden md:inline">POS Terminal</span>
               </button>
             )}
             <button
-              className="btn hover:opacity-80 transition-opacity flex items-center justify-center gap-1.5"
+              className="btn hover:opacity-80 transition-opacity flex items-center justify-center gap-1"
               onClick={() => setShowGuidebook(true)}
               title="Buku Panduan Sistem"
               style={{
                 background: 'var(--accent-glow)', border: '1px solid var(--accent)', borderRadius: 'var(--radius-md)',
-                padding: '6px 10px', color: 'var(--accent)', 
-                fontSize: '0.85rem', fontWeight: 600,
+                padding: '5px 8px', color: 'var(--accent)', 
+                fontSize: '0.8rem', fontWeight: 600,
                 flexShrink: 0
               }}
             >
-              <BookOpen size={16} /> <span className="hidden md:inline">Panduan</span>
+              <BookOpen size={14} /> <span className="hidden md:inline">Panduan</span>
             </button>
             
             {isTenant && (
@@ -663,11 +653,11 @@ export default function DashboardLayout() {
                 title="Sinkronisasi ulang data"
                 style={{
                   background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
-                  padding: '6px 8px', color: 'var(--text-secondary)',
+                  padding: '5px 7px', color: 'var(--text-secondary)',
                   flexShrink: 0
                 }}
               >
-                <RefreshCw size={16} style={{ animation: loadingData ? 'spin 0.8s linear infinite' : 'none' }} />
+                <RefreshCw size={14} style={{ animation: loadingData ? 'spin 0.8s linear infinite' : 'none' }} />
               </button>
             )}
 
@@ -683,13 +673,13 @@ export default function DashboardLayout() {
                 title="Notifikasi Sistem"
                 style={{
                   background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
-                  padding: '6px 8px', color: 'var(--text-secondary)',
+                  padding: '5px 7px', color: 'var(--text-secondary)',
                   flexShrink: 0
                 }}
               >
-                <Bell size={16} />
+                <Bell size={14} />
                 {notifCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-[var(--bg-primary)]"></span>
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[var(--bg-primary)]"></span>
                 )}
               </button>
               <AnimatePresence>
@@ -775,7 +765,7 @@ export default function DashboardLayout() {
           </div>
         </header>
 
-        <section className="flex-1 overflow-y-auto relative p-3 md:p-8">
+        <section className="flex-1 overflow-y-auto relative p-2.5 sm:p-4 md:p-8">
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
@@ -791,36 +781,7 @@ export default function DashboardLayout() {
         </section>
       </main>
 
-      <MobileBottomNav isSuperAdmin={isSuperAdmin} isTenant={isTenant} basePath={basePath} hasAccess={hasAccess} />
-
-      {/* Mobile More Menu (Hidden by default, toggled by BottomNav) */}
-      <div id="mobile-more-menu" className="hidden lg:hidden fixed inset-0 z-[60] bg-[var(--bg-secondary)] flex-col pt-12 pb-24 px-4 overflow-y-auto" style={{ display: 'none' }}>
-        <style>{`
-          #mobile-more-menu:not(.hidden) { display: flex !important; }
-        `}</style>
-        <button onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} className="absolute top-4 right-4 p-2">
-          <X size={24} />
-        </button>
-        <h2 className="text-xl font-bold mb-6">Menu Lainnya</h2>
-        <div className="flex flex-col gap-2">
-          {isTenant && hasAccess(['Owner', 'Bar', 'Kitchen', 'Central', 'Staff']) && (
-            <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/pricing-cogs`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Tag size={20} /> Menu Pricing & COGS</NavLink>
-          )}
-          {isTenant && hasAccess(['Owner', 'Bar', 'Kitchen', 'Central', 'Staff']) && (
-            <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/opname-assets`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Boxes size={20} /> Stock Opname & Aset</NavLink>
-          )}
-          {isTenant && hasAccess(['Owner', 'Kitchen', 'Central', 'Staff']) && (
-            <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/produksi`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Scissors size={20} /> Proses Produksi Bahan</NavLink>
-          )}
-          {isTenant && hasAccess(['Owner', 'Central', 'Bar', 'Staff']) && (
-            <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/cost-report`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Calculator size={20} /> Cost Control & Laporan</NavLink>
-          )}
-          {isTenant && hasAccess(['Owner']) && (
-            <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/sistem`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Settings size={20} /> Pengaturan & Sistem</NavLink>
-          )}
-          <button onClick={() => { document.getElementById('mobile-more-menu').classList.add('hidden'); logout(); }} className="p-4 rounded-xl bg-red-500/10 text-red-500 mt-4 flex items-center gap-3 text-left"><LogOut size={20} /> Keluar (Logout)</button>
-        </div>
-      </div>
+      {/* Mobile Bottom Navigation & More Menu removed per user request */}
 
       {loadingData && (
         <div style={{
@@ -898,8 +859,8 @@ export default function DashboardLayout() {
         />
       )}
 
-      {/* Floating AI Assistant */}
-      <AIAssistant />
+      {/* Floating AI Assistant (Hidden per user request) */}
+      {/* <AIAssistant /> */}
       <GuidebookModal isOpen={showGuidebook} onClose={() => setShowGuidebook(false)} />
 
       {/* POS Setup Modal */}
@@ -1068,6 +1029,70 @@ export default function DashboardLayout() {
                   }}
                   placeholder="Enter your name"
                 />
+              </div>
+
+              {/* Ganti Password Section */}
+              <div style={{ marginTop: '16px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowPasswordSection(!showPasswordSection)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--accent)',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    padding: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <span>{showPasswordSection ? '▼' : '►'}</span>
+                  <span>Ganti Password Akun</span>
+                </button>
+
+                {showPasswordSection && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Password Baru</label>
+                      <input
+                        type="password"
+                        placeholder="Minimal 6 karakter"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          borderRadius: 'var(--radius-md)',
+                          border: '1px solid var(--border)',
+                          background: 'var(--bg-secondary)',
+                          color: 'var(--text-primary)',
+                          fontSize: '0.85rem'
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Konfirmasi Password Baru</label>
+                      <input
+                        type="password"
+                        placeholder="Ulangi password baru"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          borderRadius: 'var(--radius-md)',
+                          border: '1px solid var(--border)',
+                          background: 'var(--bg-secondary)',
+                          color: 'var(--text-primary)',
+                          fontSize: '0.85rem'
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '24px' }}>

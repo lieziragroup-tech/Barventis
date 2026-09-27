@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Calendar, FileText as Database, FileText as FileSpreadsheet } from 'lucide-react';
+import { Search, Calendar, FileText as Database, FileText as FileSpreadsheet, CheckCircle2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatIDR } from '../../services/costUtils';
@@ -52,7 +52,7 @@ export default function PosRawData() {
   }, [currentTenant, page, pageSize, searchTerm, dateFrom, dateTo]);
 
   useEffect(() => {
-    // eslint-disable-next-line
+     
     fetchData();
   }, [fetchData]);
 
@@ -77,16 +77,26 @@ export default function PosRawData() {
   const totalPages = Math.ceil(total / pageSize) || 1;
 
   return (
-    <div className="fade-in" style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
-        <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Database size={24} style={{ color: 'var(--primary)' }} />
-            Data Mentah POS
-          </h1>
-          <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '0.9rem' }}>
-            Lihat riwayat item transaksi (raw data) dari file POS yang diupload.
-          </p>
+    <div className="fade-in" style={{ maxWidth: '1200px', margin: '0 auto' }}>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-5 pb-3 sm:pb-4 border-b border-[var(--border)]/70">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 sm:p-2.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shadow-xs shrink-0">
+            <Database size={19} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
+                Riwayat & Data Mentah POS
+              </h1>
+              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-400 font-bold border border-blue-500/30">
+                <CheckCircle2 size={10} />
+                <span>Raw Audit Logs</span>
+              </span>
+            </div>
+            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
+              Lihat riwayat item transaksi (raw data) dari file POS yang diupload.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -97,52 +107,50 @@ export default function PosRawData() {
       )}
 
       {/* Filter Bar */}
-      <div className="glass-card" style={{ padding: '16px', marginBottom: '24px', display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <div style={{ flex: '1 1 250px' }}>
-          <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>Cari Menu</label>
+      <div className="glass-card p-3 sm:p-4 mb-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
+        <div className="flex-1 min-w-[180px]">
+          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>Cari Menu</label>
           <div style={{ position: 'relative' }}>
-            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <Search size={15} style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
             <input
               type="text"
-              className="form-control"
+              className="form-control w-full"
               placeholder="Ketik nama menu..."
               value={inputValue}
               onChange={handleSearchChange}
-              style={{ paddingLeft: '36px' }}
+              style={{ paddingLeft: '34px' }}
             />
           </div>
         </div>
 
-        <div style={{ flex: '1 1 150px' }}>
-          <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>Dari Tanggal</label>
-          <div style={{ position: 'relative' }}>
-            <Calendar size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+        <div className="grid grid-cols-2 gap-2 w-full sm:w-auto">
+          <div>
+            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>Dari Tanggal</label>
             <input
               type="date"
-              className="form-control"
+              className="form-control w-full"
               value={dateFrom}
               onChange={e => { setDateFrom(e.target.value); handleDateChange(); }}
-              style={{ paddingLeft: '36px' }}
             />
           </div>
-        </div>
 
-        <div style={{ flex: '1 1 150px' }}>
-          <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>Sampai Tanggal</label>
-          <div style={{ position: 'relative' }}>
-            <Calendar size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <div>
+            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>Sampai Tanggal</label>
             <input
               type="date"
-              className="form-control"
+              className="form-control w-full"
               value={dateTo}
               onChange={e => { setDateTo(e.target.value); handleDateChange(); }}
-              style={{ paddingLeft: '36px' }}
             />
           </div>
         </div>
 
         <div>
-          <button className="btn btn-secondary" onClick={() => { setInputValue(''); setSearchTerm(''); setDateFrom(''); setDateTo(''); setPage(1); }} style={{ height: '42px', padding: '0 16px' }}>
+          <button
+            className="btn btn-secondary w-full sm:w-auto justify-center"
+            onClick={() => { setInputValue(''); setSearchTerm(''); setDateFrom(''); setDateTo(''); setPage(1); }}
+            style={{ padding: '8px 14px' }}
+          >
             Reset Filter
           </button>
         </div>

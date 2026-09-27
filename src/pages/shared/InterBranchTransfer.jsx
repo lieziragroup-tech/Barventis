@@ -40,6 +40,7 @@ export default function InterBranchTransfer() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [sourceFilter, setSourceFilter] = useState('ALL');
@@ -70,7 +71,7 @@ export default function InterBranchTransfer() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     fetchTransfers();
   }, [fetchTransfers]);
 
@@ -231,34 +232,51 @@ export default function InterBranchTransfer() {
   };
 
   return (
-    <div className="page-container fade-in space-y-5">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-500">
-              <ArrowRightLeft size={22} />
-            </div>
-            <div>
-              <h1 className="text-xl md:text-2xl font-black m-0" style={{ color: 'var(--text-primary)' }}>
+    <div className="fade-in space-y-3.5">
+      {/* Standardized Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 sm:p-2.5 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-xs shrink-0">
+            <ArrowRightLeft size={19} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
                 Inter-Branch Transfer
               </h1>
-              <p className="text-xs md:text-sm mt-0.5 m-0" style={{ color: 'var(--text-secondary)' }}>
-                Mutasi & serah-terima fisik bahan baku antar lokasi internal (Central Warehouse & Outlet)
-              </p>
+              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 font-bold border border-indigo-500/30">
+                <CheckCircle2 size={10} />
+                <span>Mutasi Antar-Cabang</span>
+              </span>
             </div>
+            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
+              Mutasi & serah-terima fisik bahan baku antar lokasi internal (Central Warehouse & Outlet).
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 ml-auto">
           <button
-            className="btn btn-secondary text-xs md:text-sm flex items-center gap-1.5"
+            className="btn btn-secondary text-xs flex items-center gap-1.5"
+            style={{ height: '32px', padding: '0 12px' }}
             onClick={fetchTransfers}
             disabled={loading}
             title="Muat Ulang Data"
           >
-            <RotateCcw size={15} className={loading ? 'animate-spin' : ''} />
+            <RotateCcw size={14} className={loading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Refresh</span>
+          </button>
+
+          {/* Toggle Panduan */}
+          <button
+            type="button"
+            className={`btn btn-secondary text-xs flex items-center gap-1.5 ${showGuide ? 'border-[var(--accent)] text-[var(--accent)]' : ''}`}
+            style={{ height: '32px', padding: '0 12px' }}
+            onClick={() => setShowGuide(!showGuide)}
+            title={showGuide ? "Tutup panduan" : "Buka panduan alur transfer"}
+          >
+            <Info size={14} />
+            <span className="hidden sm:inline">{showGuide ? 'Tutup' : 'Panduan'}</span>
           </button>
 
           {/* Trigger Button to Open Modal */}
@@ -275,71 +293,68 @@ export default function InterBranchTransfer() {
         </div>
       </div>
 
-      {/* Info Banner: Panduan Fungsi & Alur Transfer */}
-      <div
-        className="rounded-xl border p-4 text-sm transition-all"
-        style={{
-          background: 'rgba(99, 102, 241, 0.08)',
-          borderColor: 'rgba(99, 102, 241, 0.25)',
-          color: 'var(--text-primary)'
-        }}
-      >
-        <div className="flex items-start gap-3">
-          <div
-            className="p-2 rounded-lg shrink-0 mt-0.5"
-            style={{
-              background: 'rgba(99, 102, 241, 0.18)',
-              color: '#4f46e5'
-            }}
-          >
-            <Info size={20} />
-          </div>
-          <div className="flex-1 space-y-1.5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h4 className="font-bold text-sm m-0 text-indigo-600 dark:text-indigo-400">
-                📦 Panduan: Fungsi & Alur Kerja Inter-Branch Transfer
-              </h4>
-              <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300">
-                Mutasi Internal Aset
-              </span>
-            </div>
-
-            <p className="text-xs leading-relaxed m-0" style={{ color: 'var(--text-secondary)' }}>
-              Fitur <strong>Transfer Antar Lokasi</strong> digunakan untuk mencatat pergerakan fisik bahan baku dari <strong>Gudang Utama (Central Warehouse)</strong> ke <strong>Outlet (Resto Bar / Kitchen)</strong>, atau antar cabang. Mutasi ini <strong>tidak mempengaruhi HPP / laba-rugi</strong> karena merupakan pergerakan internal aset, melainkan menjaga buku stok (<em>Stock Ledger</em>) tetap akurat dan terhindar dari selisih semu (<em>ghost inventory</em>).
-            </p>
-
-            <div className="pt-2 mt-2 border-t border-[var(--border)] grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-              <div className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">
-                  1
-                </span>
-                <div>
-                  <strong className="block text-[var(--text-primary)]">Tentukan Rute & Bahan</strong>
-                  <span className="text-[var(--text-secondary)]">Pilih item dan tentukan gudang asal serta gudang tujuan.</span>
-                </div>
+      {/* Info Banner: Only shown when toggled */}
+      {showGuide && (
+        <div
+          className="rounded-xl border p-3.5 text-xs transition-all animate-in fade-in duration-200"
+          style={{
+            background: 'rgba(99, 102, 241, 0.08)',
+            borderColor: 'rgba(99, 102, 241, 0.25)',
+            color: 'var(--text-primary)'
+          }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div
+                className="p-1.5 rounded-lg shrink-0 mt-0.5"
+                style={{
+                  background: 'rgba(99, 102, 241, 0.18)',
+                  color: '#4f46e5'
+                }}
+              >
+                <Info size={16} />
               </div>
-              <div className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">
-                  2
-                </span>
-                <div>
-                  <strong className="block text-[var(--text-primary)]">Cek Ketersediaan Stok</strong>
-                  <span className="text-[var(--text-secondary)]">Sistem mengecek sisa stok di lokasi pengirim secara langsung agar tidak minus.</span>
+              <div className="flex-1 space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h4 className="font-bold text-xs m-0 text-indigo-600 dark:text-indigo-400">
+                    📦 Panduan Alur Kerja Inter-Branch Transfer
+                  </h4>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300">
+                    Mutasi Internal Aset
+                  </span>
                 </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">
-                  3
-                </span>
-                <div>
-                  <strong className="block text-[var(--text-primary)]">Sinkronisasi Otomatis</strong>
-                  <span className="text-[var(--text-secondary)]">Stok asal berkurang dan stok tujuan bertambah, tercatat lengkap dengan ID audit.</span>
+
+                <p className="text-[11px] leading-relaxed m-0 text-[var(--text-secondary)]">
+                  Mencatat pergerakan bahan baku antar gudang/outlet. Mutasi internal menjaga akurasi buku stok (Stock Ledger) tanpa mempengaruhi HPP.
+                </p>
+
+                <div className="pt-1.5 mt-1.5 border-t border-[var(--border)] grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px]">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 flex items-center justify-center font-bold text-[10px] shrink-0">1</span>
+                    <span className="text-[var(--text-secondary)]">Pilih rute & bahan</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 flex items-center justify-center font-bold text-[10px] shrink-0">2</span>
+                    <span className="text-[var(--text-secondary)]">Cek ketersediaan stok</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 flex items-center justify-center font-bold text-[10px] shrink-0">3</span>
+                    <span className="text-[var(--text-secondary)]">Sinkronisasi otomatis</span>
+                  </div>
                 </div>
               </div>
             </div>
+            <button
+              type="button"
+              onClick={() => setShowGuide(false)}
+              className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 shrink-0"
+              title="Tutup panduan"
+            >
+              <X size={15} />
+            </button>
           </div>
         </div>
-      </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
@@ -470,7 +485,7 @@ export default function InterBranchTransfer() {
         </div>
 
         {/* Table / Desktop */}
-        <div className="table-responsive hidden md:block border rounded-xl overflow-hidden">
+        <div className="table-responsive hidden lg:block border rounded-xl overflow-hidden">
           <table className="table w-full">
             <thead className="bg-[var(--bg-secondary)] border-b text-xs uppercase font-bold text-[var(--text-secondary)]">
               <tr>
@@ -577,8 +592,8 @@ export default function InterBranchTransfer() {
           </table>
         </div>
 
-        {/* Mobile View: Cards */}
-        <div className="md:hidden space-y-3">
+        {/* Mobile & Tablet View: Cards */}
+        <div className="lg:hidden">
           {loading ? (
             <div className="text-center py-8 text-[var(--text-secondary)]">
               <Loader2 size={24} className="animate-spin mx-auto mb-2 text-indigo-500" />
@@ -599,34 +614,38 @@ export default function InterBranchTransfer() {
               </button>
             </div>
           ) : (
-            paginatedTransfers.map((t) => (
-              <div key={t.id} className="border rounded-xl p-3.5 bg-[var(--bg-secondary)]/30 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-[var(--bg-secondary)] border">
-                    {t.id}
-                  </span>
-                  <span className="text-xs text-[var(--text-secondary)]">
-                    {t.date ? new Date(t.date).toLocaleDateString('id-ID') : '-'}
-                  </span>
-                </div>
-                <div>
-                  <div className="font-bold text-sm text-[var(--text-primary)]">{t.item_name}</div>
-                  <div className="text-xs text-[var(--text-secondary)] mt-0.5">
-                    Jumlah: <strong className="text-[var(--text-primary)]">{t.qty} {t.unit}</strong> (Rp {Number(t.amount).toLocaleString('id-ID')})
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {paginatedTransfers.map((t) => (
+                <div key={t.id} className="border border-[var(--border)] rounded-xl p-3.5 bg-[var(--bg-secondary)]/20 hover:bg-[var(--bg-secondary)]/40 transition-all flex flex-col justify-between gap-2 shadow-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-[var(--bg-card)] border border-[var(--border)]">
+                      {t.id}
+                    </span>
+                    <span className="text-xs text-[var(--text-muted)] flex items-center gap-1">
+                      <Calendar size={11} />
+                      {t.date ? new Date(t.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
+                    </span>
                   </div>
+                  <div>
+                    <div className="font-bold text-sm text-[var(--text-primary)]">{t.item_name}</div>
+                    <div className="text-xs text-[var(--text-secondary)] mt-0.5 flex items-center justify-between">
+                      <span>Jumlah: <strong className="text-[var(--text-primary)]">{t.qty} {t.unit}</strong></span>
+                      <span className="font-medium text-[var(--text-muted)]">Rp {Number(t.amount).toLocaleString('id-ID')}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 text-xs pt-1.5 border-t border-[var(--border)]/60">
+                    <span className="px-2 py-0.5 rounded bg-slate-500/10 font-medium text-[11px] truncate max-w-[120px]">{t.source_branch}</span>
+                    <ArrowRight size={12} className="text-indigo-500 shrink-0" />
+                    <span className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-medium text-[11px] truncate max-w-[120px]">{t.target_branch}</span>
+                  </div>
+                  {t.notes && (
+                    <p className="text-[11px] text-[var(--text-secondary)] italic m-0 pt-1 bg-[var(--bg-primary)] p-1.5 rounded border border-[var(--border)]/40">
+                      "{t.notes}"
+                    </p>
+                  )}
                 </div>
-                <div className="flex items-center gap-1 text-xs pt-1 border-t">
-                  <span className="px-1.5 py-0.5 rounded bg-slate-500/10 font-medium">{t.source_branch}</span>
-                  <ArrowRight size={12} className="text-indigo-500" />
-                  <span className="px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 font-medium">{t.target_branch}</span>
-                </div>
-                {t.notes && (
-                  <p className="text-xs text-[var(--text-secondary)] italic m-0 pt-1">
-                    "{t.notes}"
-                  </p>
-                )}
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
 

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Search, Plus, Trash2, Save, X, UploadCloud, Coins, AlertTriangle, CheckCircle, ChefHat, RefreshCw, Download } from 'lucide-react';
+import { Search, Plus, Trash2, Save, X, UploadCloud, Coins, AlertTriangle, CheckCircle, CheckCircle2, ChefHat, RefreshCw, Download, Beer } from 'lucide-react';
 import BulkImport from '../../components/BulkImport';
 import Pagination from '../../components/shared/Pagination';
 import { useData } from '../../contexts/DataContext';
@@ -377,10 +377,38 @@ export default function Recipes({ categoryFilter } = {}) {
     return `${info.full_pack || ''} / ${(info.unit || 'pck').toUpperCase()}`;
   };
 
+  const isBeer = categoryFilter === 'BEER';
+
   return (
-    <div className="recipes-layout" style={{ display: 'flex', gap: '24px', height: 'calc(100vh - 180px)', fontFamily: 'var(--font-sans)', animation: 'fadeIn 0.3s ease' }}>
-      {/* Left: Recipe List */}
-      <div className="glass-card recipes-list-panel" style={{ width: '310px', display: 'flex', flexDirection: 'column', padding: '20px', flexShrink: 0, border: '1px solid var(--border)' }}>
+    <div className="fade-in space-y-3.5">
+      {/* Standardized Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print">
+        <div className="flex items-center gap-2.5">
+          <div className={`p-2 sm:p-2.5 rounded-xl ${isBeer ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'} shadow-xs shrink-0`}>
+            {isBeer ? <Beer size={19} /> : <ChefHat size={19} />}
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
+                {isBeer ? 'Kalkulasi HPP & Resep Beer' : 'Kalkulasi HPP & Resep Beverage'}
+              </h1>
+              <span className={`inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full ${isBeer ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30' : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'} font-bold border`}>
+                <CheckCircle2 size={10} />
+                <span>Standar Resep Aktif</span>
+              </span>
+            </div>
+            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
+              {isBeer
+                ? 'Manajemen takaran porsi botol/keg, harga modal, dan penetapan margin harga jual bir.'
+                : 'Manajemen takaran resep bahan baku, target food cost (FC%), dan kalkulasi HPP otomatis.'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="recipes-layout" style={{ display: 'flex', gap: '20px', minHeight: 'calc(100vh - 220px)', fontFamily: 'var(--font-sans)' }}>
+        {/* Left: Recipe List */}
+        <div className="glass-card recipes-list-panel" style={{ width: '310px', display: 'flex', flexDirection: 'column', padding: '16px', flexShrink: 0, border: '1px solid var(--border)' }}>
           {/* Search */}
           <div style={{ position: 'relative', marginBottom: '14px' }}>
             <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
@@ -1048,7 +1076,7 @@ export default function Recipes({ categoryFilter } = {}) {
           { key: 'qty_10', label: 'QTY 10', required: false, type: 'number', description: 'Jumlah bahan baku 10', sample: '' }
         ]}
       />
-
+      </div>
     </div>
   );
 }

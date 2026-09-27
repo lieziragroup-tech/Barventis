@@ -24,7 +24,7 @@ export default function BeverageSalesHub() {
   const { currentTenant } = useData();
 
   return (
-    <TabContainer tabs={TABS}>
+    <TabContainer tabs={TABS} title="Penjualan Beverage (POS)">
       {(activeTab) => (
         <Suspense fallback={<Loading />}>
           {activeTab === 'upload' && <PosUpload />}
