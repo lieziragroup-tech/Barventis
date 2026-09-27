@@ -8,6 +8,10 @@ import ErrorBoundary from './components/ErrorBoundary'
 import { AuthProvider } from './contexts/AuthContext'
 import { DataProvider } from './contexts/DataContext'
 import { ToastProvider } from './contexts/ToastContext'
+import { registerServiceWorker } from './serviceWorkerRegistration'
+
+// Register Service Worker for offline PWA caching
+registerServiceWorker()
 
 if (import.meta.env.VITE_SENTRY_DSN) {
   Sentry.init({

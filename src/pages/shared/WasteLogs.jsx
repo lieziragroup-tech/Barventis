@@ -513,11 +513,12 @@ export default function WasteLogs() {
         <div className="relative flex-1 min-w-[200px]">
           <Search
             size={16}
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]"
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] pointer-events-none"
           />
           <input
             type="text"
-            className="form-control pl-9 pr-8 text-xs md:text-sm w-full py-2"
+            className="form-control pl-10 pr-8 text-xs md:text-sm w-full py-2 search-input-clearance"
+            style={{ paddingLeft: '40px' }}
             placeholder="Cari ID, nama bahan baku, SKU, atau alasan..."
             value={searchTerm}
             onChange={(e) => {
@@ -968,11 +969,12 @@ export default function WasteLogs() {
                     <div className="relative">
                       <Search
                         size={14}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]"
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] pointer-events-none"
                       />
                       <input
                         type="text"
-                        className="form-control pl-8 text-xs py-1.5 w-full"
+                        className="form-control pl-8 text-xs py-1.5 w-full search-input-clearance"
+                        style={{ paddingLeft: '34px' }}
                         placeholder="Ketik untuk memfilter bahan..."
                         value={materialSearch}
                         onChange={(e) => setMaterialSearch(e.target.value)}

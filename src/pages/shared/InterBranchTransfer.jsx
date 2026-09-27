@@ -420,7 +420,7 @@ export default function InterBranchTransfer() {
         {/* Search and Filters */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" size={16} />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] pointer-events-none" size={16} />
             <input
               type="text"
               placeholder="Cari transfer, nama bahan, atau catatan..."
@@ -429,7 +429,8 @@ export default function InterBranchTransfer() {
                 setSearchTerm(e.target.value);
                 setPage(1);
               }}
-              className="form-control pl-9 text-sm"
+              className="form-control pl-10 text-sm search-input-clearance"
+              style={{ paddingLeft: '40px' }}
             />
           </div>
 

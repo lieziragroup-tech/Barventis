@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import OperaGXFloatingMenu from './OperaGXFloatingMenu';
 
@@ -28,15 +28,60 @@ export default function TabContainer({
   const paramTab = searchParams.get('tab');
   const activeTab = tabs.find(t => t.key === paramTab)?.key || tabs[0]?.key;
 
+  const containerRef = useRef(null);
+  const tabRefs = useRef({});
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const checkScroll = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setCanScrollLeft(scrollLeft > 6);
+    setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 6);
+  }, []);
+
   const handleTabChange = (key) => {
     setSearchParams({ tab: key }, { replace: true });
   };
+
+  // Center active tab smoothly on change or mount
+  useEffect(() => {
+    const el = tabRefs.current[activeTab];
+    if (el && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({
+        behavior: 'smooth',
+        inline: 'center',
+        block: 'nearest'
+      });
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    checkScroll();
+    el.addEventListener('scroll', checkScroll, { passive: true });
+    window.addEventListener('resize', checkScroll);
+    return () => {
+      el.removeEventListener('scroll', checkScroll);
+      window.removeEventListener('resize', checkScroll);
+    };
+  }, [checkScroll, tabs]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
       {/* Sub-menu capsule navigation */}
       <div className="hub-nav-wrapper">
-        <div className="hub-nav-container">
+        {/* Left edge gradient fade indicator */}
+        {canScrollLeft && (
+          <div 
+            className="pointer-events-none absolute left-0 top-0 bottom-[8px] md:bottom-[12px] w-6 z-10 bg-gradient-to-r from-[var(--bg-primary)] to-transparent transition-opacity duration-200"
+            aria-hidden="true"
+          />
+        )}
+
+        <div ref={containerRef} className="hub-nav-container">
           <div role="tablist" className="hub-tabs-pills">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.key;
@@ -44,6 +89,7 @@ export default function TabContainer({
               return (
                 <button
                   key={tab.key}
+                  ref={(el) => { tabRefs.current[tab.key] = el; }}
                   role="tab"
                   aria-selected={isActive}
                   onClick={() => handleTabChange(tab.key)}
@@ -61,6 +107,14 @@ export default function TabContainer({
             })}
           </div>
         </div>
+
+        {/* Right edge gradient fade indicator */}
+        {canScrollRight && (
+          <div 
+            className="pointer-events-none absolute right-0 top-0 bottom-[8px] md:bottom-[12px] w-8 z-10 bg-gradient-to-l from-[var(--bg-primary)] to-transparent transition-opacity duration-200"
+            aria-hidden="true"
+          />
+        )}
       </div>
 
       <div role="tabpanel" style={{ flex: 1, minHeight: 0 }}>

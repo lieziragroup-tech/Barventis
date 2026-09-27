@@ -3,6 +3,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef, us
 import { api } from '../services/api';
 import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
+import { offlineInventoryCache } from '../services/offlineInventoryCache';
 
 const DataContext = createContext();
 
@@ -33,17 +34,35 @@ export const DataProvider = ({ children }) => {
     setLoadingData(true);
     try {
       const [materialsData, recipesData, invoicesData, transactionsData, conversionsData] = await Promise.all([
-        api.getMaterials().catch(e => { console.error('Materials:', e); return []; }),
+        api.getMaterials().catch(async (e) => {
+          console.warn('Materials fetch failed, checking offline cache:', e);
+          const cached = await offlineInventoryCache.getStockList(activeUser?.tenant_id);
+          return cached || [];
+        }),
         api.getRecipes().catch(e => { console.error('Recipes:', e); return []; }),
         Promise.resolve([]),
         Promise.resolve([]),
-        api.getUnitConversions().catch(e => { console.error('UnitConversions:', e); return []; })
+        api.getUnitConversions().catch(async (e) => {
+          console.warn('UnitConversions fetch failed, checking offline cache:', e);
+          const cached = await offlineInventoryCache.getUnitConversions(activeUser?.tenant_id);
+          return cached || [];
+        })
       ]);
 
       // Skip state updates if a newer fetch has been initiated
       if (controller.cancelled) return;
 
-      setStock(materialsData);
+      if (materialsData && materialsData.length > 0) {
+        setStock(materialsData);
+        if (activeUser?.tenant_id) {
+          offlineInventoryCache.saveStockList(activeUser.tenant_id, materialsData);
+        }
+      } else if (activeUser?.tenant_id) {
+        const cached = await offlineInventoryCache.getStockList(activeUser.tenant_id);
+        if (cached && cached.length > 0) {
+          setStock(cached);
+        }
+      }
 
       setRecipes(recipesData.map(r => ({
         ...r,
@@ -72,16 +91,58 @@ export const DataProvider = ({ children }) => {
 
       const txData = Array.isArray(transactionsData) ? transactionsData : (transactionsData.data || []);
       setTransactions(txData);
-      setUnitConversions(conversionsData || []);
+
+      if (conversionsData && conversionsData.length > 0) {
+        setUnitConversions(conversionsData);
+        if (activeUser?.tenant_id) {
+          offlineInventoryCache.saveUnitConversions(activeUser.tenant_id, conversionsData);
+        }
+      } else if (activeUser?.tenant_id) {
+        const cachedConversions = await offlineInventoryCache.getUnitConversions(activeUser.tenant_id);
+        if (cachedConversions) setUnitConversions(cachedConversions);
+      }
     } catch (e) {
       console.error('fetchAllData error:', e);
+      // Last-resort fallback to offline cache
+      if (activeUser?.tenant_id) {
+        const cachedStock = await offlineInventoryCache.getStockList(activeUser.tenant_id);
+        if (cachedStock && cachedStock.length > 0) {
+          setStock(cachedStock);
+        }
+      }
     } finally {
       setLoadingData(false);
     }
   }, [isAuthenticated, activeUser]);
 
+  // Initial immediate hydration from offline cache
   useEffect(() => {
-     
+    let isMounted = true;
+    if (activeUser?.tenant_id) {
+      offlineInventoryCache.getStockList(activeUser.tenant_id).then(cached => {
+        if (isMounted && cached && cached.length > 0) {
+          setStock(prev => (prev.length === 0 ? cached : prev));
+        }
+      });
+      offlineInventoryCache.getUnitConversions(activeUser.tenant_id).then(conversions => {
+        if (isMounted && conversions && conversions.length > 0) {
+          setUnitConversions(prev => (prev.length === 0 ? conversions : prev));
+        }
+      });
+    }
+    return () => { isMounted = false; };
+  }, [activeUser?.tenant_id]);
+
+  // Auto-refresh when internet connectivity is restored
+  useEffect(() => {
+    const handleReconnected = () => {
+      fetchAllData();
+    };
+    window.addEventListener('online', handleReconnected);
+    return () => window.removeEventListener('online', handleReconnected);
+  }, [fetchAllData]);
+
+  useEffect(() => {
     fetchAllData();
   }, [fetchAllData]);
 

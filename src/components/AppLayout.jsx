@@ -13,6 +13,7 @@ import { api } from '../services/api';
 import Onboarding from './Onboarding';
 import AIAssistant from './AIAssistant';
 import GuidebookModal from './GuidebookModal';
+import OfflineStatusIndicator from './shared/OfflineStatusIndicator';
 import barventisIcon from '../assets/barventis-icon.png';
 
 const NavItem = ({ to, exact, label, icon: Icon, isHovered, onClick }) => {
@@ -139,68 +140,101 @@ export default function DashboardLayout() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Shortcut Swipe to Right for Sidebar (Mobile Ergonomics)
-  const touchStartRef = useRef({ x: 0, y: 0, time: 0 });
-  const touchEndRef = useRef({ x: 0, y: 0 });
-
+  // High-performance, responsive swipe gesture for mobile & tablet (< 1024px)
   useEffect(() => {
+    let startX = 0;
+    let startY = 0;
+    let startTime = 0;
+    let isTracking = false;
+
     const handleTouchStart = (e) => {
       if (window.innerWidth >= 1024) return;
+      if (e.touches.length !== 1) return;
+
       const touch = e.touches[0];
-      touchStartRef.current = {
-        x: touch.clientX,
-        y: touch.clientY,
-        time: Date.now()
-      };
-      touchEndRef.current = {
-        x: touch.clientX,
-        y: touch.clientY
-      };
+      const target = e.target;
+
+      // Ignore if user is interacting with horizontal range slider or designated controls
+      if (target?.closest?.('input[type="range"], [data-no-swipe="true"]')) return;
+
+      startX = touch.clientX;
+      startY = touch.clientY;
+      startTime = Date.now();
+      isTracking = true;
     };
 
     const handleTouchMove = (e) => {
-      if (window.innerWidth >= 1024) return;
-      touchEndRef.current = {
-        x: e.touches[0].clientX,
-        y: e.touches[0].clientY
-      };
+      if (!isTracking || window.innerWidth >= 1024) return;
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - startX;
+      const deltaY = Math.abs(touch.clientY - startY);
+
+      // If user is predominantly scrolling vertically, cancel swipe tracking early
+      if (deltaY > Math.abs(deltaX) && deltaY > 12) {
+        isTracking = false;
+        return;
+      }
+
+      // Responsive Open Trigger (sensitive & smooth, triggers during drag without waiting for touchend):
+      // - If starting from left edge/zone (startX <= 85px): triggers at deltaX > 26px
+      // - If starting in-screen: triggers at deltaX > 40px with horizontal dominance
+      if (!isSidebarOpen) {
+        const isFromEdge = startX <= 85;
+        const requiredDistance = isFromEdge ? 26 : 40;
+        const requiredRatio = isFromEdge ? 0.85 : 1.3;
+
+        if (deltaX > requiredDistance && deltaX > deltaY * requiredRatio) {
+          setIsSidebarOpen(true);
+          isTracking = false;
+        }
+      } else {
+        // If sidebar is currently open, swipe left to close immediately
+        if (deltaX < -32 && Math.abs(deltaX) > deltaY) {
+          setIsSidebarOpen(false);
+          isTracking = false;
+        }
+      }
     };
 
-    const handleTouchEnd = () => {
-      if (window.innerWidth >= 1024) return;
-      const start = touchStartRef.current;
-      const end = touchEndRef.current;
-      
-      const deltaX = end.x - start.x;
-      const deltaY = Math.abs(end.y - start.y);
-      const deltaTime = Date.now() - start.time;
-
-      // Swipe ke kanan untuk membuka sidebar:
-      // - Berawal dari sisi kiri (startX <= 100px) atau pergeseran ke kanan yang jelas
-      // - Jarak geser horizontal >= 50px
-      // - Sudut lebih mendatar dari vertikal (deltaY < deltaX * 0.8 dan deltaY < 80px)
-      // - Waktu gesture wajar (< 600ms)
-      if (start.x <= 120 && deltaX >= 50 && deltaY < 80 && deltaTime < 600) {
-        setIsSidebarOpen(true);
-      } else if (deltaX <= -50 && deltaY < 80 && deltaTime < 600) {
-        // Swipe ke kiri untuk menutup sidebar jika sedang terbuka
-        setIsSidebarOpen(false);
+    const handleTouchEnd = (e) => {
+      if (!isTracking || window.innerWidth >= 1024) {
+        isTracking = false;
+        return;
       }
-      
-      touchStartRef.current = { x: 0, y: 0, time: 0 };
-      touchEndRef.current = { x: 0, y: 0 };
+      const touch = e.changedTouches?.[0];
+      if (touch) {
+        const deltaX = touch.clientX - startX;
+        const deltaY = Math.abs(touch.clientY - startY);
+        const deltaTime = Math.max(1, Date.now() - startTime);
+        const velocityX = deltaX / deltaTime; // px/ms
+
+        // Quick flick to the right (sensitive velocity trigger)
+        if (!isSidebarOpen) {
+          if (deltaX > 18 && velocityX > 0.20 && deltaX > deltaY * 0.85) {
+            setIsSidebarOpen(true);
+          }
+        } else {
+          // Quick flick to the left to close
+          if (deltaX < -18 && velocityX < -0.20 && Math.abs(deltaX) > deltaY * 0.85) {
+            setIsSidebarOpen(false);
+          }
+        }
+      }
+      isTracking = false;
     };
 
     window.addEventListener('touchstart', handleTouchStart, { passive: true });
     window.addEventListener('touchmove', handleTouchMove, { passive: true });
     window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', handleTouchEnd, { passive: true });
 
     return () => {
       window.removeEventListener('touchstart', handleTouchStart);
       window.removeEventListener('touchmove', handleTouchMove);
       window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, []);
+  }, [isSidebarOpen]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -486,16 +520,24 @@ export default function DashboardLayout() {
           />
         )}
       </AnimatePresence>
+      {/* Mobile Edge Swipe Catch Zone */}
+      {!isSidebarOpen && (
+        <div 
+          className="fixed inset-y-0 left-0 w-6 z-30 lg:hidden pointer-events-auto touch-pan-y" 
+          aria-hidden="true" 
+        />
+      )}
+
       {/* Mobile Sidebar (Slide-over) */}
       <motion.div 
-        className="fixed inset-y-0 left-0 w-[280px] bg-[var(--bg-secondary)] shadow-2xl z-50 lg:hidden flex flex-col"
+        className="fixed inset-y-0 left-0 w-[285px] max-w-[85vw] bg-[var(--bg-secondary)] shadow-2xl z-50 lg:hidden flex flex-col will-change-transform"
         drag="x"
-        dragConstraints={{ left: -280, right: 0 }}
-        dragElastic={0.05}
-        onDragEnd={(e, info) => { if (info.offset.x < -75 || info.velocity.x < -500) setIsSidebarOpen(false); }}
+        dragConstraints={{ left: -285, right: 0 }}
+        dragElastic={0.06}
+        onDragEnd={(e, info) => { if (info.offset.x < -35 || info.velocity.x < -200) setIsSidebarOpen(false); }}
         initial={{ x: '-100%' }}
         animate={{ x: isSidebarOpen ? 0 : '-100%' }}
-        transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
+        transition={{ type: 'spring', damping: 26, stiffness: 320, mass: 0.6 }}
       >
         <div className="flex items-center justify-between p-5 mb-2">
           <div className="flex items-center gap-3">
@@ -764,6 +806,9 @@ export default function DashboardLayout() {
             </div>
           </div>
         </header>
+
+        {/* Offline connectivity banner */}
+        <OfflineStatusIndicator />
 
         <section className="flex-1 overflow-y-auto relative p-2.5 sm:p-4 md:p-8">
           <AnimatePresence mode="wait">

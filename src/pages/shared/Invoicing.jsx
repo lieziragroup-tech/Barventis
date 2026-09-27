@@ -583,12 +583,12 @@ Catatan: ${inv.notes || '-'}`,
         <div className="flex flex-col gap-3">
           <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center">
             <div className="relative flex-1 min-w-[200px]">
-              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" />
               <input
                 type="text"
                 placeholder="Cari nomor PO atau nama supplier..."
-                className="form-control w-full"
-                style={{ paddingLeft: '40px', height: '36px' }}
+                className="form-control w-full search-input-clearance"
+                style={{ paddingLeft: '42px', height: '36px' }}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />

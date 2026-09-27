@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import {
   Calendar,
@@ -14,16 +14,19 @@ import {
   ChevronRight,
   ClipboardList,
   Layers,
-  HelpCircle
+  HelpCircle,
+  Search
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
+import { offlineInventoryCache } from '../../services/offlineInventoryCache';
 import ExportButton from '../../components/shared/ExportButton';
 import PrintButton from '../../components/shared/PrintButton';
+import PrintReportFooter from '../../components/shared/PrintReportFooter';
 import { exportWithAudit } from '../../services/export/exportAudit';
 import { TableSkeletonRows, TableLoadingOverlay } from '../../components/shared/TableSkeleton';
 
-export default function DailyInventory({ category, initialTab, externalTab, onTabChange }) {
+export default function DailyInventory({ category = 'ALL', initialTab, externalTab, onTabChange }) {
   const { activeUser } = useAuth();
   const [internalTab, setInternalTab] = useState(initialTab || 'REKAP');
   const activeTab = externalTab !== undefined ? externalTab : internalTab;
@@ -46,6 +49,10 @@ export default function DailyInventory({ category, initialTab, externalTab, onTa
   // EOD state
   const [items, setItems] = useState([]);
   const [inventory, setInventory] = useState({});
+
+  // Filter & Search state (allowing unified Beverage & Beer viewing)
+  const [filterCat, setFilterCat] = useState('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchRecords = useCallback(async () => {
     setLoading(true);
@@ -124,15 +131,37 @@ export default function DailyInventory({ category, initialTab, externalTab, onTa
         };
       });
 
-      // ponytail: filter by category prop when provided (BEER vs BAHAN)
-      const filtered = category
+      // Filter by category prop when provided (BEER vs BAHAN vs ALL)
+      const filtered = (category && category !== 'ALL')
         ? mapped.filter(r => {
             const cat = (r.materials?.category || '').toUpperCase();
             return category === 'BEER' ? cat === 'BEER' : cat !== 'BEER' && cat !== 'ASSET';
           })
-        : mapped;
+        : mapped.filter(r => {
+            const cat = (r.materials?.category || '').toUpperCase();
+            return cat !== 'ASSET';
+          });
       setRecords(filtered);
+      if (tenantId) {
+        offlineInventoryCache.saveDailyInventory(tenantId, date, category, {
+          records: filtered,
+          isLocked: locked
+        });
+      }
     } catch (err) {
+      console.warn('[DailyInventory] Failed to fetch live records, checking offline cache:', err);
+      try {
+        const tenantId = await api.getActiveTenantId();
+        const cached = await offlineInventoryCache.getDailyInventory(tenantId, date, category);
+        if (cached?.records && cached.records.length > 0) {
+          setRecords(cached.records);
+          setIsLocked(!!cached.isLocked);
+          setError('Mode Offline Aktif: Menampilkan data inventaris yang tersimpan.');
+          return;
+        }
+      } catch {
+        // Fall through to error
+      }
       setError(err.message || 'Gagal memuat rekap harian');
     } finally {
       setLoading(false);
@@ -154,11 +183,16 @@ export default function DailyInventory({ category, initialTab, externalTab, onTa
 
       // 1. Fetch materials (bar/resto inventory items)
       let materialsList = await api.getMaterials();
-      // ponytail: filter by category prop when provided (BEER vs BAHAN)
-      if (category) {
+      // Filter by category prop when provided (BEER vs BAHAN vs ALL)
+      if (category && category !== 'ALL') {
         materialsList = (materialsList || []).filter(m => {
           const cat = (m.category || '').toUpperCase();
           return category === 'BEER' ? cat === 'BEER' : cat !== 'BEER' && cat !== 'ASSET';
+        });
+      } else {
+        materialsList = (materialsList || []).filter(m => {
+          const cat = (m.category || '').toUpperCase();
+          return cat !== 'ASSET';
         });
       }
       setItems(materialsList || []);
@@ -213,6 +247,34 @@ export default function DailyInventory({ category, initialTab, externalTab, onTa
       fetchEodData();
     }
   }, [activeTab, fetchRecords, fetchEodData]);
+
+  const displayedRecords = useMemo(() => {
+    return records.filter(r => {
+      const cat = (r.materials?.category || '').toUpperCase();
+      if (filterCat === 'BEER' && cat !== 'BEER') return false;
+      if (filterCat === 'BAHAN' && cat === 'BEER') return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const name = (r.materials?.name || '').toLowerCase();
+        return name.includes(q);
+      }
+      return true;
+    });
+  }, [records, filterCat, searchQuery]);
+
+  const displayedItems = useMemo(() => {
+    return items.filter(m => {
+      const cat = (m.category || '').toUpperCase();
+      if (filterCat === 'BEER' && cat !== 'BEER') return false;
+      if (filterCat === 'BAHAN' && cat === 'BEER') return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const name = (m.name || '').toLowerCase();
+        return name.includes(q);
+      }
+      return true;
+    });
+  }, [items, filterCat, searchQuery]);
 
   const handleChange = (itemId, field, value) => {
     if (isLocked) return;
@@ -573,7 +635,7 @@ export default function DailyInventory({ category, initialTab, externalTab, onTa
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
-                {category === 'BEER' ? 'Daily Inventory Beer' : 'Daily Inventory Bahan'}
+                {category === 'BEER' ? 'Daily Inventory Beer' : category === 'BAHAN' ? 'Daily Inventory Bahan' : 'Daily Inventory (Bahan & Beer)'}
               </h1>
               {isLocked && (
                 <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 font-bold border border-amber-500/30">
@@ -582,7 +644,11 @@ export default function DailyInventory({ category, initialTab, externalTab, onTa
               )}
             </div>
             <p className="text-[11px] text-[var(--text-secondary)] m-0 mt-0.5">
-              {category === 'BEER' ? 'Pengawasan stok fisik botol bir & cider harian' : 'Kontrol stok fisik bahan baku bar & resto harian'}
+              {category === 'BEER'
+                ? 'Pengawasan stok fisik botol bir & cider harian'
+                : category === 'BAHAN'
+                ? 'Kontrol stok fisik bahan baku bar & resto harian'
+                : 'Kontrol stok fisik bahan baku bar, sirup, premix, bir & cider harian'}
             </p>
           </div>
         </div>
@@ -805,6 +871,54 @@ export default function DailyInventory({ category, initialTab, externalTab, onTa
           </div>
         )}
 
+        {/* Category & Search Filter Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3 no-print">
+          <div className="inline-flex p-0.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-xs shadow-2xs">
+            <button
+              type="button"
+              className={`px-2.5 py-1 rounded-md font-semibold transition-all ${filterCat === 'ALL' ? 'bg-[var(--bg-card)] text-[var(--text-primary)] shadow-xs font-bold' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
+              onClick={() => setFilterCat('ALL')}
+            >
+              Semua ({activeTab === 'REKAP' ? records.length : items.length})
+            </button>
+            <button
+              type="button"
+              className={`px-2.5 py-1 rounded-md font-semibold transition-all ${filterCat === 'BAHAN' ? 'bg-[var(--bg-card)] text-[var(--text-primary)] shadow-xs font-bold' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
+              onClick={() => setFilterCat('BAHAN')}
+            >
+              Bahan / Beverage
+            </button>
+            <button
+              type="button"
+              className={`px-2.5 py-1 rounded-md font-semibold transition-all ${filterCat === 'BEER' ? 'bg-[var(--bg-card)] text-[var(--text-primary)] shadow-xs font-bold' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
+              onClick={() => setFilterCat('BEER')}
+            >
+              Beer & Cider
+            </button>
+          </div>
+
+          <div className="relative flex-1 min-w-[200px] max-w-xs sm:max-w-sm">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" />
+            <input
+              type="text"
+              className="form-control text-xs w-full search-input-clearance"
+              style={{ height: '32px', paddingLeft: '34px' }}
+              placeholder="Cari bahan baku / bir..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+        </div>
+
         <div className="table-container relative" style={{ background: 'var(--bg-secondary)', borderRadius: '8px' }}>
           <TableLoadingOverlay
             loading={loading && (activeTab === 'REKAP' ? records.length > 0 : items.length > 0)}
@@ -844,7 +958,7 @@ export default function DailyInventory({ category, initialTab, externalTab, onTa
                     ]}
                   />
                 ) : (
-                  records.map(row => (
+                  displayedRecords.map(row => (
                     <tr key={row.id}>
                       <td>
                         <div style={{ fontWeight: 600 }}>{row.materials?.name || 'Item Terhapus'}</div>
@@ -868,11 +982,15 @@ export default function DailyInventory({ category, initialTab, externalTab, onTa
                     </tr>
                   ))
                 )}
-                {!loading && records.length === 0 && (
+                {!loading && displayedRecords.length === 0 && (
                   <tr>
                     <td colSpan="10" style={{ textAlign: 'center', padding: '24px 16px', color: 'var(--text-muted)' }}>
                       <Calendar size={28} style={{ margin: '0 auto 8px', opacity: 0.3 }} />
-                      <p style={{ fontWeight: 500, margin: 0, fontSize: '0.8rem' }}>Tidak ada data rekap untuk tanggal ini</p>
+                      <p style={{ fontWeight: 500, margin: 0, fontSize: '0.8rem' }}>
+                        {searchQuery || filterCat !== 'ALL'
+                          ? 'Tidak ada data inventaris yang cocok dengan filter / pencarian.'
+                          : 'Tidak ada data rekap untuk tanggal ini.'}
+                      </p>
                     </td>
                   </tr>
                 )}
@@ -914,7 +1032,7 @@ export default function DailyInventory({ category, initialTab, externalTab, onTa
                     ]}
                   />
                 ) : (
-                  items.map((item, idx) => {
+                  displayedItems.map((item, idx) => {
                     const row = inventory[item.id] || {};
                     const stokAwal = row.stok_awal !== undefined && row.stok_awal !== '' ? Number(row.stok_awal) : (Number(item.qty_resto ?? item.stock) || 0);
                     const qtyIn = Number(row.qty_in) || 0;
@@ -982,16 +1100,20 @@ export default function DailyInventory({ category, initialTab, externalTab, onTa
                     );
                   })
                 )}
-                {!loading && items.length === 0 && (
+                {!loading && displayedItems.length === 0 && (
                     <tr>
-                      <td colSpan="10" style={{ textAlign: 'center', padding: '48px 24px', color: '#6b7280' }}>
+                      <td colSpan="11" style={{ textAlign: 'center', padding: '48px 24px', color: '#6b7280' }}>
                         <div style={{ maxWidth: '420px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                           <Package size={36} style={{ marginBottom: '12px', opacity: 0.4 }} />
                           <p style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '6px', color: 'var(--text-primary)' }}>
-                            Belum Ada Master Bahan Baku
+                            {searchQuery || filterCat !== 'ALL'
+                              ? 'Tidak ada bahan yang cocok dengan filter / pencarian'
+                              : 'Belum Ada Master Bahan Baku'}
                           </p>
                           <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-                            Daftar barang pada Form EOD diambil otomatis dari Master Bahan Baku (<strong>Stock Ledger</strong>). Silakan tambahkan bahan terlebih dahulu di menu <strong>Stock Ledger</strong> agar dapat dicatat stok fisiknya di sini.
+                            {searchQuery || filterCat !== 'ALL'
+                              ? 'Coba ubah kata kunci pencarian atau ganti filter kategori di atas.'
+                              : 'Daftar barang pada Form EOD diambil otomatis dari Master Bahan Baku (Stock Ledger). Silakan tambahkan bahan terlebih dahulu di menu Stock Ledger agar dapat dicatat stok fisiknya di sini.'}
                           </p>
                         </div>
                       </td>
@@ -1001,6 +1123,11 @@ export default function DailyInventory({ category, initialTab, externalTab, onTa
               </table>
             )}
           </div>
+
+          <PrintReportFooter
+            title={category === 'BEER' ? 'Inventaris Harian Beer' : category === 'BAHAN' ? 'Inventaris Harian Bahan' : 'Inventaris Harian (Bahan & Beer)'}
+            subtitle={`${activeTab === 'REKAP' ? 'Rekap Historis' : 'Input EOD'} • Tanggal: ${date}`}
+          />
       </div>
     </div>
   );

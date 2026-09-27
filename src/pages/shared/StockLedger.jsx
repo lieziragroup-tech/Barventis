@@ -10,6 +10,7 @@ import { TableSkeletonRows, TableLoadingOverlay } from '../../components/shared/
 import { useData } from '../../contexts/DataContext';
 import ExportButton from '../../components/shared/ExportButton';
 import PrintButton from '../../components/shared/PrintButton';
+import PrintReportFooter from '../../components/shared/PrintReportFooter';
 import { exportWithAudit } from '../../services/export/exportAudit';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatIDR, parsePackSize, isPackUnitConsistent, getPackUnitInfo, parseStructuredFullPack } from '../../services/costUtils';
@@ -526,8 +527,8 @@ export default function StockLedger() {
               <>
                 <div className="flex flex-col sm:flex-row gap-2 flex-1 w-full">
                   <div className="relative flex-1 min-w-[180px]">
-                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                    <input type="text" placeholder="Cari bahan baku atau supplier..." className="form-control text-xs w-full" style={{ height: '34px', paddingLeft: '36px' }} value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} />
+                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" />
+                    <input type="text" placeholder="Cari bahan baku atau supplier..." className="form-control text-xs w-full search-input-clearance" style={{ height: '34px', paddingLeft: '38px' }} value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} />
                   </div>
                   <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-1.5 w-full sm:w-auto">
                     <select className="form-control text-xs font-medium" style={{ height: '34px' }} value={catFilter} onChange={e => { setCatFilter(e.target.value); setCurrentPage(1); }}>
@@ -749,6 +750,12 @@ export default function StockLedger() {
               </tbody>
             </table>
           </div>
+
+          <PrintReportFooter
+            title="Laporan Kartu Stok Bahan Baku (Stock Ledger)"
+            subtitle={`Lokasi: ${activeLoc} • Kategori: ${catFilter}`}
+          />
+
           <div style={{ padding: '0 20px 16px' }}>
             <Pagination
               page={currentPage}

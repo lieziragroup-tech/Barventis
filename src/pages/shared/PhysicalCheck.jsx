@@ -314,12 +314,12 @@ export default function PhysicalCheck() {
 
           <div style={{ marginBottom: '16px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
             <div style={{ position: 'relative', width: '300px', maxWidth: '100%' }}>
-              <Search size={16} style={{ position: 'absolute', left: '12px', top: '10px', color: 'var(--text-muted)' }} />
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
               <input 
                 type="text" 
-                className="form-control" 
+                className="form-control search-input-clearance" 
                 placeholder="Cari bahan..." 
-                style={{ paddingLeft: '36px' }}
+                style={{ paddingLeft: '38px' }}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />

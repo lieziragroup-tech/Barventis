@@ -688,10 +688,11 @@ export default function TrimmingProduction() {
           <div className="flex flex-wrap items-center gap-2">
             {/* Search Input */}
             <div className="relative">
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" />
               <input
                 type="text"
-                className="form-control text-xs pl-8 pr-3 py-1.5 w-44 sm:w-56"
+                className="form-control text-xs pr-3 py-1.5 w-44 sm:w-56 search-input-clearance"
+                style={{ paddingLeft: '32px' }}
                 placeholder="Cari Batch ID / Bahan..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}

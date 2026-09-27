@@ -378,6 +378,7 @@ export default function Recipes({ categoryFilter } = {}) {
   };
 
   const isBeer = categoryFilter === 'BEER';
+  const isAll = !categoryFilter || categoryFilter === 'ALL';
 
   return (
     <div className="fade-in space-y-3.5">
@@ -390,7 +391,7 @@ export default function Recipes({ categoryFilter } = {}) {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
-                {isBeer ? 'Kalkulasi HPP & Resep Beer' : 'Kalkulasi HPP & Resep Beverage'}
+                {isBeer ? 'Kalkulasi HPP & Resep Beer' : isAll ? 'Kalkulasi HPP & Resep Menu (Beverage & Beer)' : 'Kalkulasi HPP & Resep Beverage'}
               </h1>
               <span className={`inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full ${isBeer ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30' : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'} font-bold border`}>
                 <CheckCircle2 size={10} />
@@ -400,6 +401,8 @@ export default function Recipes({ categoryFilter } = {}) {
             <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
               {isBeer
                 ? 'Manajemen takaran porsi botol/keg, harga modal, dan penetapan margin harga jual bir.'
+                : isAll
+                ? 'Manajemen takaran resep racikan minuman, bir & cider, target food cost (FC%), dan kalkulasi HPP otomatis.'
                 : 'Manajemen takaran resep bahan baku, target food cost (FC%), dan kalkulasi HPP otomatis.'}
             </p>
           </div>
@@ -411,12 +414,12 @@ export default function Recipes({ categoryFilter } = {}) {
         <div className="glass-card recipes-list-panel" style={{ width: '310px', display: 'flex', flexDirection: 'column', padding: '16px', flexShrink: 0, border: '1px solid var(--border)' }}>
           {/* Search */}
           <div style={{ position: 'relative', marginBottom: '14px' }}>
-            <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
             <input 
               type="text" 
               placeholder="Cari resep menu..." 
-              className="form-control premium-input" 
-              style={{ paddingLeft: '38px', height: '40px' }} 
+              className="form-control premium-input search-input-clearance" 
+              style={{ paddingLeft: '40px', height: '40px' }} 
               value={search} 
               onChange={e => { setSearch(e.target.value); setRecipesPage(1); }} 
             />

@@ -141,8 +141,8 @@ export default function MenuPricing() {
       <div className="glass-card" style={{ padding: '24px' }}>
         <div className="menu-pricing-toolbar" style={{ display: 'flex', gap: '16px', marginBottom: '20px', flexWrap: 'wrap' }}>
           <div className="menu-pricing-search" style={{ position: 'relative', width: '250px' }}>
-            <Search size={16} style={{ position: 'absolute', left: '12px', top: '10px', color: 'var(--text-muted)' }} />
-            <input type="text" className="form-control" placeholder="Cari menu..." style={{ paddingLeft: '36px' }} value={search} onChange={e => setSearch(e.target.value)} />
+            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+            <input type="text" className="form-control search-input-clearance" placeholder="Cari menu..." style={{ paddingLeft: '38px' }} value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           <select className="form-control menu-pricing-category" style={{ width: '200px' }} value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
             {categories.map(c => <option key={c} value={c}>{c}</option>)}

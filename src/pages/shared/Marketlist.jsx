@@ -1135,11 +1135,12 @@ export default function Marketlist() {
           {/* Search & Filter Toolbar */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="relative w-full sm:w-80">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" />
               <input
                 type="text"
                 placeholder="Cari nama bahan, ID SKU, supplier, atau catatan..."
-                className="w-full pl-9 pr-3.5 py-2 text-xs rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                className="w-full pr-3.5 py-2 text-xs rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] search-input-clearance"
+                style={{ paddingLeft: '36px' }}
                 value={itemSearch}
                 onChange={e => setItemSearch(e.target.value)}
               />

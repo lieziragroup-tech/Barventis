@@ -828,6 +828,29 @@ body::before {
   opacity: 0.7;
 }
 
+/* ==========================================================================
+   SEARCHBARS & ICON INPUT CLEARANCE
+   Guarantees search text and placeholders never collide with left icons
+   ========================================================================== */
+.search-input-clearance,
+.search-input,
+.has-search-icon,
+[class*="pl-9"],
+[class*="pl-10"],
+[class*="pl-11"],
+[class*="pl-12"],
+div:has(> svg):has(> input[type="text"]) > input[type="text"],
+div:has(> svg):has(> input[type="search"]) > input[type="search"],
+.relative:has(> svg) > input[type="text"],
+.relative:has(> svg) > input[type="search"] {
+  padding-left: 42px !important;
+}
+
+div:has(> input) > svg[class*="absolute"],
+div:has(> input) > svg[style*="absolute"] {
+  pointer-events: none;
+}
+
 /* Drag and Drop Zone */
 .upload-zone {
   border: 2px dashed var(--border);
@@ -870,9 +893,11 @@ body::before {
 
 /* Hub Sub-Menu Navigation */
 .hub-nav-wrapper {
+  position: relative;
   border-bottom: 1px solid var(--border);
-  padding-bottom: 14px;
-  margin-bottom: 18px;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  width: 100%;
 }
 
 .hub-nav-container {
@@ -880,9 +905,11 @@ body::before {
   align-items: center;
   margin-bottom: 0;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  padding: 2px 2px 4px 2px;
 }
 .hub-nav-container::-webkit-scrollbar {
   display: none;
@@ -896,7 +923,9 @@ body::before {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 4px;
-  max-width: 100%;
+  width: max-content;
+  min-width: min-content;
+  flex-shrink: 0;
 }
 
 .hub-tab-item {
@@ -1226,7 +1255,16 @@ input[type='number']::-webkit-outer-spin-button {
   }
   .form-control {
     font-size: 16px !important; /* iOS fix */
-    padding: 8px 12px !important;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+  .form-control.search-input-clearance,
+  .form-control[class*="pl-"],
+  div:has(> svg):has(> input) > .form-control,
+  .relative:has(> svg) > .form-control {
+    padding-left: 42px !important;
   }
   
   /* Inline style overrides for inline paddings defined in JSX */
@@ -1391,37 +1429,54 @@ input[type='number']::-webkit-outer-spin-button {
   }
 
   /* Inputs with icons: ensure left padding is never crushed on mobile */
+  .search-input-clearance,
+  .form-control.search-input-clearance,
+  .form-control[class*="pl-"],
   .form-control[style*="paddingLeft"],
   .form-control[style*="padding-left"],
   input[style*="paddingLeft"],
-  input[style*="padding-left"] {
-    padding-left: 36px !important;
+  input[style*="padding-left"],
+  div:has(> svg):has(> input) > input,
+  .relative:has(> svg) > input {
+    padding-left: 42px !important;
   }
 
   /* Hub Tabs container on mobile */
   .hub-nav-wrapper {
-    padding-bottom: 10px !important;
-    margin-bottom: 14px !important;
+    padding-bottom: 8px !important;
+    margin-bottom: 12px !important;
     border-bottom: 1px solid var(--border) !important;
+    position: relative;
   }
   .hub-nav-container {
     margin-bottom: 0 !important;
-    padding-bottom: 2px !important;
+    padding: 2px 4px 6px 4px !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scroll-behavior: smooth;
+    display: flex;
+    align-items: center;
+    width: 100%;
   }
   .hub-tabs-pills {
     padding: 3px !important;
-    gap: 3px !important;
+    gap: 4px !important;
     border-radius: var(--radius-md) !important;
+    width: max-content !important;
+    min-width: min-content !important;
+    flex-shrink: 0 !important;
   }
   .hub-tab-item {
-    padding: 5px 10px !important;
-    font-size: 0.74rem !important;
+    padding: 6px 12px !important;
+    font-size: 0.76rem !important;
     gap: 5px !important;
     border-radius: var(--radius-sm) !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
   }
   .hub-tab-item svg {
-    width: 13px !important;
-    height: 13px !important;
+    width: 14px !important;
+    height: 14px !important;
   }
 
   /* Compact tables */
@@ -2112,7 +2167,27 @@ input[type='number']::-webkit-outer-spin-button {
 @media print {
   @page {
     size: auto;
-    margin: 10mm 12mm 12mm 12mm;
+    margin: 12mm 10mm 16mm 10mm;
+    @top-right {
+      content: "BARVENTIS REPORT";
+      font-size: 7.5pt;
+      color: #9ca3af;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+    @bottom-left {
+      content: "Barventis F&B Inventory Management System";
+      font-size: 7.5pt;
+      color: #9ca3af;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 8pt;
+      font-weight: 700;
+      color: #374151;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
   }
 
   /* Global background & text resets */
@@ -2126,8 +2201,8 @@ input[type='number']::-webkit-outer-spin-button {
   html, body {
     background: #ffffff !important;
     color: #111827 !important;
-    font-size: 10pt !important;
-    line-height: 1.4 !important;
+    font-size: 9pt !important;
+    line-height: 1.35 !important;
     margin: 0 !important;
     padding: 0 !important;
     width: 100% !important;
@@ -2137,7 +2212,7 @@ input[type='number']::-webkit-outer-spin-button {
     print-color-adjust: exact !important;
   }
 
-  /* Hide navigation, sidebar, and layout chrome */
+  /* Hide navigation, sidebar, floating action buttons, and layout chrome */
   aside,
   .sidebar,
   header,
@@ -2149,6 +2224,7 @@ input[type='number']::-webkit-outer-spin-button {
   .toast,
   .notification-panel,
   .bottom-nav,
+  .hub-nav-wrapper,
   footer {
     display: none !important;
   }
@@ -2176,18 +2252,32 @@ input[type='number']::-webkit-outer-spin-button {
     display: none !important;
   }
 
-  /* Reset main content container */
-  .main-content,
+  /* Reset layout constraints so multi-page pagination & thead repetition work properly */
+  #root,
+  .app-layout,
+  [class*="h-screen"],
+  [class*="overflow-hidden"],
+  [class*="overflow-y-"],
+  [class*="overflow-x-"],
   main,
+  .main-content,
   section,
-  .page-scroll-area {
-    margin: 0 !important;
-    margin-left: 0 !important;
-    padding: 0 !important;
-    max-width: 100% !important;
-    width: 100% !important;
+  .page-scroll-area,
+  [role="tabpanel"],
+  .space-y-4 {
+    display: block !important;
+    position: static !important;
     overflow: visible !important;
     height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    float: none !important;
+    transform: none !important;
+    contain: none !important;
   }
 
   /* Reset glass cards to clean printable containers */
@@ -2197,71 +2287,156 @@ input[type='number']::-webkit-outer-spin-button {
     border: none !important;
     box-shadow: none !important;
     padding: 0 !important;
-    margin: 0 0 16px 0 !important;
+    margin: 0 0 12px 0 !important;
     border-radius: 0 !important;
+    overflow: visible !important;
   }
 
-  /* Expand table container and remove scroll clipping */
+  /* Expand table container and remove scroll clipping & relative positioning */
   .table-container {
+    display: block !important;
     overflow: visible !important;
+    position: static !important;
     max-height: none !important;
+    height: auto !important;
+    width: 100% !important;
     border: none !important;
     box-shadow: none !important;
     margin: 0 !important;
     padding: 0 !important;
+    background: transparent !important;
   }
 
   /* Typography headings on print */
   h1, h2, h3, h4 {
     color: #111827 !important;
     page-break-after: avoid !important;
+    break-after: avoid !important;
     margin-top: 0 !important;
   }
 
-  /* Table styling */
+  /* Refined Table Styling for reliable thead repetition across multiple pages */
   table,
   .custom-table {
+    display: table !important;
     width: 100% !important;
+    max-width: 100% !important;
     border-collapse: collapse !important;
-    font-size: 8.5pt !important;
-    page-break-inside: auto !important;
-    background: #ffffff !important;
-    margin-top: 8px !important;
-  }
-
-  thead {
-    display: table-header-group !important;
-  }
-
-  tfoot {
-    display: table-footer-group !important;
-  }
-
-  tr {
-    page-break-inside: avoid !important;
-    page-break-after: auto !important;
-  }
-
-  th {
-    background-color: #f3f4f6 !important;
-    color: #111827 !important;
-    border: 1px solid #9ca3af !important;
-    padding: 6px 8px !important;
-    font-weight: 700 !important;
-    text-align: left !important;
+    border-spacing: 0 !important;
     font-size: 8pt !important;
-    text-transform: uppercase !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+    background: #ffffff !important;
+    margin-top: 6px !important;
+    position: static !important;
+    overflow: visible !important;
+  }
+
+  thead,
+  .custom-table thead {
+    display: table-header-group !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  tfoot,
+  .custom-table tfoot {
+    display: table-footer-group !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  thead tr,
+  .custom-table thead tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  tbody,
+  .custom-table tbody {
+    display: table-row-group !important;
+  }
+
+  tbody tr,
+  .custom-table tbody tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
+  /* Alternating row shading (zebra-striping) for printed tables */
+  tbody tr:nth-child(even),
+  .custom-table tbody tr:nth-child(even) {
+    background-color: #f3f4f6 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  td {
-    border: 1px solid #d1d5db !important;
-    padding: 6px 8px !important;
+  tbody tr:nth-child(even) td,
+  .custom-table tbody tr:nth-child(even) td {
+    background-color: #f3f4f6 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  tbody tr:nth-child(odd),
+  .custom-table tbody tr:nth-child(odd) {
+    background-color: #ffffff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  tbody tr:nth-child(odd) td,
+  .custom-table tbody tr:nth-child(odd) td {
+    background-color: #ffffff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  th,
+  .custom-table th {
+    background-color: #e5e7eb !important;
     color: #111827 !important;
-    background: transparent !important;
-    font-size: 8.5pt !important;
+    border: 1px solid #9ca3af !important;
+    padding: 5px 7px !important;
+    font-weight: 700 !important;
+    text-align: left !important;
+    font-size: 7.5pt !important;
+    text-transform: uppercase !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    position: static !important;
+    top: auto !important;
+    box-sizing: border-box !important;
+  }
+
+  td,
+  .custom-table td {
+    border: 1px solid #d1d5db !important;
+    padding: 4px 7px !important;
+    color: #111827 !important;
+    font-size: 7.5pt !important;
     vertical-align: middle !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Reset sticky headers inside tables */
+  th.sticky,
+  th[style*="sticky"],
+  .sticky,
+  [class*="sticky"] {
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    box-shadow: none !important;
+    z-index: auto !important;
   }
 
   /* Checkboxes inside tables */
@@ -2289,9 +2464,9 @@ input[type='number']::-webkit-outer-spin-button {
     border: 1px solid #9ca3af !important;
     background: transparent !important;
     color: #111827 !important;
-    font-size: 7.5pt !important;
-    padding: 2px 4px !important;
-    border-radius: 3px !important;
+    font-size: 7pt !important;
+    padding: 1px 3px !important;
+    border-radius: 2px !important;
     display: inline-block !important;
   }
 
@@ -2306,17 +2481,17 @@ input[type='number']::-webkit-outer-spin-button {
   /* Show elements marked for print-only */
   .print-only {
     display: block !important;
-    margin-bottom: 12px !important;
+    margin-bottom: 10px !important;
   }
 
   .print-header {
     border-bottom: 2px solid #111827;
-    padding-bottom: 6px;
-    margin-bottom: 12px;
+    padding-bottom: 5px;
+    margin-bottom: 10px;
   }
 
   .print-header-brand {
-    font-size: 14pt;
+    font-size: 13pt;
     font-weight: 800;
     color: #111827;
     text-transform: uppercase;
@@ -2324,8 +2499,45 @@ input[type='number']::-webkit-outer-spin-button {
   }
 
   .print-header-meta {
-    font-size: 8pt;
+    font-size: 7.5pt;
     color: #4b5563;
     margin-top: 2px;
+  }
+
+  /* Standard Fixed Print Footer with 'Page X of Y' Indicator */
+  .print-footer-fixed {
+    display: block !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    border-top: 1px solid #d1d5db !important;
+    padding: 3px 0 0 0 !important;
+    background: #ffffff !important;
+    z-index: 99999 !important;
+  }
+
+  .print-footer-container {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    width: 100% !important;
+    font-size: 7.5pt !important;
+    color: #6b7280 !important;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  }
+
+  .print-footer-brand {
+    font-weight: 700 !important;
+    color: #111827 !important;
+    letter-spacing: 0.05em !important;
+  }
+
+  .print-footer-right .page-x-of-y::after,
+  .page-x-of-y::after {
+    content: "Page " counter(page) " of " counter(pages);
+    font-weight: 700 !important;
+    color: #111827 !important;
   }
 }

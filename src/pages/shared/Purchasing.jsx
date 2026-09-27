@@ -593,12 +593,12 @@ export default function Purchasing() {
             {/* Smart Search Bar */}
             <div style={{ position: 'relative', marginBottom: '24px', zIndex: 10 }}>
               <div style={{ position: 'relative' }}>
-                <Search size={18} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
                 <input
                   ref={searchInputRef}
                   type="text"
-                  className="form-control"
-                  style={{ padding: '14px 16px 14px 44px', fontSize: '1rem', background: 'var(--bg-tertiary)', borderColor: showSearchDropdown ? 'var(--accent)' : 'var(--border)' }}
+                  className="form-control search-input-clearance"
+                  style={{ padding: '14px 16px 14px 44px', paddingLeft: '44px', fontSize: '1rem', background: 'var(--bg-tertiary)', borderColor: showSearchDropdown ? 'var(--accent)' : 'var(--border)' }}
                   placeholder="Ketik nama bahan baku untuk menambah ke keranjang..."
                   value={searchQuery}
                   onChange={(e) => {
@@ -787,12 +787,12 @@ export default function Purchasing() {
                 </div>
 
                 <div className="relative flex-1 sm:max-w-[280px]">
-                  <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                  <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
                   <input
                     type="text"
-                    className="form-control w-full"
+                    className="form-control w-full search-input-clearance"
                     placeholder="Cari histori (bahan/supplier)..."
-                    style={{ paddingLeft: '36px', height: '34px' }}
+                    style={{ paddingLeft: '38px', height: '34px' }}
                     value={historySearchInput}
                     onChange={e => setHistorySearchInput(e.target.value)}
                   />

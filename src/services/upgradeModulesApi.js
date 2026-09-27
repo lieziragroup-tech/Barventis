@@ -7,16 +7,42 @@ import { api } from './api';
 // 5.1 FEFO — Material Batches & Expiry
 // ============================================================================
 
+// Helper: safely join materials when foreign key relationship is absent in schema cache
+async function enrichWithMaterials(rows, idField = 'material_id') {
+  if (!rows || rows.length === 0) return rows || [];
+  if (rows[0] && rows[0].materials && typeof rows[0].materials === 'object') return rows;
+  try {
+    const materials = await api.getMaterials();
+    const map = new Map((materials || []).map(m => [m.id, m]));
+    return rows.map(r => ({
+      ...r,
+      materials: r.materials || map.get(r[idField]) || { name: 'Item', unit: 'pcs', price: 0 }
+    }));
+  } catch {
+    return rows;
+  }
+}
+
 export const fefoApi = {
   async getBatches(materialId = null) {
     const tenantId = await api.getActiveTenantId();
     if (!tenantId) return [];
-    let q = supabase.from('material_batches').select('*, materials(name, unit)')
-      .eq('tenant_id', tenantId).eq('status', 'active').order('expiry_date', { ascending: true });
-    if (materialId) q = q.eq('material_id', materialId);
-    const { data, error } = await q;
-    if (error) throw error;
-    return data || [];
+    try {
+      let q = supabase.from('material_batches').select('*, materials(name, unit)')
+        .eq('tenant_id', tenantId).eq('status', 'active').order('expiry_date', { ascending: true });
+      if (materialId) q = q.eq('material_id', materialId);
+      const { data, error } = await q;
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      // Fallback if PostgREST relation is not cached or missing
+      let q = supabase.from('material_batches').select('*')
+        .eq('tenant_id', tenantId).eq('status', 'active').order('expiry_date', { ascending: true });
+      if (materialId) q = q.eq('material_id', materialId);
+      const { data, error } = await q;
+      if (error) throw error;
+      return await enrichWithMaterials(data || []);
+    }
   },
 
   async createBatch({ material_id, batch_number, expiry_date, quantity, location = 'BAR' }) {
@@ -32,12 +58,22 @@ export const fefoApi = {
     const tenantId = await api.getActiveTenantId();
     if (!tenantId) return [];
     const cutoff = new Date(Date.now() + daysAhead * 86400000).toISOString().split('T')[0];
-    const { data, error } = await supabase.from('material_batches')
-      .select('*, materials(name, unit, price)')
-      .eq('tenant_id', tenantId).eq('status', 'active')
-      .lte('expiry_date', cutoff).order('expiry_date', { ascending: true });
-    if (error) throw error;
-    return data || [];
+    try {
+      const { data, error } = await supabase.from('material_batches')
+        .select('*, materials(name, unit, price)')
+        .eq('tenant_id', tenantId).eq('status', 'active')
+        .lte('expiry_date', cutoff).order('expiry_date', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      // Fallback query without foreign-key join
+      const { data, error } = await supabase.from('material_batches')
+        .select('*')
+        .eq('tenant_id', tenantId).eq('status', 'active')
+        .lte('expiry_date', cutoff).order('expiry_date', { ascending: true });
+      if (error) throw error;
+      return await enrichWithMaterials(data || []);
+    }
   },
 
   async disposeBatch(batchId, reason = 'expired') {
@@ -57,14 +93,25 @@ export const adjustmentApi = {
   async getAdjustments({ status = null, startDate = null, endDate = null } = {}) {
     const tenantId = await api.getActiveTenantId();
     if (!tenantId) return [];
-    let q = supabase.from('stock_adjustments').select('*, materials(name, unit)')
-      .eq('tenant_id', tenantId).order('created_at', { ascending: false });
-    if (status) q = q.eq('status', status);
-    if (startDate) q = q.gte('opname_date', startDate);
-    if (endDate) q = q.lte('opname_date', endDate);
-    const { data, error } = await q;
-    if (error) throw error;
-    return data || [];
+    try {
+      let q = supabase.from('stock_adjustments').select('*, materials(name, unit)')
+        .eq('tenant_id', tenantId).order('created_at', { ascending: false });
+      if (status) q = q.eq('status', status);
+      if (startDate) q = q.gte('opname_date', startDate);
+      if (endDate) q = q.lte('opname_date', endDate);
+      const { data, error } = await q;
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      let q = supabase.from('stock_adjustments').select('*')
+        .eq('tenant_id', tenantId).order('created_at', { ascending: false });
+      if (status) q = q.eq('status', status);
+      if (startDate) q = q.gte('opname_date', startDate);
+      if (endDate) q = q.lte('opname_date', endDate);
+      const { data, error } = await q;
+      if (error) throw error;
+      return await enrichWithMaterials(data || []);
+    }
   },
 
   async createAdjustment({ material_id, opname_date, system_qty, physical_qty, variance_pct, reason, category = 'UNCLASSIFIED' }) {

@@ -111,14 +111,14 @@ export default function PosRawData() {
         <div className="flex-1 min-w-[180px]">
           <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>Cari Menu</label>
           <div style={{ position: 'relative' }}>
-            <Search size={15} style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <Search size={15} style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
             <input
               type="text"
-              className="form-control w-full"
+              className="form-control w-full search-input-clearance"
               placeholder="Ketik nama menu..."
               value={inputValue}
               onChange={handleSearchChange}
-              style={{ paddingLeft: '34px' }}
+              style={{ paddingLeft: '38px' }}
             />
           </div>
         </div>

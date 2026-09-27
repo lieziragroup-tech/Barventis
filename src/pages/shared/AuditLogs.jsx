@@ -256,16 +256,19 @@ export default function AuditLogs() {
               left: '14px',
               top: '50%',
               transform: 'translateY(-50%)',
-              color: 'var(--text-muted)'
+              color: 'var(--text-muted)',
+              pointerEvents: 'none'
             }} />
             <input
               type="text"
+              className="search-input-clearance"
               placeholder="Cari deskripsi atau tindakan..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               style={{
                 width: '100%',
-                padding: '12px 16px 12px 42px',
+                padding: '12px 16px 12px 44px',
+                paddingLeft: '44px',
                 background: 'var(--bg-primary)',
                 border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-lg)',
