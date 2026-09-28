@@ -140,12 +140,16 @@ export default function DashboardLayout() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // High-performance, responsive swipe gesture for mobile & tablet (< 1024px)
+  // Balanced, edge-only swipe gesture for mobile & tablet (< 1024px)
+  // Strictly enforces minimum 50px distance threshold and respects table scrolling
   useEffect(() => {
     let startX = 0;
     let startY = 0;
     let startTime = 0;
     let isTracking = false;
+
+    // Minimum distance threshold before sidebar can be triggered
+    const MIN_OPEN_SWIPE_DISTANCE = 50;
 
     const handleTouchStart = (e) => {
       if (window.innerWidth >= 1024) return;
@@ -154,8 +158,17 @@ export default function DashboardLayout() {
       const touch = e.touches[0];
       const target = e.target;
 
-      // Ignore if user is interacting with horizontal range slider or designated controls
-      if (target?.closest?.('input[type="range"], [data-no-swipe="true"]')) return;
+      // When sidebar is closed, ONLY allow opening from the actual left screen bezel (0 - 30px)
+      // Never trigger when user is touching inside tables, content grids, or form elements
+      if (!isSidebarOpen) {
+        if (touch.clientX > 30) return;
+        if (target?.closest?.(
+          '.table-container, table, .custom-table, tbody, thead, th, td, [role="grid"], [role="table"], ' +
+          '.overflow-x-auto, .overflow-auto, .hub-nav-container, input, textarea, select, [data-no-swipe="true"]'
+        )) {
+          return;
+        }
+      }
 
       startX = touch.clientX;
       startY = touch.clientY;
@@ -169,27 +182,21 @@ export default function DashboardLayout() {
       const deltaX = touch.clientX - startX;
       const deltaY = Math.abs(touch.clientY - startY);
 
-      // If user is predominantly scrolling vertically, cancel swipe tracking early
-      if (deltaY > Math.abs(deltaX) && deltaY > 12) {
+      // If predominantly vertical, cancel tracking early
+      if (deltaY > Math.abs(deltaX) && deltaY > 10) {
         isTracking = false;
         return;
       }
 
-      // Responsive Open Trigger (sensitive & smooth, triggers during drag without waiting for touchend):
-      // - If starting from left edge/zone (startX <= 85px): triggers at deltaX > 26px
-      // - If starting in-screen: triggers at deltaX > 40px with horizontal dominance
       if (!isSidebarOpen) {
-        const isFromEdge = startX <= 85;
-        const requiredDistance = isFromEdge ? 26 : 40;
-        const requiredRatio = isFromEdge ? 0.85 : 1.3;
-
-        if (deltaX > requiredDistance && deltaX > deltaY * requiredRatio) {
+        // Strictly require at least 50px horizontal distance from the left edge bezel
+        if (startX <= 30 && deltaX >= MIN_OPEN_SWIPE_DISTANCE && deltaX > deltaY * 1.5) {
           setIsSidebarOpen(true);
           isTracking = false;
         }
       } else {
-        // If sidebar is currently open, swipe left to close immediately
-        if (deltaX < -32 && Math.abs(deltaX) > deltaY) {
+        // If sidebar is open, swipe left to close
+        if (deltaX < -35 && Math.abs(deltaX) > deltaY) {
           setIsSidebarOpen(false);
           isTracking = false;
         }
@@ -208,14 +215,14 @@ export default function DashboardLayout() {
         const deltaTime = Math.max(1, Date.now() - startTime);
         const velocityX = deltaX / deltaTime; // px/ms
 
-        // Quick flick to the right (sensitive velocity trigger)
+        // Quick flick from the edge - also strictly requires at least 50px distance
         if (!isSidebarOpen) {
-          if (deltaX > 18 && velocityX > 0.20 && deltaX > deltaY * 0.85) {
+          if (startX <= 30 && deltaX >= MIN_OPEN_SWIPE_DISTANCE && velocityX > 0.35 && deltaX > deltaY * 1.5) {
             setIsSidebarOpen(true);
           }
         } else {
-          // Quick flick to the left to close
-          if (deltaX < -18 && velocityX < -0.20 && Math.abs(deltaX) > deltaY * 0.85) {
+          // Quick flick left to close
+          if (deltaX < -25 && velocityX < -0.25 && Math.abs(deltaX) > deltaY) {
             setIsSidebarOpen(false);
           }
         }

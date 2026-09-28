@@ -62,28 +62,28 @@ export function triggerHaptic(type = 'light') {
   switch (type) {
     case 'light':
       if (hasVibrate) {
-        try { navigator.vibrate(10); } catch {}
+        try { navigator.vibrate(10); } catch { /* ignore */ }
       }
       playTactileMicroPulse(180, 0.012, 0.04);
       break;
 
     case 'medium':
       if (hasVibrate) {
-        try { navigator.vibrate(25); } catch {}
+        try { navigator.vibrate(25); } catch { /* ignore */ }
       }
       playTactileMicroPulse(150, 0.02, 0.06);
       break;
 
     case 'heavy':
       if (hasVibrate) {
-        try { navigator.vibrate([35, 20, 20]); } catch {}
+        try { navigator.vibrate([35, 20, 20]); } catch { /* ignore */ }
       }
       playTactileMicroPulse(110, 0.035, 0.08);
       break;
 
     case 'success':
       if (hasVibrate) {
-        try { navigator.vibrate([15, 40, 25]); } catch {}
+        try { navigator.vibrate([15, 40, 25]); } catch { /* ignore */ }
       }
       playTactileMicroPulse(220, 0.015, 0.05);
       setTimeout(() => playTactileMicroPulse(280, 0.02, 0.05), 45);
@@ -92,7 +92,7 @@ export function triggerHaptic(type = 'light') {
     case 'warning':
     case 'error':
       if (hasVibrate) {
-        try { navigator.vibrate([30, 40, 30]); } catch {}
+        try { navigator.vibrate([30, 40, 30]); } catch { /* ignore */ }
       }
       playTactileMicroPulse(90, 0.03, 0.08);
       setTimeout(() => playTactileMicroPulse(70, 0.03, 0.08), 50);
@@ -100,7 +100,7 @@ export function triggerHaptic(type = 'light') {
 
     default:
       if (hasVibrate) {
-        try { navigator.vibrate(15); } catch {}
+        try { navigator.vibrate(15); } catch { /* ignore */ }
       }
       playTactileMicroPulse(160, 0.015, 0.05);
   }
