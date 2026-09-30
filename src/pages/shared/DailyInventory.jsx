@@ -1,39 +1,17 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
-import {
-  Calendar,
-  FileText,
-  PlusCircle,
-  Save,
-  Loader2,
-  Lock,
-  Info,
-  Package,
-  X,
-  ChevronLeft,
-  ChevronRight,
-  ClipboardList,
-  Layers,
-  HelpCircle,
-  Search
-} from 'lucide-react';
+import { Calendar, FileText, PlusCircle, Save, Loader2, Lock, Info, Package, Camera } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
-import { offlineInventoryCache } from '../../services/offlineInventoryCache';
 import ExportButton from '../../components/shared/ExportButton';
 import PrintButton from '../../components/shared/PrintButton';
-import PrintReportFooter from '../../components/shared/PrintReportFooter';
 import { exportWithAudit } from '../../services/export/exportAudit';
 import { TableSkeletonRows, TableLoadingOverlay } from '../../components/shared/TableSkeleton';
+import PhotoUploaderModal from '../../components/shared/PhotoUploaderModal';
 
-export default function DailyInventory({ category = 'ALL', initialTab, externalTab, onTabChange }) {
+export default function DailyInventory({ category, initialTab }) {
   const { activeUser } = useAuth();
-  const [internalTab, setInternalTab] = useState(initialTab || 'REKAP');
-  const activeTab = externalTab !== undefined ? externalTab : internalTab;
-  const setActiveTab = (tab) => {
-    setInternalTab(tab);
-    if (onTabChange) onTabChange(tab);
-  };
+  const [activeTab, setActiveTab] = useState(initialTab || 'REKAP');
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
 
   const [loading, setLoading] = useState(false);
@@ -41,7 +19,7 @@ export default function DailyInventory({ category = 'ALL', initialTab, externalT
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
   const [isLocked, setIsLocked] = useState(false);
-  const [showGuide, setShowGuide] = useState(false);
+  const [photoModal, setPhotoModal] = useState({ isOpen: false, bucket: '', contextName: '' });
 
   // REKAP state
   const [records, setRecords] = useState([]);
@@ -49,10 +27,6 @@ export default function DailyInventory({ category = 'ALL', initialTab, externalT
   // EOD state
   const [items, setItems] = useState([]);
   const [inventory, setInventory] = useState({});
-
-  // Filter & Search state (allowing unified Beverage & Beer viewing)
-  const [filterCat, setFilterCat] = useState('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchRecords = useCallback(async () => {
     setLoading(true);
@@ -131,42 +105,18 @@ export default function DailyInventory({ category = 'ALL', initialTab, externalT
         };
       });
 
-      // Filter by category prop when provided (BEER vs BAHAN vs ALL)
-      const filtered = (category && category !== 'ALL')
-        ? mapped.filter(r => {
-            const cat = (r.materials?.category || '').toUpperCase();
-            return category === 'BEER' ? cat === 'BEER' : cat !== 'BEER' && cat !== 'ASSET';
-          })
-        : mapped.filter(r => {
-            const cat = (r.materials?.category || '').toUpperCase();
-            return cat !== 'ASSET';
-          });
+      // Filter out ASSET category, keep everything else including BEER
+      const filtered = mapped.filter(r => {
+        const cat = (r.materials?.category || '').toUpperCase();
+        return cat !== 'ASSET';
+      });
       setRecords(filtered);
-      if (tenantId) {
-        offlineInventoryCache.saveDailyInventory(tenantId, date, category, {
-          records: filtered,
-          isLocked: locked
-        });
-      }
     } catch (err) {
-      console.warn('[DailyInventory] Failed to fetch live records, checking offline cache:', err);
-      try {
-        const tenantId = await api.getActiveTenantId();
-        const cached = await offlineInventoryCache.getDailyInventory(tenantId, date, category);
-        if (cached?.records && cached.records.length > 0) {
-          setRecords(cached.records);
-          setIsLocked(!!cached.isLocked);
-          setError('Mode Offline Aktif: Menampilkan data inventaris yang tersimpan.');
-          return;
-        }
-      } catch {
-        // Fall through to error
-      }
       setError(err.message || 'Gagal memuat rekap harian');
     } finally {
       setLoading(false);
     }
-  }, [date, category]);
+  }, [date]);
 
   const fetchEodData = useCallback(async () => {
     setLoading(true);
@@ -183,19 +133,12 @@ export default function DailyInventory({ category = 'ALL', initialTab, externalT
 
       // 1. Fetch materials (bar/resto inventory items)
       let materialsList = await api.getMaterials();
-      // Filter by category prop when provided (BEER vs BAHAN vs ALL)
-      if (category && category !== 'ALL') {
-        materialsList = (materialsList || []).filter(m => {
-          const cat = (m.category || '').toUpperCase();
-          return category === 'BEER' ? cat === 'BEER' : cat !== 'BEER' && cat !== 'ASSET';
-        });
-      } else {
-        materialsList = (materialsList || []).filter(m => {
-          const cat = (m.category || '').toUpperCase();
-          return cat !== 'ASSET';
-        });
-      }
-      setItems(materialsList || []);
+      // Filter out ASSET category, keep everything else including BEER
+      materialsList = (materialsList || []).filter(m => {
+        const cat = (m.category || '').toUpperCase();
+        return cat !== 'ASSET';
+      });
+      setItems(materialsList);
 
       // 2. Fetch existing daily inventory header for date
       const { data: header, error: headerErr } = await supabase
@@ -237,44 +180,16 @@ export default function DailyInventory({ category = 'ALL', initialTab, externalT
     } finally {
       setLoading(false);
     }
-  }, [date, category]);
+  }, [date]);
 
   useEffect(() => {
     if (activeTab === 'REKAP') {
-       
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchRecords();
     } else {
       fetchEodData();
     }
   }, [activeTab, fetchRecords, fetchEodData]);
-
-  const displayedRecords = useMemo(() => {
-    return records.filter(r => {
-      const cat = (r.materials?.category || '').toUpperCase();
-      if (filterCat === 'BEER' && cat !== 'BEER') return false;
-      if (filterCat === 'BAHAN' && cat === 'BEER') return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const name = (r.materials?.name || '').toLowerCase();
-        return name.includes(q);
-      }
-      return true;
-    });
-  }, [records, filterCat, searchQuery]);
-
-  const displayedItems = useMemo(() => {
-    return items.filter(m => {
-      const cat = (m.category || '').toUpperCase();
-      if (filterCat === 'BEER' && cat !== 'BEER') return false;
-      if (filterCat === 'BAHAN' && cat === 'BEER') return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const name = (m.name || '').toLowerCase();
-        return name.includes(q);
-      }
-      return true;
-    });
-  }, [items, filterCat, searchQuery]);
 
   const handleChange = (itemId, field, value) => {
     if (isLocked) return;
@@ -375,8 +290,9 @@ export default function DailyInventory({ category = 'ALL', initialTab, externalT
       const qtyIn = Number(row.qty_in) || 0;
       const qtyOut = Number(row.qty_out) || 0;
       const waste = Number(row.waste) || 0;
+      const isBeer = (item.category || '').toUpperCase().includes('BEER');
       const fullQty = Number(row.full_qty) || 0;
-      const broken = Number(row.broken) || 0;
+      const broken = isBeer ? 0 : (Number(row.broken) || 0);
 
       const stokAkhir = fullQty + broken;
       const qtyTerpakai = qtyOut + waste; // or (stokAwal + qtyIn) - stokAkhir
@@ -607,149 +523,90 @@ export default function DailyInventory({ category = 'ALL', initialTab, externalT
     }
   };
 
-  const handlePrevDay = () => {
-    const d = new Date(date);
-    d.setDate(d.getDate() - 1);
-    setDate(d.toISOString().split('T')[0]);
-  };
-
-  const handleNextDay = () => {
-    const d = new Date(date);
-    d.setDate(d.getDate() + 1);
-    setDate(d.toISOString().split('T')[0]);
-  };
-
-  const handleToday = () => {
-    setDate(new Date().toISOString().split('T')[0]);
-  };
-
   return (
-    <div className="fade-in space-y-3.5">
-      {/* Header with Distinct Labeled Submenu */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print">
-        {/* Left: Main Header Title & Badges */}
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-xl bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/20 shadow-xs">
-            <ClipboardList size={18} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
-                {category === 'BEER' ? 'Daily Inventory Beer' : category === 'BAHAN' ? 'Daily Inventory Bahan' : 'Daily Inventory (Bahan & Beer)'}
-              </h1>
-              {isLocked && (
-                <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 font-bold border border-amber-500/30">
-                  <Lock size={10} /> Terkunci (Closed)
-                </span>
-              )}
-            </div>
-            <p className="text-[11px] text-[var(--text-secondary)] m-0 mt-0.5">
-              {category === 'BEER'
-                ? 'Pengawasan stok fisik botol bir & cider harian'
-                : category === 'BAHAN'
-                ? 'Kontrol stok fisik bahan baku bar & resto harian'
-                : 'Kontrol stok fisik bahan baku bar, sirup, premix, bir & cider harian'}
-            </p>
-          </div>
+    <div className="fade-in space-y-4">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0 }}>
+            Daily Inventory
+            {isLocked && <span style={{ marginLeft: '12px', padding: '2px 8px', background: '#fef3c7', color: '#92400e', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>TERKUNCI (EOD CLOSED)</span>}
+          </h1>
+          <p style={{ color: '#6b7280', fontSize: '0.875rem', marginTop: '4px' }}>Rekapitulasi stok akhir hari dan nilai terpakai</p>
         </div>
-
-        {/* Right: Distinct Sub-menu with Label Background */}
-        <div className="flex items-center gap-2 bg-[var(--bg-secondary)]/80 p-1.5 rounded-xl border border-[var(--border)] shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] px-1.5 flex items-center gap-1">
-            <Layers size={11} className="text-[var(--accent)]" />
-            Mode:
-          </span>
-
-          {/* Segmented Switcher */}
-          <div className="inline-flex p-0.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-xs shadow-2xs">
-            <button
-              type="button"
-              className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
-                activeTab === 'REKAP'
-                  ? 'bg-[var(--accent)] text-white shadow-xs font-bold'
-                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-              }`}
-              onClick={() => setActiveTab('REKAP')}
-            >
-              <FileText size={13} />
-              <span>Rekap</span>
-            </button>
-            <button
-              type="button"
-              className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
-                activeTab === 'EOD'
-                  ? 'bg-[var(--accent)] text-white shadow-xs font-bold'
-                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-              }`}
-              onClick={() => setActiveTab('EOD')}
-            >
-              <PlusCircle size={13} />
-              <span>Input EOD</span>
-            </button>
-          </div>
-
-          {/* Collapsible Info Guide Toggle */}
+        <div className="no-print" style={{ display: 'flex', gap: '8px' }}>
           <button
-            type="button"
-            className={`p-1.5 rounded-lg border text-xs flex items-center gap-1 transition-all ${
-              showGuide
-                ? 'bg-[var(--accent-glow)] border-[var(--accent)] text-[var(--accent)]'
-                : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card)]'
-            }`}
-            onClick={() => setShowGuide(!showGuide)}
-            title={showGuide ? "Tutup panduan" : "Buka panduan mode"}
+            className={`btn ${activeTab === 'REKAP' ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            onClick={() => setActiveTab('REKAP')}
           >
-            <Info size={14} />
-            <span className="hidden sm:inline text-[11px] font-medium">{showGuide ? 'Tutup' : 'Panduan'}</span>
+            <FileText size={16} />
+            Rekap Harian
+          </button>
+          <button
+            className={`btn ${activeTab === 'EOD' ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            onClick={() => setActiveTab('EOD')}
+          >
+            <PlusCircle size={16} />
+            Form Input EOD
           </button>
         </div>
       </div>
 
-      {/* Collapsible Info Banner: Only shown when toggled */}
-      {showGuide && (
-        <div
-          className="rounded-xl border p-3 text-xs transition-all no-print animate-in fade-in duration-200"
-          style={{
-            background: activeTab === 'REKAP' ? 'rgba(59, 130, 246, 0.08)' : 'rgba(245, 158, 11, 0.08)',
-            borderColor: activeTab === 'REKAP' ? 'rgba(59, 130, 246, 0.25)' : 'rgba(245, 158, 11, 0.25)',
-            color: 'var(--text-primary)'
-          }}
-        >
-          <div className="flex items-start justify-between gap-2.5">
-            <div className="flex items-start gap-2.5">
-              <div
-                className="p-1.5 rounded-lg shrink-0 mt-0.5"
-                style={{
-                  background: activeTab === 'REKAP' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                  color: activeTab === 'REKAP' ? '#2563eb' : '#d97706'
-                }}
-              >
-                <Info size={15} />
+      {/* Info Banner: Penjelasan Perbedaan Rekap Harian vs Form Input EOD */}
+      <div
+        className="rounded-xl border p-4 text-sm transition-all no-print"
+        style={{
+          background: activeTab === 'REKAP' ? 'rgba(59, 130, 246, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+          borderColor: activeTab === 'REKAP' ? 'rgba(59, 130, 246, 0.25)' : 'rgba(245, 158, 11, 0.25)',
+          color: 'var(--text-primary)'
+        }}
+      >
+        <div className="flex items-start gap-3">
+          <div
+            className="p-2 rounded-lg shrink-0 mt-0.5"
+            style={{
+              background: activeTab === 'REKAP' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+              color: activeTab === 'REKAP' ? '#2563eb' : '#d97706'
+            }}
+          >
+            <Info size={18} />
+          </div>
+          <div className="flex-1 space-y-1">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="font-semibold text-sm m-0" style={{ color: activeTab === 'REKAP' ? '#2563eb' : '#d97706' }}>
+                {activeTab === 'REKAP' ? '📊 Panduan: Rekap Harian (Monitoring & Audit)' : '📝 Panduan: Form Input EOD (End of Day Closing)'}
+              </h4>
+              <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+                {activeTab === 'REKAP' ? 'Mode Tinjauan & Analisa' : 'Mode Pencatatan Fisik Staf'}
+              </span>
+            </div>
+
+            {activeTab === 'REKAP' ? (
+              <p className="text-xs leading-relaxed m-0 text-[var(--text-secondary)]">
+                <strong>Rekap Harian</strong> berfungsi untuk <strong>meninjau hasil kalkulasi</strong> dari stok yang telah diinput pada tanggal terpilih. Anda dapat memantau pergerakan Stok Awal, Barang Masuk (IN), Barang Keluar (OUT), Barang Terbuang (WASTE), sisa fisik (FULL/BROKEN), total kuantitas terpakai, dan nilai rupiah biaya bahan (HPP) untuk keperluan audit manajerial.
+              </p>
+            ) : (
+              <p className="text-xs leading-relaxed m-0 text-[var(--text-secondary)]">
+                <strong>Form Input EOD</strong> adalah <strong>lembar kerja operasional</strong> bagi staf bar atau kitchen di akhir shift untuk menginput hasil opname fisik malam hari. Masukkan sisa botol/kemasan utuh (<em>Full</em>), botol terbuka/sebagian (<em>Broken</em>), dan barang rusak/tumpah (<em>Waste</em>). Gunakan <strong>Simpan Draft</strong> untuk menyimpan sementara, atau <strong>Kunci & Closing EOD</strong> saat operasional selesai agar data terkunci per 23:59:59.
+              </p>
+            )}
+
+            <div className="pt-2 mt-2 border-t border-[var(--border)] grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+              <div className="flex items-center gap-1.5 text-[var(--text-secondary)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>
+                <span><strong>Rekap Harian:</strong> Khusus melihat rekap & nilai rupiah (Read/Review).</span>
               </div>
-              <div className="space-y-1">
-                <h4 className="font-semibold text-xs m-0" style={{ color: activeTab === 'REKAP' ? '#2563eb' : '#d97706' }}>
-                  {activeTab === 'REKAP' ? '📊 Panduan: Rekap Harian (Monitoring & Audit)' : '📝 Panduan: Form Input EOD (End of Day Closing)'}
-                </h4>
-                <p className="text-[11px] leading-relaxed m-0 text-[var(--text-secondary)]">
-                  {activeTab === 'REKAP'
-                    ? 'Rekap Harian berfungsi untuk meninjau hasil kalkulasi pergerakan stok (Stok Awal, In, Out, Waste, Full/Broken) dan nilai HPP untuk audit.'
-                    : 'Form Input EOD adalah lembar kerja closing shift untuk menginput sisa botol utuh (Full), terbuka (Broken), dan terbuang (Waste).'}
-                </p>
+              <div className="flex items-center gap-1.5 text-[var(--text-secondary)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                <span><strong>Form Input EOD:</strong> Khusus menginput stok fisik & closing shift (Write/Lock).</span>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowGuide(false)}
-              className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 shrink-0"
-              title="Tutup panduan"
-            >
-              <X size={14} />
-            </button>
           </div>
         </div>
-      )}
+      </div>
 
-      <div className="glass-card p-3 sm:p-4 md:p-5" style={{ marginBottom: '16px' }}>
+      <div className="glass-card" style={{ padding: '24px' }}>
         {/* Print-only Document Header */}
         <div className="print-only print-header">
           <div className="print-header-brand">BARVENTIS — SISTEM MANAJEMEN GUDANG</div>
@@ -761,98 +618,58 @@ export default function DailyInventory({ category = 'ALL', initialTab, externalT
           </div>
         </div>
 
-        {/* Integrated Minimalist Toolbar with Zero Dead Whitespace */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3 pb-3 border-b border-[var(--border)]/60">
-          {/* Left: Date controls with quick stepper buttons */}
-          <div className="flex items-center justify-between sm:justify-start gap-1.5 w-full sm:w-auto">
-            <div className="flex items-center gap-1.5 flex-1 sm:flex-initial">
-              <span className="text-xs font-bold text-[var(--text-secondary)] whitespace-nowrap mr-0.5">Tanggal:</span>
-              <div className="inline-flex items-center rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)]/50 p-0.5 shadow-2xs flex-1 sm:flex-initial justify-between">
-                <button
-                  type="button"
-                  className="p-1 hover:bg-[var(--bg-card)] rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
-                  onClick={handlePrevDay}
-                  title="Hari sebelumnya"
-                >
-                  <ChevronLeft size={15} />
-                </button>
-                <input
-                  type="date"
-                  className="bg-transparent border-0 text-xs font-semibold text-[var(--text-primary)] px-1 sm:px-2 py-1 focus:outline-none cursor-pointer text-center sm:text-left flex-1"
-                  style={{ height: '28px', minWidth: '105px' }}
-                  value={date}
-                  onChange={e => setDate(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="p-1 hover:bg-[var(--bg-card)] rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors shrink-0"
-                  onClick={handleNextDay}
-                  title="Hari berikutnya"
-                >
-                  <ChevronRight size={15} />
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              className="text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-[var(--border)] hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors shadow-2xs whitespace-nowrap shrink-0"
-              style={{ height: '32px' }}
-              onClick={handleToday}
-            >
-              Hari Ini
-            </button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+            <label style={{ fontWeight: 600 }}>Filter Tanggal:</label>
+            <input
+              type="date"
+              className="form-control"
+              style={{ width: 'auto' }}
+              value={date}
+              onChange={e => setDate(e.target.value)}
+            />
           </div>
 
-          {/* Center Info Badge: Eliminates empty gap and provides key context */}
-          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-secondary)]/60 border border-[var(--border)]/60 text-xs text-[var(--text-secondary)] shadow-2xs">
-            <span className={`w-2 h-2 rounded-full ${isLocked ? 'bg-amber-500' : 'bg-emerald-500'} animate-pulse`} />
-            <span className="font-semibold text-[var(--text-primary)]">
-              {activeTab === 'REKAP' ? `${records.length} Bahan Terdata` : `${items.length} Bahan Siap Input`}
-            </span>
-            <span className="text-[var(--border)]">•</span>
-            <span className="text-[11px]">
-              {isLocked ? 'Status EOD: Terkunci' : 'Status EOD: Siap Closing'}
-            </span>
-          </div>
-
-          {/* Right: Action Buttons Group */}
-          <div className="flex items-center gap-1.5 w-full sm:w-auto sm:ml-auto justify-end flex-wrap sm:flex-nowrap">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <ExportButton
               onExportExcel={handleExportExcel}
               onExportPDF={handleExportPDF}
               currentRole={activeUser?.role}
               disabled={loading || (activeTab === 'REKAP' ? records.length === 0 : items.length === 0)}
-              className="flex-1 sm:flex-initial"
-              style={{ height: '32px', padding: '0 10px', fontSize: '0.78rem', gap: '5px' }}
             />
             <PrintButton
               currentRole={activeUser?.role}
               disabled={loading || (activeTab === 'REKAP' ? records.length === 0 : items.length === 0)}
               title="Cetak lembar inventaris harian"
-              className="flex-1 sm:flex-initial"
-              style={{ height: '32px', padding: '0 10px', fontSize: '0.78rem', gap: '5px' }}
             />
 
             {activeTab === 'EOD' && !isLocked && (
               <>
                 <button
-                  className="btn btn-secondary text-xs"
-                  style={{ height: '32px', padding: '0 10px', display: 'flex', alignItems: 'center', gap: '5px' }}
+                  className="btn btn-secondary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                   onClick={handleSave}
                   disabled={saving || loading}
                 >
-                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                  <span>Simpan</span>
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                  Simpan Progress (Draf)
                 </button>
                 <button
-                  className="btn text-xs font-bold"
-                  style={{ height: '32px', padding: '0 11px', background: '#059669', color: 'white', display: 'flex', alignItems: 'center', gap: '5px' }}
+                  className="btn"
+                  style={{ background: '#059669', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}
+                  onClick={() => setPhotoModal({ isOpen: true, bucket: 'closing-photos', contextName: `Closing_EOD_${date}` })}
+                >
+                  <Camera size={16} />
+                  Bukti Closing
+                </button>
+                <button
+                  className="btn"
+                  style={{ background: '#059669', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}
                   onClick={submitEODSettlement}
                   disabled={saving || loading}
                 >
-                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
-                  <span>Closing EOD</span>
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Lock size={16} />}
+                  Kunci Closing EOD
                 </button>
               </>
             )}
@@ -870,54 +687,6 @@ export default function DailyInventory({ category = 'ALL', initialTab, externalT
             {success}
           </div>
         )}
-
-        {/* Category & Search Filter Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3 no-print">
-          <div className="inline-flex p-0.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-xs shadow-2xs">
-            <button
-              type="button"
-              className={`px-2.5 py-1 rounded-md font-semibold transition-all ${filterCat === 'ALL' ? 'bg-[var(--bg-card)] text-[var(--text-primary)] shadow-xs font-bold' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
-              onClick={() => setFilterCat('ALL')}
-            >
-              Semua ({activeTab === 'REKAP' ? records.length : items.length})
-            </button>
-            <button
-              type="button"
-              className={`px-2.5 py-1 rounded-md font-semibold transition-all ${filterCat === 'BAHAN' ? 'bg-[var(--bg-card)] text-[var(--text-primary)] shadow-xs font-bold' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
-              onClick={() => setFilterCat('BAHAN')}
-            >
-              Bahan / Beverage
-            </button>
-            <button
-              type="button"
-              className={`px-2.5 py-1 rounded-md font-semibold transition-all ${filterCat === 'BEER' ? 'bg-[var(--bg-card)] text-[var(--text-primary)] shadow-xs font-bold' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
-              onClick={() => setFilterCat('BEER')}
-            >
-              Beer & Cider
-            </button>
-          </div>
-
-          <div className="relative flex-1 min-w-[200px] max-w-xs sm:max-w-sm">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" />
-            <input
-              type="text"
-              className="form-control text-xs w-full search-input-clearance"
-              style={{ height: '32px', paddingLeft: '34px' }}
-              placeholder="Cari bahan baku / bir..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-              >
-                <X size={13} />
-              </button>
-            )}
-          </div>
-        </div>
 
         <div className="table-container relative" style={{ background: 'var(--bg-secondary)', borderRadius: '8px' }}>
           <TableLoadingOverlay
@@ -958,7 +727,7 @@ export default function DailyInventory({ category = 'ALL', initialTab, externalT
                     ]}
                   />
                 ) : (
-                  displayedRecords.map(row => (
+                  records.map(row => (
                     <tr key={row.id}>
                       <td>
                         <div style={{ fontWeight: 600 }}>{row.materials?.name || 'Item Terhapus'}</div>
@@ -982,15 +751,11 @@ export default function DailyInventory({ category = 'ALL', initialTab, externalT
                     </tr>
                   ))
                 )}
-                {!loading && displayedRecords.length === 0 && (
+                {!loading && records.length === 0 && (
                   <tr>
-                    <td colSpan="10" style={{ textAlign: 'center', padding: '24px 16px', color: 'var(--text-muted)' }}>
-                      <Calendar size={28} style={{ margin: '0 auto 8px', opacity: 0.3 }} />
-                      <p style={{ fontWeight: 500, margin: 0, fontSize: '0.8rem' }}>
-                        {searchQuery || filterCat !== 'ALL'
-                          ? 'Tidak ada data inventaris yang cocok dengan filter / pencarian.'
-                          : 'Tidak ada data rekap untuk tanggal ini.'}
-                      </p>
+                    <td colSpan="10" style={{ textAlign: 'center', padding: '48px', color: '#6b7280' }}>
+                      <Calendar size={48} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
+                      <p style={{ fontWeight: 500, margin: 0 }}>Tidak ada data rekap untuk tanggal ini</p>
                     </td>
                   </tr>
                 )}
@@ -1032,13 +797,14 @@ export default function DailyInventory({ category = 'ALL', initialTab, externalT
                     ]}
                   />
                 ) : (
-                  displayedItems.map((item, idx) => {
+                  items.map((item, idx) => {
                     const row = inventory[item.id] || {};
                     const stokAwal = row.stok_awal !== undefined && row.stok_awal !== '' ? Number(row.stok_awal) : (Number(item.qty_resto ?? item.stock) || 0);
                     const qtyIn = Number(row.qty_in) || 0;
                     const waste = Number(row.waste) || 0;
                     const fullQty = Number(row.full_qty) || 0;
-                    const broken = Number(row.broken) || 0;
+                    const isBeer = (item.category || '').toUpperCase().includes('BEER');
+                    const broken = isBeer ? 0 : (Number(row.broken) || 0);
 
                     const stokAkhir = fullQty + broken;
                     const qtyTerpakai = (stokAwal + qtyIn) - (stokAkhir + waste);
@@ -1065,7 +831,10 @@ export default function DailyInventory({ category = 'ALL', initialTab, externalT
                           <input type="number" min="0" disabled={isLocked} className="form-control" style={{ width: '100%', padding: '6px', textAlign: 'center' }} value={row.stok_awal ?? item.qty_resto ?? item.stock ?? ''} onChange={e => handleChange(item.id, 'stok_awal', e.target.value)} onKeyDown={e => handleKeyDown(e, idx, 1, 'stok_awal')} data-row={idx} data-col={1} />
                         </td>
                         <td style={{ padding: '8px' }}>
-                          <input type="number" min="0" disabled={isLocked} className="form-control" style={{ width: '100%', padding: '6px', textAlign: 'center' }} value={row.qty_in ?? ''} onChange={e => handleChange(item.id, 'qty_in', e.target.value)} onKeyDown={e => handleKeyDown(e, idx, 2, 'qty_in')} data-row={idx} data-col={2} />
+                          <div className="flex items-center gap-1">
+                            <input type="number" min="0" disabled={isLocked} className="form-control" style={{ width: '100%', padding: '6px', textAlign: 'center' }} value={row.qty_in ?? ''} onChange={e => handleChange(item.id, 'qty_in', e.target.value)} onKeyDown={e => handleKeyDown(e, idx, 2, 'qty_in')} data-row={idx} data-col={2} />
+                            <button onClick={() => setPhotoModal({ isOpen: true, bucket: 'receipt-photos', contextName: `Penerimaan_IN_${item.name}` })} className="p-1.5 text-blue-600 bg-blue-50 rounded hover:bg-blue-100" title="Upload Nota/Struk" disabled={isLocked}><Camera size={14}/></button>
+                          </div>
                         </td>
                         <td style={{ padding: '8px' }}>
                           <input type="number" min="0" disabled={isLocked} className="form-control" style={{ width: '100%', padding: '6px', textAlign: 'center' }} value={row.qty_out ?? ''} onChange={e => handleChange(item.id, 'qty_out', e.target.value)} onKeyDown={e => handleKeyDown(e, idx, 3, 'qty_out')} data-row={idx} data-col={3} />
@@ -1079,13 +848,20 @@ export default function DailyInventory({ category = 'ALL', initialTab, externalT
                           }} />
                         </td>
                         <td style={{ padding: '8px', background: 'rgba(239,68,68,0.05)' }}>
-                          <input type="number" min="0" disabled={isLocked} className="form-control" style={{ width: '100%', padding: '6px', textAlign: 'center', color: '#dc2626' }} value={row.waste ?? ''} onChange={e => handleChange(item.id, 'waste', e.target.value)} onKeyDown={e => handleKeyDown(e, idx, 4, 'waste')} data-row={idx} data-col={4} />
+                          <div className="flex items-center gap-1">
+                            <input type="number" min="0" disabled={isLocked} className="form-control" style={{ width: '100%', padding: '6px', textAlign: 'center', color: '#dc2626' }} value={row.waste ?? ''} onChange={e => handleChange(item.id, 'waste', e.target.value)} onKeyDown={e => handleKeyDown(e, idx, 4, 'waste')} data-row={idx} data-col={4} />
+                            <button onClick={() => setPhotoModal({ isOpen: true, bucket: 'waste-photos', contextName: `Waste_${item.name}` })} className="p-1.5 text-red-600 bg-red-50 rounded hover:bg-red-100" title="Foto Bukti Limbah" disabled={isLocked}><Camera size={14}/></button>
+                          </div>
                         </td>
                         <td style={{ padding: '8px', background: 'rgba(245,158,11,0.05)' }}>
                           <input type="number" min="0" disabled={isLocked} className="form-control" style={{ width: '100%', padding: '6px', textAlign: 'center', fontWeight: 600 }} value={row.full_qty ?? ''} onChange={e => handleChange(item.id, 'full_qty', e.target.value)} onKeyDown={e => handleKeyDown(e, idx, 5, 'full_qty')} data-row={idx} data-col={5} />
                         </td>
                         <td style={{ padding: '8px', background: 'rgba(245,158,11,0.05)' }}>
-                          <input type="number" min="0" disabled={isLocked} className="form-control" style={{ width: '100%', padding: '6px', textAlign: 'center', fontWeight: 600 }} value={row.broken ?? ''} onChange={e => handleChange(item.id, 'broken', e.target.value)} onKeyDown={e => handleKeyDown(e, idx, 6, 'broken')} data-row={idx} data-col={6} />
+                          {isBeer ? (
+                            <input type="number" disabled className="form-control" style={{ width: '100%', padding: '6px', textAlign: 'center', fontWeight: 600, background: '#f3f4f6' }} value={0} />
+                          ) : (
+                            <input type="number" min="0" disabled={isLocked} className="form-control" style={{ width: '100%', padding: '6px', textAlign: 'center', fontWeight: 600 }} value={row.broken ?? ''} onChange={e => handleChange(item.id, 'broken', e.target.value)} onKeyDown={e => handleKeyDown(e, idx, 6, 'broken')} data-row={idx} data-col={6} />
+                          )}
                         </td>
                         <td style={{ padding: '12px', textAlign: 'center', fontWeight: 700, background: 'rgba(16,185,129,0.05)', color: '#047857' }}>
                           {stokAkhir}
@@ -1100,20 +876,16 @@ export default function DailyInventory({ category = 'ALL', initialTab, externalT
                     );
                   })
                 )}
-                {!loading && displayedItems.length === 0 && (
+                {!loading && items.length === 0 && (
                     <tr>
-                      <td colSpan="11" style={{ textAlign: 'center', padding: '48px 24px', color: '#6b7280' }}>
+                      <td colSpan="10" style={{ textAlign: 'center', padding: '48px 24px', color: '#6b7280' }}>
                         <div style={{ maxWidth: '420px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                           <Package size={36} style={{ marginBottom: '12px', opacity: 0.4 }} />
                           <p style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '6px', color: 'var(--text-primary)' }}>
-                            {searchQuery || filterCat !== 'ALL'
-                              ? 'Tidak ada bahan yang cocok dengan filter / pencarian'
-                              : 'Belum Ada Master Bahan Baku'}
+                            Belum Ada Master Bahan Baku
                           </p>
                           <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-                            {searchQuery || filterCat !== 'ALL'
-                              ? 'Coba ubah kata kunci pencarian atau ganti filter kategori di atas.'
-                              : 'Daftar barang pada Form EOD diambil otomatis dari Master Bahan Baku (Stock Ledger). Silakan tambahkan bahan terlebih dahulu di menu Stock Ledger agar dapat dicatat stok fisiknya di sini.'}
+                            Daftar barang pada Form EOD diambil otomatis dari Master Bahan Baku (<strong>Stock Ledger</strong>). Silakan tambahkan bahan terlebih dahulu di menu <strong>Stock Ledger</strong> agar dapat dicatat stok fisiknya di sini.
                           </p>
                         </div>
                       </td>
@@ -1123,12 +895,14 @@ export default function DailyInventory({ category = 'ALL', initialTab, externalT
               </table>
             )}
           </div>
-
-          <PrintReportFooter
-            title={category === 'BEER' ? 'Inventaris Harian Beer' : category === 'BAHAN' ? 'Inventaris Harian Bahan' : 'Inventaris Harian (Bahan & Beer)'}
-            subtitle={`${activeTab === 'REKAP' ? 'Rekap Historis' : 'Input EOD'} • Tanggal: ${date}`}
+          
+          <PhotoUploaderModal 
+            isOpen={photoModal.isOpen} 
+            onClose={() => setPhotoModal({ isOpen: false, bucket: '', contextName: '' })} 
+            bucket={photoModal.bucket}
+            contextName={photoModal.contextName}
           />
+        </div>
       </div>
-    </div>
   );
 }

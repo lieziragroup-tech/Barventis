@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { Calendar, TrendingUp, Loader2, CheckCircle2 } from 'lucide-react';
+import { Calendar, TrendingUp, Loader2 } from 'lucide-react';
 import ExportButton from '../../components/shared/ExportButton';
 import { exportWithAudit } from '../../services/export/exportAudit';
 import { TableSkeletonRows } from '../../components/shared/TableSkeleton';
@@ -159,24 +159,16 @@ export default function UsageRecap() {
 
   return (
     <div className="fade-in space-y-5">
-      {/* Unified Professional Header & Date Range Toolbar */}
-      <div className="glass-card p-3.5 sm:p-4 mb-3.5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/60">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-xs">
-              <TrendingUp size={18} />
+      {/* Header */}
+      <div className="glass-card" style={{ padding: '20px 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ padding: '8px', borderRadius: '12px', background: 'rgba(99,102,241,0.1)' }}>
+              <TrendingUp size={22} style={{ color: 'var(--accent)' }} />
             </div>
             <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="m-0 text-base sm:text-lg font-extrabold text-[var(--text-primary)] tracking-tight">
-                  Rekapitulasi Pemakaian Bahan
-                </h3>
-                <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-500/30">
-                  <CheckCircle2 size={10} />
-                  <span>Live Sinkron</span>
-                </span>
-              </div>
-              <p className="m-0 text-[11px] text-[var(--text-secondary)] mt-0.5">
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Rekapitulasi Pemakaian Bahan</h3>
+              <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                 Kumulatif pemakaian bahan baku dalam rentang tanggal terpilih
               </p>
             </div>
@@ -185,31 +177,21 @@ export default function UsageRecap() {
             onExportExcel={handleExportExcel}
             currentRole={activeUser?.role}
             disabled={loading || records.length === 0}
-            className="w-full sm:w-auto"
-            style={{ height: '32px', padding: '0 12px', fontSize: '0.78rem' }}
           />
         </div>
+      </div>
 
-        {/* Toolbar Filter */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-3">
-          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
-            <span className="font-bold text-xs text-[var(--text-secondary)] whitespace-nowrap">Periode:</span>
-            <div className="flex items-center gap-1.5 flex-1 sm:flex-initial">
-              <input type="date" className="form-control text-xs font-medium flex-1 sm:w-auto" style={{ height: '32px', padding: '4px 8px' }} value={startDate} onChange={e => setStartDate(e.target.value)} />
-              <span className="text-[var(--text-muted)] text-xs font-medium">s/d</span>
-              <input type="date" className="form-control text-xs font-medium flex-1 sm:w-auto" style={{ height: '32px', padding: '4px 8px' }} value={endDate} onChange={e => setEndDate(e.target.value)} />
-            </div>
-            <button className="btn btn-secondary text-xs flex items-center justify-center gap-1.5 font-semibold w-full sm:w-auto" style={{ height: '32px', padding: '0 12px' }} onClick={fetchUsageData} disabled={loading}>
-              {loading ? <Loader2 size={13} className="animate-spin" /> : <Calendar size={13} />}
-              Tampilkan
-            </button>
-          </div>
-
-          {records.length > 0 && (
-            <div className="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg bg-[var(--bg-secondary)]/60 border border-[var(--border)] text-[var(--text-secondary)]">
-              <span>{records.length} Item Tercatat</span>
-            </div>
-          )}
+      {/* Date range */}
+      <div className="glass-card" style={{ padding: '16px 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <label style={{ fontWeight: 600, fontSize: '0.85rem' }}>Periode:</label>
+          <input type="date" className="form-control" style={{ width: 'auto' }} value={startDate} onChange={e => setStartDate(e.target.value)} />
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>s/d</span>
+          <input type="date" className="form-control" style={{ width: 'auto' }} value={endDate} onChange={e => setEndDate(e.target.value)} />
+          <button className="btn btn-secondary text-xs flex items-center gap-1.5" onClick={fetchUsageData} disabled={loading}>
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <Calendar size={14} />}
+            Tampilkan
+          </button>
         </div>
       </div>
 

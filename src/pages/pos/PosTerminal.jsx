@@ -10,7 +10,7 @@ import './PosTerminal.css';
 
 export default function PosTerminal() {
   const navigate = useNavigate();
-   
+  // eslint-disable-next-line no-unused-vars
   const { recipes, loadingData, refreshData, currentTenant } = useData();
   const { activeUser } = useAuth();
   const { showSuccess, showError, showWarning } = useToast();

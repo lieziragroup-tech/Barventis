@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { BarChart3, Star, TrendingUp, TrendingDown, Loader2, CheckCircle2 } from 'lucide-react';
+import { BarChart3, Star, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
 import { menuEngApi } from '../../services/upgradeModulesApi';
 import { useAuth } from '../../contexts/AuthContext';
 import { TableSkeletonRows } from '../../components/shared/TableSkeleton';
@@ -49,32 +49,24 @@ export default function MenuEngineering() {
   };
 
   return (
-    <div className="fade-in space-y-3.5">
-      {/* Standardized Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 sm:p-2.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shadow-xs shrink-0">
-            <BarChart3 size={19} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
-                Menu Engineering Matrix
-              </h1>
-              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 font-bold border border-amber-500/30">
-                <CheckCircle2 size={10} />
-                <span>Analisis Kuadran Aktif</span>
-              </span>
+    <div className="fade-in space-y-5">
+      <div className="glass-card" style={{ padding: '20px 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ padding: '8px', borderRadius: '12px', background: 'rgba(245,158,11,0.1)' }}>
+              <BarChart3 size={22} style={{ color: '#f59e0b' }} />
             </div>
-            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
-              Klasifikasi 4 kuadran performa menu: Stars, Plowhorses, Puzzles, dan Dogs.
-            </p>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Menu Engineering Matrix</h3>
+              <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                Klasifikasi 4 kuadran: Stars, Plowhorses, Puzzles, Dogs
+              </p>
+            </div>
           </div>
+          <button className="btn btn-primary text-xs flex items-center gap-1.5" onClick={handleSave} disabled={items.length === 0}>
+            Simpan Klasifikasi
+          </button>
         </div>
-
-        <button className="btn btn-primary text-xs flex items-center gap-1.5 ml-auto font-semibold" style={{ height: '32px', padding: '0 12px' }} onClick={handleSave} disabled={items.length === 0}>
-          Simpan Klasifikasi
-        </button>
       </div>
 
       {/* Quadrant KPI Cards */}

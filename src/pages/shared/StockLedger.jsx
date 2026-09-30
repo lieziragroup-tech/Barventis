@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import {
   Search, Plus, Edit, History, X, Trash2,
-  Package, UploadCloud, CheckCircle2, Database
+  Package, UploadCloud
 } from 'lucide-react';
 import BulkImport from '../../components/BulkImport';
 import Pagination from '../../components/shared/Pagination';
@@ -10,7 +10,6 @@ import { TableSkeletonRows, TableLoadingOverlay } from '../../components/shared/
 import { useData } from '../../contexts/DataContext';
 import ExportButton from '../../components/shared/ExportButton';
 import PrintButton from '../../components/shared/PrintButton';
-import PrintReportFooter from '../../components/shared/PrintReportFooter';
 import { exportWithAudit } from '../../services/export/exportAudit';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatIDR, parsePackSize, isPackUnitConsistent, getPackUnitInfo, parseStructuredFullPack } from '../../services/costUtils';
@@ -486,100 +485,65 @@ export default function StockLedger() {
   }, [selectedItem, historyTab, ledgerLocationFilter]);
 
   return (
-    <div className="fade-in space-y-3.5">
-      {/* Standardized Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 sm:p-2.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shadow-xs shrink-0">
-            <Database size={19} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
-                Kartu Stok Gudang (Stock Ledger)
-              </h1>
-              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-400 font-bold border border-blue-500/30">
-                <CheckCircle2 size={10} />
-                <span>Audit Transaksi Aktif</span>
-              </span>
-            </div>
-            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
-              Kartu pergerakan keluar-masuk stok bahan baku, historis mutasi, dan stok akhir per lokasi.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="stock-ledger-layout" style={{ display: 'flex', gap: '20px', position: 'relative' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Filters & Actions Toolbar */}
-        <div className="glass-card p-3 sm:p-4 mb-3.5 shadow-2xs">
-          <div className="flex flex-col sm:flex-row flex-wrap gap-2.5 items-stretch sm:items-center">
+    <div className="stock-ledger-layout fade-in" style={{ display: 'flex', gap: '24px', position: 'relative' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Filters */}
+        <div className="glass-card" style={{ marginBottom: '24px', padding: '20px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
             {selectedItems.length > 0 ? (
-              <div className="flex items-center gap-2.5 flex-1 bg-[var(--bg-secondary)] border border-[var(--border)] px-3 py-1.5 rounded-lg shadow-2xs">
-                <span className="text-xs font-bold text-[var(--text-primary)]">{selectedItems.length} Item Terpilih</span>
-                <button className="btn btn-secondary text-xs" style={{ height: '32px', padding: '0 10px', color: 'var(--danger)', borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.05)' }} onClick={handleBulkDelete}>
-                  <Trash2 size={13} style={{ marginRight: '4px' }}/> Hapus Terpilih
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, background: 'var(--bg-secondary)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 'var(--radius-md)' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{selectedItems.length} Item Terpilih</span>
+                <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem', color: 'var(--danger)', borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.05)' }} onClick={handleBulkDelete}>
+                  <Trash2 size={14} style={{ marginRight: '6px' }}/> Hapus Terpilih
                 </button>
-                <button className="btn btn-secondary text-xs" style={{ height: '32px', padding: '0 10px' }} onClick={() => setSelectedItems([])}>Batal</button>
+                <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => setSelectedItems([])}>Batal (Unselect)</button>
               </div>
             ) : (
               <>
-                <div className="flex flex-col sm:flex-row gap-2 flex-1 w-full">
-                  <div className="relative flex-1 min-w-[180px]">
-                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" />
-                    <input type="text" placeholder="Cari bahan baku atau supplier..." className="form-control text-xs w-full search-input-clearance" style={{ height: '34px', paddingLeft: '38px' }} value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} />
-                  </div>
-                  <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-1.5 w-full sm:w-auto">
-                    <select className="form-control text-xs font-medium" style={{ height: '34px' }} value={catFilter} onChange={e => { setCatFilter(e.target.value); setCurrentPage(1); }}>
-                      {categories.map(cat => <option key={cat} value={cat}>{cat === 'ALL' ? 'Semua Kategori' : cat}</option>)}
-                      {!categories.includes('BEER') && <option value="BEER">BEER</option>}
-                    </select>
-                    <select className="form-control text-xs font-medium" style={{ height: '34px' }} value={supFilter} onChange={e => { setSupFilter(e.target.value); setCurrentPage(1); }}>
-                      {uniqueSuppliersInStock.map(sup => <option key={sup} value={sup}>{sup === 'ALL' ? 'Semua Supplier' : sup}</option>)}
-                    </select>
-                    <select className="form-control text-xs font-medium" style={{ height: '34px' }} value={alertFilter} onChange={e => { setAlertFilter(e.target.value); setCurrentPage(1); }}>
-                      <option value="ALL">Semua Status</option>
-                      <option value="SAFE">Safe (Aman)</option>
-                      <option value="WARNING">Low Stock</option>
-                      <option value="CRITICAL">Out of Stock</option>
-                    </select>
-                    <select 
-                      className="form-control text-xs font-medium" 
-                      style={{ height: '34px' }} 
-                      value={safeActiveLoc} 
-                      onChange={e => { setActiveLoc(e.target.value); setCurrentPage(1); }}
-                    >
-                      {locations.map(loc => (
-                        <option key={loc.code} value={loc.code}>
-                          {loc.code === 'ALL' ? 'Semua Lokasi' : loc.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
+                  <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                  <input type="text" placeholder="Search materials or suppliers..." className="form-control" style={{ paddingLeft: '44px' }} value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} />
                 </div>
-
-                <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-[var(--border)]/40">
-                  <button className="btn btn-primary text-xs font-semibold flex items-center justify-center gap-1.5 flex-1 sm:flex-initial" style={{ height: '34px', padding: '0 12px' }} onClick={() => setShowAddModal(true)}>
-                    <Plus size={14} /> Tambah Bahan
-                  </button>
-                  <button className="btn btn-secondary text-xs flex items-center justify-center gap-1.5 flex-1 sm:flex-initial" style={{ height: '34px', padding: '0 12px' }} onClick={() => setShowBulkImport(true)}>
-                    <UploadCloud size={14} /> Bulk Import
-                  </button>
-                  <ExportButton 
-                    onExportExcel={handleExportExcel} 
-                    onExportPDF={handleExportPDF} 
-                    currentRole={profile?.role || 'SuperAdmin'} 
-                    className="flex-1 sm:flex-initial"
-                    style={{ height: '34px', padding: '0 12px', fontSize: '0.78rem' }}
-                  />
-                  <PrintButton
-                    currentRole={profile?.role || 'SuperAdmin'}
-                    title="Cetak kartu stok bahan (Stock Ledger)"
-                    className="flex-1 sm:flex-initial"
-                    style={{ height: '34px', padding: '0 12px', fontSize: '0.78rem' }}
-                  />
-                </div>
+                <select className="form-control" style={{ width: '170px' }} value={catFilter} onChange={e => { setCatFilter(e.target.value); setCurrentPage(1); }}>
+                  {categories.map(cat => <option key={cat} value={cat}>{cat === 'ALL' ? 'All Categories' : cat}</option>)}
+                  {!categories.includes('BEER') && <option value="BEER">BEER</option>}
+                </select>
+                <select className="form-control" style={{ width: '170px' }} value={supFilter} onChange={e => { setSupFilter(e.target.value); setCurrentPage(1); }}>
+                  {uniqueSuppliersInStock.map(sup => <option key={sup} value={sup}>{sup === 'ALL' ? 'All Suppliers' : sup}</option>)}
+                </select>
+                <select className="form-control" style={{ width: '150px' }} value={alertFilter} onChange={e => { setAlertFilter(e.target.value); setCurrentPage(1); }}>
+                  <option value="ALL">All Status</option>
+                  <option value="SAFE">Safe</option>
+                  <option value="WARNING">Low Stock</option>
+                  <option value="CRITICAL">Out of Stock</option>
+                </select>
+                <select 
+                  className="form-control" 
+                  style={{ width: '170px' }} 
+                  value={safeActiveLoc} 
+                  onChange={e => { setActiveLoc(e.target.value); setCurrentPage(1); }}
+                >
+                  {locations.map(loc => (
+                    <option key={loc.code} value={loc.code}>
+                      {loc.code === 'ALL' ? 'All Locations' : loc.name}
+                    </option>
+                  ))}
+                </select>
+                <button className="btn btn-primary" style={{ padding: '8px 14px', fontSize: '0.8rem' }} onClick={() => setShowAddModal(true)}>
+                  <Plus size={14} style={{ marginRight: '4px' }}/> Tambah Bahan
+                </button>
+                <button className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '0.8rem' }} onClick={() => setShowBulkImport(true)}>
+                  <UploadCloud size={14} style={{ marginRight: '4px' }}/> Bulk Import
+                </button>
+                <ExportButton 
+                  onExportExcel={handleExportExcel} 
+                  onExportPDF={handleExportPDF} 
+                  currentRole={profile?.role || 'SuperAdmin'} 
+                />
+                <PrintButton
+                  currentRole={profile?.role || 'SuperAdmin'}
+                  title="Cetak kartu stok bahan (Stock Ledger)"
+                />
               </>
             )}
           </div>
@@ -750,12 +714,6 @@ export default function StockLedger() {
               </tbody>
             </table>
           </div>
-
-          <PrintReportFooter
-            title="Laporan Kartu Stok Bahan Baku (Stock Ledger)"
-            subtitle={`Lokasi: ${activeLoc} • Kategori: ${catFilter}`}
-          />
-
           <div style={{ padding: '0 20px 16px' }}>
             <Pagination
               page={currentPage}
@@ -1152,7 +1110,6 @@ export default function StockLedger() {
           </div>
         </div>
       )}
-      </div>
     </div>
   );
 }

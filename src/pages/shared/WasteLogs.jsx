@@ -45,25 +45,6 @@ const QUICK_REASONS = [
   'Salah Simpan Suhu'
 ];
 
-const cleanReasonText = (text) => {
-  if (!text) return '-';
-  return text.replace(/(-?\d+\.\d{3,})/g, (match) => {
-    const num = parseFloat(match);
-    return isNaN(num) ? match : Number(num.toFixed(2)).toString();
-  });
-};
-
-const formatDateBadge = (dateStr) => {
-  if (!dateStr) return '-';
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
-  } catch {
-    return dateStr;
-  }
-};
-
 export default function WasteLogs() {
   const { stock, refreshData } = useData();
   const { role } = useAuth();
@@ -115,7 +96,7 @@ export default function WasteLogs() {
   }, [toast]);
 
   useEffect(() => {
-     
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchLogs();
   }, [fetchLogs]);
 
@@ -361,62 +342,58 @@ export default function WasteLogs() {
   const canManageWaste = role === 'Admin / Owner' || role === 'Owner' || role === 'Central' || role === 'SuperAdmin' || role === 'Super Admin';
 
   return (
-    <div className="fade-in space-y-4 max-w-7xl mx-auto">
-      {/* Standardized Sub-Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 sm:p-2.5 rounded-xl bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 shadow-xs shrink-0">
-            <Trash2 size={19} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-[var(--text-primary)] m-0">
+    <div className="page-container p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+      {/* PAGE HEADER */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border)] pb-5">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <div className="p-2.5 rounded-xl bg-red-500/10 text-red-600 dark:text-red-400">
+              <Trash2 size={24} />
+            </div>
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold tracking-tight text-[var(--text-primary)]">
                 Consolidated Waste Logs
               </h1>
-              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-red-500/15 text-red-700 dark:text-red-400 font-bold border border-red-500/30">
-                <CheckCircle2 size={10} />
-                <span>Audit Kerugian Aktif</span>
-              </span>
+              <p className="text-xs md:text-sm text-[var(--text-secondary)] mt-0.5">
+                Pencatatan dan audit kerugian limbah bar, sisa trimming kitchen, pecah, dan expired.
+              </p>
             </div>
-            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
-              Pencatatan dan audit kerugian limbah bar, sisa trimming kitchen, pecah, dan expired.
-            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 self-end sm:self-auto">
           <button
             type="button"
-            className="btn btn-secondary text-xs flex items-center gap-1.5 py-1.5 px-3"
+            className="btn btn-secondary text-xs md:text-sm flex items-center gap-2 py-2 px-3.5"
             onClick={fetchLogs}
             disabled={loading}
             title="Refresh Data"
           >
-            <RotateCcw size={14} className={loading ? 'animate-spin' : ''} />
+            <RotateCcw size={15} className={loading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
 
           <button
             type="button"
-            className="btn btn-secondary text-xs flex items-center gap-1.5 py-1.5 px-3"
+            className="btn btn-secondary text-xs md:text-sm flex items-center gap-2 py-2 px-3.5"
             onClick={handleExport}
             disabled={filteredLogs.length === 0}
             title="Export Excel"
           >
-            <FileSpreadsheet size={14} />
+            <FileSpreadsheet size={15} />
             <span className="hidden sm:inline">Export Excel</span>
           </button>
 
           <button
             type="button"
-            className="btn btn-primary text-xs flex items-center gap-1.5 py-1.5 px-3.5 shadow-xs font-bold"
+            className="btn btn-primary text-xs md:text-sm flex items-center gap-2 py-2 px-4 shadow font-bold"
             onClick={() => {
               setError('');
               setShowInputModal(true);
             }}
           >
-            <Plus size={15} />
-            <span>Catat Limbah</span>
+            <Plus size={17} />
+            <span>Catat Limbah Baru</span>
           </button>
         </div>
       </div>
@@ -508,17 +485,16 @@ export default function WasteLogs() {
       </div>
 
       {/* FILTER & SEARCH TOOLBAR */}
-      <div className="glass-card p-3 sm:p-4 rounded-2xl border border-[var(--border)] flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+      <div className="glass-card p-4 rounded-2xl border border-[var(--border)] flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
         {/* Search input */}
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative flex-1 min-w-[220px]">
           <Search
             size={16}
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] pointer-events-none"
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]"
           />
           <input
             type="text"
-            className="form-control pl-10 pr-8 text-xs md:text-sm w-full py-2 search-input-clearance"
-            style={{ paddingLeft: '40px' }}
+            className="form-control pl-9 pr-8 text-xs md:text-sm w-full py-2"
             placeholder="Cari ID, nama bahan baku, SKU, atau alasan..."
             value={searchTerm}
             onChange={(e) => {
@@ -538,11 +514,12 @@ export default function WasteLogs() {
         </div>
 
         {/* Filters Group */}
-        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Tipe Waste Filter */}
           <div className="flex items-center gap-1.5 text-xs">
+            <Filter size={14} className="text-[var(--text-secondary)] hidden sm:inline" />
             <select
-              className="form-control text-xs py-2 px-2.5 w-full sm:min-w-[130px]"
+              className="form-control text-xs py-2 px-2.5 min-w-[130px]"
               value={typeFilter}
               onChange={(e) => {
                 setTypeFilter(e.target.value);
@@ -561,7 +538,7 @@ export default function WasteLogs() {
           {/* Location Filter */}
           <div className="flex items-center gap-1.5 text-xs">
             <select
-              className="form-control text-xs py-2 px-2.5 w-full sm:min-w-[125px]"
+              className="form-control text-xs py-2 px-2.5 min-w-[125px]"
               value={locationFilter}
               onChange={(e) => {
                 setLocationFilter(e.target.value);
@@ -575,9 +552,9 @@ export default function WasteLogs() {
           </div>
 
           {/* Period Filter */}
-          <div className="flex items-center gap-1.5 text-xs col-span-2 sm:col-span-1">
+          <div className="flex items-center gap-1.5 text-xs">
             <select
-              className="form-control text-xs py-2 px-2.5 w-full sm:min-w-[120px]"
+              className="form-control text-xs py-2 px-2.5 min-w-[120px]"
               value={periodFilter}
               onChange={(e) => {
                 setPeriodFilter(e.target.value);
@@ -595,7 +572,7 @@ export default function WasteLogs() {
           {(searchTerm || typeFilter !== 'ALL' || locationFilter !== 'ALL' || periodFilter !== 'ALL') && (
             <button
               type="button"
-              className="btn btn-secondary text-xs py-2 px-2.5 text-red-500 hover:text-red-600 col-span-2 sm:col-span-1 justify-center flex items-center"
+              className="btn btn-secondary text-xs py-2 px-2.5 text-red-500 hover:text-red-600"
               onClick={() => {
                 setSearchTerm('');
                 setTypeFilter('ALL');
@@ -614,20 +591,20 @@ export default function WasteLogs() {
 
       {/* DATA TABLE / LIST CARD */}
       <div className="glass-card rounded-2xl border border-[var(--border)] overflow-hidden shadow-sm">
-        <div className="p-3.5 sm:p-4 border-b border-[var(--border)] flex flex-wrap items-center justify-between gap-2 bg-[var(--bg-secondary)]/30">
+        <div className="p-4 border-b border-[var(--border)] flex items-center justify-between bg-[var(--bg-secondary)]/30">
           <div className="flex items-center gap-2">
             <span className="font-bold text-sm text-[var(--text-primary)]">Riwayat Catatan Waste</span>
-            <span className="inline-flex items-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[var(--accent-glow)] text-[var(--accent)] border border-[var(--accent)]/20">
+            <span className="badge badge-info text-[11px] px-2 py-0.5 rounded-full font-bold">
               {filteredLogs.length} Record
             </span>
           </div>
-          <span className="text-xs text-[var(--text-secondary)] whitespace-nowrap">
+          <span className="text-xs text-[var(--text-secondary)]">
             Halaman {page} dari {Math.max(1, Math.ceil(filteredLogs.length / itemsPerPage))}
           </span>
         </div>
 
         {/* DESKTOP TABLE */}
-        <div className="hidden lg:block overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto">
           <table className="custom-table w-full text-left text-xs">
             <thead>
               <tr className="border-b border-[var(--border)] bg-[var(--bg-secondary)]/50 text-[var(--text-secondary)] font-semibold">
@@ -793,8 +770,8 @@ export default function WasteLogs() {
           </table>
         </div>
 
-        {/* MOBILE & TABLET CARD VIEW (RESPONSIVE GRID) */}
-        <div className="lg:hidden p-3 sm:p-4">
+        {/* MOBILE CARD VIEW */}
+        <div className="md:hidden divide-y divide-[var(--border)]">
           {loading ? (
             <div className="p-8 text-center text-xs text-[var(--text-secondary)]">
               <RotateCcw size={20} className="animate-spin mx-auto mb-2 opacity-50" />
@@ -815,84 +792,72 @@ export default function WasteLogs() {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {paginatedLogs.map((log) => {
-                const typeObj = WASTE_TYPES.find((wt) => wt.value === log.type) || {
-                  label: log.type,
-                  color: 'bg-red-500/15 text-red-600 border-red-500/20'
-                };
+            paginatedLogs.map((log) => {
+              const typeObj = WASTE_TYPES.find((wt) => wt.value === log.type) || {
+                label: log.type,
+                color: 'bg-red-500/15 text-red-600 border-red-500/20'
+              };
 
-                return (
-                  <div
-                    key={log.id}
-                    className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)]/20 hover:bg-[var(--bg-secondary)]/50 transition-all flex flex-col justify-between gap-2.5 cursor-pointer shadow-xs active:scale-[0.99]"
-                    onClick={() => setSelectedDetailLog(log)}
-                  >
-                    {/* Top Row: ID, Badge, Date */}
-                    <div className="flex items-center justify-between gap-1.5 flex-wrap">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-mono text-xs font-bold text-[var(--text-primary)] bg-[var(--bg-card)] px-1.5 py-0.5 rounded border border-[var(--border)]">
-                          {log.id}
-                        </span>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${typeObj.color}`}>
-                          {typeObj.label}
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-[var(--text-muted)] flex items-center gap-1 font-medium whitespace-nowrap">
-                        <Calendar size={11} />
-                        {formatDateBadge(log.date)}
+              return (
+                <div
+                  key={log.id}
+                  className="p-4 space-y-2.5 active:bg-[var(--bg-secondary)]/60"
+                  onClick={() => setSelectedDetailLog(log)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-bold text-[var(--text-primary)]">{log.id}</span>
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${typeObj.color}`}
+                      >
+                        {typeObj.label}
                       </span>
                     </div>
+                    <span className="text-[11px] text-[var(--text-secondary)]">{log.date}</span>
+                  </div>
 
-                    {/* Middle Row: Item & Loss Value */}
-                    <div className="flex items-start justify-between gap-2 pt-1 border-t border-[var(--border)]/50">
-                      <div className="min-w-0 flex-1">
-                        <div className="font-bold text-sm text-[var(--text-primary)] truncate" title={log.item_name}>
-                          {log.item_name}
-                        </div>
-                        <div className="text-[11px] text-[var(--text-muted)] flex items-center gap-1 mt-0.5">
-                          <Building2 size={11} />
-                          <span>{log.location === 'CENTRAL' ? 'Central Warehouse' : 'Resto Bar'}</span>
-                        </div>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <div className="font-mono font-bold text-sm text-red-600 dark:text-red-400">
-                          -{Number(log.quantity).toLocaleString('id-ID', { maximumFractionDigits: 2 })} {log.unit}
-                        </div>
-                        <div className="font-mono font-semibold text-xs text-red-500/90">
-                          -{formatIDR(log.cost_loss)}
-                        </div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-bold text-sm text-[var(--text-primary)]">{log.item_name}</div>
+                      <div className="text-xs text-[var(--text-secondary)]">
+                        Lokasi: {log.location === 'CENTRAL' ? 'Central Warehouse' : 'Resto Bar'}
                       </div>
                     </div>
-
-                    {/* Reason box */}
-                    <div className="text-[11px] text-[var(--text-secondary)] bg-[var(--bg-primary)] p-2 rounded-lg border border-[var(--border)]/40 line-clamp-2" title={log.reason}>
-                      <span className="font-semibold text-[var(--text-primary)]">Alasan:</span> {cleanReasonText(log.reason)}
-                    </div>
-
-                    {/* Bottom Actions */}
-                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-[var(--border)]/40" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        className="btn btn-secondary text-xs py-1 px-2.5 flex items-center gap-1 rounded-md"
-                        onClick={() => setSelectedDetailLog(log)}
-                      >
-                        <Eye size={12} /> Detail
-                      </button>
-                      {canManageWaste && (
-                        <button
-                          type="button"
-                          className="btn btn-secondary text-xs py-1 px-2.5 text-red-500 hover:text-red-600 flex items-center gap-1 rounded-md"
-                          onClick={() => setLogToDelete(log)}
-                        >
-                          <Trash2 size={12} /> Batalkan
-                        </button>
-                      )}
+                    <div className="text-right">
+                      <div className="font-mono font-bold text-sm text-red-600 dark:text-red-400">
+                        -{log.quantity} {log.unit}
+                      </div>
+                      <div className="font-mono font-semibold text-xs text-red-600/80">
+                        {formatIDR(log.cost_loss)}
+                      </div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
+
+                  <div className="text-xs text-[var(--text-secondary)] bg-[var(--bg-secondary)]/50 p-2 rounded-lg">
+                    <span className="font-medium text-[var(--text-primary)]">Alasan:</span> {log.reason || '-'}
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary text-xs py-1 px-2.5 flex items-center gap-1"
+                      onClick={() => setSelectedDetailLog(log)}
+                    >
+                      <Eye size={12} /> Detail
+                    </button>
+                    {canManageWaste && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary text-xs py-1 px-2.5 text-red-500 hover:text-red-600 flex items-center gap-1"
+                        onClick={() => setLogToDelete(log)}
+                      >
+                        <Trash2 size={12} /> Batalkan
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
 
@@ -969,12 +934,11 @@ export default function WasteLogs() {
                     <div className="relative">
                       <Search
                         size={14}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] pointer-events-none"
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]"
                       />
                       <input
                         type="text"
-                        className="form-control pl-8 text-xs py-1.5 w-full search-input-clearance"
-                        style={{ paddingLeft: '34px' }}
+                        className="form-control pl-8 text-xs py-1.5 w-full"
                         placeholder="Ketik untuk memfilter bahan..."
                         value={materialSearch}
                         onChange={(e) => setMaterialSearch(e.target.value)}

@@ -55,7 +55,7 @@ export default function TenantAdminPanel() {
 
   useEffect(() => {
     if (currentTenant) {
-       
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCompanyName(currentTenant.company_name || '');
       setIsPosEnabled(!!currentTenant.is_pos_enabled);
     }
@@ -296,28 +296,14 @@ export default function TenantAdminPanel() {
   };
 
   return (
-    <div className="fade-in space-y-3.5" style={{ paddingBottom: '30px' }}>
-      {/* Standardized Sub-Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print mb-3.5">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 sm:p-2.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shadow-xs shrink-0">
-            <Store size={19} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-[var(--text-primary)] m-0">
-                Konfigurasi Toko & Role RBAC
-              </h1>
-              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-400 font-bold border border-blue-500/30">
-                <CheckCircle size={10} />
-                <span>Pengaturan Aktif</span>
-              </span>
-            </div>
-            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
-              Kelola profil resto, otorisasi staf, kuota add-ons, dan manajemen cabang lokasi.
-            </p>
-          </div>
-        </div>
+    <div style={{ paddingBottom: '30px' }}>
+      <div style={{ marginBottom: '18px' }}>
+        <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Store size={20} style={{ color: 'var(--accent)' }} /> Pengaturan Resto
+        </h2>
+        <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '0.8rem' }}>
+          Kelola profil resto dan hak akses staf Anda.
+        </p>
       </div>
 
       <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', overflowX: 'auto', paddingBottom: '4px' }}>

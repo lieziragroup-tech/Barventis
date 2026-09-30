@@ -21,7 +21,7 @@ const Loading = () => (
 
 export default function OpnameAssetsHub() {
   return (
-    <TabContainer tabs={TABS} title="Stock Opname & Aset">
+    <TabContainer tabs={TABS}>
       {(activeTab) => (
         <Suspense fallback={<Loading />}>
           {activeTab === 'resto' && <StockOpname defaultLocation="RESTO" />}

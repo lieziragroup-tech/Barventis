@@ -21,7 +21,7 @@ const Loading = () => (
 
 export default function ProductionHub() {
   return (
-    <TabContainer tabs={TABS} title="Proses Produksi Bahan">
+    <TabContainer tabs={TABS}>
       {(activeTab) => (
         <Suspense fallback={<Loading />}>
           {activeTab === 'trimming' && <TrimmingProduction initialFilter="STEP1" />}

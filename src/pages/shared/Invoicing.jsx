@@ -1,7 +1,7 @@
- 
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
-  Plus, X, FileText, CheckCircle, CheckCircle2, XCircle, Clock, Package, Search,
+  Plus, X, FileText, CheckCircle, XCircle, Clock, Package, Search,
   Download, Eye, UploadCloud, Send, Camera, MapPin, ExternalLink
 } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
@@ -554,88 +554,58 @@ Catatan: ${inv.notes || '-'}`,
   };
 
   return (
-    <div className="fade-in space-y-3.5">
-      {/* Standardized Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 sm:p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-xs shrink-0">
-            <FileText size={19} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
-                Purchase Orders & Invoicing
-              </h1>
-              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-500/30">
-                <CheckCircle2 size={10} />
-                <span>PO & GRN Aktif</span>
-              </span>
-            </div>
-            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
-              Siklus pengadaan bahan baku: Buat PO, kirim ke Supplier, dan verifikasi penerimaan barang (Goods Receipt).
-            </p>
-          </div>
-        </div>
+    <div className="fade-in">
+      {/* Page Header */}
+      <div style={{ marginBottom: '20px' }}>
+        <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+          Purchase Orders & Invoicing
+        </h2>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '4px' }}>
+          Siklus lengkap pengadaan bahan baku: Buat PO, kirim ke Supplier, dan verifikasi penerimaan barang (Goods Receipt) langsung ke stok gudang.
+        </p>
       </div>
 
       {/* Controls */}
-      <div className="glass-card p-3 sm:p-4 mb-4">
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Cari nomor PO atau nama supplier..."
-                className="form-control w-full search-input-clearance"
-                style={{ paddingLeft: '42px', height: '36px' }}
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-            </div>
-            <select
-              className="form-control w-full sm:w-[170px]"
-              style={{ height: '36px' }}
-              value={statusFilter}
-              onChange={e => { setStatusFilter(e.target.value); setInvoicesPage(1); }}
-            >
-              <option value="ALL">Semua Status</option>
-              <option value="DRAFT">DRAFT (Baru)</option>
-              <option value="SENT">SENT (Terkirim)</option>
-              <option value="RECEIVED">RECEIVED (Diterima)</option>
-              <option value="CANCELLED">CANCELLED (Batal)</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-[var(--border)]/40 justify-end">
-            <ExportButton
-              onExportExcel={handleExportExcel}
-              onExportPDF={handleExportPDF}
-              currentRole={activeUser?.role}
-              className="flex-1 sm:flex-initial"
-              style={{ height: '34px', padding: '0 12px', fontSize: '0.8rem' }}
+      <div className="glass-card" style={{ marginBottom: '20px', padding: '16px 20px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+            <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <input
+              type="text"
+              placeholder="Cari nomor PO atau nama supplier..."
+              className="form-control"
+              style={{ paddingLeft: '40px' }}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
             />
-            <PrintButton
-              currentRole={activeUser?.role}
-              title="Cetak daftar Purchase Order & Invoicing"
-              className="flex-1 sm:flex-initial"
-              style={{ height: '34px', padding: '0 12px', fontSize: '0.8rem' }}
-            />
-            <button
-              className="btn btn-secondary text-xs flex items-center justify-center gap-1.5 flex-1 sm:flex-initial"
-              style={{ height: '34px', padding: '0 14px' }}
-              onClick={() => setShowBulkImport(true)}
-            >
-              <UploadCloud size={14} /> Bulk Import PO
-            </button>
-            <button
-              className="btn btn-primary text-xs font-bold flex items-center justify-center gap-1.5 flex-1 sm:flex-initial"
-              style={{ height: '34px', padding: '0 14px' }}
-              onClick={() => setShowCreateModal(true)}
-            >
-              <Plus size={15} /> Buat PO Baru
-            </button>
           </div>
+          <select
+            className="form-control"
+            style={{ width: '160px' }}
+            value={statusFilter}
+            onChange={e => { setStatusFilter(e.target.value); setInvoicesPage(1); }}
+          >
+            <option value="ALL">Semua Status</option>
+            <option value="DRAFT">DRAFT (Baru)</option>
+            <option value="SENT">SENT (Terkirim)</option>
+            <option value="RECEIVED">RECEIVED (Diterima)</option>
+            <option value="CANCELLED">CANCELLED (Batal)</option>
+          </select>
+          <ExportButton
+            onExportExcel={handleExportExcel}
+            onExportPDF={handleExportPDF}
+            currentRole={activeUser?.role}
+          />
+          <PrintButton
+            currentRole={activeUser?.role}
+            title="Cetak daftar Purchase Order & Invoicing"
+          />
+          <button className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '0.85rem' }} onClick={() => setShowBulkImport(true)}>
+            <UploadCloud size={15} style={{ marginRight: '6px' }} /> Bulk Import PO
+          </button>
+          <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem' }} onClick={() => setShowCreateModal(true)}>
+            <Plus size={15} style={{ marginRight: '6px' }} /> Buat PO Baru
+          </button>
         </div>
       </div>
 

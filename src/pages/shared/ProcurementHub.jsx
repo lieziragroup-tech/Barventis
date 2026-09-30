@@ -20,7 +20,7 @@ const Loading = () => (
 
 export default function ProcurementHub() {
   return (
-    <TabContainer tabs={TABS} title="Marketlist & Pembelian">
+    <TabContainer tabs={TABS}>
       {(activeTab) => (
         <Suspense fallback={<Loading />}>
           {activeTab === 'marketlist' && <Marketlist />}

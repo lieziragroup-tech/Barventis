@@ -95,13 +95,13 @@ const MarketlistExcelView = ({ materials = [], currentStocks = {}, onSendRequest
           
           <div className="flex items-center gap-2 w-full md:w-auto">
             <div className="relative w-full md:w-64">
-              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input 
                 type="text" 
                 placeholder="Cari bahan, kode, vendor..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-3 py-2 border rounded-lg text-sm focus:ring-1 focus:ring-primary focus:outline-none search-input-clearance"
+                className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:ring-1 focus:ring-primary focus:outline-none"
               />
             </div>
             <button 

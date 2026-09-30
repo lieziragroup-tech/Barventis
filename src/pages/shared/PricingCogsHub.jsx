@@ -8,7 +8,8 @@ const MenuEngineering = React.lazy(() => import('./MenuEngineering'));
 
 const TABS = [
   { key: 'pricing', label: 'Menu Pricing & Simulasi Margin', icon: Tag },
-  { key: 'cogs', label: 'COGS & Resep (Beverage & Beer)', icon: Utensils },
+  { key: 'cogs-beverage', label: 'COGS Beverage (Resep Minuman)', icon: Utensils },
+  { key: 'cogs-beer', label: 'COGS Beer (Produk Jadi)', icon: Beer },
   { key: 'engineering', label: 'Menu Engineering Matrix', icon: BarChart3 },
 ];
 
@@ -20,13 +21,12 @@ const Loading = () => (
 
 export default function PricingCogsHub() {
   return (
-    <TabContainer tabs={TABS} title="Menu Pricing & COGS">
+    <TabContainer tabs={TABS}>
       {(activeTab) => (
         <Suspense fallback={<Loading />}>
           {activeTab === 'pricing' && <MenuPricing />}
-          {(activeTab === 'cogs' || activeTab === 'cogs-beverage' || activeTab === 'cogs-beer') && (
-            <Recipes categoryFilter="ALL" />
-          )}
+          {activeTab === 'cogs-beverage' && <Recipes categoryFilter="BEVERAGE" />}
+          {activeTab === 'cogs-beer' && <Recipes categoryFilter="BEER" />}
           {activeTab === 'engineering' && <MenuEngineering />}
         </Suspense>
       )}

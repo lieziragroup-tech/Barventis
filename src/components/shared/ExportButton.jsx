@@ -8,8 +8,7 @@ export default function ExportButton({
   allowedRoles,
   currentRole,
   label = 'Export',
-  className = '',
-  style = {}
+  className = ''
 }) {
   const [open, setOpen] = useState(false);
   const [loadingType, setLoadingType] = useState(null); // 'excel' | 'pdf' | null
@@ -59,22 +58,20 @@ export default function ExportButton({
   const isBusy = !!loadingType;
 
   return (
-    <div ref={containerRef} style={{ position: 'relative' }} className={`no-print inline-block ${className}`}>
+    <div ref={containerRef} style={{ position: 'relative', display: 'inline-block' }} className={`no-print ${className}`}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
         disabled={disabled || isBusy}
-        className="btn btn-secondary w-full"
+        className="btn btn-secondary"
         style={{
           display: 'inline-flex',
           alignItems: 'center',
-          justifyContent: 'center',
           gap: '7px',
           padding: '8px 14px',
           fontSize: '0.85rem',
           opacity: (disabled || isBusy) ? 0.7 : 1,
-          cursor: (disabled || isBusy) ? 'not-allowed' : 'pointer',
-          ...style
+          cursor: (disabled || isBusy) ? 'not-allowed' : 'pointer'
         }}
         aria-haspopup="true"
         aria-expanded={open}

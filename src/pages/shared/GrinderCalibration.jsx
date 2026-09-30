@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Coffee, PlusCircle, CheckCircle2 } from 'lucide-react';
+import { Coffee, PlusCircle } from 'lucide-react';
 
 export default function GrinderCalibration() {
   const { activeUser } = useAuth();
@@ -12,7 +12,7 @@ export default function GrinderCalibration() {
   
   const tenantId = activeUser?.tenant_id;
 
-  const fetchLogs = useCallback(async () => {
+  const fetchLogs = async () => {
     setLoading(true);
     const { data } = await supabase
       .from('transactions')
@@ -23,11 +23,11 @@ export default function GrinderCalibration() {
       .limit(50);
     setLogs(data || []);
     setLoading(false);
-  }, [tenantId]);
+  };
 
   useEffect(() => {
     if (tenantId) fetchLogs();
-  }, [tenantId, fetchLogs]);
+  }, [tenantId]);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -48,33 +48,10 @@ export default function GrinderCalibration() {
   };
 
   return (
-    <div className="fade-in space-y-3.5 max-w-2xl mx-auto">
-      {/* Standardized Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 sm:p-2.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shadow-xs shrink-0">
-            <Coffee size={19} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
-                Kalibrasi Grinder Harian
-              </h1>
-              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 font-bold border border-amber-500/30">
-                <CheckCircle2 size={10} />
-                <span>Quality Control</span>
-              </span>
-            </div>
-            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
-              Pencatatan rasio Dose In & Yield Out untuk menjaga standar ekstraksi espresso.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="glass-card p-4 sm:p-5 mb-3.5">
-        <h2 className="text-sm font-bold flex items-center gap-2 mb-3 m-0">
-          <Coffee size={16} className="text-[var(--accent)]" /> Form Input Kalibrasi
+    <div style={{ padding: '24px', maxWidth: '600px', margin: '0 auto' }}>
+      <div className="glass-card" style={{ padding: '24px', marginBottom: '24px' }}>
+        <h2 style={{ fontSize: '1.2rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+          <Coffee size={20} /> Input Kalibrasi Harian
         </h2>
         <form onSubmit={handleSave} style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
           <div style={{ flex: 1 }}>

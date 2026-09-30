@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, Search, ArrowRight, Save, AlertTriangle, ExternalLink, CheckCircle2, DollarSign } from 'lucide-react';
+import { RefreshCw, Search, ArrowRight, Save, AlertTriangle, ExternalLink } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
 
@@ -46,7 +46,7 @@ export default function MenuPricing() {
   };
 
   useEffect(() => {
-     
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchRecipes();
   }, []);
 
@@ -104,31 +104,14 @@ export default function MenuPricing() {
   });
 
   return (
-    <div className="fade-in space-y-3.5">
-      {/* Standardized Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 sm:p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-xs shrink-0">
-            <DollarSign size={19} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
-                Menu Pricing Simulator
-              </h1>
-              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-500/30">
-                <CheckCircle2 size={10} />
-                <span>Simulasi Margin Aktif</span>
-              </span>
-            </div>
-            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
-              Simulasi dan optimasi harga jual berdasarkan HPP berjalan.
-            </p>
-          </div>
+    <div className="fade-in">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ minWidth: 0 }}>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Menu Pricing Simulator</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Simulasi dan optimasi harga jual berdasarkan HPP berjalan.</p>
         </div>
-
-        <button className="btn btn-secondary text-xs flex items-center gap-1.5 ml-auto" style={{ height: '32px', padding: '0 12px' }} onClick={fetchRecipes} disabled={loading}>
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
+        <button className="btn btn-secondary" onClick={fetchRecipes} disabled={loading}>
+          <RefreshCw size={16} className={loading ? 'spin' : ''} /> Refresh
         </button>
       </div>
 
@@ -141,8 +124,8 @@ export default function MenuPricing() {
       <div className="glass-card" style={{ padding: '24px' }}>
         <div className="menu-pricing-toolbar" style={{ display: 'flex', gap: '16px', marginBottom: '20px', flexWrap: 'wrap' }}>
           <div className="menu-pricing-search" style={{ position: 'relative', width: '250px' }}>
-            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
-            <input type="text" className="form-control search-input-clearance" placeholder="Cari menu..." style={{ paddingLeft: '38px' }} value={search} onChange={e => setSearch(e.target.value)} />
+            <Search size={16} style={{ position: 'absolute', left: '12px', top: '10px', color: 'var(--text-muted)' }} />
+            <input type="text" className="form-control" placeholder="Cari menu..." style={{ paddingLeft: '36px' }} value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           <select className="form-control menu-pricing-category" style={{ width: '200px' }} value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
             {categories.map(c => <option key={c} value={c}>{c}</option>)}

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import {
-  Upload, FileSpreadsheet, CheckCircle, CheckCircle2, AlertTriangle, Download,
+  Upload, FileSpreadsheet, CheckCircle, AlertTriangle, Download,
   FileText, Archive, Filter, Calendar, Database, ChevronRight, X, Loader
 } from 'lucide-react';
 import { api } from '../../services/api';
@@ -230,28 +230,16 @@ export default function BaristaReport() {
   } : null;
 
   return (
-    <div className="fade-in space-y-3.5" style={{ maxWidth: 1200, margin: '0 auto' }}>
-      {/* Standardized Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 sm:p-2.5 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 shadow-xs shrink-0">
-            <FileSpreadsheet size={19} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
-                SO Barista Report Generator
-              </h1>
-              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-700 dark:text-purple-400 font-bold border border-purple-500/30">
-                <CheckCircle2 size={10} />
-                <span>Auto Report Aktif</span>
-              </span>
-            </div>
-            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
-              Upload Daily Sales Report → Generate semua laporan barista otomatis
-            </p>
-          </div>
-        </div>
+    <div className="fade-in" style={{ padding: '20px', maxWidth: 1200, margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ marginBottom: 24 }}>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+          <FileSpreadsheet size={24} style={{ verticalAlign: 'middle', marginRight: 8 }} />
+          SO Barista Report Generator
+        </h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '6px 0 0' }}>
+          Upload Daily Sales Report → Generate semua laporan barista otomatis
+        </p>
       </div>
 
       {/* Step Indicator */}

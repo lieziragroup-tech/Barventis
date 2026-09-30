@@ -1,4 +1,4 @@
- 
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   History, Search, ShieldAlert, Calendar,
@@ -26,7 +26,6 @@ export default function AuditLogs() {
   const [humanOnly, setHumanOnly] = useState(true);
   const [page, setPage] = useState(1);
   const [selectedLog, setSelectedLog] = useState(null);
-  const [dismissNotice, setDismissNotice] = useState(false);
   const debounceRef = useRef(null);
 
   // Debounce the search box -> actual query (400ms), reset to page 1
@@ -147,42 +146,6 @@ export default function AuditLogs() {
 
   return (
     <div className="audit-logs-container fade-in">
-      {/* Standardized Sub-Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print mb-4">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 sm:p-2.5 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-xs shrink-0">
-            <History size={19} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-[var(--text-primary)] m-0">
-                Audit Trail & Log Aktivitas
-              </h1>
-              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 font-bold border border-indigo-500/30">
-                <CheckCircle size={10} />
-                <span>Keamanan Aktif</span>
-              </span>
-            </div>
-            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
-              Riwayat pencatatan aktivitas pengguna dan perubahan data sistem secara real-time.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="btn btn-secondary text-xs flex items-center gap-1.5 py-1.5 px-3"
-            onClick={() => fetchLogs(page, searchQuery, categoryFilter, humanOnly)}
-            disabled={loading}
-            title="Refresh Data"
-          >
-            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-            <span>Segarkan</span>
-          </button>
-        </div>
-      </div>
-
       {/* Quick Summary KPI (from a lightweight stats query — accurate across the whole history, not just this page) */}
       <div className="kpi-grid" style={{ marginBottom: '24px' }}>
         <div className="glass-card kpi-card">
@@ -256,19 +219,16 @@ export default function AuditLogs() {
               left: '14px',
               top: '50%',
               transform: 'translateY(-50%)',
-              color: 'var(--text-muted)',
-              pointerEvents: 'none'
+              color: 'var(--text-muted)'
             }} />
             <input
               type="text"
-              className="search-input-clearance"
               placeholder="Cari deskripsi atau tindakan..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               style={{
                 width: '100%',
-                padding: '12px 16px 12px 44px',
-                paddingLeft: '44px',
+                padding: '12px 16px 12px 42px',
                 background: 'var(--bg-primary)',
                 border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-lg)',
@@ -366,36 +326,26 @@ export default function AuditLogs() {
       </div>
 
       {/* RBAC Notice (Only shown to Head Bar for context) */}
-      {activeUser?.role === 'Inventory Manager' && !dismissNotice && (
+      {activeUser?.role === 'Inventory Manager' && (
         <div style={{
           background: 'var(--accent-glow)',
           border: '1px solid rgba(76, 110, 245, 0.2)',
           borderRadius: 'var(--radius-lg)',
-          padding: '12px 14px',
-          marginBottom: '16px',
+          padding: '16px',
+          marginBottom: '24px',
           display: 'flex',
-          gap: '10px',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between'
+          gap: '12px',
+          alignItems: 'flex-start'
         }}>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-            <Info size={18} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: '2px' }} />
-            <div>
-              <h4 style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '2px' }}>
-                Mode Asisten Terpercaya (Masking Aktif)
-              </h4>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: '1.35', margin: 0 }}>
-                Sebagai <strong>Admin (Head Bar)</strong>, hak akses kolaboratif aktif. Parameter IP address asli disembunyikan/dimasking demi keamanan sistem.
-              </p>
-            </div>
+          <Info size={20} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: '2px' }} />
+          <div>
+            <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '4px' }}>
+              Mode Asisten Terpercaya (Masking Aktif)
+            </h4>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
+              Sebagai <strong>Admin (Head Bar)</strong>, Anda memiliki hak akses kolaboratif penuh untuk memantau aktivitas operasional. Demi alasan keamanan jaringan sistem, parameter jaringan teknis (seperti <strong>IP Address</strong> asli pengguna) disembunyikan/di-masking dengan <code>***.***.***.***</code> pada feed Anda.
+            </p>
           </div>
-          <button
-            onClick={() => setDismissNotice(true)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px' }}
-            title="Tutup pesan"
-          >
-            <X size={15} />
-          </button>
         </div>
       )}
 

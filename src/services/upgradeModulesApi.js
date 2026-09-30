@@ -7,42 +7,16 @@ import { api } from './api';
 // 5.1 FEFO — Material Batches & Expiry
 // ============================================================================
 
-// Helper: safely join materials when foreign key relationship is absent in schema cache
-async function enrichWithMaterials(rows, idField = 'material_id') {
-  if (!rows || rows.length === 0) return rows || [];
-  if (rows[0] && rows[0].materials && typeof rows[0].materials === 'object') return rows;
-  try {
-    const materials = await api.getMaterials();
-    const map = new Map((materials || []).map(m => [m.id, m]));
-    return rows.map(r => ({
-      ...r,
-      materials: r.materials || map.get(r[idField]) || { name: 'Item', unit: 'pcs', price: 0 }
-    }));
-  } catch {
-    return rows;
-  }
-}
-
 export const fefoApi = {
   async getBatches(materialId = null) {
     const tenantId = await api.getActiveTenantId();
     if (!tenantId) return [];
-    try {
-      let q = supabase.from('material_batches').select('*, materials(name, unit)')
-        .eq('tenant_id', tenantId).eq('status', 'active').order('expiry_date', { ascending: true });
-      if (materialId) q = q.eq('material_id', materialId);
-      const { data, error } = await q;
-      if (error) throw error;
-      return data || [];
-    } catch (err) {
-      // Fallback if PostgREST relation is not cached or missing
-      let q = supabase.from('material_batches').select('*')
-        .eq('tenant_id', tenantId).eq('status', 'active').order('expiry_date', { ascending: true });
-      if (materialId) q = q.eq('material_id', materialId);
-      const { data, error } = await q;
-      if (error) throw error;
-      return await enrichWithMaterials(data || []);
-    }
+    let q = supabase.from('material_batches').select('*, materials(name, unit)')
+      .eq('tenant_id', tenantId).eq('status', 'active').order('expiry_date', { ascending: true });
+    if (materialId) q = q.eq('material_id', materialId);
+    const { data, error } = await q;
+    if (error) throw error;
+    return data || [];
   },
 
   async createBatch({ material_id, batch_number, expiry_date, quantity, location = 'BAR' }) {
@@ -58,22 +32,12 @@ export const fefoApi = {
     const tenantId = await api.getActiveTenantId();
     if (!tenantId) return [];
     const cutoff = new Date(Date.now() + daysAhead * 86400000).toISOString().split('T')[0];
-    try {
-      const { data, error } = await supabase.from('material_batches')
-        .select('*, materials(name, unit, price)')
-        .eq('tenant_id', tenantId).eq('status', 'active')
-        .lte('expiry_date', cutoff).order('expiry_date', { ascending: true });
-      if (error) throw error;
-      return data || [];
-    } catch (err) {
-      // Fallback query without foreign-key join
-      const { data, error } = await supabase.from('material_batches')
-        .select('*')
-        .eq('tenant_id', tenantId).eq('status', 'active')
-        .lte('expiry_date', cutoff).order('expiry_date', { ascending: true });
-      if (error) throw error;
-      return await enrichWithMaterials(data || []);
-    }
+    const { data, error } = await supabase.from('material_batches')
+      .select('*, materials(name, unit, price)')
+      .eq('tenant_id', tenantId).eq('status', 'active')
+      .lte('expiry_date', cutoff).order('expiry_date', { ascending: true });
+    if (error) throw error;
+    return data || [];
   },
 
   async disposeBatch(batchId, reason = 'expired') {
@@ -93,25 +57,14 @@ export const adjustmentApi = {
   async getAdjustments({ status = null, startDate = null, endDate = null } = {}) {
     const tenantId = await api.getActiveTenantId();
     if (!tenantId) return [];
-    try {
-      let q = supabase.from('stock_adjustments').select('*, materials(name, unit)')
-        .eq('tenant_id', tenantId).order('created_at', { ascending: false });
-      if (status) q = q.eq('status', status);
-      if (startDate) q = q.gte('opname_date', startDate);
-      if (endDate) q = q.lte('opname_date', endDate);
-      const { data, error } = await q;
-      if (error) throw error;
-      return data || [];
-    } catch (err) {
-      let q = supabase.from('stock_adjustments').select('*')
-        .eq('tenant_id', tenantId).order('created_at', { ascending: false });
-      if (status) q = q.eq('status', status);
-      if (startDate) q = q.gte('opname_date', startDate);
-      if (endDate) q = q.lte('opname_date', endDate);
-      const { data, error } = await q;
-      if (error) throw error;
-      return await enrichWithMaterials(data || []);
-    }
+    let q = supabase.from('stock_adjustments').select('*, materials(name, unit)')
+      .eq('tenant_id', tenantId).order('created_at', { ascending: false });
+    if (status) q = q.eq('status', status);
+    if (startDate) q = q.gte('opname_date', startDate);
+    if (endDate) q = q.lte('opname_date', endDate);
+    const { data, error } = await q;
+    if (error) throw error;
+    return data || [];
   },
 
   async createAdjustment({ material_id, opname_date, system_qty, physical_qty, variance_pct, reason, category = 'UNCLASSIFIED' }) {
@@ -302,25 +255,16 @@ export const menuEngApi = {
     const { data, error } = await supabase.from('v_menu_engineering')
       .select('*').eq('tenant_id', tenantId).order('contribution', { ascending: false });
     if (error) {
-      // View might not exist yet, fallback to direct query.
-      // FIX: recipes tidak punya kolom `total_cost` (itu cuma field turunan
-      // di JS — lihat DataContext.jsx `total_cost: r.basic_cost`). Kolom HPP
-      // asli di DB adalah `basic_cost`, sama seperti dipakai di view
-      // v_menu_engineering (kolom `cogs`).
+      // View might not exist yet, fallback to direct query
       const { data: recipes } = await supabase.from('recipes')
-        .select('id, menu_name, category, selling_price, basic_cost, total_sold, menu_class, target_cost_percent')
+        .select('id, name, category, selling_price, total_cost, total_sold, menu_class, target_cost_percent')
         .eq('tenant_id', tenantId).gt('selling_price', 0);
       return (recipes || []).map(r => ({
         ...r,
-        // recipes table's real column is menu_name (no `name` column exists) —
-        // aliased to `name` here so it matches the v_menu_engineering view's
-        // shape and UnifiedCogsPricing.jsx (which reads recipe.name).
-        name: r.menu_name,
-        cogs: r.basic_cost,
-        margin: (r.selling_price || 0) - (r.basic_cost || 0),
-        contribution: ((r.selling_price || 0) - (r.basic_cost || 0)) * (r.total_sold || 0),
-        food_cost_pct: r.basic_cost > 0 && r.selling_price > 0
-          ? +((r.basic_cost / r.selling_price * 100).toFixed(1)) : 0
+        margin: (r.selling_price || 0) - (r.total_cost || 0),
+        contribution: ((r.selling_price || 0) - (r.total_cost || 0)) * (r.total_sold || 0),
+        food_cost_pct: r.total_cost > 0 && r.selling_price > 0
+          ? +((r.total_cost / r.selling_price * 100).toFixed(1)) : 0
       }));
     }
     return data || [];

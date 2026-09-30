@@ -1,6 +1,6 @@
- 
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Plus, Edit2, Search, Trash2, Calendar, ShoppingCart, User, UploadCloud, CheckCircle2, Layers } from 'lucide-react';
+import { Plus, Edit2, Search, Trash2, Calendar, ShoppingCart, User, UploadCloud } from 'lucide-react';
 import { api } from '../../services/api';
 import ExportButton from '../../components/shared/ExportButton';
 import PrintButton from '../../components/shared/PrintButton';
@@ -182,10 +182,11 @@ export default function Purchasing() {
       material_id: material.id,
       name: material.name,
       unit: material.unit,
-      qty: 1,
-      unit_price: material.price,
-      supplier_id: '',
-      date: purchaseDate
+      qty: '',
+      unit_price: material.price || '',
+      supplier_id: material.supplier || '',
+      date: purchaseDate,
+      destination: 'RESTO'
     }]);
     setSearchQuery('');
     setShowSearchDropdown(false);
@@ -222,7 +223,8 @@ export default function Purchasing() {
         qty: parseFloat(item.qty),
         unit: item.unit,
         unit_price: parseFloat(item.unit_price),
-        notes: `Pembelian Multi-Cart by ${activeUser?.name || 'Sistem'}`
+        notes: `Pembelian Multi-Cart by ${activeUser?.name || 'Sistem'}`,
+        destination: item.destination || 'RESTO'
       })));
 
       setCart([]);
@@ -462,58 +464,24 @@ export default function Purchasing() {
   }, [cart]);
 
   return (
-    <div className="fade-in space-y-3.5">
-      {/* Standardized Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 sm:p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-xs shrink-0">
-            <ShoppingCart size={19} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
-                Purchasing & Suppliers
-              </h1>
-              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-500/30">
-                <CheckCircle2 size={10} />
-                <span>Pengadaan Aktif</span>
-              </span>
-            </div>
-            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
-              Catat pembelian harian dan kelola master data supplier serta riwayat PO.
-            </p>
-          </div>
+    <div className="fade-in">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Purchasing & Suppliers</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Catat pembelian harian dan kelola master data supplier.</p>
         </div>
+      </div>
 
-        {/* Labeled Sub-menu Switcher */}
-        <div className="flex items-center gap-2 bg-[var(--bg-secondary)]/80 p-1.5 rounded-xl border border-[var(--border)] shadow-xs ml-auto">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] px-1.5 flex items-center gap-1">
-            <Layers size={11} className="text-[var(--accent)]" />
-            Tampilan:
-          </span>
-          <div className="inline-flex p-0.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-xs shadow-2xs gap-0.5">
-            <button
-              className={`px-3 py-1.5 rounded-md font-semibold text-xs transition-all ${
-                tab === 'PURCHASES'
-                  ? 'bg-[var(--accent)] text-white shadow-xs font-bold'
-                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-              }`}
-              onClick={() => setTab('PURCHASES')}
-            >
-              Daily Purchases
-            </button>
-            <button
-              className={`px-3 py-1.5 rounded-md font-semibold text-xs transition-all ${
-                tab === 'SUPPLIERS'
-                  ? 'bg-[var(--accent)] text-white shadow-xs font-bold'
-                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-              }`}
-              onClick={() => setTab('SUPPLIERS')}
-            >
-              Supplier Master
-            </button>
-          </div>
+      {notification && (
+        <div style={{ padding: '14px 20px', borderRadius: 'var(--radius-lg)', marginBottom: '20px', background: notification.type === 'success' ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)', border: `1px solid ${notification.type === 'success' ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}` }}>
+          <span style={{ fontSize: '0.875rem', color: 'var(--text-primary)' }}>{notification.text}</span>
         </div>
+      )}
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-tertiary)', padding: '4px', borderRadius: 'var(--radius-md)', width: 'fit-content', marginBottom: '20px' }}>
+        <button className={`btn ${tab === 'PURCHASES' ? 'btn-primary' : ''}`} style={{ background: tab === 'PURCHASES' ? '' : 'transparent', color: tab === 'PURCHASES' ? '' : 'var(--text-secondary)' }} onClick={() => setTab('PURCHASES')}>Daily Purchases</button>
+        <button className={`btn ${tab === 'SUPPLIERS' ? 'btn-primary' : ''}`} style={{ background: tab === 'SUPPLIERS' ? '' : 'transparent', color: tab === 'SUPPLIERS' ? '' : 'var(--text-secondary)' }} onClick={() => setTab('SUPPLIERS')}>Supplier Master</button>
       </div>
 
       {tab === 'SUPPLIERS' && (
@@ -593,12 +561,12 @@ export default function Purchasing() {
             {/* Smart Search Bar */}
             <div style={{ position: 'relative', marginBottom: '24px', zIndex: 10 }}>
               <div style={{ position: 'relative' }}>
-                <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+                <Search size={18} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input
                   ref={searchInputRef}
                   type="text"
-                  className="form-control search-input-clearance"
-                  style={{ padding: '14px 16px 14px 44px', paddingLeft: '44px', fontSize: '1rem', background: 'var(--bg-tertiary)', borderColor: showSearchDropdown ? 'var(--accent)' : 'var(--border)' }}
+                  className="form-control"
+                  style={{ padding: '14px 16px 14px 44px', fontSize: '1rem', background: 'var(--bg-tertiary)', borderColor: showSearchDropdown ? 'var(--accent)' : 'var(--border)' }}
                   placeholder="Ketik nama bahan baku untuk menambah ke keranjang..."
                   value={searchQuery}
                   onChange={(e) => {
@@ -678,8 +646,12 @@ export default function Purchasing() {
                           {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
                       </td>
-                      <td>
+                      <td style={{ display: 'flex', gap: '4px' }}>
                         <input type="date" className="form-control" style={{ padding: '4px', fontSize: '0.85rem', width: '110px' }} value={item.date || purchaseDate} onChange={(e) => updateCartItem(item.cart_id, 'date', e.target.value)} />
+                        <select className="form-control" style={{ padding: '4px', fontSize: '0.85rem', width: '90px' }} value={item.destination || 'RESTO'} onChange={(e) => updateCartItem(item.cart_id, 'destination', e.target.value)}>
+                          <option value="RESTO">RESTO</option>
+                          <option value="CENTRAL">CENTRAL</option>
+                        </select>
                       </td>
                       <td>
                         <input
@@ -749,33 +721,26 @@ export default function Purchasing() {
             </div>
           </div>
 
-           {/* History Panel */}
+          {/* History Panel */}
           <div className="glass-card purchasing-history-panel" style={{ padding: '24px' }}>
-            <div className="paged-toolbar mb-4 space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/60">
-                <h3 className="text-base sm:text-lg font-bold text-[var(--text-primary)] m-0">Log Riwayat Pembelian</h3>
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <ExportButton 
-                    onExportExcel={handleExportExcel} 
-                    onExportPDF={handleExportPDF} 
-                    currentRole={activeUser?.role || 'SuperAdmin'}
-                    className="flex-1 sm:flex-initial"
-                  />
-                  <PrintButton
-                    currentRole={activeUser?.role || 'SuperAdmin'}
-                    title="Cetak log riwayat pembelian"
-                    className="flex-1 sm:flex-initial"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center">
-                <div className="flex items-center gap-2 flex-1">
-                  <Calendar size={16} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-                  <span className="text-xs font-semibold text-[var(--text-secondary)] whitespace-nowrap">Periode:</span>
+            <div className="paged-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Log Riwayat Pembelian</h3>
+              <ExportButton 
+                onExportExcel={handleExportExcel} 
+                onExportPDF={handleExportPDF}
+                currentRole={activeUser?.role || 'SuperAdmin'}
+              />
+              <PrintButton
+                currentRole={activeUser?.role || 'SuperAdmin'}
+                title="Cetak log riwayat pembelian"
+              />
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Calendar size={16} style={{ color: 'var(--accent)' }} />
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Periode:</span>
                   <select
-                    className="form-control flex-1 sm:w-[160px]"
-                    style={{ padding: '6px 12px', fontSize: '0.85rem' }}
+                    className="form-control"
+                    style={{ padding: '6px 12px', fontSize: '0.85rem', width: '150px' }}
                     value={period}
                     onChange={e => { setPeriod(e.target.value); setPage(1); }}
                   >
@@ -786,13 +751,13 @@ export default function Purchasing() {
                   </select>
                 </div>
 
-                <div className="relative flex-1 sm:max-w-[280px]">
-                  <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+                <div style={{ position: 'relative', width: '250px' }}>
+                  <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                   <input
                     type="text"
-                    className="form-control w-full search-input-clearance"
+                    className="form-control"
                     placeholder="Cari histori (bahan/supplier)..."
-                    style={{ paddingLeft: '38px', height: '34px' }}
+                    style={{ paddingLeft: '36px' }}
                     value={historySearchInput}
                     onChange={e => setHistorySearchInput(e.target.value)}
                   />
@@ -1204,10 +1169,11 @@ export default function Purchasing() {
               material_id: material.id,
               name: material.name,
               unit: unitLabel || material.unit,
-              qty,
+              qty: qty,
               unit_price: unitPrice,
-              supplier_id,
-              date: rowDate
+              supplier_id: supplier_id,
+              date: rowDate,
+              destination: 'RESTO'
             }]);
             success++;
           }
@@ -1244,8 +1210,12 @@ export default function Purchasing() {
                   {cart.map(item => (
                     <tr key={item.cart_id}>
                       <td style={{ fontWeight: 600 }}>{item.name} <br/><span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{suppliers.find(s => s.id === item.supplier_id)?.name || 'Tanpa Supplier'}</span></td>
-                      <td>
+                      <td style={{ display: 'flex', gap: '4px' }}>
                         <input type="date" className="form-control" style={{ padding: '4px', fontSize: '0.85rem', width: '110px' }} value={item.date || purchaseDate} onChange={(e) => updateCartItem(item.cart_id, 'date', e.target.value)} />
+                        <select className="form-control" style={{ padding: '4px', fontSize: '0.85rem', width: '90px' }} value={item.destination || 'RESTO'} onChange={(e) => updateCartItem(item.cart_id, 'destination', e.target.value)}>
+                          <option value="RESTO">RESTO</option>
+                          <option value="CENTRAL">CENTRAL</option>
+                        </select>
                       </td>
                       <td>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>

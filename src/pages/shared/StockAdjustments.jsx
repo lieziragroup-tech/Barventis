@@ -58,45 +58,25 @@ export default function StockAdjustments() {
   const pending = items.filter(i => i.status === 'pending');
 
   return (
-    <div className="fade-in space-y-3.5">
-      {/* Standardized Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 sm:p-2.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shadow-xs shrink-0">
-            <FileText size={19} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
-                Audit Selisih Stok & Berita Acara
-              </h1>
-              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 font-bold border border-amber-500/30">
-                <CheckCircle2 size={10} />
-                <span>Otorisasi Manager</span>
-              </span>
+    <div className="fade-in space-y-5">
+      <div className="glass-card" style={{ padding: '20px 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ padding: '8px', borderRadius: '12px', background: 'rgba(245,158,11,0.1)' }}>
+              <FileText size={22} style={{ color: '#f59e0b' }} />
             </div>
-            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
-              Investigasi dan persetujuan variansi stok &gt; 2%
-            </p>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Audit Selisih Stok & Berita Acara</h3>
+              <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                Investigasi dan persetujuan variansi stok &gt; 2%
+              </p>
+            </div>
           </div>
-        </div>
-
-        {/* Labeled Status Filter Sub-menu */}
-        <div className="flex items-center gap-2 bg-[var(--bg-secondary)]/80 p-1.5 rounded-xl border border-[var(--border)] shadow-xs ml-auto">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] px-1.5">
-            Status:
-          </span>
-          <div className="inline-flex p-0.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-xs shadow-2xs gap-0.5">
+          <div style={{ display: 'flex', gap: '8px' }}>
             {['pending', 'approved', 'rejected', 'all'].map(s => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`px-2.5 py-1 rounded-md font-semibold text-xs transition-all whitespace-nowrap ${
-                  statusFilter === s
-                    ? 'bg-[var(--accent)] text-white shadow-xs font-bold'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
-              >
+              <button key={s} onClick={() => setStatusFilter(s)}
+                className={`btn ${statusFilter === s ? 'btn-primary' : 'btn-secondary'} text-xs`}
+                style={{ textTransform: 'capitalize' }}>
                 {s === 'all' ? 'Semua' : s === 'pending' ? `Menunggu (${pending.length})` : s === 'approved' ? 'Disetujui' : 'Ditolak'}
               </button>
             ))}

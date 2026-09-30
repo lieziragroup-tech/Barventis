@@ -1,4 +1,4 @@
- 
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import {
@@ -1012,17 +1012,16 @@ export default function SuperAdminPanel({ tab }) {
                 <div style={{ flex: 1, minWidth: '220px', position: 'relative' }}>
                   <input
                     type="text"
-                    className="search-input-clearance"
                     placeholder="Cari deskripsi, aksi, atau nama user..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     style={{
                       ...inputStyle,
-                      paddingLeft: '34px',
+                      paddingLeft: '32px',
                       border: `1px solid ${colors.border}`
                     }}
                   />
-                  <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: colors.textMuted, pointerEvents: 'none' }} />
+                  <Search size={13} style={{ position: 'absolute', left: '10px', top: '10px', color: colors.textMuted }} />
                 </div>
 
                 {/* Tenant Filter */}

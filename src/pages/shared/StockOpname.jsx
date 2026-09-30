@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import {
-  ClipboardCheck, ArrowRight, ShieldCheck, CheckCircle2,
+  ClipboardCheck, ArrowRight, ShieldCheck,
   Palette, UploadCloud
 } from 'lucide-react';
 import BulkImport from '../../components/BulkImport';
@@ -246,33 +246,10 @@ export default function StockOpname({ defaultLocation } = {}) {
   }), [opnameItems]);
 
   return (
-    <div className="fade-in space-y-3.5">
-      {/* Standardized Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 sm:p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-xs shrink-0">
-            <ClipboardCheck size={19} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
-                Stock Opname Fisik — Lokasi {location === 'CENTRAL' ? 'Central Warehouse' : 'Resto Bar'}
-              </h1>
-              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-500/30">
-                <CheckCircle2 size={10} />
-                <span>Audit Bulanan Aktif</span>
-              </span>
-            </div>
-            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
-              Pencatatan dan rekonsiliasi stok fisik versus sistem buku secara real-time.
-            </p>
-          </div>
-        </div>
-      </div>
-
+    <div className="fade-in">
       {/* Step 1: Initialize Opname */}
       {step === 1 && (
-        <div className="glass-card" style={{ maxWidth: '520px', margin: '20px auto', padding: '28px' }}>
+        <div className="glass-card" style={{ maxWidth: '520px', margin: '40px auto', padding: '32px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', textAlign: 'center', marginBottom: '24px' }}>
             <div className="upload-icon-circle" style={{ background: 'var(--accent-glow)', color: 'var(--accent)', width: '72px', height: '72px' }}>
               <ClipboardCheck size={36} />
@@ -335,42 +312,32 @@ export default function StockOpname({ defaultLocation } = {}) {
 
       {/* Step 2: Physical Count Input Grid */}
       {step === 2 && (
-        <div className="glass-card p-4 sm:p-5 md:p-6 mb-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 pb-3.5 mb-4 border-b border-[var(--border)]/70">
-            <div className="min-w-0">
-              <span className="badge badge-info mb-1.5 inline-block text-[10px]">Step 2: Counting</span>
-              <h3 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0">
-                Audit Inventory: Lokasi {location}
-              </h3>
+        <div className="glass-card" style={{ padding: '28px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ minWidth: 0 }}>
+              <span className="badge badge-info" style={{ marginBottom: '6px' }}>Step 2: Counting</span>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>Audit Inventory: {location} Location</h3>
             </div>
             
-            {/* Labeled Category Sub-menu */}
-            <div className="flex items-center gap-2 bg-[var(--bg-secondary)]/80 p-1.5 rounded-xl border border-[var(--border)] shadow-xs max-w-full overflow-x-auto">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] px-1.5 whitespace-nowrap">
-                Kategori:
-              </span>
+            {/* Category tabs */}
+            <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', maxWidth: '60%' }}>
               <button 
-                className="btn btn-secondary text-xs flex items-center gap-1.5 whitespace-nowrap font-medium" 
-                style={{ height: '30px', padding: '0 10px', borderColor: 'var(--accent)' }} 
+                className="btn btn-secondary" 
+                style={{ padding: '6px 12px', fontSize: '0.8rem', whiteSpace: 'nowrap', display: 'flex', gap: '6px', alignItems: 'center', borderColor: 'var(--accent)' }} 
                 onClick={() => setShowBulkImport(true)}
               >
-                <UploadCloud size={13} style={{ color: 'var(--accent)' }} /> Import Excel
+                <UploadCloud size={14} style={{ color: 'var(--accent)' }} /> Import Excel
               </button>
-              <div className="inline-flex p-0.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-xs shadow-2xs gap-0.5">
-                {categories.map(cat => (
-                  <button 
-                    key={cat} 
-                    className={`px-2.5 py-1 rounded-md font-semibold text-xs transition-all whitespace-nowrap ${
-                      activeCategory === cat 
-                        ? 'bg-[var(--accent)] text-white shadow-xs font-bold' 
-                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                    }`}
-                    onClick={() => setActiveCategory(cat)}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
+              {categories.map(cat => (
+                <button 
+                  key={cat} 
+                  className={`btn ${activeCategory === cat ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ padding: '6px 12px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
+                  onClick={() => setActiveCategory(cat)}
+                >
+                  {cat}
+                </button>
+              ))}
             </div>
           </div>
 

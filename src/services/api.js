@@ -962,53 +962,6 @@ export const api = {
     if (error) throw new Error('Failed to update name: ' + error.message);
   },
 
-  // Reset Password for Email (Sends Supabase magic recovery link)
-  resetPasswordForEmail: async (email) => {
-    const cleanEmail = (email || '').trim();
-    if (!cleanEmail) throw new Error('Email tidak boleh kosong.');
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(cleanEmail)) throw new Error('Format email tidak valid.');
-
-    const redirectUrl = typeof window !== 'undefined'
-      ? `${window.location.origin}/reset-password`
-      : undefined;
-
-    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-      redirectTo: redirectUrl
-    });
-
-    if (error) {
-      throw new Error(error.message || 'Gagal mengirim email reset password. Pastikan email terdaftar.');
-    }
-
-    try {
-      await logAudit('RESET_PASSWORD_REQUEST', `Permintaan reset password diajukan untuk email: ${cleanEmail}`);
-    } catch { /* best-effort */ }
-
-    return { success: true };
-  },
-
-  // Update Password (Sets new password for currently authenticated or recovery session)
-  updatePassword: async (newPassword) => {
-    if (!newPassword || newPassword.length < 6) {
-      throw new Error('Password baru minimal harus 6 karakter.');
-    }
-
-    const { data, error } = await supabase.auth.updateUser({
-      password: newPassword
-    });
-
-    if (error) {
-      throw new Error(error.message || 'Gagal memperbarui password.');
-    }
-
-    try {
-      await logAudit('UPDATE_PASSWORD', 'Pengguna berhasil memperbarui password akun.');
-    } catch { /* best-effort */ }
-
-    return data;
-  },
-
   // getProfile — reads from Supabase DB, not localStorage (KRITIS-01 fix)
   getProfile: async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -1410,6 +1363,64 @@ export const api = {
 
     await logAudit('TRANSFER_STOCK', `Transfer ${qty} ${mat.unit} "${mat.name}" dari ${source_branch} ke ${target_branch}.`);
     return { success: true, material: mat, tx };
+  },
+  // --- TRANSFER REQUISITION (WBS Phase 2) ---
+  createTransferRequest: async ({ material_id, qty, source_branch, target_branch, notes }) => {
+    const tenantId = await getActiveTenantId();
+    const { data: mat } = await supabase.from('materials').select('price').eq('id', material_id).single();
+    const unitPrice = parseFloat(mat?.price) || 0;
+    
+    const { data, error } = await supabase.from('transactions').insert({
+      tenant_id: tenantId,
+      date: new Date().toISOString().split('T')[0],
+      material_id: material_id,
+      type: 'TRANSFER_REQUEST',
+      location: target_branch,
+      qty: parseFloat(qty),
+      amount: parseFloat(qty) * unitPrice,
+      notes: `Request Transfer [${source_branch} ➔ ${target_branch}] - ${notes || ''}`
+    }).select().single();
+    
+    if (error) throw new Error('Gagal membuat request transfer: ' + error.message);
+    return data;
+  },
+  
+  getTransferRequests: async () => {
+    const tenantId = await getActiveTenantId();
+    const { data, error } = await supabase.from('transactions')
+      .select('*, materials(id, name, sku, unit, qty_resto, qty_central)')
+      .eq('tenant_id', tenantId)
+      .eq('type', 'TRANSFER_REQUEST')
+      .order('id', { ascending: false });
+    if (error) throw new Error('Gagal memuat request: ' + error.message);
+    return data || [];
+  },
+  
+  approveTransferRequest: async (txId) => {
+    const tenantId = await getActiveTenantId();
+    const { data: tx, error: fetchErr } = await supabase.from('transactions').select('*').eq('id', txId).eq('tenant_id', tenantId).single();
+    if (fetchErr || !tx) throw new Error('Request tidak ditemukan.');
+    
+    const match = tx.notes ? tx.notes.match(/Request Transfer \[([^\]]+) ➔ ([^\]]+)\]/) : null;
+    const source = match ? match[1] : 'Central Warehouse';
+    const target = match ? match[2] : 'Resto Bar';
+    
+    // Execute real transfer
+    await api.createTransfer({
+      material_id: tx.material_id,
+      quantity: tx.qty,
+      source_branch: source,
+      target_branch: target,
+      notes: 'Disetujui dari Request'
+    });
+    
+    // Delete the request
+    await supabase.from('transactions').delete().eq('id', txId);
+  },
+  
+  rejectTransferRequest: async (txId) => {
+    const tenantId = await getActiveTenantId();
+    await supabase.from('transactions').delete().eq('id', txId).eq('tenant_id', tenantId);
   },
 
   getTransfers: async () => {
@@ -3124,41 +3135,113 @@ export const api = {
     const tenantId = await getActiveTenantId();
     const userId = await getActiveUserId();
 
+    const destination = purchaseData.destination || 'RESTO'; // Default RESTO if not specified
+    const qty = parseFloat(purchaseData.qty) || 0;
+
     const payload = {
       tenant_id: tenantId,
       material_id: purchaseData.material_id,
       supplier_id: purchaseData.supplier_id || null,
-      qty: parseFloat(purchaseData.qty),
+      qty: qty,
       unit: purchaseData.unit,
-      unit_price: parseFloat(purchaseData.unit_price),
+      unit_price: parseFloat(purchaseData.unit_price) || 0,
       date: purchaseData.date,
       input_by: userId,
       notes: purchaseData.notes || null
     };
 
+    // 1. Fetch current material stock
+    const { data: mat, error: matErr } = await supabase
+      .from('materials')
+      .select('qty_resto, qty_central')
+      .eq('id', payload.material_id)
+      .eq('tenant_id', tenantId)
+      .single();
+    
+    if (matErr || !mat) throw new Error("Gagal mengambil stok bahan baku: " + (matErr?.message || ''));
+
+    // 2. Adjust target stock based on destination
+    const updatePayload = {};
+    if (destination === 'RESTO') {
+      updatePayload.qty_resto = (parseFloat(mat.qty_resto) || 0) + qty;
+    } else {
+      updatePayload.qty_central = (parseFloat(mat.qty_central) || 0) + qty;
+    }
+
+    const { error: updateErr } = await supabase
+      .from('materials')
+      .update({ ...updatePayload, updated_at: new Date().toISOString() })
+      .eq('id', payload.material_id)
+      .eq('tenant_id', tenantId);
+      
+    if (updateErr) throw new Error("Gagal update stok: " + updateErr.message);
+
+    // 3. Insert Purchase Entry
     const { data: insertedPurchase, error: pErr } = await supabase.from('purchase_entries').insert(payload).select().single();
     if (pErr) throw new Error("Gagal menyimpan pembelian: " + pErr.message);
 
-    const { error: rpcErr } = await supabase.rpc('deduct_stock_atomic', {
-      p_material_id: payload.material_id,
-      p_deduct_qty: -payload.qty // negative qty = tambah stok ke central
-    });
-    if (rpcErr) throw new Error("Gagal update stok: " + rpcErr.message);
-
+    // 4. Record Transaction
     const { error: txErr } = await supabase.from('transactions').insert({
       tenant_id: tenantId,
       date: payload.date,
       material_id: payload.material_id,
       type: 'PURCHASE_IN',
-      location: 'CENTRAL',
+      location: destination,
       qty: payload.qty,
       amount: payload.qty * payload.unit_price,
-      notes: `Daily Purchase Entry [ID:${insertedPurchase.id}]`,
+      notes: `Daily Purchase Entry [ID:${insertedPurchase.id}] - Tujuan: ${destination}`,
       created_by: userId
     });
     if (txErr) throw new Error("Gagal mencatat transaksi: " + txErr.message);
 
-    await logAudit('CREATE_PURCHASE_ENTRY', `Mencatat pembelian ${payload.qty} ${payload.unit} (Rp ${(payload.qty * payload.unit_price).toLocaleString('id-ID')}).`);
+
+    // 5. Automasi pengisian kolom IN harian (Daily Inventory) jika ke RESTO
+    if (destination === 'RESTO') {
+      try {
+        const { data: header } = await supabase
+          .from('daily_inventories')
+          .select('id')
+          .eq('tenant_id', tenantId)
+          .eq('date', payload.date)
+          .maybeSingle();
+          
+        if (header) {
+          const { data: existingItem } = await supabase
+            .from('daily_inventory_items')
+            .select('id, in_qty')
+            .eq('inventory_id', header.id)
+            .eq('material_id', payload.material_id)
+            .maybeSingle();
+          if (existingItem) {
+            await supabase
+              .from('daily_inventory_items')
+              .update({ in_qty: (Number(existingItem.in_qty) || 0) + payload.qty })
+              .eq('id', existingItem.id);
+          } else {
+            // FIX: Jika barang baru saja dibeli dan belum ada di baris draft hari ini, sisipkan baris baru.
+            await supabase
+              .from('daily_inventory_items')
+              .insert({
+                inventory_id: header.id,
+                material_id: payload.material_id,
+                tenant_id: tenantId,
+                in_qty: payload.qty,
+                prev_full_qty: parseFloat(mat.qty_resto) || 0, // Stok awal sebelum ditambah
+                out_qty: 0,
+                waste_qty: 0,
+                broken_qty: 0,
+                full_qty: 0,
+                closing_qty: 0,
+                terpakai_qty: 0
+              });
+          }
+        }
+      } catch (err) {
+        console.warn('Otomasi pengisian IN harian gagal:', err);
+      }
+    }
+
+    await logAudit('CREATE_PURCHASE_ENTRY', `Mencatat pembelian ${payload.qty} ${payload.unit} ke ${destination} (Rp ${(payload.qty * payload.unit_price).toLocaleString('id-ID')}).`);
   },
 
   deletePurchaseEntry: async (purchaseId) => {
@@ -5026,5 +5109,23 @@ export const api = {
 
     await logAudit('TRIMMING_STEP2', `Menyelesaikan Tahap 2 trimming batch (Bersih: ${clean_weight}g, Limbah: ${waste_weight}g, Pack: ${portion_pack_output || 0})`);
     return data;
+  },
+
+  uploadPhoto: async (fileBlob, bucket, filename) => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) throw new Error("Tenant aktif diperlukan untuk upload foto.");
+
+    const path = `${tenantId}/${filename}`;
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .upload(path, fileBlob, { contentType: 'image/webp', upsert: true });
+      
+    if (error) throw new Error("Gagal mengunggah foto: " + error.message);
+    
+    const { data: { publicUrl } } = supabase.storage
+      .from(bucket)
+      .getPublicUrl(path);
+      
+    return publicUrl;
   }
 };

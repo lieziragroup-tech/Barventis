@@ -32,7 +32,6 @@ export default function PrintButton({
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        justifyContent: 'center',
         gap: '7px',
         padding: '8px 14px',
         fontSize: '0.85rem',

@@ -1,4 +1,4 @@
-import { UploadCloud, ClipboardCheck, Plus, CheckCircle, CheckCircle2, Edit2, Trash2, X, Wine } from 'lucide-react';
+import { UploadCloud, ClipboardCheck, Plus, CheckCircle, Edit2, Trash2, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
@@ -37,7 +37,7 @@ export default function AssetManagement() {
 
   useEffect(() => {
      
-     
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAssets();
   }, []);
 
@@ -123,38 +123,21 @@ export default function AssetManagement() {
   }
 
   return (
-    <div className="fade-in space-y-3.5">
-      {/* Standardized Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 sm:p-2.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shadow-xs shrink-0">
-            <Wine size={19} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
-                SO Glass & Tool (Peralatan Bar)
-              </h1>
-              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 font-bold border border-amber-500/30">
-                <CheckCircle2 size={10} />
-                <span>Inventaris Aset Aktif</span>
-              </span>
-            </div>
-            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
-              Daftar inventaris & cek fisik kondisi peralatan operasional bar.
-            </p>
-          </div>
+    <div className="fade-in">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ minWidth: 0 }}>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>SO Glass & Tool (Peralatan Bar)</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Daftar inventaris & cek fisik kondisi peralatan operasional bar.</p>
         </div>
-
-        <div className="flex items-center gap-2 flex-wrap ml-auto">
-          <button className="btn btn-secondary text-xs flex items-center gap-1.5" style={{ height: '32px', padding: '0 12px' }} onClick={() => setShowBulkImport(true)}>
-            <UploadCloud size={14} /> Import Excel
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary" onClick={() => setShowBulkImport(true)}>
+            <UploadCloud size={16} style={{ marginRight: '8px' }}/> Import Excel
           </button>
-          <button className="btn btn-secondary text-xs flex items-center gap-1.5" style={{ height: '32px', padding: '0 12px' }} onClick={openChecklistModal} disabled={loading || assets.length === 0}>
-            <ClipboardCheck size={14} /> Checklist Kondisi
+          <button className="btn btn-secondary" onClick={openChecklistModal} disabled={loading || assets.length === 0}>
+            <ClipboardCheck size={16} style={{ marginRight: '8px' }}/> Checklist Kondisi
           </button>
-          <button className="btn btn-primary text-xs font-semibold flex items-center gap-1.5" style={{ height: '32px', padding: '0 12px' }} onClick={() => setEditAsset({ name: '', supplier: '', brand: 'Baik', price: 0, qty_resto: 0 })}>
-            <Plus size={14} /> Tambah Aset
+          <button className="btn btn-primary" onClick={() => setEditAsset({ name: '', supplier: '', brand: 'Baik', price: 0, qty_resto: 0 })}>
+            <Plus size={16} style={{ marginRight: '8px' }}/> Tambah Aset
           </button>
         </div>
       </div>

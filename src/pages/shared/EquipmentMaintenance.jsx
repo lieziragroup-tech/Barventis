@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Wrench, Calendar, PlusCircle, Loader2, Save, CheckCircle2 } from 'lucide-react';
+import { Wrench, Calendar, PlusCircle, Loader2, Save } from 'lucide-react';
 import { maintenanceApi } from '../../services/upgradeModulesApi';
 import { api } from '../../services/api';
 import { supabase } from '../../lib/supabase';
@@ -53,32 +53,24 @@ export default function EquipmentMaintenance() {
   const serviceTypeColor = { PREVENTIVE: '#3b82f6', CORRECTIVE: '#f59e0b', CALIBRATION: '#8b5cf6', REPLACEMENT: '#ef4444' };
 
   return (
-    <div className="fade-in space-y-3.5">
-      {/* Standardized Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 sm:p-2.5 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 shadow-xs shrink-0">
-            <Wrench size={19} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
-                Pemeliharaan & Riwayat Servis Alat
-              </h1>
-              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-700 dark:text-purple-400 font-bold border border-purple-500/30">
-                <CheckCircle2 size={10} />
-                <span>Maintenance Aktif</span>
-              </span>
+    <div className="fade-in space-y-5">
+      <div className="glass-card" style={{ padding: '20px 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ padding: '8px', borderRadius: '12px', background: 'rgba(139,92,246,0.1)' }}>
+              <Wrench size={22} style={{ color: '#8b5cf6' }} />
             </div>
-            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
-              Jadwal preventif, riwayat servis, dan penggantian suku cadang
-            </p>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Pemeliharaan & Riwayat Servis Alat</h3>
+              <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                Jadwal preventif, riwayat servis, dan penggantian suku cadang
+              </p>
+            </div>
           </div>
+          <button className="btn btn-primary text-xs flex items-center gap-1.5" onClick={() => setShowForm(!showForm)}>
+            <PlusCircle size={14} /> Catat Servis Baru
+          </button>
         </div>
-
-        <button className="btn btn-primary text-xs flex items-center gap-1.5 ml-auto font-semibold" style={{ height: '32px', padding: '0 12px' }} onClick={() => setShowForm(!showForm)}>
-          <PlusCircle size={14} /> Catat Servis Baru
-        </button>
       </div>
 
       {error && <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>{error}</div>}

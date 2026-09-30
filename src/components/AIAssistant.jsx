@@ -133,12 +133,6 @@ const QUICK_CHIPS = [
 ];
 
 export default function AIAssistant() {
-  // Fitur Chat AI disembunyikan sementara sesuai permintaan pengguna
-  return null;
-}
-
- 
-function UnusedAIAssistant() {
   const { stock = [], recipes = [], transactions = [], unitConversionMap } = useData();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([

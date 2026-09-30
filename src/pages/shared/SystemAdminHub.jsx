@@ -24,7 +24,7 @@ const Loading = () => (
 
 export default function SystemAdminHub() {
   return (
-    <TabContainer tabs={TABS} title="Pengaturan & Sistem">
+    <TabContainer tabs={TABS}>
       {(activeTab) => (
         <Suspense fallback={<Loading />}>
           {activeTab === 'stock-ledger' && <StockLedger />}

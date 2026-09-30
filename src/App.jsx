@@ -95,9 +95,9 @@ const RootRedirect = () => {
 
 // Auth Guard Component
 const AuthRoute = ({ children }) => {
-  const { isAuthenticated, loading, isPasswordRecovery } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
   if (loading) return <LoadingSpinner />;
-  if (isAuthenticated && !isPasswordRecovery) return <RootRedirect />;
+  if (isAuthenticated) return <RootRedirect />;
   return children;
 };
 
@@ -122,16 +122,6 @@ export default function App() {
           <AuthRoute>
             <AuthScreen />
           </AuthRoute>
-        } />
-
-        <Route path="/forgot-password" element={
-          <AuthRoute>
-            <AuthScreen initialMode="forgot" />
-          </AuthRoute>
-        } />
-
-        <Route path="/reset-password" element={
-          <AuthScreen initialMode="reset" />
         } />
 
         <Route path="/" element={<RootRedirect />} />

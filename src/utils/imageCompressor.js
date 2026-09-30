@@ -59,16 +59,11 @@ export const formatWIB = () => {
  * @returns {Promise<Blob>}
  */
 export const compressAndWatermark = async (file, options = {}) => {
-  const { picName = 'Unknown', branchName = 'Unknown' } = options;
-  
-  // 1. Ambil GPS secara asinkron
-  const gps = await getCurrentGPS();
-  const gpsStr = gps 
-    ? `${gps.latitude.toFixed(5)}, ${gps.longitude.toFixed(5)}`
-    : 'GPS OFF';
+  const { userName = 'Unknown' } = options;
   
   const timeStr = formatWIB();
-  const watermarkText = `${timeStr} | ${picName} | ${branchName} | ${gpsStr}`;
+  // Sesuai PRD FR-BAR-05: [UMATIS RESTO BSD] \quad YYYY-MM-DD HH:mm:ss WIB \quad User: [Nama Barista]
+  const watermarkText = `[UMATIS RESTO BSD]    ${timeStr}    User: ${userName}`;
 
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

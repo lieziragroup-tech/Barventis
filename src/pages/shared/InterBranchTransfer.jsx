@@ -36,11 +36,11 @@ export default function InterBranchTransfer() {
   }, [currentTenant]);
 
   const [transfers, setTransfers] = useState([]);
+  const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const [showGuide, setShowGuide] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [sourceFilter, setSourceFilter] = useState('ALL');
@@ -60,8 +60,12 @@ export default function InterBranchTransfer() {
     setLoading(true);
     setError('');
     try {
-      const data = await api.getTransfers();
+      const [data, reqData] = await Promise.all([
+        api.getTransfers(),
+        api.getTransferRequests()
+      ]);
       setTransfers(data || []);
+      setRequests(reqData || []);
     } catch (err) {
       console.error('Error fetching transfers:', err);
       setError(err.message || 'Gagal memuat data transfer.');
@@ -71,7 +75,7 @@ export default function InterBranchTransfer() {
   }, []);
 
   useEffect(() => {
-     
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTransfers();
   }, [fetchTransfers]);
 
@@ -196,13 +200,24 @@ export default function InterBranchTransfer() {
     setError('');
 
     try {
-      await api.createTransfer({
-        material_id: transferForm.item_id,
-        quantity: qty,
-        source_branch: transferForm.source_branch,
-        target_branch: transferForm.target_branch,
-        notes: transferForm.notes
-      });
+      if (activeUser?.role === 'Bar') {
+        await api.createTransferRequest({
+          material_id: transferForm.item_id,
+          qty: qty,
+          source_branch: transferForm.source_branch,
+          target_branch: transferForm.target_branch,
+          notes: transferForm.notes
+        });
+      } else {
+        await api.createTransfer({
+          material_id: transferForm.item_id,
+          quantity: qty,
+          source_branch: transferForm.source_branch,
+          target_branch: transferForm.target_branch,
+          notes: transferForm.notes
+        });
+      }
+
 
       // Refresh both local transfer log & main data context (Stock Ledger, etc.)
       await fetchTransfers();
@@ -231,52 +246,64 @@ export default function InterBranchTransfer() {
     }
   };
 
+  const handleApproveRequest = async (txId) => {
+    if (!window.confirm('Setujui permintaan transfer ini? Stok akan otomatis berpindah.')) return;
+    setLoading(true);
+    try {
+      await api.approveTransferRequest(txId);
+      if (showToast) showToast('Permintaan disetujui dan ditransfer.', 'success');
+      await fetchTransfers();
+      if (refreshData) refreshData();
+    } catch (err) {
+      if (showToast) showToast(err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRejectRequest = async (txId) => {
+    if (!window.confirm('Tolak dan hapus permintaan transfer ini?')) return;
+    setLoading(true);
+    try {
+      await api.rejectTransferRequest(txId);
+      if (showToast) showToast('Permintaan ditolak.', 'success');
+      await fetchTransfers();
+    } catch (err) {
+      if (showToast) showToast(err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="fade-in space-y-3.5">
-      {/* Standardized Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--border)]/70 no-print">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 sm:p-2.5 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-xs shrink-0">
-            <ArrowRightLeft size={19} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-extrabold text-[var(--text-primary)] m-0 tracking-tight">
+    <div className="page-container fade-in space-y-5">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-500">
+              <ArrowRightLeft size={22} />
+            </div>
+            <div>
+              <h1 className="text-xl md:text-2xl font-black m-0" style={{ color: 'var(--text-primary)' }}>
                 Inter-Branch Transfer
               </h1>
-              <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 font-bold border border-indigo-500/30">
-                <CheckCircle2 size={10} />
-                <span>Mutasi Antar-Cabang</span>
-              </span>
+              <p className="text-xs md:text-sm mt-0.5 m-0" style={{ color: 'var(--text-secondary)' }}>
+                Mutasi & serah-terima fisik bahan baku antar lokasi internal (Central Warehouse & Outlet)
+              </p>
             </div>
-            <p className="text-[11px] sm:text-xs text-[var(--text-secondary)] mt-0.5 m-0">
-              Mutasi & serah-terima fisik bahan baku antar lokasi internal (Central Warehouse & Outlet).
-            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 ml-auto">
+        <div className="flex items-center gap-2">
           <button
-            className="btn btn-secondary text-xs flex items-center gap-1.5"
-            style={{ height: '32px', padding: '0 12px' }}
+            className="btn btn-secondary text-xs md:text-sm flex items-center gap-1.5"
             onClick={fetchTransfers}
             disabled={loading}
             title="Muat Ulang Data"
           >
-            <RotateCcw size={14} className={loading ? 'animate-spin' : ''} />
+            <RotateCcw size={15} className={loading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Refresh</span>
-          </button>
-
-          {/* Toggle Panduan */}
-          <button
-            type="button"
-            className={`btn btn-secondary text-xs flex items-center gap-1.5 ${showGuide ? 'border-[var(--accent)] text-[var(--accent)]' : ''}`}
-            style={{ height: '32px', padding: '0 12px' }}
-            onClick={() => setShowGuide(!showGuide)}
-            title={showGuide ? "Tutup panduan" : "Buka panduan alur transfer"}
-          >
-            <Info size={14} />
-            <span className="hidden sm:inline">{showGuide ? 'Tutup' : 'Panduan'}</span>
           </button>
 
           {/* Trigger Button to Open Modal */}
@@ -288,73 +315,76 @@ export default function InterBranchTransfer() {
             }}
           >
             <Plus size={17} />
-            <span>Buat Transfer Baru</span>
+            <span>{activeUser?.role === 'Bar' ? 'Buat Permintaan Transfer' : 'Buat Transfer Baru'}</span>
           </button>
         </div>
       </div>
 
-      {/* Info Banner: Only shown when toggled */}
-      {showGuide && (
-        <div
-          className="rounded-xl border p-3.5 text-xs transition-all animate-in fade-in duration-200"
-          style={{
-            background: 'rgba(99, 102, 241, 0.08)',
-            borderColor: 'rgba(99, 102, 241, 0.25)',
-            color: 'var(--text-primary)'
-          }}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <div
-                className="p-1.5 rounded-lg shrink-0 mt-0.5"
-                style={{
-                  background: 'rgba(99, 102, 241, 0.18)',
-                  color: '#4f46e5'
-                }}
-              >
-                <Info size={16} />
-              </div>
-              <div className="flex-1 space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h4 className="font-bold text-xs m-0 text-indigo-600 dark:text-indigo-400">
-                    📦 Panduan Alur Kerja Inter-Branch Transfer
-                  </h4>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300">
-                    Mutasi Internal Aset
-                  </span>
+      {/* Info Banner: Panduan Fungsi & Alur Transfer */}
+      <div
+        className="rounded-xl border p-4 text-sm transition-all"
+        style={{
+          background: 'rgba(99, 102, 241, 0.08)',
+          borderColor: 'rgba(99, 102, 241, 0.25)',
+          color: 'var(--text-primary)'
+        }}
+      >
+        <div className="flex items-start gap-3">
+          <div
+            className="p-2 rounded-lg shrink-0 mt-0.5"
+            style={{
+              background: 'rgba(99, 102, 241, 0.18)',
+              color: '#4f46e5'
+            }}
+          >
+            <Info size={20} />
+          </div>
+          <div className="flex-1 space-y-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="font-bold text-sm m-0 text-indigo-600 dark:text-indigo-400">
+                📦 Panduan: Fungsi & Alur Kerja Inter-Branch Transfer
+              </h4>
+              <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300">
+                Mutasi Internal Aset
+              </span>
+            </div>
+
+            <p className="text-xs leading-relaxed m-0" style={{ color: 'var(--text-secondary)' }}>
+              Fitur <strong>Transfer Antar Lokasi</strong> digunakan untuk mencatat pergerakan fisik bahan baku dari <strong>Gudang Utama (Central Warehouse)</strong> ke <strong>Outlet (Resto Bar / Kitchen)</strong>, atau antar cabang. Mutasi ini <strong>tidak mempengaruhi HPP / laba-rugi</strong> karena merupakan pergerakan internal aset, melainkan menjaga buku stok (<em>Stock Ledger</em>) tetap akurat dan terhindar dari selisih semu (<em>ghost inventory</em>).
+            </p>
+
+            <div className="pt-2 mt-2 border-t border-[var(--border)] grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+              <div className="flex items-start gap-2">
+                <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">
+                  1
+                </span>
+                <div>
+                  <strong className="block text-[var(--text-primary)]">Tentukan Rute & Bahan</strong>
+                  <span className="text-[var(--text-secondary)]">Pilih item dan tentukan gudang asal serta gudang tujuan.</span>
                 </div>
-
-                <p className="text-[11px] leading-relaxed m-0 text-[var(--text-secondary)]">
-                  Mencatat pergerakan bahan baku antar gudang/outlet. Mutasi internal menjaga akurasi buku stok (Stock Ledger) tanpa mempengaruhi HPP.
-                </p>
-
-                <div className="pt-1.5 mt-1.5 border-t border-[var(--border)] grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px]">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 flex items-center justify-center font-bold text-[10px] shrink-0">1</span>
-                    <span className="text-[var(--text-secondary)]">Pilih rute & bahan</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 flex items-center justify-center font-bold text-[10px] shrink-0">2</span>
-                    <span className="text-[var(--text-secondary)]">Cek ketersediaan stok</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 flex items-center justify-center font-bold text-[10px] shrink-0">3</span>
-                    <span className="text-[var(--text-secondary)]">Sinkronisasi otomatis</span>
-                  </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">
+                  2
+                </span>
+                <div>
+                  <strong className="block text-[var(--text-primary)]">Cek Ketersediaan Stok</strong>
+                  <span className="text-[var(--text-secondary)]">Sistem mengecek sisa stok di lokasi pengirim secara langsung agar tidak minus.</span>
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">
+                  3
+                </span>
+                <div>
+                  <strong className="block text-[var(--text-primary)]">Sinkronisasi Otomatis</strong>
+                  <span className="text-[var(--text-secondary)]">Stok asal berkurang dan stok tujuan bertambah, tercatat lengkap dengan ID audit.</span>
                 </div>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowGuide(false)}
-              className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 shrink-0"
-              title="Tutup panduan"
-            >
-              <X size={15} />
-            </button>
           </div>
         </div>
-      )}
+      </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
@@ -420,7 +450,7 @@ export default function InterBranchTransfer() {
         {/* Search and Filters */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] pointer-events-none" size={16} />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" size={16} />
             <input
               type="text"
               placeholder="Cari transfer, nama bahan, atau catatan..."
@@ -429,8 +459,7 @@ export default function InterBranchTransfer() {
                 setSearchTerm(e.target.value);
                 setPage(1);
               }}
-              className="form-control pl-10 text-sm search-input-clearance"
-              style={{ paddingLeft: '40px' }}
+              className="form-control pl-9 text-sm"
             />
           </div>
 
@@ -485,8 +514,61 @@ export default function InterBranchTransfer() {
           </div>
         </div>
 
+        {requests.length > 0 && (
+          <div className="mb-6">
+            <h3 className="text-lg font-bold text-amber-600 mb-3 flex items-center gap-2">
+              <AlertCircle size={20} /> Permintaan Transfer Menunggu Persetujuan
+            </h3>
+            <div className="table-responsive hidden md:block border border-amber-200 rounded-xl overflow-hidden shadow-sm">
+              <table className="table w-full">
+                <thead className="bg-amber-50 border-b border-amber-200 text-xs uppercase font-bold text-amber-800">
+                  <tr>
+                    <th className="py-3 px-4 text-left">Tanggal</th>
+                    <th className="py-3 px-4 text-left">Item / Bahan Baku</th>
+                    <th className="py-3 px-4 text-left">Rute Perpindahan</th>
+                    <th className="py-3 px-4 text-right">Kuantitas</th>
+                    <th className="py-3 px-4 text-left">Catatan</th>
+                    <th className="py-3 px-4 text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-amber-100 text-sm">
+                  {requests.map(r => {
+                    const match = r.notes ? r.notes.match(/Request Transfer \[([^\]]+) ➔ ([^\]]+)\](?: - (.*))?/) : null;
+                    const source = match ? match[1] : 'Central Warehouse';
+                    const target = match ? match[2] : 'Resto Bar';
+                    const notes = match ? match[3] : r.notes;
+                    return (
+                      <tr key={r.id} className="bg-white hover:bg-amber-50/50">
+                        <td className="py-3 px-4 text-xs">{new Date(r.date).toLocaleDateString('id-ID')}</td>
+                        <td className="py-3 px-4 font-semibold">{r.materials?.name || '-'}</td>
+                        <td className="py-3 px-4 text-xs font-mono text-[var(--text-secondary)]">
+                          {source} ➔ <strong className="text-[var(--text-primary)]">{target}</strong>
+                        </td>
+                        <td className="py-3 px-4 text-right font-bold text-indigo-600">
+                          {r.qty} <span className="text-xs font-normal text-indigo-400">{r.materials?.unit || ''}</span>
+                        </td>
+                        <td className="py-3 px-4 text-xs italic text-[var(--text-secondary)]">{notes || '-'}</td>
+                        <td className="py-3 px-4 text-center">
+                          {activeUser?.role !== 'Bar' ? (
+                            <div className="flex items-center justify-center gap-2">
+                              <button onClick={() => handleApproveRequest(r.id)} disabled={loading} className="btn btn-primary py-1 px-2 text-xs bg-emerald-500 hover:bg-emerald-600 border-none text-white font-bold"><Check size={14}/> Setuju</button>
+                              <button onClick={() => handleRejectRequest(r.id)} disabled={loading} className="btn btn-secondary py-1 px-2 text-xs text-rose-500 hover:bg-rose-50 border-rose-200"><X size={14}/> Tolak</button>
+                            </div>
+                          ) : (
+                            <span className="text-xs font-bold text-amber-500 px-2 py-1 rounded bg-amber-100">Menunggu</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* Table / Desktop */}
-        <div className="table-responsive hidden lg:block border rounded-xl overflow-hidden">
+        <div className="table-responsive hidden md:block border rounded-xl overflow-hidden">
           <table className="table w-full">
             <thead className="bg-[var(--bg-secondary)] border-b text-xs uppercase font-bold text-[var(--text-secondary)]">
               <tr>
@@ -593,8 +675,8 @@ export default function InterBranchTransfer() {
           </table>
         </div>
 
-        {/* Mobile & Tablet View: Cards */}
-        <div className="lg:hidden">
+        {/* Mobile View: Cards */}
+        <div className="md:hidden space-y-3">
           {loading ? (
             <div className="text-center py-8 text-[var(--text-secondary)]">
               <Loader2 size={24} className="animate-spin mx-auto mb-2 text-indigo-500" />
@@ -615,38 +697,34 @@ export default function InterBranchTransfer() {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {paginatedTransfers.map((t) => (
-                <div key={t.id} className="border border-[var(--border)] rounded-xl p-3.5 bg-[var(--bg-secondary)]/20 hover:bg-[var(--bg-secondary)]/40 transition-all flex flex-col justify-between gap-2 shadow-xs">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-[var(--bg-card)] border border-[var(--border)]">
-                      {t.id}
-                    </span>
-                    <span className="text-xs text-[var(--text-muted)] flex items-center gap-1">
-                      <Calendar size={11} />
-                      {t.date ? new Date(t.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
-                    </span>
-                  </div>
-                  <div>
-                    <div className="font-bold text-sm text-[var(--text-primary)]">{t.item_name}</div>
-                    <div className="text-xs text-[var(--text-secondary)] mt-0.5 flex items-center justify-between">
-                      <span>Jumlah: <strong className="text-[var(--text-primary)]">{t.qty} {t.unit}</strong></span>
-                      <span className="font-medium text-[var(--text-muted)]">Rp {Number(t.amount).toLocaleString('id-ID')}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 text-xs pt-1.5 border-t border-[var(--border)]/60">
-                    <span className="px-2 py-0.5 rounded bg-slate-500/10 font-medium text-[11px] truncate max-w-[120px]">{t.source_branch}</span>
-                    <ArrowRight size={12} className="text-indigo-500 shrink-0" />
-                    <span className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-medium text-[11px] truncate max-w-[120px]">{t.target_branch}</span>
-                  </div>
-                  {t.notes && (
-                    <p className="text-[11px] text-[var(--text-secondary)] italic m-0 pt-1 bg-[var(--bg-primary)] p-1.5 rounded border border-[var(--border)]/40">
-                      "{t.notes}"
-                    </p>
-                  )}
+            paginatedTransfers.map((t) => (
+              <div key={t.id} className="border rounded-xl p-3.5 bg-[var(--bg-secondary)]/30 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-[var(--bg-secondary)] border">
+                    {t.id}
+                  </span>
+                  <span className="text-xs text-[var(--text-secondary)]">
+                    {t.date ? new Date(t.date).toLocaleDateString('id-ID') : '-'}
+                  </span>
                 </div>
-              ))}
-            </div>
+                <div>
+                  <div className="font-bold text-sm text-[var(--text-primary)]">{t.item_name}</div>
+                  <div className="text-xs text-[var(--text-secondary)] mt-0.5">
+                    Jumlah: <strong className="text-[var(--text-primary)]">{t.qty} {t.unit}</strong> (Rp {Number(t.amount).toLocaleString('id-ID')})
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 text-xs pt-1 border-t">
+                  <span className="px-1.5 py-0.5 rounded bg-slate-500/10 font-medium">{t.source_branch}</span>
+                  <ArrowRight size={12} className="text-indigo-500" />
+                  <span className="px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 font-medium">{t.target_branch}</span>
+                </div>
+                {t.notes && (
+                  <p className="text-xs text-[var(--text-secondary)] italic m-0 pt-1">
+                    "{t.notes}"
+                  </p>
+                )}
+              </div>
+            ))
           )}
         </div>
 
