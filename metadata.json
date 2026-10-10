@@ -1,0 +1,6 @@
+{
+  "name": "Barventis",
+  "description": "Sistem Manajemen Inventory & Cost Control F&B Terbaik - Perhitungan resep, integrasi POS, stock opname, dan analisis HPP restoran.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

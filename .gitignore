@@ -1,0 +1,59 @@
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+
+# Environment secrets — NEVER commit
+.env
+.env.*
+!.env.example
+*.local
+
+# Reference projects (not part of Barventis)
+**/!Reference/
+scratch/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Python script & cache
+*.py
+__pycache__/
+
+# Raw Data & Generated Templates
+*.xlsx
+~$*.xlsx
+*.csv
+Hasil yang diinginkan (Utama)/
+
+# Temp analysis files
+Analisis_*.md
+Manual_Setup_Required.md
+SQL.txt
+
+# Sensitive Data & Database Dumps
+Data Source/
+db/*.sql
+db/SQL.txt
+
+# Obsidian Local Workspace (UI state, prevents merge conflicts)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/plugins/*/data.json
