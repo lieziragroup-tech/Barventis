@@ -192,6 +192,12 @@ export default function App() {
             </ProtectedRoute>
           } />
 
+          <Route path="olah-bahan" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Kitchen', 'Central', 'Staff', 'Bar']}>
+              <RouteErrorBoundary><SimplePrep /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
           {/* ====== BACKWARD COMPATIBILITY REDIRECTS ====== */}
 
         </Route>
