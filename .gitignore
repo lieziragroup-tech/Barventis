@@ -70,3 +70,9 @@ QA_Testing/
 .agents/
 .gemini/
 *.mdc
+
+# ---------------------------------------------------
+# Block ALL Markdown files except README
+# ---------------------------------------------------
+*.md
+!README.md
