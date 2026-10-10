@@ -27,3 +27,7 @@
 ## [v2.2.3] - Database Integrity Audit
 - **Fix**: Suntikkan `FOREIGN KEY` yang hilang pada `stock_adjustments.material_id` dan `daily_inventory_items.material_id` yang memicu error PostgREST API 400.
 - **Docs**: Pembuatan dokumen pengujian White Box dan Black Box.
+
+## [v2.3.0-draft] - System Hardening & Optimization Planning
+- **Docs**: Membuat `_memory/optimization_blueprint.md` sebagai landasan arsitektur *Zero Defect* & *Offline-Resilience*.
+- **Docs**: Merancang `prd/phase_2_optimization.md` untuk memindahkan logika perhitungan ke *Database Triggers* dan virtualisasi *DOM frontend*.
