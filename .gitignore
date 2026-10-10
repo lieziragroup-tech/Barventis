@@ -44,7 +44,6 @@ __pycache__/
 Hasil yang diinginkan (Utama)/
 
 # Temp analysis files
-Analisis_*.md
 Manual_Setup_Required.md
 SQL.txt
 
@@ -62,17 +61,14 @@ db/SQL.txt
 # Agent, Obsidian Memory & Docs (DO NOT UPLOAD)
 # ---------------------------------------------------
 .obsidian/
-_memory/
-diagrams/
-roadmap/
-prd/
 QA_Testing/
 .agents/
 .gemini/
-*.mdc
 
 # ---------------------------------------------------
 # Block ALL Markdown files except README
 # ---------------------------------------------------
-*.md
-!README.md
+.agents/
+.gemini/
+.obsidian/
+QA_Testing/
