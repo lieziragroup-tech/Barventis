@@ -1247,9 +1247,9 @@ export default function Purchasing() {
                 </thead>
                 <tbody>
                   {cart.map(item => (
-                    
+                      <React.Fragment key={item.cart_id}>
                       <SwipeableItem onDelete={() => removeFromCart(item.cart_id)}>
-                        <tr key={item.cart_id} className="block md:table-row bg-white border-b">
+                        <tr className="block md:table-row bg-white border-b">
 
                       <td style={{ fontWeight: 600 }}>{item.name} <br/><span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{suppliers.find(s => s.id === item.supplier_id)?.name || 'Tanpa Supplier'}</span></td>
                       <td style={{ display: 'flex', gap: '4px' }}>
@@ -1275,6 +1275,8 @@ export default function Purchasing() {
                         {((parseFloat(item.qty) || 0) * (parseFloat(item.unit_price) || 0)).toLocaleString('id-ID')}
                       </td>
                     </tr>
+                      </SwipeableItem>
+                      </React.Fragment>
                   ))}
                 </tbody>
               </table>
