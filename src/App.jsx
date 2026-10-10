@@ -17,7 +17,6 @@ const DailyInventoryHub = React.lazy(() => import('./pages/shared/DailyInventory
 const ProcurementHub = React.lazy(() => import('./pages/shared/ProcurementHub'));
 const PricingCogsHub = React.lazy(() => import('./pages/shared/PricingCogsHub'));
 const OpnameAssetsHub = React.lazy(() => import('./pages/shared/OpnameAssetsHub'));
-const ProductionHub = React.lazy(() => import('./pages/shared/ProductionHub'));
 const CostControlReportHub = React.lazy(() => import('./pages/shared/CostControlReportHub'));
 const SystemAdminHub = React.lazy(() => import('./pages/shared/SystemAdminHub'));
 
@@ -178,11 +177,6 @@ export default function App() {
           } />
 
           {/* [6] Proses Produksi Bahan */}
-          <Route path="produksi" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Kitchen', 'Central', 'Staff']}>
-              <RouteErrorBoundary><ProductionHub /></RouteErrorBoundary>
-            </ProtectedRoute>
-          } />
 
           {/* [7] Cost Control & Laporan */}
           <Route path="cost-report" element={

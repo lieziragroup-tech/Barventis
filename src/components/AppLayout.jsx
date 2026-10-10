@@ -518,7 +518,7 @@ export default function DashboardLayout() {
                     {location.pathname === `${basePath}/procurement` && "Marketlist & Pembelian Harian"}
                     {location.pathname === `${basePath}/pricing-cogs` && "Menu Pricing & COGS"}
                     {location.pathname === `${basePath}/opname-assets` && "Stock Opname & Aset"}
-                    {location.pathname === `${basePath}/produksi` && "Proses Produksi Bahan (Trimming)"}
+                    
                     {location.pathname === `${basePath}/cost-report` && "Cost Control & Laporan SO Barista"}
                     {location.pathname === `${basePath}/sistem` && "Pengaturan & Sistem"}
                   </>
@@ -536,8 +536,8 @@ export default function DashboardLayout() {
                     {location.pathname === `${basePath}/daily-inventory` && "Pencatatan stok harian bahan & bir, pemakaian, dan log limbah."}
                     {location.pathname === `${basePath}/procurement` && "Rencana belanja (marketlist), purchase order, dan penerimaan barang."}
                     {location.pathname === `${basePath}/pricing-cogs` && "Simulasi harga jual, resep minuman racikan (COGS Beverage), dan katalog bir."}
-                    {location.pathname === `${basePath}/opname-assets` && "Stock opname resto & central, serta checklist kondisi peralatan bar."}
-                    {location.pathname === `${basePath}/produksi` && "Kalkulator susut trimming buah segar dan batching porsi olahan."}
+                    {location.pathname === `${basePath}/opname-assets` && "Stock opname inventory harian resto & central."}
+                    
                     {location.pathname === `${basePath}/cost-report` && "Audit variansi biaya bulanan dan ekspor 13 sheet laporan SO Barista."}
                     {location.pathname === `${basePath}/sistem` && "Buku stok, mutasi antar cabang, konfigurasi toko & RBAC, audit trail & backup."}
                   </>
