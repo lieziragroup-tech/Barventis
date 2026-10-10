@@ -17,6 +17,7 @@ const DailyInventoryHub = React.lazy(() => import('./pages/shared/DailyInventory
 const ProcurementHub = React.lazy(() => import('./pages/shared/ProcurementHub'));
 const PricingCogsHub = React.lazy(() => import('./pages/shared/PricingCogsHub'));
 const OpnameAssetsHub = React.lazy(() => import('./pages/shared/OpnameAssetsHub'));
+const SimplePrep = React.lazy(() => import('./pages/shared/SimplePrep'));
 const CostControlReportHub = React.lazy(() => import('./pages/shared/CostControlReportHub'));
 const SystemAdminHub = React.lazy(() => import('./pages/shared/SystemAdminHub'));
 
