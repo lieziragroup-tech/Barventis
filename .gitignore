@@ -57,3 +57,16 @@ db/SQL.txt
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json
 .obsidian/plugins/*/data.json
+
+# ---------------------------------------------------
+# Agent, Obsidian Memory & Docs (DO NOT UPLOAD)
+# ---------------------------------------------------
+.obsidian/
+_memory/
+diagrams/
+roadmap/
+prd/
+QA_Testing/
+.agents/
+.gemini/
+*.mdc
