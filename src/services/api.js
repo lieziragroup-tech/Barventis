@@ -3097,7 +3097,8 @@ export const api = {
       unit_price: parseFloat(purchaseData.unit_price) || 0,
       date: purchaseData.date,
       input_by: userId,
-      notes: purchaseData.notes || null
+      notes: purchaseData.notes || null,
+      expiry_date: purchaseData.expiry_date || null
     };
 
     // 1. Panggil RPC untuk update stok, insert purchase, dan insert ledger atomic
@@ -3111,7 +3112,8 @@ export const api = {
       p_date: payload.date,
       p_destination: destination,
       p_input_by: userId,
-      p_notes: payload.notes
+      p_notes: payload.notes,
+      p_expired_date: payload.expiry_date
     });
 
     if (rpcErr) throw new Error("Gagal menyimpan pembelian (Atomic): " + rpcErr.message);

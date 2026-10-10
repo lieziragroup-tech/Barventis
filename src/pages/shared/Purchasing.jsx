@@ -627,6 +627,7 @@ export default function Purchasing() {
                   <tr>
                     <th>Bahan Baku</th>
                     <th style={{ width: '120px' }}>Supplier</th>
+                    <th style={{ width: '130px' }}>Expired (FEFO)</th>
                     <th style={{ width: '130px' }}>Tanggal</th>
                     <th style={{ width: '100px', textAlign: 'right' }}>Qty</th>
                     <th style={{ width: '60px' }}>Unit</th>
@@ -649,6 +650,15 @@ export default function Purchasing() {
                           <option value="">(Tunai / Tidak ada)</option>
                           {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
+                      </td>
+                      <td>
+                        <input
+                          type="date"
+                          className="form-control"
+                          style={{ padding: '6px 8px', fontSize: '0.8rem', borderColor: !item.expiry_date ? 'var(--danger)' : 'var(--border)' }}
+                          value={item.expiry_date}
+                          onChange={(e) => updateCartItem(item.cart_id, 'expiry_date', e.target.value)}
+                        />
                       </td>
                       <td style={{ display: 'flex', gap: '4px' }}>
                         <input type="date" className="form-control" style={{ padding: '4px', fontSize: '0.85rem', width: '110px' }} value={item.date || purchaseDate} onChange={(e) => updateCartItem(item.cart_id, 'date', e.target.value)} />
