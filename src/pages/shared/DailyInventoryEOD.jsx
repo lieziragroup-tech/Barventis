@@ -16,6 +16,7 @@ const DailyInventoryEOD = ({ inventoryData = [], materials = [], onSave, onLockE
   const [isRestoring, setIsRestoring] = useState(true);
   const [lastSaved, setLastSaved] = useState(null);
   const [renderLimit, setRenderLimit] = useState(50);
+  const [expandedId, setExpandedId] = useState(null);
 
   // Logika Warna FEFO
   const getExpiryBadge = (expired_date) => {
@@ -351,6 +352,7 @@ const DailyInventoryEOD = ({ inventoryData = [], materials = [], onSave, onLockE
           </tbody>
         </table>
       </div>
+      )} {/* End of Desktop/Mobile Conditional */}
     </div>
   );
 };

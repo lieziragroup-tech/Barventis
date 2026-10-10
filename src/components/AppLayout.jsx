@@ -726,7 +726,9 @@ export default function DashboardLayout() {
       <div id="mobile-more-menu" className="hidden lg:hidden fixed inset-0 z-[60] bg-[var(--bg-secondary)] flex-col pt-12 pb-24 px-4 overflow-y-auto" style={{ display: 'none' }}>
         <style>{`
           #mobile-more-menu:not(.hidden) { display: flex !important; }
-        `}
+        `}</style>
+        
+        <style>{`
   /* Bottom Navigation Styles (Mobile) */
   .bottom-nav {
     position: fixed;
@@ -773,8 +775,7 @@ export default function DashboardLayout() {
     border-radius: 16px;
     transition: all 0.2s ease;
   }
-
-      </style>
+      `}</style>
         <button onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} className="absolute top-4 right-4 p-2">
           <X size={24} />
         </button>
