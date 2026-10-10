@@ -99,6 +99,7 @@ export default function Purchasing() {
 
   // New Material Modal
   const [showNewMaterialModal, setShowNewMaterialModal] = useState(false);
+  const isMobile = window.innerWidth < 768;
   const [newMaterialData, setNewMaterialData] = useState({ name: '', category: 'Bahan Baku Dasar', unit: 'pcs', price: '', min_stock: 15 });
 
   const fetchHistory = useCallback(async (targetPage, targetSearch, targetPeriod) => {
@@ -638,65 +639,89 @@ export default function Purchasing() {
                 </thead>
                 <tbody>
                   {cart.map(item => (
-                    <tr key={item.cart_id}>
-                      <td style={{ fontWeight: 600 }}>{item.name}</td>
-                      <td>
-                        <select
-                          className="form-control"
-                          style={{ padding: '6px 8px', fontSize: '0.8rem' }}
-                          value={item.supplier_id}
-                          onChange={(e) => updateCartItem(item.cart_id, 'supplier_id', e.target.value)}
-                        >
-                          <option value="">(Tunai / Tidak ada)</option>
-                          {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                        </select>
-                      </td>
-                      <td>
-                        <input
-                          type="date"
-                          className="form-control"
-                          style={{ padding: '6px 8px', fontSize: '0.8rem', borderColor: !item.expiry_date ? 'var(--danger)' : 'var(--border)' }}
-                          value={item.expiry_date}
-                          onChange={(e) => updateCartItem(item.cart_id, 'expiry_date', e.target.value)}
-                        />
-                      </td>
-                      <td style={{ display: 'flex', gap: '4px' }}>
-                        <input type="date" className="form-control" style={{ padding: '4px', fontSize: '0.85rem', width: '110px' }} value={item.date || purchaseDate} onChange={(e) => updateCartItem(item.cart_id, 'date', e.target.value)} />
-                        <select className="form-control" style={{ padding: '4px', fontSize: '0.85rem', width: '90px' }} value={item.destination || 'RESTO'} onChange={(e) => updateCartItem(item.cart_id, 'destination', e.target.value)}>
-                          <option value="RESTO">RESTO</option>
-                          <option value="CENTRAL">CENTRAL</option>
-                        </select>
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          step="any"
-                          className="form-control"
-                          style={{ padding: '6px 8px', textAlign: 'right', fontSize: '0.85rem' }}
-                          value={item.qty}
-                          onChange={(e) => updateCartItem(item.cart_id, 'qty', e.target.value)}
-                        />
-                      </td>
-                      <td style={{ color: 'var(--text-muted)' }}>{item.unit}</td>
-                      <td>
-                        <input
-                          type="number"
-                          step="any"
-                          className="form-control"
-                          style={{ padding: '6px 8px', textAlign: 'right', fontSize: '0.85rem' }}
-                          value={item.unit_price}
-                          onChange={(e) => updateCartItem(item.cart_id, 'unit_price', e.target.value)}
-                        />
-                      </td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--accent)' }}>
-                        Rp {((parseFloat(item.qty) || 0) * (parseFloat(item.unit_price) || 0)).toLocaleString('id-ID')}
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <button className="btn" style={{ padding: '4px', color: 'var(--danger)', background: 'transparent' }} onClick={() => removeCartItem(item.cart_id)}>
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
+                    <React.Fragment key={item.cart_id}>
+                      {!isMobile ? (
+                        <tr>
+                          <td style={{ fontWeight: 600 }}>{item.name}</td>
+                          <td>
+                            <select
+                              className="form-control"
+                              style={{ padding: '6px 8px', fontSize: '0.8rem' }}
+                              value={item.supplier_id}
+                              onChange={(e) => updateCartItem(item.cart_id, 'supplier_id', e.target.value)}
+                            >
+                              <option value="">(Tunai / Tidak ada)</option>
+                              {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            </select>
+                          </td>
+                          <td>
+                            <input
+                              type="date"
+                              className="form-control"
+                              style={{ padding: '6px 8px', fontSize: '0.8rem', borderColor: !item.expiry_date ? 'var(--danger)' : 'var(--border)' }}
+                              value={item.expiry_date}
+                              onChange={(e) => updateCartItem(item.cart_id, 'expiry_date', e.target.value)}
+                            />
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <input
+                              type="number"
+                              min="0"
+                              className="form-control text-right"
+                              style={{ width: '80px', padding: '6px 8px' }}
+                              value={item.qty === 0 ? '' : item.qty}
+                              onChange={(e) => updateCartItem(item.cart_id, 'qty', e.target.value)}
+                            />
+                          </td>
+                          <td>{item.unit}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <input
+                              type="number"
+                              min="0"
+                              className="form-control text-right"
+                              style={{ width: '120px', padding: '6px 8px' }}
+                              value={item.unit_price === 0 ? '' : item.unit_price}
+                              onChange={(e) => updateCartItem(item.cart_id, 'unit_price', e.target.value)}
+                            />
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                            {formatIDR(item.qty * item.unit_price)}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <button className="btn" style={{ padding: '4px', color: 'var(--danger)' }} onClick={() => removeFromCart(item.cart_id)}>
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      ) : (
+                        <tr>
+                          <td colSpan="8" style={{ padding: 0 }}>
+                            <SwipeableItem onDelete={() => removeFromCart(item.cart_id)}>
+                              <div className="p-3 bg-white border-b border-gray-100 flex flex-col gap-2">
+                                <div className="flex justify-between items-start">
+                                  <div className="font-bold text-sm">{item.name} <span className="font-normal text-xs text-gray-500">({item.unit})</span></div>
+                                  <div className="font-bold text-primary">{formatIDR(item.qty * item.unit_price)}</div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 mt-1">
+                                  <div>
+                                    <label className="text-[10px] text-gray-500">Qty</label>
+                                    <input type="number" className="form-control text-sm py-1 px-2" value={item.qty} onChange={(e) => updateCartItem(item.cart_id, 'qty', e.target.value)} />
+                                  </div>
+                                  <div>
+                                    <label className="text-[10px] text-gray-500">Harga Satuan</label>
+                                    <input type="number" className="form-control text-sm py-1 px-2" value={item.unit_price} onChange={(e) => updateCartItem(item.cart_id, 'unit_price', e.target.value)} />
+                                  </div>
+                                  <div className="col-span-2">
+                                    <label className="text-[10px] text-red-500 font-bold">Expired Date (FEFO)</label>
+                                    <input type="date" className="form-control text-sm py-1 px-2 border-red-300" value={item.expiry_date} onChange={(e) => updateCartItem(item.cart_id, 'expiry_date', e.target.value)} />
+                                  </div>
+                                </div>
+                              </div>
+                            </SwipeableItem>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   ))}
 
                   {cart.length === 0 && (
@@ -1222,7 +1247,10 @@ export default function Purchasing() {
                 </thead>
                 <tbody>
                   {cart.map(item => (
-                    <tr key={item.cart_id}>
+                    
+                      <SwipeableItem onDelete={() => removeFromCart(item.cart_id)}>
+                        <tr key={item.cart_id} className="block md:table-row bg-white border-b">
+
                       <td style={{ fontWeight: 600 }}>{item.name} <br/><span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{suppliers.find(s => s.id === item.supplier_id)?.name || 'Tanpa Supplier'}</span></td>
                       <td style={{ display: 'flex', gap: '4px' }}>
                         <input type="date" className="form-control" style={{ padding: '4px', fontSize: '0.85rem', width: '110px' }} value={item.date || purchaseDate} onChange={(e) => updateCartItem(item.cart_id, 'date', e.target.value)} />
