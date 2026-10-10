@@ -72,3 +72,11 @@ QA_Testing/
 .gemini/
 .obsidian/
 QA_Testing/
+
+# ---------------------------------------------------
+# Memory & Docs (Local Only)
+# ---------------------------------------------------
+_memory/
+prd/
+roadmap/
+diagrams/
