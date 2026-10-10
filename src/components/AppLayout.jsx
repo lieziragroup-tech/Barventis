@@ -76,6 +76,13 @@ export default function DashboardLayout() {
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
@@ -719,7 +726,55 @@ export default function DashboardLayout() {
       <div id="mobile-more-menu" className="hidden lg:hidden fixed inset-0 z-[60] bg-[var(--bg-secondary)] flex-col pt-12 pb-24 px-4 overflow-y-auto" style={{ display: 'none' }}>
         <style>{`
           #mobile-more-menu:not(.hidden) { display: flex !important; }
-        `}</style>
+        `}
+  /* Bottom Navigation Styles (Mobile) */
+  .bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 65px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    z-index: 9999;
+    padding-bottom: env(safe-area-inset-bottom); /* iPhone X+ support */
+  }
+
+  .bottom-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.65rem;
+    font-weight: 600;
+    gap: 4px;
+    transition: all 0.2s ease;
+  }
+
+  .bottom-nav-item.active {
+    color: var(--primary);
+  }
+
+  .bottom-nav-item.active .icon-wrap {
+    background: var(--primary-light);
+    color: var(--primary);
+  }
+
+  .bottom-nav-item .icon-wrap {
+    padding: 6px 16px;
+    border-radius: 16px;
+    transition: all 0.2s ease;
+  }
+
+      </style>
         <button onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} className="absolute top-4 right-4 p-2">
           <X size={24} />
         </button>
