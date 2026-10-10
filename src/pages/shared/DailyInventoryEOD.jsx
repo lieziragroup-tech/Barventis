@@ -16,6 +16,16 @@ const DailyInventoryEOD = ({ inventoryData = [], materials = [], onSave, onLockE
   const [isRestoring, setIsRestoring] = useState(true);
   const [lastSaved, setLastSaved] = useState(null);
   const [renderLimit, setRenderLimit] = useState(50);
+
+  // Logika Warna FEFO
+  const getExpiryBadge = (expired_date) => {
+    if (!expired_date) return null;
+    const daysLeft = Math.ceil((new Date(expired_date) - new Date()) / (1000 * 60 * 60 * 24));
+    if (daysLeft <= 3) return <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-100 text-red-700 border border-red-200">🔴 {daysLeft} Hari</span>;
+    if (daysLeft <= 7) return <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-bold bg-yellow-100 text-yellow-700 border border-yellow-200">🟡 {daysLeft} Hari</span>;
+    return <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-bold bg-green-100 text-green-700 border border-green-200">🟢 {daysLeft} Hari</span>;
+  };
+
   
   // Refs for keyboard navigation
   const inputRefs = useRef({});
@@ -273,7 +283,7 @@ const DailyInventoryEOD = ({ inventoryData = [], materials = [], onSave, onLockE
               return (
                 <tr key={item.material_id} className="hover:bg-gray-50 group">
                   <td className="p-3 font-medium text-gray-800 sticky left-0 bg-white group-hover:bg-gray-50 border-r">
-                    {item.name}
+                    {item.name} {item.batch_no && <span className="text-xs font-mono text-gray-500 ml-1">[{item.batch_no}]</span>} {getExpiryBadge(item.expired_date)}
                     <div className="text-[10px] text-gray-400 mt-0.5">{item.category}</div>
                   </td>
                   <td className="p-3 text-center text-xs text-gray-500">{item.unit}</td>
