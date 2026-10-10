@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Search, Lock, Save, AlertTriangle, FileSpreadsheet } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
+import localforage from 'localforage';
 
 /**
  * Unified Daily Inventory EOD (One-Sheet Counting)
@@ -12,30 +13,72 @@ const DailyInventoryEOD = ({ inventoryData = [], materials = [], onSave, onLockE
   
   // Create a deep copy of inventory items to handle local state before save
   const [items, setItems] = useState([]);
+  const [isRestoring, setIsRestoring] = useState(true);
+  const [lastSaved, setLastSaved] = useState(null);
+  const [renderLimit, setRenderLimit] = useState(50);
   
   // Refs for keyboard navigation
   const inputRefs = useRef({});
 
-  // Initialize items from props
+  // Initialize items & Restore Draft
   useEffect(() => {
-    if (inventoryData && inventoryData.length > 0) {
-      setItems(inventoryData.map(d => ({...d})));
-    } else if (materials && materials.length > 0) {
-      // Fallback if no inventory data passed for today yet
-      setItems(materials.map(m => ({
-        material_id: m.id,
-        name: m.name,
-        category: m.category,
-        unit: m.unit,
-        opening_stock: 0,
-        in_qty: 0,
-        out_qty: 0,
-        full_units: 0,
-        broken_fraction: 0,
-        waste_qty: 0,
-      })));
-    }
-  }, [inventoryData, materials]);
+    const initData = async () => {
+      try {
+        if (isLocked) {
+           // Skip draft if locked
+           setItems(inventoryData.map(d => ({...d})));
+           setIsRestoring(false);
+           return;
+        }
+
+        const draft = await localforage.getItem('eod_draft_items');
+        const draftDate = await localforage.getItem('eod_draft_date');
+        const todayStr = new Date().toISOString().split('T')[0];
+
+        if (draft && draftDate === todayStr && draft.length > 0) {
+           setItems(draft);
+           setLastSaved(new Date());
+           toast.success('Draf offline berhasil dipulihkan.');
+        } else {
+           if (inventoryData && inventoryData.length > 0) {
+             setItems(inventoryData.map(d => ({...d})));
+           } else if (materials && materials.length > 0) {
+             setItems(materials.map(m => ({
+               material_id: m.id,
+               name: m.name,
+               category: m.category,
+               unit: m.unit,
+               opening_stock: 0,
+               in_qty: 0,
+               out_qty: 0,
+               full_units: 0,
+               broken_fraction: 0,
+               waste_qty: 0,
+             })));
+           }
+        }
+      } catch (err) {
+        console.error("Failed to restore draft", err);
+      } finally {
+        setIsRestoring(false);
+      }
+    };
+    initData();
+  }, [inventoryData, materials, isLocked]);
+
+  // Auto-save debounced
+  useEffect(() => {
+    if (isRestoring || isLocked || items.length === 0) return;
+    
+    const timer = setTimeout(() => {
+      const todayStr = new Date().toISOString().split('T')[0];
+      localforage.setItem('eod_draft_items', items);
+      localforage.setItem('eod_draft_date', todayStr);
+      setLastSaved(new Date());
+    }, 2000);
+    
+    return () => clearTimeout(timer);
+  }, [items, isRestoring, isLocked]);
 
   const categories = useMemo(() => {
     const cats = new Set(items.map(i => i.category).filter(Boolean));
@@ -49,6 +92,20 @@ const DailyInventoryEOD = ({ inventoryData = [], materials = [], onSave, onLockE
       return matchSearch && matchCat;
     });
   }, [items, searchTerm, activeFilter]);
+
+  // Lag Killer (Epik 2): Chunked Rendering
+  useEffect(() => {
+    setRenderLimit(50); // Reset limit when filter changes
+  }, [searchTerm, activeFilter]);
+
+  const handleScroll = (e) => {
+    const { scrollTop, clientHeight, scrollHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop <= clientHeight * 1.5) {
+      if (renderLimit < filteredItems.length) {
+        setRenderLimit(prev => Math.min(prev + 50, filteredItems.length));
+      }
+    }
+  };
 
   // Keyboard navigation logic
   const handleKeyDown = (e, index, field) => {
@@ -117,6 +174,8 @@ const DailyInventoryEOD = ({ inventoryData = [], materials = [], onSave, onLockE
   const handleLock = () => {
     if (confirm('Anda yakin ingin menutup EOD? Setelah dikunci, data tidak dapat diubah dan saldo akan disalin ke esok hari.')) {
       if (onLockEOD) onLockEOD(items);
+    localforage.removeItem('eod_draft_items');
+    localforage.removeItem('eod_draft_date');
     }
   };
 
@@ -203,7 +262,7 @@ const DailyInventoryEOD = ({ inventoryData = [], materials = [], onSave, onLockE
             </tr>
           </thead>
           <tbody className="divide-y">
-            {filteredItems.map((item, index) => {
+            {filteredItems.slice(0, renderLimit).map((item, index) => {
               const rowClosing = (item.full_units || 0) + (item.broken_fraction || 0);
               const rowUsage = (item.opening_stock || 0) + (item.in_qty || 0) - rowClosing - (item.waste_qty || 0);
               
