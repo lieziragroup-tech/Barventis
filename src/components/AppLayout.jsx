@@ -5,7 +5,7 @@ import {
   LogOut, Bell, X, RefreshCw, Menu,
   LayoutDashboard, ClipboardList, UploadCloud,
   Tag, ShoppingCart, Boxes, Package,
-  Calculator, Settings, Wrench, Building2, Layout, Edit, MonitorSmartphone, BookOpen, Clock, Box, Scissors, FileSpreadsheet, Warehouse
+  Calculator, Settings, Wrench, Building2, Layout, Edit, MonitorSmartphone, BookOpen, Clock, Box, Scissors, FileSpreadsheet, Warehouse, History
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
