@@ -261,7 +261,8 @@ export default function WasteLogs() {
         location: wasteForm.location,
         reason: wasteForm.reason.trim(),
         notes: wasteForm.notes.trim(),
-        date: wasteForm.date
+        date: wasteForm.date,
+        photo_evidence: wasteForm.photo_evidence
       });
 
       toast.showSuccess(
