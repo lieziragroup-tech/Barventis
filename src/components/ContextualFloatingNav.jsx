@@ -3,9 +3,9 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ClipboardList, ShoppingCart, FileText, Boxes, Warehouse, Wrench,
-  Beer, TrendingUp, Trash2, AlertTriangle, Tag, Utensils, BarChart3,
+  TrendingUp, Trash2, AlertTriangle, Tag, Utensils, BarChart3,
   BookOpen, ArrowRightLeft, Settings, History, Calculator, FileSpreadsheet,
-  Scissors, Package, UploadCloud, MonitorSmartphone
+  UploadCloud, MonitorSmartphone
 } from 'lucide-react';
 
 const MENU_MAP = {
