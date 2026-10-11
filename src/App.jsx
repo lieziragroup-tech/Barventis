@@ -33,7 +33,6 @@ const CostControl = React.lazy(() => import('./pages/shared/CostControl'));
 const Invoicing = React.lazy(() => import('./pages/shared/Invoicing'));
 const Purchasing = React.lazy(() => import('./pages/shared/Purchasing'));
 const AuditLogs = React.lazy(() => import('./pages/shared/AuditLogs'));
-const AssetManagement = React.lazy(() => import('./pages/shared/AssetManagement'));
 const BackupCenter = React.lazy(() => import('./pages/shared/BackupCenter'));
 const InterBranchTransfer = React.lazy(() => import('./pages/shared/InterBranchTransfer'));
 const WasteLogs = React.lazy(() => import('./pages/shared/WasteLogs'));
