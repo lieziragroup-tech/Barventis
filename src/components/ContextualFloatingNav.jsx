@@ -113,7 +113,7 @@ export default function ContextualFloatingNav({ isSidebarOpen = false }) {
               damping: 30,
               mass: 0.6
             }}
-            className="pointer-events-auto fixed bottom-6 left-1/2 z-[45] max-w-[94vw] bg-[var(--bg-secondary)]/95 backdrop-blur-2xl border border-[var(--border)]/80 shadow-[0_12px_36px_rgba(0,0,0,0.18)] rounded-full p-1.5 flex items-center gap-1.5 overflow-hidden select-none"
+            className="pointer-events-auto fixed bottom-20 left-1/2 z-[45] max-w-[94vw] bg-[var(--bg-secondary)]/95 backdrop-blur-2xl border border-[var(--border)]/80 shadow-[0_12px_36px_rgba(0,0,0,0.18)] rounded-full p-1.5 flex items-center gap-1.5 overflow-hidden select-none"
             style={{ touchAction: 'manipulation' }}
             aria-label="Navigasi Cepat Sub-Menu"
           >
