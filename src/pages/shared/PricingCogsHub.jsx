@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import { Tag, Utensils, Beer, BarChart3 } from 'lucide-react';
+import { Tag, Utensils, BarChart3 } from 'lucide-react';
 import TabContainer from '../../components/shared/TabContainer';
 
 const MenuPricing = React.lazy(() => import('./MenuPricing'));
@@ -8,8 +8,7 @@ const MenuEngineering = React.lazy(() => import('./MenuEngineering'));
 
 const TABS = [
   { key: 'pricing', label: 'Menu Pricing & Simulasi Margin', icon: Tag },
-  { key: 'cogs-beverage', label: 'COGS Beverage (Resep Minuman)', icon: Utensils },
-  { key: 'cogs-beer', label: 'COGS Beer (Produk Jadi)', icon: Beer },
+  { key: 'cogs-all', label: 'COGS All Beverage (Semua Resep & Bir)', icon: Utensils },
   { key: 'engineering', label: 'Menu Engineering Matrix', icon: BarChart3 },
 ];
 
@@ -25,8 +24,7 @@ export default function PricingCogsHub() {
       {(activeTab) => (
         <Suspense fallback={<Loading />}>
           {activeTab === 'pricing' && <MenuPricing />}
-          {activeTab === 'cogs-beverage' && <Recipes categoryFilter="BEVERAGE" />}
-          {activeTab === 'cogs-beer' && <Recipes categoryFilter="BEER" />}
+          {activeTab === 'cogs-all' && <Recipes />}
           {activeTab === 'engineering' && <MenuEngineering />}
         </Suspense>
       )}
