@@ -34,6 +34,8 @@ export default function TenantAdminPanel() {
 
   // Locations management
   const [locations, setLocations] = useState([]);
+  const [branchesList, setBranchesList] = useState([]);
+  const [loadingBranches, setLoadingBranches] = useState(false);
   const [showAddLocationModal, setShowAddLocationModal] = useState(false);
   const [newLocName, setNewLocName] = useState('');
   const [newLocCode, setNewLocCode] = useState('');
@@ -62,8 +64,28 @@ export default function TenantAdminPanel() {
     fetchUsers();
     fetchInvitations();
     fetchResetRequests();
+    fetchBranches();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, currentTenant]);
+
+
+  async function fetchBranches() {
+    if (!currentTenant) return;
+    try {
+      setLoadingBranches(true);
+      const { data, error } = await supabase
+        .from('branches')
+        .select('*')
+        .eq('tenant_id', currentTenant.id)
+        .order('is_central', { ascending: false });
+      if (error) throw error;
+      setBranchesList(data || []);
+    } catch (err) {
+      console.error('Error fetching branches:', err);
+    } finally {
+      setLoadingBranches(false);
+    }
+  }
 
   async function fetchUsers() {
     if (!currentTenant) return;
@@ -314,6 +336,7 @@ export default function TenantAdminPanel() {
           { id: 'profile', label: 'Profil Resto', icon: Building },
           { id: 'addons', label: 'Add-Ons & Kuota', icon: Store },
           { id: 'locations', label: 'Manajemen Lokasi', icon: MapPin },
+          { id: 'branches', label: 'Cabang / Outlet', icon: Store },
         ].map((item) => {
           const isActive = tab === item.id;
           const Icon = item.icon;
