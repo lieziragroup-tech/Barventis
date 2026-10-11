@@ -319,7 +319,7 @@ export default function DashboardLayout() {
                   <NavGroup title="Operasional Bar (1:1)" isHovered={isHovered} isFirst={!isSuperAdmin}>
                     <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory Bahan" icon={ClipboardList} isHovered={isHovered} />
                     <NavItem to={`${basePath}/penjualan`} label="Penjualan Beverage (ESB)" icon={UploadCloud} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/produksi`} label="Proses Produksi Bahan" icon={Scissors} isHovered={isHovered} />
+                    
                     <NavItem to={`${basePath}/opname-assets?tab=resto`} label="Stock Opname Resto" icon={Boxes} isHovered={isHovered} />
                     <NavItem to={`${basePath}/opname-assets?tab=glass-tool`} label="SO Glass & Tool" icon={Package} isHovered={isHovered} />
                     <NavItem to={`${basePath}/procurement?tab=marketlist`} label="Marketlist" icon={ShoppingCart} isHovered={isHovered} />
@@ -339,7 +339,6 @@ export default function DashboardLayout() {
                       {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Purchasing']) && <NavItem to={`${basePath}/procurement`} label="Marketlist & Pembelian" icon={ShoppingCart} isHovered={isHovered} />}
                       {hasAccess(['Admin / Owner', 'Owner', 'Kitchen', 'Central', 'Staff']) && <NavItem to={`${basePath}/pricing-cogs`} label="Menu Pricing & COGS" icon={Tag} isHovered={isHovered} />}
                       {hasAccess(['Admin / Owner', 'Owner', 'Kitchen', 'Central', 'Staff']) && <NavItem to={`${basePath}/opname-assets`} label="Stock Opname & Aset" icon={Boxes} isHovered={isHovered} />}
-                      {hasAccess(['Admin / Owner', 'Owner', 'Kitchen', 'Central', 'Staff']) && <NavItem to={`${basePath}/produksi`} label="Proses Produksi Bahan" icon={Scissors} isHovered={isHovered} />}
                       {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Staff']) && <NavItem to={`${basePath}/cost-report`} label="Cost Control & Laporan" icon={Calculator} isHovered={isHovered} />}
                     </NavGroup>
 
@@ -468,7 +467,7 @@ export default function DashboardLayout() {
                   {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Purchasing']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/procurement`} label="Marketlist & Pembelian" icon={ShoppingCart} isHovered={true} />}
                   {hasAccess(['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pricing-cogs`} label="Menu Pricing & COGS" icon={Tag} isHovered={true} />}
                   {hasAccess(['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/opname-assets`} label="Stock Opname & Aset" icon={Boxes} isHovered={true} />}
-                  {hasAccess(['Admin / Owner', 'Owner', 'Kitchen', 'Central', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/produksi`} label="Proses Produksi Bahan" icon={Scissors} isHovered={true} />}
+                  
                   {hasAccess(['Admin / Owner', 'Owner', 'Central', 'Bar', 'Staff']) && <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/cost-report`} label="Cost Control & Laporan" icon={Calculator} isHovered={true} />}
                 </NavGroup>
 
@@ -787,9 +786,7 @@ export default function DashboardLayout() {
           {isTenant && hasAccess(['Owner', 'Bar', 'Kitchen', 'Central', 'Staff']) && (
             <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/opname-assets`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Boxes size={20} /> Stock Opname & Aset</NavLink>
           )}
-          {isTenant && hasAccess(['Owner', 'Kitchen', 'Central', 'Staff']) && (
-            <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/produksi`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Scissors size={20} /> Proses Produksi Bahan</NavLink>
-          )}
+          
           {isTenant && hasAccess(['Owner', 'Central', 'Bar', 'Staff']) && (
             <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/cost-report`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Calculator size={20} /> Cost Control & Laporan</NavLink>
           )}
