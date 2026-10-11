@@ -19,6 +19,7 @@ export default function Recipes({ categoryFilter } = {}) {
   const [recalculating, setRecalculating] = useState(false);
   const [activeRecipe, setActiveRecipe] = useState(recipes[0] || null);
   const [search, setSearch] = useState('');
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
   const [editedIngredients, setEditedIngredients] = useState(activeRecipe ? ensureUids(activeRecipe.ingredients) : []);
   const [editedSellingPrice, setEditedSellingPrice] = useState(activeRecipe ? Math.round(activeRecipe.selling_price) : 0);
   
@@ -104,19 +105,26 @@ export default function Recipes({ categoryFilter } = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recipes]);
 
+    // Ekstrak kategori unik dari data resep yang ada
+  const availableCategories = useMemo(() => {
+    const cats = new Set(recipes.map(r => r.category).filter(Boolean));
+    return ['ALL', ...Array.from(cats).sort()];
+  }, [recipes]);
+
   // Filter recipe list
   const filteredRecipes = useMemo(() => {
     return recipes.filter(r => {
       const matchSearch = r.menu_name.toLowerCase().includes(search.toLowerCase());
-      // ponytail: filter by categoryFilter prop when provided (BEER vs BEVERAGE)
+      const matchCategory = selectedCategoryFilter === 'ALL' || (r.category || '').toUpperCase() === selectedCategoryFilter.toUpperCase();
+      
       if (categoryFilter) {
         const cat = (r.category || '').toUpperCase();
-        const matchCategory = categoryFilter === 'BEER' ? cat === 'BEER' : cat !== 'BEER';
-        return matchSearch && matchCategory;
+        const matchProp = categoryFilter === 'BEER' ? cat === 'BEER' : cat !== 'BEER';
+        return matchSearch && matchCategory && matchProp;
       }
-      return matchSearch;
+      return matchSearch && matchCategory;
     });
-  }, [recipes, search, categoryFilter]);
+  }, [recipes, search, selectedCategoryFilter, categoryFilter]);
 
   const RECIPES_PAGE_SIZE = 15;
   const [recipesPage, setRecipesPage] = useState(1);
@@ -381,17 +389,32 @@ export default function Recipes({ categoryFilter } = {}) {
     <div className="recipes-layout" style={{ display: 'flex', gap: '24px', height: 'calc(100vh - 180px)', fontFamily: 'var(--font-sans)', animation: 'fadeIn 0.3s ease' }}>
       {/* Left: Recipe List */}
       <div className="glass-card recipes-list-panel" style={{ width: '310px', display: 'flex', flexDirection: 'column', padding: '20px', flexShrink: 0, border: '1px solid var(--border)' }}>
-          {/* Search */}
-          <div style={{ position: 'relative', marginBottom: '14px' }}>
-            <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-            <input 
-              type="text" 
-              placeholder="Cari resep menu..." 
-              className="form-control premium-input" 
-              style={{ paddingLeft: '38px', height: '40px' }} 
-              value={search} 
-              onChange={e => { setSearch(e.target.value); setRecipesPage(1); }} 
-            />
+          {/* Search & Category Filter */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
+            <div style={{ position: 'relative' }}>
+              <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input 
+                type="text" 
+                placeholder="Cari resep menu..." 
+                className="form-control premium-input" 
+                style={{ paddingLeft: '38px', height: '38px' }} 
+                value={search} 
+                onChange={e => { setSearch(e.target.value); setRecipesPage(1); }} 
+              />
+            </div>
+            <select
+              className="form-control premium-input"
+              style={{ height: '36px', fontSize: '0.8rem', padding: '4px 10px', background: 'var(--bg-secondary)', fontWeight: 600, color: 'var(--text-primary)' }}
+              value={selectedCategoryFilter}
+              onChange={e => { setSelectedCategoryFilter(e.target.value); setRecipesPage(1); }}
+            >
+              <option value="ALL">📁 Semua Kategori ({recipes.length})</option>
+              {availableCategories.filter(c => c !== 'ALL').map(c => (
+                <option key={c} value={c}>
+                  🏷️ {c} ({recipes.filter(r => r.category === c).length})
+                </option>
+              ))}
+            </select>
           </div>
 
         {selectedItems.length > 0 ? (
