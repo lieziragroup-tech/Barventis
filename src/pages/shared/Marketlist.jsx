@@ -31,7 +31,7 @@ export default function Marketlist() {
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 15;
+  const itemsPerPage = 20;
 
   
   // Inline edit states
@@ -220,11 +220,11 @@ export default function Marketlist() {
               ) : filteredMaterials.length === 0 ? (
                 <tr><td colSpan="7" className="text-center py-12 text-[var(--text-muted)]"><Package size={48} className="mx-auto mb-3 opacity-20"/>Tidak ada bahan baku ditemukan</td></tr>
               ) : (
-                filteredMaterials.map((mat, idx) => {
+                paginatedMaterials.map((mat, idx) => {
                   const isEditing = editingId === mat.id;
                   return (
                     <tr key={mat.id} className="hover:bg-[var(--bg-secondary)]/50">
-                      <td className="text-center text-[var(--text-muted)]">{idx + 1}</td>
+                      <td className="text-center text-[var(--text-muted)] font-mono text-xs">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
                       
                       <td>
                         {isEditing ? (

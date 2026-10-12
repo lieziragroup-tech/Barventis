@@ -6,7 +6,8 @@ import { Scissors, Upload, X, CheckCircle, ArrowRight, PackageOpen } from 'lucid
 import { triggerHaptic } from '../../utils/haptics';
 
 export default function SimplePrep() {
-  const { materials, refreshData } = useData();
+  const { stock: rawStock, refreshData } = useData();
+  const materials = rawStock || [];
   const toast = useToast();
 
   const [loading, setLoading] = useState(false);
