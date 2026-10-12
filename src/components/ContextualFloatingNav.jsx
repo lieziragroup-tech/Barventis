@@ -17,7 +17,6 @@ const MENU_MAP = {
   '/dashboard/opname-assets': [
     { id: 'resto', label: 'Resto', icon: Boxes },
     { id: 'central', label: 'Central', icon: Warehouse },
-    { id: 'glass-tool', label: 'Alat', icon: Wrench },
     { id: 'adjustments', label: 'Audit', icon: FileText }
   ],
   '/dashboard/daily-inventory': [
@@ -28,8 +27,7 @@ const MENU_MAP = {
   ],
   '/dashboard/pricing-cogs': [
     { id: 'pricing', label: 'Pricing', icon: Tag },
-    { id: 'cogs-beverage', label: 'Bev', icon: Utensils },
-    { id: 'cogs-beer', label: 'Beer', icon: Beer },
+    { id: 'cogs-all', label: 'COGS', icon: Utensils },
     { id: 'engineering', label: 'Matrix', icon: BarChart3 }
   ],
   '/dashboard/sistem': [
