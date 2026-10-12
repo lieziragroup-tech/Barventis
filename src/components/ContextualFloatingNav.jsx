@@ -21,10 +21,10 @@ const MENU_MAP = {
   ],
   '/dashboard/daily-inventory': [
     { id: 'quick-usage', label: 'Quick OUT', icon: TrendingUp },
-    { id: 'bahan', label: 'Daily', icon: ClipboardList },
+    { id: 'bahan', label: 'Semua', icon: ClipboardList },
     { id: 'pemakaian', label: 'Rekap', icon: ClipboardList },
-    { id: 'waste', label: 'Waste', icon: Trash2 },
-    { id: 'expiry', label: 'Expiry', icon: AlertTriangle }
+    { id: 'waste', label: 'Limbah', icon: Trash2 },
+    { id: 'expiry', label: 'Expired', icon: AlertTriangle }
   ],
   '/dashboard/pricing-cogs': [
     { id: 'pricing', label: 'Pricing', icon: Tag },

@@ -11,10 +11,10 @@ const ExpiryMonitor = React.lazy(() => import('./ExpiryMonitor'));
 
 const TABS = [
   { key: 'quick-usage', label: 'Catat Pemakaian (Quick OUT)', icon: TrendingUp },
-  { key: 'bahan', label: 'Daily Inventory (All Items)', icon: ClipboardList },
-  { key: 'pemakaian', label: 'Rekap Pemakaian Berkala', icon: ClipboardList },
-  { key: 'waste', label: 'Buku Catatan Limbah (Waste Log)', icon: Trash2 },
-  { key: 'expiry', label: 'Monitor Kedaluwarsa (FEFO)', icon: AlertTriangle },
+  { key: 'bahan', label: 'Semua Bahan', icon: ClipboardList },
+  { key: 'pemakaian', label: 'Rekap Pemakaian', icon: ClipboardList },
+  { key: 'waste', label: 'Catatan Limbah', icon: Trash2 },
+  { key: 'expiry', label: 'Pantau Kedaluwarsa', icon: AlertTriangle },
 ];
 
 const Loading = () => (

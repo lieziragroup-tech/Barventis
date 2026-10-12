@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { BarChart3, Star, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
+import { BarChart3, Star, TrendingUp, TrendingDown, Loader2, Search } from 'lucide-react';
+import Pagination from '../../components/shared/Pagination';
 import { menuEngApi } from '../../services/upgradeModulesApi';
 import { useAuth } from '../../contexts/AuthContext';
 import { TableSkeletonRows } from '../../components/shared/TableSkeleton';
 
 const CLASS_CONFIG = {
-  STAR: { label: 'Star', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', desc: 'Populer & Margin Tinggi' },
-  PLOWHORSE: { label: 'Plowhorse', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', desc: 'Populer, Margin Rendah' },
-  PUZZLE: { label: 'Puzzle', color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)', desc: 'Kurang Populer, Margin Tinggi' },
-  DOG: { label: 'Dog', color: '#6b7280', bg: 'rgba(107,114,128,0.1)', desc: 'Kurang Populer & Margin Rendah' }
+  STAR: { label: '⭐ Menu Bintang', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', desc: 'Paling Laris & Untung Gede (Pertahankan)' },
+  PLOWHORSE: { label: '🐎 Menu Kerja Keras', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', desc: 'Sangat Laris, tapi Untung Tipis (Naikkan Harga)' },
+  PUZZLE: { label: '🧩 Menu Teka-Teki', color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)', desc: 'Untung Gede, tapi Jarang Laku (Tingkatkan Promo)' },
+  DOG: { label: '🐾 Menu Evaluasi', color: '#6b7280', bg: 'rgba(107,114,128,0.1)', desc: 'Jarang Laku & Untung Dikit (Pertimbangkan Ganti)' }
 };
 
 export default function MenuEngineering() {
@@ -17,6 +18,19 @@ export default function MenuEngineering() {
   const [error, setError] = useState('');
   const [items, setItems] = useState([]);
   const [classFilter, setClassFilter] = useState('ALL');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
+
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedSearch(searchTerm), 300);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, classFilter]);
 
   const fetch = useCallback(async () => {
     setLoading(true);
@@ -30,10 +44,18 @@ export default function MenuEngineering() {
 
   useEffect(() => { fetch(); }, [fetch]);
 
-  const filtered = useMemo(() =>
-    classFilter === 'ALL' ? items : items.filter(i => i.menu_class === classFilter),
-    [items, classFilter]
-  );
+  const filtered = useMemo(() => {
+    return items.filter(i => {
+      const matchClass = classFilter === 'ALL' || i.menu_class === classFilter;
+      const matchSearch = (i.menu_name || '').toLowerCase().includes(debouncedSearch.toLowerCase());
+      return matchClass && matchSearch;
+    });
+  }, [items, classFilter, debouncedSearch]);
+
+  const paginatedItems = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filtered.slice(start, start + itemsPerPage);
+  }, [filtered, currentPage, itemsPerPage]);
 
   const counts = useMemo(() => {
     const c = { STAR: 0, PLOWHORSE: 0, PUZZLE: 0, DOG: 0 };
@@ -148,6 +170,17 @@ export default function MenuEngineering() {
             </tbody>
           </table>
         </div>
+        {filtered.length > 0 && (
+          <div className="p-3 border-t border-[var(--border)] bg-[var(--bg-secondary)]/30 flex justify-end">
+            <Pagination
+              page={currentPage}
+              pageSize={itemsPerPage}
+              totalCount={filtered.length}
+              onPageChange={setCurrentPage}
+              itemLabel="menu"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

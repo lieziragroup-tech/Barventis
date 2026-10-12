@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RefreshCw, Search, ArrowRight, Save, AlertTriangle, ExternalLink } from 'lucide-react';
+import Pagination from '../../components/shared/Pagination';
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
 
@@ -10,6 +11,19 @@ export default function MenuPricing() {
   const [recipes, setRecipes] = useState([]);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
+
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(handler);
+  }, [search]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, categoryFilter]);
+
   
   const [globalTargetFc, setGlobalTargetFc] = useState(30);
   const [globalRounding, setGlobalRounding] = useState('up');
@@ -95,11 +109,16 @@ export default function MenuPricing() {
     }
   };
 
+    const paginatedRecipes = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredRecipes.slice(start, start + itemsPerPage);
+  }, [filteredRecipes, currentPage, itemsPerPage]);
+
   const categories = ['ALL', ...new Set(recipes.map(r => r.category || 'Uncategorized'))];
 
   const filteredRecipes = recipes.filter(r => {
     const matchCat = categoryFilter === 'ALL' || (r.category || 'Uncategorized') === categoryFilter;
-    const matchSearch = r.menu_name.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = r.menu_name.toLowerCase().includes(debouncedSearch.toLowerCase());
     return matchCat && matchSearch;
   });
 
@@ -163,7 +182,7 @@ export default function MenuPricing() {
               </tr>
             </thead>
             <tbody>
-              {filteredRecipes.map(r => {
+              {paginatedRecipes.map(r => {
                 const hpp = parseFloat(r.basic_cost);
                 const simPrice = simulatedPrices[r.id] || 0;
                 const simFc = simPrice > 0 ? (hpp / simPrice) * 100 : 0;
@@ -224,6 +243,17 @@ export default function MenuPricing() {
             </tbody>
           </table>
         </div>
+        {filteredRecipes.length > 0 && (
+          <div className="p-3 border-t border-[var(--border)] bg-[var(--bg-secondary)]/30 flex justify-end">
+            <Pagination
+              page={currentPage}
+              pageSize={itemsPerPage}
+              totalCount={filteredRecipes.length}
+              onPageChange={setCurrentPage}
+              itemLabel="menu"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

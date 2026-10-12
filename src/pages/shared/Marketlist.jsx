@@ -85,6 +85,12 @@ export default function Marketlist() {
     setCurrentPage(1);
   }, [searchTerm, categoryFilter]);
 
+  
+  const paginatedMaterials = useMemo(() => {
+    const start = (currentPage - 1) * 20;
+    return filteredMaterials.slice(start, start + 20);
+  }, [filteredMaterials, currentPage]);
+
   const filteredMaterials = useMemo(() => {
     return materials.filter(m => {
       const matchSearch = m.name.toLowerCase().includes(searchTerm.toLowerCase()) || 

@@ -1015,7 +1015,7 @@ export const api = {
       try {
         const { data: tData } = await supabase
           .from('tenants')
-          .select('name, company_name, is_pos_enabled, pos_tax_rate, pos_service_charge, locked_until_month, locked_until_year')
+          .select('name, company_name, is_pos_enabled, locked_until_month, locked_until_year')
           .eq('id', userProfile.tenant_id)
           .maybeSingle();
         if (tData) {
