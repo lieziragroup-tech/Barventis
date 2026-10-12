@@ -984,19 +984,53 @@ export const api = {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) throw new Error('No active session.');
 
+    // 1. Ambil profil user murni tanpa JOIN relasional yang berisiko 400 Bad Request
     const { data: userProfile, error } = await supabase
       .from('users')
-      .select('id, tenant_id, branch_id, name, email, role, tenants(name, company_name, is_pos_enabled, pos_tax_rate, pos_service_charge, locked_until_month, locked_until_year)')
+      .select('id, tenant_id, branch_id, name, email, role')
       .eq('id', session.user.id)
       .maybeSingle();
 
     if (error || !userProfile) {
+      console.error('[API] User fetch error:', error);
       throw new Error('Profil tidak ditemukan.');
     }
 
-    const tenant = userProfile.tenants;
+    let tenantName = '';
+    let companyName = '';
+    let isPosEnabled = false;
+    let posTaxRate = 0;
+    let posServiceCharge = 0;
+    let lockedUntilMonth = null;
+    let lockedUntilYear = null;
+
     const roleLower = (userProfile.role || '').toLowerCase().replace(/\s+/g, '');
-    const isSuper = roleLower === 'superadmin';
+    const isSuper = roleLower === 'superadmin' || roleLower === 'super admin';
+
+    if (isSuper) {
+      tenantName = 'superadmin';
+      companyName = 'Barventis System Management';
+    } else if (userProfile.tenant_id) {
+      // 2. Fetch tenant secara aman terisolasi
+      try {
+        const { data: tData } = await supabase
+          .from('tenants')
+          .select('name, company_name, is_pos_enabled, pos_tax_rate, pos_service_charge, locked_until_month, locked_until_year')
+          .eq('id', userProfile.tenant_id)
+          .maybeSingle();
+        if (tData) {
+          tenantName = tData.name || '';
+          companyName = tData.company_name || '';
+          isPosEnabled = !!tData.is_pos_enabled;
+          posTaxRate = tData.pos_tax_rate || 0;
+          posServiceCharge = tData.pos_service_charge || 0;
+          lockedUntilMonth = tData.locked_until_month;
+          lockedUntilYear = tData.locked_until_year;
+        }
+      } catch (e) {
+        console.warn('[API] Could not fetch tenant:', e);
+      }
+    }
 
     const fullProfile = {
       id: userProfile.id,
@@ -1005,13 +1039,13 @@ export const api = {
       name: userProfile.name,
       email: userProfile.email,
       role: userProfile.role,
-      tenant_name: isSuper ? 'superadmin' : (tenant?.name || ''),
-      company_name: isSuper ? 'Barventis System Management' : (tenant?.company_name || ''),
-      is_pos_enabled: isSuper ? false : !!tenant?.is_pos_enabled,
-      pos_tax_rate: tenant?.pos_tax_rate,
-      pos_service_charge: tenant?.pos_service_charge,
-      locked_until_month: tenant?.locked_until_month,
-      locked_until_year: tenant?.locked_until_year,
+      tenant_name: tenantName,
+      company_name: companyName,
+      is_pos_enabled: isPosEnabled,
+      pos_tax_rate: posTaxRate,
+      pos_service_charge: posServiceCharge,
+      locked_until_month: lockedUntilMonth,
+      locked_until_year: lockedUntilYear,
       overhead_pct: 0.05,
       whatsapp_number: null,
       whatsapp_token: null,
@@ -1023,7 +1057,6 @@ export const api = {
     }
     return fullProfile;
   },
-    // Generate expires_at 24 hours from now
   // 1.5 Tenant Invitations
   generateTenantInvite: async (tenantId, role = 'Admin / Owner') => {
     const expiresAt = new Date();
