@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Search, Lock, Save, AlertTriangle, FileSpreadsheet } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import localforage from 'localforage';
+import Pagination from '../../components/shared/Pagination';
 
 /**
  * Unified Daily Inventory EOD (One-Sheet Counting)
@@ -16,6 +17,8 @@ const DailyInventoryEOD = ({ inventoryData = [], materials = [], onSave, onLockE
   const [isRestoring, setIsRestoring] = useState(true);
   const [lastSaved, setLastSaved] = useState(null);
   const [renderLimit, setRenderLimit] = useState(50);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
   const [expandedId, setExpandedId] = useState(null);
 
   // Logika Warna FEFO
@@ -104,9 +107,15 @@ const DailyInventoryEOD = ({ inventoryData = [], materials = [], onSave, onLockE
     });
   }, [items, searchTerm, activeFilter]);
 
+  const paginatedItems = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredItems.slice(start, start + itemsPerPage);
+  }, [filteredItems, currentPage, itemsPerPage]);
+
   // Lag Killer (Epik 2): Chunked Rendering
   useEffect(() => {
-    setRenderLimit(50); // Reset limit when filter changes
+    setRenderLimit(50);
+    setCurrentPage(1);
   }, [searchTerm, activeFilter]);
 
   const handleScroll = (e) => {
@@ -273,7 +282,7 @@ const DailyInventoryEOD = ({ inventoryData = [], materials = [], onSave, onLockE
             </tr>
           </thead>
           <tbody className="divide-y">
-            {filteredItems.slice(0, renderLimit).map((item, index) => {
+            {paginatedItems.map((item, index) => {
               const rowClosing = (item.full_units || 0) + (item.broken_fraction || 0);
               const rowUsage = (item.opening_stock || 0) + (item.in_qty || 0) - rowClosing - (item.waste_qty || 0);
               
@@ -351,8 +360,29 @@ const DailyInventoryEOD = ({ inventoryData = [], materials = [], onSave, onLockE
             })}
           </tbody>
         </table>
+        {/* Pagination Bar Desktop */}
+        <div className="p-3 border-t border-gray-200 bg-gray-50/50 flex justify-end">
+          <Pagination
+            page={currentPage}
+            pageSize={itemsPerPage}
+            totalCount={filteredItems.length}
+            onPageChange={setCurrentPage}
+            itemLabel="item bahan"
+          />
+        </div>
       </div>
       )} {/* End of Desktop/Mobile Conditional */}
+
+      {/* Pagination Bar Global (Mobile & Desktop) */}
+      <div className="md:hidden mt-2 flex justify-center">
+        <Pagination
+          page={currentPage}
+          pageSize={itemsPerPage}
+          totalCount={filteredItems.length}
+          onPageChange={setCurrentPage}
+          itemLabel="item bahan"
+        />
+      </div>
     </div>
   );
 };
