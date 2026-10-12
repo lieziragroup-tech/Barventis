@@ -20,8 +20,9 @@ const MENU_MAP = {
     { id: 'adjustments', label: 'Audit', icon: FileText }
   ],
   '/dashboard/daily-inventory': [
+    { id: 'quick-usage', label: 'Quick OUT', icon: TrendingUp },
     { id: 'bahan', label: 'Daily', icon: ClipboardList },
-    { id: 'pemakaian', label: 'Pemakaian', icon: TrendingUp },
+    { id: 'pemakaian', label: 'Rekap', icon: ClipboardList },
     { id: 'waste', label: 'Waste', icon: Trash2 },
     { id: 'expiry', label: 'Expiry', icon: AlertTriangle }
   ],

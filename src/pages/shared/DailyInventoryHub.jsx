@@ -3,14 +3,16 @@ import { ClipboardList, Beer, TrendingUp, Trash2, AlertTriangle } from 'lucide-r
 import TabContainer from '../../components/shared/TabContainer';
 
 const DailyInventory = React.lazy(() => import('./DailyInventory'));
+const QuickUsageLogger = React.lazy(() => import('../../components/shared/QuickUsageLogger'));
 const UsageRecap = React.lazy(() => import('./UsageRecap'));
 const WasteLogs = React.lazy(() => import('./WasteLogs'));
 const ExpiryMonitor = React.lazy(() => import('./ExpiryMonitor'));
 
 
 const TABS = [
+  { key: 'quick-usage', label: 'Catat Pemakaian (Quick OUT)', icon: TrendingUp },
   { key: 'bahan', label: 'Daily Inventory (All Items)', icon: ClipboardList },
-  { key: 'pemakaian', label: 'Pemakaian Harian', icon: TrendingUp },
+  { key: 'pemakaian', label: 'Rekap Pemakaian Berkala', icon: ClipboardList },
   { key: 'waste', label: 'Buku Catatan Limbah (Waste Log)', icon: Trash2 },
   { key: 'expiry', label: 'Monitor Kedaluwarsa (FEFO)', icon: AlertTriangle },
 ];
@@ -26,6 +28,7 @@ export default function DailyInventoryHub() {
     <TabContainer tabs={TABS}>
       {(activeTab) => (
         <Suspense fallback={<Loading />}>
+          {activeTab === 'quick-usage' && <QuickUsageLogger />}
           {activeTab === 'bahan' && <DailyInventory />}
           {activeTab === 'pemakaian' && <UsageRecap />}
           {activeTab === 'waste' && <WasteLogs />}
