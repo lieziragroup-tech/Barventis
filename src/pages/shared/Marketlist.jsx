@@ -4,6 +4,7 @@ import React, { Suspense } from 'react';
 import { api } from '../../services/api';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
+import Pagination from '../../components/shared/Pagination';
 
 export const OFFICIAL_CATEGORIES = [
   'Drink & Beer',
@@ -28,6 +29,10 @@ export default function Marketlist() {
   
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
+
   
   // Inline edit states
   const [editingId, setEditingId] = useState(null);
@@ -74,6 +79,11 @@ export default function Marketlist() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, categoryFilter]);
 
   const filteredMaterials = useMemo(() => {
     return materials.filter(m => {
@@ -284,6 +294,17 @@ export default function Marketlist() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination Bar */}
+        <div className="p-4 border-t border-[var(--border)] bg-[var(--bg-secondary)]/30">
+          <Pagination
+            page={currentPage}
+            pageSize={itemsPerPage}
+            totalCount={filteredMaterials.length}
+            onPageChange={setCurrentPage}
+            itemLabel="bahan baku"
+          />
         </div>
       </div>
 

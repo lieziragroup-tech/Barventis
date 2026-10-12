@@ -23,18 +23,35 @@ export default function SimplePrep() {
   const [photoBeforePreview, setPhotoBeforePreview] = useState(null);
   const [photoWastePreview, setPhotoWastePreview] = useState(null);
 
-  // Filter: Bahan Asal harus "Bahan Baku Dasar" atau Mentah
+  // Filter: Bahan Asal - Mendukung kategori riil (Fresh Fruit, Vegetables, Bahan Mentah, dll)
   const sourceMaterials = useMemo(() => {
-    return materials.filter(m => 
-      m.category === 'Bahan Baku Dasar' || m.category === 'Meat' || m.category === 'Vegetables' || m.category === 'Sayur & Buah'
-    ).sort((a,b) => a.name.localeCompare(b.name));
+    return materials.filter(m => {
+      const cat = (m.category || '').toLowerCase();
+      return cat.includes('fruit') || 
+             cat.includes('buah') || 
+             cat.includes('vegetable') || 
+             cat.includes('sayur') || 
+             cat.includes('meat') || 
+             cat.includes('daging') || 
+             cat.includes('mentah') || 
+             cat.includes('dasar') ||
+             cat.includes('dry goods');
+    }).sort((a,b) => a.name.localeCompare(b.name));
   }, [materials]);
 
-  // Filter: Bahan Hasil harus "Bahan Racikan" atau Semi-Finished
+  // Filter: Bahan Hasil - Mendukung kategori olahan (Syrup, Juice, Frozen, Racikan, dll)
   const targetMaterials = useMemo(() => {
-    return materials.filter(m => 
-      m.category === 'Bahan Racikan' || m.category === 'Semi-Finished' || m.category === 'Other' || m.category === 'Lainnya'
-    ).sort((a,b) => a.name.localeCompare(b.name));
+    return materials.filter(m => {
+      const cat = (m.category || '').toLowerCase();
+      return cat.includes('syrup') || 
+             cat.includes('juice') || 
+             cat.includes('frozen') || 
+             cat.includes('racikan') || 
+             cat.includes('semi') || 
+             cat.includes('other') || 
+             cat.includes('lainnya') ||
+             cat.includes('powder');
+    }).sort((a,b) => a.name.localeCompare(b.name));
   }, [materials]);
 
   const selSource = sourceMaterials.find(m => m.id === parseInt(form.source_mat_id));
