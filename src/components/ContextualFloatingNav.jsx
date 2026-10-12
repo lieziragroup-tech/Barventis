@@ -40,12 +40,7 @@ const MENU_MAP = {
     { id: 'cost-control', label: 'Cost', icon: Calculator },
     { id: 'laporan', label: 'Laporan', icon: FileSpreadsheet }
   ],
-  '/dashboard/produksi': [
-    { id: 'trimming', label: 'Trimming', icon: Scissors },
-    { id: 'batching', label: 'Batching', icon: Package },
-    { id: 'kalibrasi', label: 'Kalibrasi', icon: Scissors },
-    { id: 'maintenance', label: 'Alat', icon: Wrench }
-  ],
+
   '/dashboard/penjualan': [
     { id: 'upload', label: 'Upload', icon: UploadCloud },
     { id: 'raw', label: 'Raw Data', icon: FileText },
