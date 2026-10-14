@@ -73,7 +73,139 @@ const logAudit = async (action, description) => {
 // Re-export from costUtils for backward compatibility
 export { parsePackSize, calculateIngredientCost };
 
+// FEFO-aware stock deduction: tries atomic_deduct_fefo first (batch-level FEFO),
+// falls back to deduct_stock_atomic (legacy flat deduction) if RPC not available.
+const deductStockSmart = async (materialId, deductQty, location = 'RESTO') => {
+  const tenantId = await getActiveTenantId();
+  if (tenantId) {
+    const { data, error } = await supabase.rpc('atomic_deduct_fefo', {
+      p_tenant_id: tenantId,
+      p_material_id: materialId,
+      p_qty_to_deduct: deductQty,
+      p_location: location
+    });
+    if (!error) return data;
+    // ponytail: fallback if RPC missing (tenant belum migrate), bukan crash
+    console.warn('[deductStockSmart] atomic_deduct_fefo unavailable, fallback to legacy:', error.message);
+  }
+  const { error: legacyErr } = await supabase.rpc('deduct_stock_atomic', {
+    p_material_id: materialId,
+    p_deduct_qty: deductQty
+  });
+  if (legacyErr) throw legacyErr;
+};
+
 export const api = {
+  // Daily Inventory
+  // Get header/items for a given date
+  getDailyInventoryRecords: async (date) => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return [];
+    const { data: headers, error: headerErr } = await supabase
+      .from('daily_inventories')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .eq('date', date);
+    if (headerErr) throw headerErr;
+    if (!headers || headers.length === 0) return [];
+    const headerIds = headers.map(h => h.id);
+    const [{ data: itemRows, error: itemsErr }, materialsList] = await Promise.all([
+      supabase
+        .from('daily_inventory_items')
+        .select('*')
+        .in('inventory_id', headerIds),
+      api.getMaterials().catch(() => [])
+    ]);
+    if (itemsErr) throw itemsErr;
+    const materialsById = Object.fromEntries((materialsList || []).map(m => [m.id, m]));
+    return (itemRows || []).map(r => ({ ...r, materials: materialsById[r.material_id] || null }));
+  },
+  getDailyInventoryEodData: async (date) => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return { items: [], inventory: {} };
+    let materialsList = await api.getMaterials();
+    materialsList = (materialsList || []).filter(m => (m.category || '').toUpperCase() !== 'ASSET');
+    // Get header
+    const { data: header, error: headerErr } = await supabase
+      .from('daily_inventories')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .eq('date', date)
+      .maybeSingle();
+    if (headerErr) throw headerErr;
+    const invMap = {};
+    if (header) {
+      const { data: itemRows, error: itemsErr } = await supabase
+        .from('daily_inventory_items')
+        .select('*')
+        .eq('inventory_id', header.id);
+      if (itemsErr) throw itemsErr;
+      (itemRows || []).forEach(row => { invMap[row.material_id] = row; });
+    }
+    return { items: materialsList, inventory: invMap, isLocked: !!header && ['verified','closed'].includes(header.status) };
+  },
+  saveDailyInventory: async (date, items, isClosing, userId) => {
+    // items: [{ material_id, ...fields }]
+    const tenantId = await requireTenantId();
+    // 1. Find or create header
+    let { data: header, error: headerErr } = await supabase
+      .from('daily_inventories')
+      .select('id, status')
+      .eq('tenant_id', tenantId)
+      .eq('date', date)
+      .maybeSingle();
+    if (headerErr) throw headerErr;
+    if (!header) {
+      const { data: newHeader, error: createHeaderErr } = await supabase
+        .from('daily_inventories')
+        .insert({
+          tenant_id: tenantId,
+          date: date,
+          status: isClosing ? 'verified' : 'draft',
+          checked_by: userId || null,
+          location: 'RESTO',
+          verified_by: isClosing ? (userId || null) : null
+        })
+        .select()
+        .single();
+      if (createHeaderErr) throw createHeaderErr;
+      header = newHeader;
+    } else if (isClosing) {
+      const { error: updateHeaderErr } = await supabase
+        .from('daily_inventories')
+        .update({
+          status: 'verified',
+          verified_by: userId || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', header.id);
+      if (updateHeaderErr) throw updateHeaderErr;
+    }
+    // Delete then insert
+    await supabase
+      .from('daily_inventory_items')
+      .delete()
+      .eq('inventory_id', header.id);
+    const itemsToInsert = items.map(item => ({
+      inventory_id: header.id,
+      material_id: item.material_id,
+      tenant_id: tenantId,
+      prev_full_qty: item.stok_awal || 0,
+      in_qty: item.qty_in || 0,
+      out_qty: item.qty_out || 0,
+      waste_qty: item.waste || 0,
+      broken_qty: item.broken || 0,
+      full_qty: item.full_qty || 0,
+      closing_qty: (item.full_qty||0)+(item.broken||0),
+      terpakai_qty: item.qty_terpakai || 0,
+      expiry_date: item.expiry_date || null
+    }));
+    if (itemsToInsert.length > 0)
+      await supabase.from('daily_inventory_items').insert(itemsToInsert);
+    await logAudit(isClosing ? 'LOCK_EOD' : 'SAVE_EOD', `Inventory tanggal ${date} ${(isClosing ? 'closing' : 'draft')}. ${items.length} items.`);
+    return true;
+  },
+
   getNearestExpiry: async () => {
     // Note: Table stock_ledger_entries does not exist in standard schema (PGRST205).
     // Return empty map to avoid 404 / PGRST205 schema cache errors on load.
@@ -296,12 +428,13 @@ export const api = {
              negativeWarnings.push(`Stok ${data.matInfo.name} kurang. Butuh ${deductQty.toFixed(2)}, tersedia ${currentResto.toFixed(2)}.`);
           }
 
-          const { error: rpcErr } = await supabase.rpc('deduct_stock_atomic', { p_material_id: matId, p_deduct_qty: deductQty });
-          if (rpcErr) {
-             console.error('RPC Error:', rpcErr);
-             deductionErrors.push(data.matInfo.name);
-             return;
-          }
+          try {
+              await deductStockSmart(matId, deductQty, 'RESTO');
+           } catch (rpcErr) {
+              console.error('RPC Error:', rpcErr);
+              deductionErrors.push(data.matInfo.name);
+              return;
+           }
 
           transactionRows.push({
               tenant_id: tenantId,

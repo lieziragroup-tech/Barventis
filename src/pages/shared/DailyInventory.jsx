@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../../lib/supabase';
+import { getExpiryColor } from '../../utils/expiryColor';
 import { Calendar, FileText, PlusCircle, Save, Loader2, Lock, Info, Package, Camera, HelpCircle, ChevronDown, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
@@ -33,85 +33,17 @@ export default function DailyInventory({ category, initialTab }) {
     setLoading(true);
     setError('');
     try {
-      const tenantId = await api.getActiveTenantId();
-      if (!tenantId) {
+      // REFACTOR: endpoint baru
+      const data = await api.getDailyInventoryRecords(date);
+      if (!data || !data.length) {
         setRecords([]);
         setIsLocked(false);
         return;
       }
-
-      // Fetch header for date
-      const { data: headers, error: headerErr } = await supabase
-        .from('daily_inventories')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .eq('date', date);
-
-      if (headerErr) throw headerErr;
-
-      const locked = (headers || []).some(h => h.status === 'verified' || h.status === 'closed');
-      setIsLocked(locked);
-
-      if (!headers || headers.length === 0) {
-        setRecords([]);
-        return;
-      }
-
-      const headerIds = headers.map(h => h.id);
-
-      // Fetch items for these headers and materials in parallel
-      const [{ data: itemRows, error: itemsErr }, materialsList] = await Promise.all([
-        supabase
-          .from('daily_inventory_items')
-          .select('*')
-          .in('inventory_id', headerIds),
-        api.getMaterials().catch(() => [])
-      ]);
-
-      if (itemsErr) throw itemsErr;
-
-      const materialsById = Object.fromEntries(
-        (materialsList || []).map(m => [m.id, m])
-      );
-
-      // Map to records format expected by the view
-      const mapped = (itemRows || []).map(r => {
-        const mat = materialsById[r.material_id] || null;
-        const full = Number(r.full_qty) || 0;
-        const broken = Number(r.broken_qty) || 0;
-        const stokAkhir = Number(r.closing_qty) || (full + broken);
-        const stokAwal = Number(r.prev_full_qty) || 0;
-        const inQty = Number(r.in_qty) || 0;
-        const outQty = Number(r.out_qty) || 0;
-        const waste = Number(r.waste_qty) || 0;
-        const terpakai = r.terpakai_qty !== null && r.terpakai_qty !== undefined
-          ? Number(r.terpakai_qty)
-          : (outQty + waste);
-        const unitPrice = Number(mat?.price) || 0;
-        const nilaiRupiah = terpakai * unitPrice;
-
-        return {
-          id: r.id,
-          material_id: r.material_id,
-          materials: mat,
-          stok_awal: stokAwal,
-          qty_in: inQty,
-          qty_out: outQty,
-          waste: waste,
-          full_qty: full,
-          broken: broken,
-          stok_akhir: stokAkhir,
-          qty_terpakai: terpakai,
-          nilai_rupiah: nilaiRupiah
-        };
-      });
-
-      // Filter out ASSET category, keep everything else including BEER
-      const filtered = mapped.filter(r => {
-        const cat = (r.materials?.category || '').toUpperCase();
-        return cat !== 'ASSET';
-      });
-      setRecords(filtered);
+      // Locking flag: jika ada yang verified/closed
+      setIsLocked(data.some(r => r.status === 'verified' || r.status === 'closed'));
+      // Map sama seperti sebelumnya + filtering ASSET
+      setRecords(data.filter(r => (r.materials?.category || '').toUpperCase() !== 'ASSET'));
     } catch (err) {
       setError(err.message || 'Gagal memuat rekap harian');
     } finally {
@@ -124,58 +56,11 @@ export default function DailyInventory({ category, initialTab }) {
     setError('');
     setSuccess('');
     try {
-      const tenantId = await api.getActiveTenantId();
-      if (!tenantId) {
-        setItems([]);
-        setInventory({});
-        setIsLocked(false);
-        return;
-      }
-
-      // 1. Fetch materials (bar/resto inventory items)
-      let materialsList = await api.getMaterials();
-      // Filter out ASSET category, keep everything else including BEER
-      materialsList = (materialsList || []).filter(m => {
-        const cat = (m.category || '').toUpperCase();
-        return cat !== 'ASSET';
-      });
+      // REFACTOR: endpoint baru
+      const { items: materialsList, inventory: invMap, isLocked: lockFlag } = await api.getDailyInventoryEodData(date);
       setItems(materialsList);
-
-      // 2. Fetch existing daily inventory header for date
-      const { data: header, error: headerErr } = await supabase
-        .from('daily_inventories')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .eq('date', date)
-        .maybeSingle();
-
-      if (headerErr) throw headerErr;
-
-      const locked = header ? (header.status === 'verified' || header.status === 'closed') : false;
-      setIsLocked(locked);
-
-      const invMap = {};
-      if (header) {
-        const { data: itemRows, error: itemsErr } = await supabase
-          .from('daily_inventory_items')
-          .select('*')
-          .eq('inventory_id', header.id);
-
-        if (itemsErr) throw itemsErr;
-
-        (itemRows || []).forEach(row => {
-          invMap[row.material_id] = {
-            stok_awal: row.prev_full_qty,
-            qty_in: row.in_qty,
-            qty_out: row.out_qty,
-            waste: row.waste_qty,
-            broken: row.broken_qty,
-            full_qty: row.full_qty
-          };
-        });
-      }
-
-      setInventory(invMap);
+      setIsLocked(!!lockFlag);
+      setInventory(invMap || {});
     } catch (err) {
       setError(err.message || 'Gagal memuat form EOD');
     } finally {
@@ -248,50 +133,8 @@ export default function DailyInventory({ category, initialTab }) {
   };
 
   const performSave = async (isClosing = false) => {
-    const tenantId = await api.getActiveTenantId();
-    if (!tenantId) throw new Error('Sesi tenant tidak valid. Silakan login ulang.');
-
-    // 1. Find or create daily_inventories header
-    let { data: header, error: headerErr } = await supabase
-      .from('daily_inventories')
-      .select('id, status')
-      .eq('tenant_id', tenantId)
-      .eq('date', date)
-      .maybeSingle();
-
-    if (headerErr) throw headerErr;
-
-    if (!header) {
-      const { data: newHeader, error: createHeaderErr } = await supabase
-        .from('daily_inventories')
-        .insert({
-          tenant_id: tenantId,
-          date: date,
-          status: isClosing ? 'verified' : 'draft',
-          checked_by: activeUser?.id || null,
-          location: 'RESTO',
-          verified_by: isClosing ? (activeUser?.id || null) : null
-        })
-        .select()
-        .single();
-
-      if (createHeaderErr) throw createHeaderErr;
-      header = newHeader;
-    } else if (isClosing) {
-      const { error: updateHeaderErr } = await supabase
-        .from('daily_inventories')
-        .update({
-          status: 'verified',
-          verified_by: activeUser?.id || null,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', header.id);
-
-      if (updateHeaderErr) throw updateHeaderErr;
-    }
-
-    // 2. Prepare items for daily_inventory_items
-    const itemsToInsert = items.map(item => {
+    // REFACTOR: call API endpoint, supply normalized inputs
+    const itemsToSave = items.map(item => {
       const row = inventory[item.id] || {};
       const stokAwal = row.stok_awal !== undefined && row.stok_awal !== '' ? Number(row.stok_awal) : (Number(item.qty_resto ?? item.stock) || 0);
       const qtyIn = Number(row.qty_in) || 0;
@@ -300,40 +143,22 @@ export default function DailyInventory({ category, initialTab }) {
       const isBeer = (item.category || '').toUpperCase().includes('BEER');
       const fullQty = Number(row.full_qty) || 0;
       const broken = isBeer ? 0 : (Number(row.broken) || 0);
-
+      const expiry_date = row.expiry_date || item.brand || undefined;
       const stokAkhir = fullQty + broken;
-      const qtyTerpakai = qtyOut + waste; // or (stokAwal + qtyIn) - stokAkhir
-
+      const qtyTerpakai = qtyOut + waste;
       return {
-        inventory_id: header.id,
         material_id: item.id,
-        tenant_id: tenantId,
-        prev_full_qty: stokAwal,
-        in_qty: qtyIn,
-        out_qty: qtyOut,
-        waste_qty: waste,
-        broken_qty: broken,
+        stok_awal: stokAwal,
+        qty_in: qtyIn,
+        qty_out: qtyOut,
+        waste: waste,
+        broken: broken,
         full_qty: fullQty,
-        closing_qty: stokAkhir,
-        terpakai_qty: qtyTerpakai
+        expiry_date,
+        qty_terpakai: qtyTerpakai,
       };
     });
-
-    if (itemsToInsert.length === 0) return;
-
-    // Delete existing rows for this inventory_id to prevent duplicates, then insert fresh
-    const { error: delErr } = await supabase
-      .from('daily_inventory_items')
-      .delete()
-      .eq('inventory_id', header.id);
-
-    if (delErr) throw delErr;
-
-    const { error: insertErr } = await supabase
-      .from('daily_inventory_items')
-      .insert(itemsToInsert);
-
-    if (insertErr) throw insertErr;
+    await api.saveDailyInventory(date, itemsToSave, !!isClosing, activeUser?.id);
   };
 
   const handleSave = async () => {
@@ -858,16 +683,14 @@ export default function DailyInventory({ category, initialTab }) {
 
                     // FEFO Expiry (H-3)
                     const expDate = row.expiry_date || item.brand || '';
-                    let isExpiringSoon = false;
-                    if (expDate && expDate.length > 5) { // minimal valid YYYY-MM-DD
-                      const daysLeft = (new Date(expDate) - new Date()) / (1000 * 60 * 60 * 24);
-                      isExpiringSoon = daysLeft <= 3 && daysLeft >= -30; // Warn if H-3 or expired (up to 30 days past)
-                    }
+                    const fefo = getExpiryColor(expDate);
 
                     return (
-                      <tr key={item.id} style={{ background: isExpiringSoon ? 'rgba(239,68,68,0.1)' : 'transparent' }}>
+                      <tr key={item.id} style={{ background: fefo?.color === 'red' ? 'rgba(239,68,68,0.1)' : fefo?.color === 'yellow' ? 'rgba(245,158,11,0.1)' : fefo?.color === 'green' ? 'rgba(16,185,129,0.05)' : 'transparent' }}>
                         <td style={{ padding: '12px' }}>
-                          <div style={{ fontWeight: 600 }}>{item.name}</div>
+                          <div style={{ fontWeight: 600 }}>{item.name} {fefo && (
+                            <span style={{ marginLeft: 8, fontWeight: 700, fontSize: '10px', padding: '2px 8px', borderRadius: 4, background: fefo.color === 'red' ? '#fee2e2' : fefo.color === 'yellow' ? '#fef08a' : '#bbf7d0', color: fefo.color === 'red' ? '#b91c1c' : fefo.color === 'yellow' ? '#854d0e' : '#166534' }}>{fefo.label} {fefo.days} hari</span>
+                          )}</div>
                           <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
                             Rp {unitPrice.toLocaleString('id-ID')} / {item.unit || 'unit'}
                           </div>

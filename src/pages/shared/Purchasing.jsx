@@ -187,7 +187,8 @@ export default function Purchasing() {
       unit_price: material.price || '',
       supplier_id: material.supplier || '',
       date: purchaseDate,
-      destination: 'RESTO'
+      destination: 'RESTO',
+      expiry_date: ''
     }]);
     setSearchQuery('');
     setShowSearchDropdown(false);
@@ -229,7 +230,8 @@ export default function Purchasing() {
         unit: item.unit,
         unit_price: parseFloat(item.unit_price),
         notes: `Pembelian Multi-Cart by ${activeUser?.name || 'Sistem'}`,
-        destination: item.destination || 'RESTO'
+        destination: item.destination || 'RESTO',
+        expiry_date: item.expiry_date || null
       })));
 
       setCart([]);
