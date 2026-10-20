@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, Trash2, CheckCircle2, TrendingDown, TrendingUp, AlertTriangle, Layers, Clock, Loader2 } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Search, Plus, Trash2, CheckCircle2, TrendingDown, TrendingUp, AlertTriangle, Layers, Clock, Loader2, ChevronDown } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { useToast } from '../../contexts/ToastContext';
 import { api } from '../../services/api';
@@ -25,10 +25,23 @@ export default function QuickUsageLogger({ onActionRecorded }) {
   
   // Form fields
   const [actionType, setActionType] = useState('OUT');
+  const [isActionDropdownOpen, setIsActionDropdownOpen] = useState(false);
+  const actionDropdownRef = useRef(null);
   const [qtyValue, setQtyValue] = useState('');
   const [fractionValue, setFractionValue] = useState(''); // khusus untuk closing broken
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Close action dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (actionDropdownRef.current && !actionDropdownRef.current.contains(e.target)) {
+        setIsActionDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Active recorded list for today
   const [activeActions, setActiveActions] = useState([]);
@@ -179,35 +192,62 @@ export default function QuickUsageLogger({ onActionRecorded }) {
               <p className="text-xs text-[var(--text-secondary)]">Pilih aksi (IN, OUT, Waste, Sisa Fisik), cari bahan, dan simpan. Bahan lain otomatis default 0.</p>
             </div>
           </div>
-
-          {/* Action Selector Pills */}
-          <div className="flex items-center gap-1.5 p-1 bg-white/80 border border-gray-200 rounded-xl overflow-x-auto">
-            {ACTION_TYPES.map((a) => {
-              const Icon = a.icon;
-              const isSel = actionType === a.id;
-              return (
-                <button
-                  key={a.id}
-                  type="button"
-                  onClick={() => setActionType(a.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    isSel ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
-                  }`}
-                >
-                  <Icon size={13} />
-                  <span>{a.label}</span>
-                </button>
-              );
-            })}
-          </div>
         </div>
 
         <form onSubmit={handleSubmitAction} className="mt-4 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
             
-            {/* 1. Search Input with Debounce */}
-            <div className="md:col-span-4 relative">
-              <label className="text-xs font-bold text-gray-600 block mb-1.5">1. Cari Nama Bahan (Debounced) *</label>
+            {/* 1. Action Type Dropdown */}
+            <div className={`relative ${actionType === 'CLOSING' ? 'md:col-span-2' : 'md:col-span-3'}`} ref={actionDropdownRef}>
+              <label className="text-xs font-bold text-gray-600 block mb-1.5">1. Tipe Aksi *</label>
+              <button
+                type="button"
+                onClick={() => setIsActionDropdownOpen(!isActionDropdownOpen)}
+                className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border text-xs font-bold transition-all bg-white shadow-sm h-[42px] cursor-pointer ${selectedActionConfig.color}`}
+              >
+                <div className="flex items-center gap-2 truncate">
+                  <selectedActionConfig.icon size={15} className="shrink-0" />
+                  <span className="truncate">{selectedActionConfig.label}</span>
+                </div>
+                <ChevronDown size={14} className={`shrink-0 transition-transform duration-200 ${isActionDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {/* Dropdown Menu */}
+              {isActionDropdownOpen && (
+                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-[var(--border)] rounded-xl shadow-2xl p-1.5 space-y-1">
+                  {ACTION_TYPES.map((a) => {
+                    const Icon = a.icon;
+                    const isSel = actionType === a.id;
+                    return (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() => {
+                          setActionType(a.id);
+                          setIsActionDropdownOpen(false);
+                          triggerHaptic();
+                        }}
+                        className={`w-full flex items-center justify-between p-2 rounded-lg text-xs font-semibold transition-colors text-left cursor-pointer ${
+                          isSel ? 'bg-indigo-50 text-indigo-700 font-bold' : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className={`p-1 rounded-md border ${a.color}`}>
+                            <Icon size={13} />
+                          </div>
+                          <span>{a.label}</span>
+                        </div>
+                        {isSel && <CheckCircle2 size={14} className="text-indigo-600" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 2. Search Input with Debounce */}
+            <div className="md:col-span-3 relative">
+              <label className="text-xs font-bold text-gray-600 block mb-1.5">2. Cari Nama Bahan (Debounced) *</label>
               <div className="relative">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
                 <input
@@ -242,10 +282,10 @@ export default function QuickUsageLogger({ onActionRecorded }) {
               )}
             </div>
 
-            {/* 2. Primary Qty Input */}
-            <div className={actionType === 'CLOSING' ? 'md:col-span-2' : 'md:col-span-3'}>
+            {/* 3. Primary Qty Input */}
+            <div className={actionType === 'CLOSING' ? 'md:col-span-2' : 'md:col-span-2'}>
               <label className="text-xs font-bold text-gray-600 block mb-1.5">
-                {actionType === 'CLOSING' ? '2. Sisa Utuh (Full) *' : `2. Jumlah ${actionType} *`}
+                {actionType === 'CLOSING' ? '3. Sisa Utuh *' : `3. Jumlah ${actionType} *`}
               </label>
               <div className="relative">
                 <input
@@ -264,10 +304,10 @@ export default function QuickUsageLogger({ onActionRecorded }) {
               </div>
             </div>
 
-            {/* 2b. Fraction Input khusus CLOSING */}
+            {/* 3b. Fraction Input khusus CLOSING */}
             {actionType === 'CLOSING' && (
-              <div className="md:col-span-2">
-                <label className="text-xs font-bold text-gray-600 block mb-1.5">Pecahan (0.25 / 0.5)</label>
+              <div className="md:col-span-1">
+                <label className="text-xs font-bold text-gray-600 block mb-1.5 truncate" title="Pecahan (0.25 / 0.5)">Pecahan</label>
                 <input
                   type="number"
                   step="0.01"
@@ -281,9 +321,9 @@ export default function QuickUsageLogger({ onActionRecorded }) {
               </div>
             )}
 
-            {/* 3. Notes */}
-            <div className={actionType === 'CLOSING' ? 'md:col-span-2' : 'md:col-span-3'}>
-              <label className="text-xs font-bold text-gray-600 block mb-1.5">3. Keterangan</label>
+            {/* 4. Notes */}
+            <div className="md:col-span-2">
+              <label className="text-xs font-bold text-gray-600 block mb-1.5">4. Keterangan</label>
               <input
                 type="text"
                 placeholder="Opsional..."
@@ -293,7 +333,7 @@ export default function QuickUsageLogger({ onActionRecorded }) {
               />
             </div>
 
-            {/* 4. Submit Button */}
+            {/* 5. Submit Button */}
             <div className="md:col-span-2">
               <button
                 type="submit"

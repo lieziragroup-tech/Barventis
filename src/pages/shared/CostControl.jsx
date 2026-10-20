@@ -42,8 +42,8 @@ export default function CostControl() {
   }, [period]);
 
   // Re-calculate all metrics dynamically on the frontend to support Tab Filtering
-  const { openingStock, totalPembelian, closingStock, pemakaianBulan, totalSalesBeverage, beverageCostPct, wasteValuation, statusLabel, filteredOpnameItems } = useMemo(() => {
-    if (!reportData) return { openingStock: 0, totalPembelian: 0, closingStock: 0, pemakaianBulan: 0, totalSalesBeverage: 0, beverageCostPct: 0, wasteValuation: 0, statusLabel: 'SAFE', filteredOpnameItems: [] };
+  const { openingStock, totalPembelian, closingStock, pemakaianBulan, totalSalesBeverage, beverageCostPct, wasteValuation, statusLabel, filteredOpnameItems, actualDailyUsageCost, dailyStockBasedUsageCost, theoreticalCogsCost, theoreticalUsageItems, reconciliationDifference, closedEodSessions, openingStockEstimated, closingStockEstimated } = useMemo(() => {
+    if (!reportData) return { openingStock: 0, totalPembelian: 0, closingStock: 0, pemakaianBulan: 0, totalSalesBeverage: 0, beverageCostPct: 0, wasteValuation: 0, statusLabel: 'SAFE', filteredOpnameItems: [], actualDailyUsageCost: 0, dailyStockBasedUsageCost: 0, theoreticalCogsCost: 0, theoreticalUsageItems: 0, reconciliationDifference: 0, closedEodSessions: 0, openingStockEstimated: false, closingStockEstimated: false };
 
     let purchases = 0;
     let cogsIngredients = 0;
@@ -88,6 +88,7 @@ export default function CostControl() {
 
     let actualCogs = opening + purchases - closing;
     if (actualCogs < 0) actualCogs = 0;
+    actualCogs = Number(reportData.metrics?.total_cogs ?? actualCogs) || 0;
 
     const bevPct = sales > 0 ? (actualCogs / sales) * 100 : 0;
     // FIX 2026-09 (QA finding, sanity check): Cost % > 100% berarti COGS lebih
@@ -107,7 +108,15 @@ export default function CostControl() {
       beverageCostPct: bevPct,
       wasteValuation: waste,
       statusLabel: stat,
-      filteredOpnameItems: filteredOpnames
+      filteredOpnameItems: filteredOpnames,
+      actualDailyUsageCost: Number(reportData.metrics?.actual_daily_usage_cost) || 0,
+      dailyStockBasedUsageCost: Number(reportData.metrics?.daily_stock_based_usage_cost) || 0,
+      theoreticalCogsCost: Number(reportData.metrics?.theoretical_cogs_cost) || 0,
+      theoreticalUsageItems: Number(reportData.metrics?.theoretical_usage_items) || 0,
+      reconciliationDifference: Number(reportData.metrics?.reconciliation_difference_after_usage_and_waste) || 0,
+      closedEodSessions: Number(reportData.metrics?.closed_eod_sessions) || 0,
+      openingStockEstimated: Boolean(reportData.metrics?.opening_stock_estimated),
+      closingStockEstimated: Boolean(reportData.metrics?.closing_stock_estimated)
     };
   }, [reportData, period]);
 
@@ -187,6 +196,11 @@ export default function CostControl() {
     { item: 'Total Stock Akhir (Closing)', value: closingStock },
     { item: 'Total Waste / Kerugian (Spoilage, Broken)', value: wasteValuation },
     { item: 'Total Pemakaian (COGS Aktual + Overhead)', value: pemakaianBulan },
+    { item: 'Pemakaian Harian Aktual (OUT manual / konsumsi akhir)', value: actualDailyUsageCost },
+    { item: 'Theoretical COGS (ESB × Resep)', value: theoreticalCogsCost },
+    { item: 'Pemakaian Harian dari Rekonsiliasi Stok', value: dailyStockBasedUsageCost },
+    { item: 'Sisa Selisih Setelah Pemakaian Harian dan Waste', value: reconciliationDifference },
+    { item: 'Sesi EOD Final', value: closedEodSessions },
     { item: 'Total F&B Sales', value: totalSalesBeverage },
     { item: 'Total F&B Cost %', value: `${beverageCostPct.toFixed(2)}%` },
     { item: 'Status', value: statusLabel }
@@ -421,9 +435,9 @@ export default function CostControl() {
           {/* Formula Cards */}
           <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: '32px' }}>
             {[
-              { label: '1. Stock Awal (Opening)', value: formatIDR(openingStock), sub: 'Awal resto + gudang pusat' },
+              { label: '1. Stock Awal (Opening)', value: formatIDR(openingStock), sub: openingStockEstimated ? 'ESTIMASI — perlu rekonsiliasi saldo dan nilai awal' : 'Awal resto + gudang pusat (snapshot)' },
               { label: '2. Pembelian (PO Received)', value: `+ ${formatIDR(totalPembelian)}`, sub: 'Barang masuk periode ini' },
-              { label: '3. Stock Akhir (Closing)', value: `- ${formatIDR(closingStock)}`, sub: 'Stok opname yang aktif' },
+              { label: '3. Stock Akhir (Closing)', value: `- ${formatIDR(closingStock)}`, sub: closingStockEstimated ? 'ESTIMASI — biaya awal/WAC belum tervalidasi' : 'Stok opname atau EOD final' },
               { label: 'Kerugian (Waste/Loss)', value: formatIDR(wasteValuation), sub: 'Basi, Pecah, Hilang (Di luar HPP)', warning: true },
               { label: '4. Pemakaian (COGS)', value: `= ${formatIDR(pemakaianBulan)}`, sub: '(Awal + PO) - Akhir', accent: true }
             ].map((card, i) => (
@@ -433,6 +447,35 @@ export default function CostControl() {
                 <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '4px' }}>{card.sub}</div>
               </div>
             ))}
+          </div>
+
+          {/* Daily actual usage and inventory reconciliation are separate measures. */}
+          <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '28px' }}>
+            <div className="glass-card" style={{ padding: '18px 20px' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '7px' }}>Pemakaian Harian Aktual</div>
+              <div style={{ fontSize: '1.35rem', fontWeight: 800 }}>{formatIDR(actualDailyUsageCost)}</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '5px' }}>OUT yang dikonfirmasi staf; hanya dari sesi EOD final.</div>
+            </div>
+            <div className="glass-card" style={{ padding: '18px 20px' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '7px' }}>Theoretical COGS (ESB × Resep)</div>
+              <div style={{ fontSize: '1.35rem', fontWeight: 800 }}>{formatIDR(theoreticalCogsCost)}</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '5px' }}>{theoreticalUsageItems} baris bahan dari resep; tidak memotong stok fisik.</div>
+            </div>
+            <div className="glass-card" style={{ padding: '18px 20px' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '7px' }}>COGS dari Rekonsiliasi Stok</div>
+              <div style={{ fontSize: '1.35rem', fontWeight: 800 }}>{formatIDR(pemakaianBulan)}</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '5px' }}>Stok awal + pembelian − stok akhir; termasuk dampak waste dan selisih stok.</div>
+            </div>
+            <div className="glass-card" style={{ padding: '18px 20px', borderLeft: `3px solid ${Math.abs(reconciliationDifference) > 0.01 ? 'var(--warning)' : 'var(--success)'}` }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '7px' }}>Selisih Rekonsiliasi</div>
+              <div style={{ fontSize: '1.35rem', fontWeight: 800, color: Math.abs(reconciliationDifference) > 0.01 ? 'var(--warning)' : 'var(--success)' }}>{formatIDR(reconciliationDifference)}</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '5px' }}>COGS berbasis stok − OUT aktual − waste. Selisih perlu ditelusuri, bukan otomatis dianggap kehilangan.</div>
+            </div>
+            <div className="glass-card" style={{ padding: '18px 20px' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '7px' }}>EOD Final Tercatat</div>
+              <div style={{ fontSize: '1.35rem', fontWeight: 800 }}>{closedEodSessions}</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '5px' }}>Sesi lokasi/tanggal yang dikunci selama periode ini.</div>
+            </div>
           </div>
 
           {/* Daily Table */}

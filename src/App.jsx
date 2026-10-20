@@ -96,7 +96,7 @@ const AuthRoute = ({ children }) => {
   return children;
 };
 
-const ALL_TENANT = ['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Service', 'Purchasing', 'Staff'];
+const ALL_TENANT = ['Admin / Owner', 'Owner', 'Supervisor', 'Bar', 'Kitchen', 'Central', 'Service', 'Kasir', 'Purchasing', 'Staff'];
 const ADMIN_ROLES = ['Admin / Owner', 'Owner'];
 
 export default function App() {
@@ -150,7 +150,7 @@ export default function App() {
 
           {/* [2] Daily Inventory & Waste */}
           <Route path="daily-inventory" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Service', 'Purchasing', 'Staff']}>
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Bar', 'Kitchen', 'Central', 'Service', 'Purchasing', 'Staff']}>
               <RouteErrorBoundary><DailyInventoryHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
@@ -176,7 +176,7 @@ export default function App() {
             </ProtectedRoute>
           } />
 
-          {/* [6] Proses Produksi Bahan */}
+          {/* [6] Proses Produksi tersedia sebagai tab pada Daily Inventory Hub agar operator memakai satu workspace. */}
 
           {/* [7] Cost Control & Laporan */}
           <Route path="cost-report" element={

@@ -57,7 +57,8 @@ export default function Marketlist() {
     unit: 'pcs',
     price: 0,
     supplier: '',
-    min_stock: 15
+    min_stock: 15,
+    shelf_life_days: ''
   });
 
   const fetchData = useCallback(async () => {
@@ -86,11 +87,6 @@ export default function Marketlist() {
   }, [searchTerm, categoryFilter]);
 
   
-  const paginatedMaterials = useMemo(() => {
-    const start = (currentPage - 1) * 20;
-    return filteredMaterials.slice(start, start + 20);
-  }, [filteredMaterials, currentPage]);
-
   const filteredMaterials = useMemo(() => {
     return materials.filter(m => {
       const matchSearch = m.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -100,6 +96,11 @@ export default function Marketlist() {
     });
   }, [materials, searchTerm, categoryFilter]);
 
+  const paginatedMaterials = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredMaterials.slice(start, start + itemsPerPage);
+  }, [filteredMaterials, currentPage, itemsPerPage]);
+
   const startEdit = (mat) => {
     setEditingId(mat.id);
     setEditForm({
@@ -107,7 +108,8 @@ export default function Marketlist() {
       category: mat.category || OFFICIAL_CATEGORIES[0],
       unit: mat.unit,
       price: mat.price || mat.new_price || 0,
-      supplier: mat.supplier || ''
+      supplier: mat.supplier || '',
+      shelf_life_days: mat.shelf_life_days ?? ''
     });
   };
 
@@ -124,7 +126,8 @@ export default function Marketlist() {
         category: editForm.category,
         unit: editForm.unit,
         price: parseFloat(editForm.price) || 0,
-        supplier: editForm.supplier
+        supplier: editForm.supplier,
+        shelf_life_days: editForm.shelf_life_days ? parseInt(editForm.shelf_life_days, 10) : null
       });
       showToast('Bahan berhasil diupdate', 'success');
       setEditingId(null);
@@ -158,11 +161,12 @@ export default function Marketlist() {
     try {
       await api.createMaterial({
         ...newMaterial,
-        price: parseFloat(newMaterial.price) || 0
+        price: parseFloat(newMaterial.price) || 0,
+        shelf_life_days: newMaterial.shelf_life_days ? parseInt(newMaterial.shelf_life_days, 10) : null
       });
       showToast('Bahan baku baru berhasil ditambahkan', 'success');
       setShowModal(false);
-      setNewMaterial({ name: '', category: OFFICIAL_CATEGORIES[0], unit: 'pcs', price: 0, supplier: '', min_stock: 15 });
+      setNewMaterial({ name: '', category: OFFICIAL_CATEGORIES[0], unit: 'pcs', price: 0, supplier: '', min_stock: 15, shelf_life_days: '' });
       fetchData();
       refreshData();
     } catch (err) {
@@ -171,6 +175,7 @@ export default function Marketlist() {
       setSaving(false);
     }
   };
+
 
   return (
     <div className="fade-in space-y-6">
@@ -212,19 +217,20 @@ export default function Marketlist() {
             <thead>
               <tr>
                 <th className="w-12 text-center">No</th>
-                <th className="w-64">Nama Bahan</th>
-                <th className="w-48">Kategori</th>
-                <th className="w-32">Satuan</th>
-                <th className="w-48">Supplier (Inline Edit)</th>
-                <th className="w-48 text-right">Harga (Inline Edit)</th>
-                <th className="w-32 text-center">Aksi</th>
+                <th className="w-60">Nama Bahan</th>
+                <th className="w-44">Kategori</th>
+                <th className="w-24">Satuan</th>
+                <th className="w-32 text-center">Masa Simpan</th>
+                <th className="w-44">Supplier (Inline Edit)</th>
+                <th className="w-44 text-right">Harga (Inline Edit)</th>
+                <th className="w-28 text-center">Aksi</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="7" className="text-center py-8"><Loader2 className="animate-spin mx-auto text-[var(--text-muted)]" /></td></tr>
+                <tr><td colSpan="8" className="text-center py-8"><Loader2 className="animate-spin mx-auto text-[var(--text-muted)]" /></td></tr>
               ) : filteredMaterials.length === 0 ? (
-                <tr><td colSpan="7" className="text-center py-12 text-[var(--text-muted)]"><Package size={48} className="mx-auto mb-3 opacity-20"/>Tidak ada bahan baku ditemukan</td></tr>
+                <tr><td colSpan="8" className="text-center py-12 text-[var(--text-muted)]"><Package size={48} className="mx-auto mb-3 opacity-20"/>Tidak ada bahan baku ditemukan</td></tr>
               ) : (
                 paginatedMaterials.map((mat, idx) => {
                   const isEditing = editingId === mat.id;
@@ -255,6 +261,28 @@ export default function Marketlist() {
                           <input type="text" className="form-control w-full py-1 text-sm" value={editForm.unit} onChange={e => setEditForm({...editForm, unit: e.target.value})} />
                         ) : (
                           <span>{mat.unit}</span>
+                        )}
+                      </td>
+
+                      <td className="text-center">
+                        {isEditing ? (
+                          <div className="flex items-center justify-center gap-1">
+                            <input
+                              type="number"
+                              min="1"
+                              placeholder="Hari"
+                              className="form-control w-16 py-1 text-xs text-center border-[var(--accent)]"
+                              value={editForm.shelf_life_days ?? ''}
+                              onChange={e => setEditForm({...editForm, shelf_life_days: e.target.value})}
+                            />
+                            <span className="text-[11px] text-[var(--text-muted)]">hr</span>
+                          </div>
+                        ) : (
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                            mat.shelf_life_days ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'text-gray-400'
+                          }`}>
+                            {mat.shelf_life_days ? `${mat.shelf_life_days} hr` : '-'}
+                          </span>
                         )}
                       </td>
 
@@ -342,10 +370,29 @@ export default function Marketlist() {
                   <input required type="number" min="0" className="form-control w-full" value={newMaterial.price} onChange={e => setNewMaterial({...newMaterial, price: e.target.value})} />
                 </div>
               </div>
-              <div>
-                <label className="form-label">Nama Supplier</label>
-                <input type="text" className="form-control w-full" value={newMaterial.supplier} onChange={e => setNewMaterial({...newMaterial, supplier: e.target.value})} />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label">Nama Supplier</label>
+                  <input type="text" className="form-control w-full" value={newMaterial.supplier} onChange={e => setNewMaterial({...newMaterial, supplier: e.target.value})} />
+                </div>
+                <div>
+                  <label className="form-label flex items-center justify-between">
+                    <span>Masa Simpan</span>
+                    <span className="text-[10px] text-gray-400 font-normal">Hari</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="Contoh: 3 / 30"
+                    className="form-control w-full"
+                    value={newMaterial.shelf_life_days}
+                    onChange={e => setNewMaterial({...newMaterial, shelf_life_days: e.target.value})}
+                  />
+                </div>
               </div>
+              <p className="text-[11px] text-[var(--text-muted)] -mt-2">
+                * Masa simpan dipakai untuk auto-fill tanggal kedaluwarsa saat produksi olah bahan & penerimaan barang.
+              </p>
             </div>
             <div className="p-4 border-t border-[var(--border)] flex justify-end gap-2 bg-[var(--bg-secondary)]">
               <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Batal</button>

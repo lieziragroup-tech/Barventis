@@ -109,18 +109,20 @@ export default function MenuPricing() {
     }
   };
 
-    const paginatedRecipes = useMemo(() => {
+  const categories = ['ALL', ...new Set(recipes.map(r => r.category || 'Uncategorized'))];
+
+  const filteredRecipes = useMemo(() => {
+    return recipes.filter(r => {
+      const matchCat = categoryFilter === 'ALL' || (r.category || 'Uncategorized') === categoryFilter;
+      const matchSearch = r.menu_name.toLowerCase().includes(debouncedSearch.toLowerCase());
+      return matchCat && matchSearch;
+    });
+  }, [recipes, categoryFilter, debouncedSearch]);
+
+  const paginatedRecipes = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
     return filteredRecipes.slice(start, start + itemsPerPage);
   }, [filteredRecipes, currentPage, itemsPerPage]);
-
-  const categories = ['ALL', ...new Set(recipes.map(r => r.category || 'Uncategorized'))];
-
-  const filteredRecipes = recipes.filter(r => {
-    const matchCat = categoryFilter === 'ALL' || (r.category || 'Uncategorized') === categoryFilter;
-    const matchSearch = r.menu_name.toLowerCase().includes(debouncedSearch.toLowerCase());
-    return matchCat && matchSearch;
-  });
 
   return (
     <div className="fade-in">

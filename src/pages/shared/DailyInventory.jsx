@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getExpiryColor } from '../../utils/expiryColor';
-import { Calendar, FileText, PlusCircle, Save, Loader2, Lock, Info, Package, Camera, HelpCircle, ChevronDown, X } from 'lucide-react';
+import { Calendar, FileText, PlusCircle, Save, Loader2, Lock, Unlock, Info, Package, Camera, HelpCircle, ChevronDown, X, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
 import ExportButton from '../../components/shared/ExportButton';
@@ -8,11 +8,13 @@ import PrintButton from '../../components/shared/PrintButton';
 import { exportWithAudit } from '../../services/export/exportAudit';
 import { TableSkeletonRows, TableLoadingOverlay } from '../../components/shared/TableSkeleton';
 import PhotoUploaderModal from '../../components/shared/PhotoUploaderModal';
+import { calculateClosingStockQty, calculateDailyInventoryMetrics, getLocalDateISO } from '../../services/dailyInventoryMath';
 
 export default function DailyInventory({ category, initialTab }) {
   const { activeUser } = useAuth();
   const [activeTab, setActiveTab] = useState(initialTab || 'REKAP');
-  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(() => getLocalDateISO());
+  const [location, setLocation] = useState('RESTO');
   const [showGuide, setShowGuide] = useState(false);
 
   const [loading, setLoading] = useState(false);
@@ -34,7 +36,7 @@ export default function DailyInventory({ category, initialTab }) {
     setError('');
     try {
       // REFACTOR: endpoint baru
-      const data = await api.getDailyInventoryRecords(date);
+      const data = await api.getDailyInventoryRecords(date, location);
       if (!data || !data.length) {
         setRecords([]);
         setIsLocked(false);
@@ -49,7 +51,7 @@ export default function DailyInventory({ category, initialTab }) {
     } finally {
       setLoading(false);
     }
-  }, [date]);
+  }, [date, location]);
 
   const fetchEodData = useCallback(async () => {
     setLoading(true);
@@ -57,7 +59,7 @@ export default function DailyInventory({ category, initialTab }) {
     setSuccess('');
     try {
       // REFACTOR: endpoint baru
-      const { items: materialsList, inventory: invMap, isLocked: lockFlag } = await api.getDailyInventoryEodData(date);
+      const { items: materialsList, inventory: invMap, isLocked: lockFlag } = await api.getDailyInventoryEodData(date, location);
       setItems(materialsList);
       setIsLocked(!!lockFlag);
       setInventory(invMap || {});
@@ -66,7 +68,7 @@ export default function DailyInventory({ category, initialTab }) {
     } finally {
       setLoading(false);
     }
-  }, [date]);
+  }, [date, location]);
 
   useEffect(() => {
     if (activeTab === 'REKAP') {
@@ -79,19 +81,105 @@ export default function DailyInventory({ category, initialTab }) {
 
   const handleChange = (itemId, field, value) => {
     if (isLocked) return;
+    const initialItem = items.find(m => m.id === itemId);
+    const fallbackStokAwal = Number(location === 'CENTRAL' ? initialItem?.qty_central : (initialItem?.qty_resto ?? initialItem?.stock)) || 0;
     setInventory(prev => {
       let parsedValue = value;
-      if (field !== 'expiry_date' && value !== '') {
-        parsedValue = Math.max(0, parseFloat(value) || 0);
+      if (field !== 'expiry_date') {
+        if (value === '' || value === null || value === undefined) {
+          parsedValue = '';
+        } else {
+          // Normalisasi koma (format keyboard ID) ke titik desimal
+          parsedValue = String(value).replace(',', '.');
+        }
       }
+      const existing = prev[itemId] || {
+        stok_awal: fallbackStokAwal,
+        qty_in: 0,
+        qty_out: 0,
+        waste: 0,
+        broken: 0,
+        full_qty: ''
+      };
+      const nextRow = { ...existing, [field]: parsedValue };
+      if (field === 'full_qty' || field === 'broken') {
+        const fullValue = field === 'full_qty' ? parsedValue : existing.full_qty;
+        const brokenValue = field === 'broken' ? parsedValue : existing.broken;
+        const hasExplicitCount = (fullValue !== '' && fullValue !== null && fullValue !== undefined)
+          || (brokenValue !== '' && brokenValue !== null && brokenValue !== undefined);
+        nextRow.is_counted = hasExplicitCount;
+      }
+      return { ...prev, [itemId]: nextRow };
+    });
+  };
+
+  const handleCountedChange = (itemId, checked) => {
+    if (isLocked) return;
+    setInventory(prev => {
+      const current = prev[itemId] || {};
+      // Checking an otherwise blank row explicitly means the physical count was
+      // performed and the stock was zero; keep that distinct from uncounted.
+      const shouldSetZero = checked && (current.full_qty === '' || current.full_qty == null) &&
+        (current.broken === '' || current.broken == null);
       return {
         ...prev,
         [itemId]: {
-          ...(prev[itemId] || { stok_awal: 0, qty_in: 0, qty_out: 0, waste: 0, broken: 0, full_qty: 0 }),
-          [field]: parsedValue
+          ...current,
+          is_counted: Boolean(checked),
+          ...(shouldSetZero ? { full_qty: 0, broken: 0 } : {})
         }
       };
     });
+  };
+
+  const getInventoryRowMetrics = (item, row = {}, strict = false) => {
+    const opening = Number(row.stok_awal) || 0;
+    const incoming = Number(row.qty_in) || 0;
+    const out = Number(row.qty_out) || 0;
+    const productionUsage = Number(row.production_usage_qty) || 0;
+    const waste = Number(row.waste) || 0;
+    const full = Number(row.full_qty) || 0;
+    const broken = Number(row.broken) || 0;
+    let closing = row.is_counted ? 0 : null;
+    if (row.is_counted) {
+      try {
+        closing = calculateClosingStockQty(item, full, broken);
+      } catch (error) {
+        if (strict) throw error;
+        closing = null;
+      }
+    }
+    const metrics = calculateDailyInventoryMetrics({ opening, incoming, netMovement: row.net_stock_movement, out, productionUsage, waste, closing: Number(closing) || 0 });
+    const unitCost = Number(row.cost_per_unit ?? row.unit_cost_snapshot ?? item.avg_cost ?? item.price) || 0;
+    return {
+      ...metrics,
+      stockBasedUsage: closing === null ? null : metrics.stockBasedUsage,
+      usageVariance: closing === null ? null : metrics.usageVariance,
+      closing,
+      unitCost,
+      usageValue: (out + productionUsage) * unitCost,
+      counted: Boolean(row.is_counted),
+    };
+  };
+
+  const handleUnlock = async () => {
+    setSaving(true);
+    setError('');
+    setSuccess('');
+    try {
+      await api.unlockDailyInventory(date, location);
+      setIsLocked(false);
+      setSuccess('Kunci EOD berhasil dibuka. Formulir kini dapat diedit kembali.');
+      if (activeTab === 'REKAP') {
+        fetchRecords();
+      } else {
+        fetchEodData();
+      }
+    } catch (err) {
+      setError('Gagal membuka kunci EOD: ' + (err.message || 'Terjadi kesalahan'));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleKeyDown = (e, rowIndex, colIndex) => {
@@ -136,29 +224,33 @@ export default function DailyInventory({ category, initialTab }) {
     // REFACTOR: call API endpoint, supply normalized inputs
     const itemsToSave = items.map(item => {
       const row = inventory[item.id] || {};
-      const stokAwal = row.stok_awal !== undefined && row.stok_awal !== '' ? Number(row.stok_awal) : (Number(item.qty_resto ?? item.stock) || 0);
-      const qtyIn = Number(row.qty_in) || 0;
+      const fallbackOpening = location === 'CENTRAL' ? item.qty_central : (item.qty_resto ?? item.stock);
+      const stokAwal = row.stok_awal !== undefined && row.stok_awal !== '' ? Number(row.stok_awal) : (Number(fallbackOpening) || 0);
       const qtyOut = Number(row.qty_out) || 0;
-      const waste = Number(row.waste) || 0;
-      const isBeer = (item.category || '').toUpperCase().includes('BEER');
       const fullQty = Number(row.full_qty) || 0;
-      const broken = isBeer ? 0 : (Number(row.broken) || 0);
-      const expiry_date = row.expiry_date || item.brand || undefined;
-      const stokAkhir = fullQty + broken;
-      const qtyTerpakai = qtyOut + waste;
+      const broken = Number(row.broken) || 0;
+      const expiry_date = row.expiry_date || undefined;
+      const closingQty = row.is_counted ? calculateClosingStockQty(item, fullQty, broken) : 0;
       return {
         material_id: item.id,
         stok_awal: stokAwal,
-        qty_in: qtyIn,
         qty_out: qtyOut,
-        waste: waste,
         broken: broken,
         full_qty: fullQty,
+        closing_qty: closingQty,
+        is_counted: Boolean(row.is_counted),
+        opening_qty_source: row.opening_qty_source || 'CLIENT_OR_LEGACY_FALLBACK',
         expiry_date,
-        qty_terpakai: qtyTerpakai,
       };
     });
-    await api.saveDailyInventory(date, itemsToSave, !!isClosing, activeUser?.id);
+    if (isClosing) {
+      const uncounted = items.filter(item => !inventory[item.id]?.is_counted);
+      if (uncounted.length) {
+        const examples = uncounted.slice(0, 5).map(item => item.name).join(', ');
+        throw new Error(`${uncounted.length} barang belum dikonfirmasi hitung fisiknya. Contoh: ${examples}${uncounted.length > 5 ? ', …' : ''}. Centang “Sudah dihitung” atau isi FULL/BROKEN, termasuk 0 jika stok kosong.`);
+      }
+    }
+    await api.saveDailyInventory(date, itemsToSave, !!isClosing, activeUser?.id, location);
   };
 
   const handleSave = async () => {
@@ -179,7 +271,7 @@ export default function DailyInventory({ category, initialTab }) {
   const submitEODSettlement = async () => {
     if (isLocked) return;
     const confirm = window.confirm(
-      "Apakah Anda yakin ingin melakukan Closing EOD? Data per 23:59:59 akan dikunci."
+      `Apakah Anda yakin ingin melakukan Closing EOD untuk ${date} • ${location}? Semua barang wajib sudah dikonfirmasi hitung fisiknya. Data akan dikunci.`
     );
     if (!confirm) return;
 
@@ -212,7 +304,8 @@ export default function DailyInventory({ category, initialTab }) {
           'HARGA SATUAN (RP)': Number(row.materials?.price) || 0,
           'STOK AWAL': row.stok_awal ?? 0,
           'MASUK (IN)': row.qty_in ?? 0,
-          'KELUAR (OUT)': row.qty_out ?? 0,
+          'KELUAR (OUT MANUAL)': row.qty_out ?? 0,
+          'PRODUKSI INPUT (OTOMATIS)': row.production_usage_qty ?? 0,
           'WASTE / RUSAK': row.waste ?? 0,
           'FISIK FULL': row.full_qty ?? 0,
           'FISIK BROKEN': row.broken ?? 0,
@@ -227,16 +320,18 @@ export default function DailyInventory({ category, initialTab }) {
         }
         rows = items.map((item, idx) => {
           const row = inventory[item.id] || {};
-          const stokAwal = row.stok_awal !== undefined && row.stok_awal !== '' ? Number(row.stok_awal) : (Number(item.qty_resto ?? item.stock) || 0);
+          const fallbackOpening = location === 'CENTRAL' ? item.qty_central : (item.qty_resto ?? item.stock);
+          const stokAwal = row.stok_awal !== undefined && row.stok_awal !== '' ? Number(row.stok_awal) : (Number(fallbackOpening) || 0);
           const qtyIn = Number(row.qty_in) || 0;
           const qtyOut = Number(row.qty_out) || 0;
           const waste = Number(row.waste) || 0;
           const fullQty = Number(row.full_qty) || 0;
           const broken = Number(row.broken) || 0;
-          const stokAkhir = fullQty + broken;
-          const qtyTerpakai = (stokAwal + qtyIn) - (stokAkhir + waste);
-          const unitPrice = Number(item.price) || 0;
-          const nilaiRupiah = qtyTerpakai * unitPrice;
+          const metrics = getInventoryRowMetrics(item, { ...row, stok_awal: stokAwal });
+          const stokAkhir = metrics.closing ?? '';
+          const qtyTerpakai = qtyOut;
+          const unitPrice = metrics.unitCost;
+          const nilaiRupiah = metrics.usageValue;
 
           return {
             'NO': idx + 1,
@@ -245,12 +340,16 @@ export default function DailyInventory({ category, initialTab }) {
             'HARGA SATUAN (RP)': unitPrice,
             'STOK AWAL': stokAwal,
             'MASUK (IN)': qtyIn,
-            'KELUAR (OUT)': qtyOut,
+            'KELUAR (OUT MANUAL)': qtyOut,
+            'PRODUKSI INPUT (OTOMATIS)': Number(row.production_usage_qty) || 0,
             'WASTE / RUSAK': waste,
             'FISIK FULL': fullQty,
             'FISIK BROKEN': broken,
             'STOK AKHIR': stokAkhir,
             'QTY TERPAKAI': qtyTerpakai,
+            'STOCK-BASED USAGE': metrics.stockBasedUsage,
+            'SELISIH PEMAKAIAN': metrics.usageVariance,
+            'SUDAH DIHITUNG': metrics.counted ? 'YA' : 'BELUM',
             'NILAI PEMAKAIAN (RP)': nilaiRupiah
           };
         });
@@ -311,16 +410,18 @@ export default function DailyInventory({ category, initialTab }) {
         }
         rows = items.map((item, idx) => {
           const row = inventory[item.id] || {};
-          const stokAwal = row.stok_awal !== undefined && row.stok_awal !== '' ? Number(row.stok_awal) : (Number(item.qty_resto ?? item.stock) || 0);
+          const fallbackOpening = location === 'CENTRAL' ? item.qty_central : (item.qty_resto ?? item.stock);
+          const stokAwal = row.stok_awal !== undefined && row.stok_awal !== '' ? Number(row.stok_awal) : (Number(fallbackOpening) || 0);
           const qtyIn = Number(row.qty_in) || 0;
           const qtyOut = Number(row.qty_out) || 0;
           const waste = Number(row.waste) || 0;
           const fullQty = Number(row.full_qty) || 0;
           const broken = Number(row.broken) || 0;
-          const stokAkhir = fullQty + broken;
-          const qtyTerpakai = (stokAwal + qtyIn) - (stokAkhir + waste);
-          const unitPrice = Number(item.price) || 0;
-          const nilaiRupiah = qtyTerpakai * unitPrice;
+          const metrics = getInventoryRowMetrics(item, { ...row, stok_awal: stokAwal });
+          const stokAkhir = metrics.closing ?? '';
+          const qtyTerpakai = qtyOut;
+          const unitPrice = metrics.unitCost;
+          const nilaiRupiah = metrics.usageValue;
 
           return {
             no: idx + 1,
@@ -342,7 +443,7 @@ export default function DailyInventory({ category, initialTab }) {
       await exportWithAudit({
         format: 'pdf',
         filename: `Inventaris_Harian_${activeTab}_${date}`,
-        title: `Laporan Inventaris Harian — Tanggal: ${date} (${modeTitle})`,
+        title: `Laporan Inventaris Harian — Tanggal: ${date} — Lokasi: ${location} (${modeTitle})`,
         tenantName: 'BARVENTIS - Sistem Manajemen Gudang',
         columns,
         rows,
@@ -458,8 +559,8 @@ export default function DailyInventory({ category, initialTab }) {
                 </div>
                 <p className="m-0 leading-relaxed text-[var(--text-secondary)]">
                   {activeTab === 'REKAP' 
-                    ? 'Rekap Harian meninjau pergerakan stok (Awal, Masuk, Keluar, Waste, Sisa Fisik, Qty Terpakai, dan Nilai HPP Rupiah) untuk kebutuhan audit manajerial.'
-                    : 'Form Input EOD diisi staf di akhir shift untuk menginput sisa botol/kemasan utuh (Full), botol terbuka (Broken), dan barang rusak (Waste).'
+                    ? 'Rekap Harian meninjau stok awal, IN, OUT aktual staf, waste, stok fisik, pemakaian harian, dan selisih rekonsiliasi untuk kebutuhan audit manajerial.'
+                    : 'Form EOD diisi staf setiap hari. IN berasal dari pembelian/transfer yang sudah dicatat, WASTE berasal dari Catatan Limbah, OUT dikonfirmasi staf berdasarkan pemakaian aktual, lalu hitung FULL (kemasan utuh) dan BROKEN (sisa isi kemasan terbuka dalam satuan dasar). Data IN dan WASTE tidak perlu diketik ulang.'
                   }
                 </p>
               </div>
@@ -484,7 +585,7 @@ export default function DailyInventory({ category, initialTab }) {
             {activeTab === 'REKAP' ? 'Laporan Rekapitulasi Inventaris Harian' : 'Lembar Kerja Input EOD (End of Day)'}
           </div>
           <div className="print-header-meta">
-            Tanggal: {date} | Status: {isLocked ? 'Terkunci (EOD Closed)' : 'Draft / Terbuka'} | Tanggal Cetak: {new Date().toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' })}
+            Tanggal: {date} | Lokasi: {location} | Status: {isLocked ? 'Terkunci (EOD Closed)' : 'Draft / Terbuka'} | Tanggal Cetak: {new Date().toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' })}
           </div>
         </div>
 
@@ -498,6 +599,17 @@ export default function DailyInventory({ category, initialTab }) {
               value={date}
               onChange={e => setDate(e.target.value)}
             />
+            <label style={{ fontWeight: 600 }}>Lokasi:</label>
+            <select
+              className="form-control"
+              style={{ width: 'auto', minWidth: '145px' }}
+              value={location}
+              onChange={e => setLocation(e.target.value)}
+              disabled={saving || loading}
+            >
+              <option value="RESTO">Resto</option>
+              <option value="CENTRAL">Central</option>
+            </select>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -512,6 +624,20 @@ export default function DailyInventory({ category, initialTab }) {
               disabled={loading || (activeTab === 'REKAP' ? records.length === 0 : items.length === 0)}
               title="Cetak lembar inventaris harian"
             />
+
+            {isLocked && (
+              <button
+                type="button"
+                className="btn btn-secondary border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100"
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                onClick={handleUnlock}
+                disabled={saving || loading}
+                title="Buka kunci formulir EOD untuk revisi"
+              >
+                {saving ? <Loader2 size={16} className="animate-spin" /> : <Unlock size={16} />}
+                Buka Kunci (Revisi EOD)
+              </button>
+            )}
 
             {activeTab === 'EOD' && !isLocked && (
               <>
@@ -546,6 +672,26 @@ export default function DailyInventory({ category, initialTab }) {
           </div>
         </div>
 
+        {isLocked && (
+          <div className="flex items-center justify-between p-3.5 mb-4 rounded-xl border border-amber-300 bg-amber-50/90 text-amber-900 text-xs">
+            <div className="flex items-center gap-2.5">
+              <Lock size={16} className="text-amber-600 shrink-0" />
+              <div>
+                <span className="font-bold">Formulir Terkunci (EOD Closed / Verified).</span> Kolom input dinonaktifkan untuk melindungi data closing akhir hari.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleUnlock}
+              disabled={saving || loading}
+              className="ml-3 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold transition-colors flex items-center gap-1.5 shrink-0 shadow-sm"
+            >
+              <Unlock size={13} />
+              Buka Kunci untuk Edit
+            </button>
+          </div>
+        )}
+
         {error && (
           <div style={{ padding: '12px', borderRadius: '8px', marginBottom: '16px', background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
             {error}
@@ -564,19 +710,19 @@ export default function DailyInventory({ category, initialTab }) {
             message="Menyinkronkan data inventaris harian..."
           />
           {activeTab === 'REKAP' ? (
-            <table className="custom-table" style={{ width: '100%' }}>
+            <table className="custom-table" style={{ width: '100%', minWidth: '1240px' }}>
               <thead>
                 <tr>
-                  <th style={{ textAlign: 'left' }}>Barang</th>
-                  <th style={{ textAlign: 'center' }}>Stok Awal</th>
-                  <th style={{ textAlign: 'center' }}>IN</th>
-                  <th style={{ textAlign: 'center' }}>OUT</th>
-                  <th style={{ textAlign: 'center' }}>WASTE</th>
-                  <th style={{ textAlign: 'center' }}>FULL</th>
-                  <th style={{ textAlign: 'center' }}>BROKEN</th>
-                  <th style={{ textAlign: 'center' }}>Stok Akhir</th>
-                  <th style={{ textAlign: 'center' }}>Terpakai</th>
-                  <th style={{ textAlign: 'right' }}>Nilai (Rp)</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', minWidth: '220px' }} className="whitespace-nowrap">Barang</th>
+                  <th style={{ padding: '12px 10px', textAlign: 'center', minWidth: '95px' }} className="whitespace-nowrap">Stok Awal</th>
+                  <th style={{ padding: '12px 10px', textAlign: 'center', minWidth: '95px' }} className="whitespace-nowrap">IN</th>
+                  <th style={{ padding: '12px 10px', textAlign: 'center', minWidth: '95px' }} className="whitespace-nowrap">OUT Manual</th>
+                  <th style={{ padding: '12px 10px', textAlign: 'center', minWidth: '95px' }} className="whitespace-nowrap">WASTE</th>
+                  <th style={{ padding: '12px 10px', textAlign: 'center', minWidth: '95px' }} className="whitespace-nowrap">FULL</th>
+                  <th style={{ padding: '12px 10px', textAlign: 'center', minWidth: '95px' }} className="whitespace-nowrap">BROKEN</th>
+                  <th style={{ padding: '12px 10px', textAlign: 'center', minWidth: '100px' }} className="whitespace-nowrap">Stok Akhir</th>
+                  <th style={{ padding: '12px 10px', textAlign: 'center', minWidth: '100px' }} className="whitespace-nowrap">Terpakai</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right', minWidth: '130px' }} className="whitespace-nowrap">Nilai (Rp)</th>
                 </tr>
               </thead>
               <tbody>
@@ -584,38 +730,41 @@ export default function DailyInventory({ category, initialTab }) {
                   <TableSkeletonRows
                     rows={6}
                     columns={[
-                      { width: '180px', type: 'dual-text' },
-                      { width: '70px', type: 'text', align: 'center' },
-                      { width: '70px', type: 'text', align: 'center' },
-                      { width: '70px', type: 'text', align: 'center' },
-                      { width: '70px', type: 'text', align: 'center' },
-                      { width: '70px', type: 'text', align: 'center' },
-                      { width: '70px', type: 'text', align: 'center' },
-                      { width: '80px', type: 'text', align: 'center' },
-                      { width: '80px', type: 'text', align: 'center' },
-                      { width: '110px', type: 'text', align: 'right' }
+                      { width: '220px', type: 'dual-text' },
+                      { width: '95px', type: 'text', align: 'center' },
+                      { width: '95px', type: 'text', align: 'center' },
+                      { width: '95px', type: 'text', align: 'center' },
+                      { width: '95px', type: 'text', align: 'center' },
+                      { width: '95px', type: 'text', align: 'center' },
+                      { width: '95px', type: 'text', align: 'center' },
+                      { width: '100px', type: 'text', align: 'center' },
+                      { width: '100px', type: 'text', align: 'center' },
+                      { width: '130px', type: 'text', align: 'right' }
                     ]}
                   />
                 ) : (
                   records.map(row => (
                     <tr key={row.id}>
-                      <td>
-                        <div style={{ fontWeight: 600 }}>{row.materials?.name || 'Item Terhapus'}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div className="font-semibold text-sm text-[var(--text-primary)]">{row.materials?.name || 'Item Terhapus'}</div>
+                        <div className="text-xs text-[var(--text-muted)] whitespace-nowrap mt-0.5">
                           Harga: Rp {(Number(row.materials?.price) || 0).toLocaleString('id-ID')} / {row.materials?.unit || 'unit'}
                         </div>
                       </td>
-                      <td style={{ textAlign: 'center' }}>{row.stok_awal}</td>
-                      <td style={{ textAlign: 'center' }}>{row.qty_in}</td>
-                      <td style={{ textAlign: 'center' }}>{row.qty_out}</td>
-                      <td style={{ textAlign: 'center' }}>{row.waste}</td>
-                      <td style={{ textAlign: 'center' }}>{row.full_qty}</td>
-                      <td style={{ textAlign: 'center' }}>{row.broken}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 600 }}>{row.stok_akhir}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 600, color: row.qty_terpakai < 0 ? '#ef4444' : 'inherit' }}>
+                      <td className="text-center font-mono tabular-nums whitespace-nowrap" style={{ padding: '12px 10px' }}>{row.stok_awal}</td>
+                      <td className="text-center font-mono tabular-nums whitespace-nowrap" style={{ padding: '12px 10px' }}>{row.qty_in}</td>
+                      <td className="text-center font-mono tabular-nums whitespace-nowrap" style={{ padding: '12px 10px' }}>
+                        <div>{row.qty_out}</div>
+                        {Number(row.production_usage_qty) > 0 && <div className="mt-1 text-[10px] font-semibold text-indigo-700" title="Bahan digunakan untuk produksi internal, bukan konsumsi akhir Cost Control.">Produksi: {Number(row.production_usage_qty).toLocaleString('id-ID')}</div>}
+                      </td>
+                      <td className="text-center font-mono tabular-nums whitespace-nowrap" style={{ padding: '12px 10px', color: Number(row.waste) > 0 ? '#dc2626' : 'inherit' }}>{row.waste}</td>
+                      <td className="text-center font-mono tabular-nums whitespace-nowrap" style={{ padding: '12px 10px' }}>{row.full_qty}</td>
+                      <td className="text-center font-mono tabular-nums whitespace-nowrap" style={{ padding: '12px 10px' }}>{row.broken}</td>
+                      <td className="text-center font-mono tabular-nums whitespace-nowrap font-bold" style={{ padding: '12px 10px' }}>{row.stok_akhir}</td>
+                      <td className="text-center font-mono tabular-nums whitespace-nowrap font-bold" style={{ padding: '12px 10px', color: row.qty_terpakai < 0 ? '#ef4444' : 'inherit' }}>
                         {row.qty_terpakai}
                       </td>
-                      <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                      <td className="text-right font-mono tabular-nums whitespace-nowrap font-semibold" style={{ padding: '12px 16px' }}>
                         Rp {Number(row.nilai_rupiah).toLocaleString('id-ID')}
                       </td>
                     </tr>
@@ -632,20 +781,20 @@ export default function DailyInventory({ category, initialTab }) {
               </tbody>
             </table>
           ) : (
-            <table className="custom-table" style={{ width: '100%' }}>
+            <table className="custom-table" style={{ width: '100%', minWidth: '1360px' }}>
               <thead>
                 <tr>
-                  <th style={{ padding: '12px', textAlign: 'left' }}>Barang</th>
-                  <th style={{ padding: '12px', width: '90px' }}>Stok Awal</th>
-                  <th style={{ padding: '12px', width: '90px' }}>IN</th>
-                  <th style={{ padding: '12px', width: '90px' }}>OUT</th>
-                  <th style={{ padding: '12px', width: '130px', background: 'rgba(239,68,68,0.1)' }}>Exp. Date</th>
-                  <th style={{ padding: '12px', width: '90px', background: 'rgba(239,68,68,0.05)' }}>WASTE</th>
-                  <th style={{ padding: '12px', width: '90px', background: 'rgba(245,158,11,0.05)' }}>FULL</th>
-                  <th style={{ padding: '12px', width: '90px', background: 'rgba(245,158,11,0.05)' }}>BROKEN</th>
-                  <th style={{ padding: '12px', width: '90px', background: 'rgba(16,185,129,0.05)' }}>Stok Akhir</th>
-                  <th style={{ padding: '12px', width: '90px', background: 'rgba(139,92,246,0.05)' }}>Terpakai</th>
-                  <th style={{ padding: '12px', width: '120px', textAlign: 'right' }}>Nilai (Rp)</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', minWidth: '220px' }} className="whitespace-nowrap">Barang</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '100px', width: '100px' }} className="whitespace-nowrap">Stok Awal</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '125px', width: '125px' }} className="whitespace-nowrap">IN</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '100px', width: '100px' }} className="whitespace-nowrap">OUT</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '140px', width: '140px', background: 'rgba(239,68,68,0.1)' }} className="whitespace-nowrap">Exp. Date</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '130px', width: '130px', background: 'rgba(239,68,68,0.05)' }} className="whitespace-nowrap">WASTE</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '100px', width: '100px', background: 'rgba(245,158,11,0.05)' }} className="whitespace-nowrap">FULL</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '100px', width: '100px', background: 'rgba(245,158,11,0.05)' }} className="whitespace-nowrap">BROKEN</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '100px', width: '100px', background: 'rgba(16,185,129,0.05)' }} className="whitespace-nowrap">Stok Akhir</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '105px', width: '105px', background: 'rgba(139,92,246,0.05)' }} className="whitespace-nowrap">Terpakai</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right', minWidth: '135px', width: '135px' }} className="whitespace-nowrap">Nilai (Rp)</th>
                 </tr>
               </thead>
               <tbody>
@@ -653,91 +802,198 @@ export default function DailyInventory({ category, initialTab }) {
                   <TableSkeletonRows
                     rows={8}
                     columns={[
-                      { width: '200px', type: 'dual-text' },
-                      { width: '90px', type: 'text', align: 'center' },
-                      { width: '90px', type: 'text', align: 'center' },
-                      { width: '90px', type: 'text', align: 'center' },
+                      { width: '220px', type: 'dual-text' },
+                      { width: '100px', type: 'text', align: 'center' },
+                      { width: '125px', type: 'text', align: 'center' },
+                      { width: '100px', type: 'text', align: 'center' },
+                      { width: '140px', type: 'text', align: 'center' },
                       { width: '130px', type: 'text', align: 'center' },
-                      { width: '90px', type: 'text', align: 'center' },
-                      { width: '90px', type: 'text', align: 'center' },
-                      { width: '90px', type: 'text', align: 'center' },
-                      { width: '90px', type: 'text', align: 'center' },
-                      { width: '90px', type: 'text', align: 'center' },
-                      { width: '120px', type: 'text', align: 'right' }
+                      { width: '100px', type: 'text', align: 'center' },
+                      { width: '100px', type: 'text', align: 'center' },
+                      { width: '100px', type: 'text', align: 'center' },
+                      { width: '105px', type: 'text', align: 'center' },
+                      { width: '135px', type: 'text', align: 'right' }
                     ]}
                   />
                 ) : (
                   items.map((item, idx) => {
                     const row = inventory[item.id] || {};
-                    const stokAwal = row.stok_awal !== undefined && row.stok_awal !== '' ? Number(row.stok_awal) : (Number(item.qty_resto ?? item.stock) || 0);
-                    const qtyIn = Number(row.qty_in) || 0;
-                    const waste = Number(row.waste) || 0;
-                    const fullQty = Number(row.full_qty) || 0;
-                    const isBeer = (item.category || '').toUpperCase().includes('BEER');
-                    const broken = isBeer ? 0 : (Number(row.broken) || 0);
-
-                    const stokAkhir = fullQty + broken;
-                    const qtyTerpakai = (stokAwal + qtyIn) - (stokAkhir + waste);
-                    const unitPrice = Number(item.price) || 0;
-                    const nilaiRupiah = qtyTerpakai * unitPrice;
+                    const fallbackOpening = location === 'CENTRAL' ? item.qty_central : (item.qty_resto ?? item.stock);
+                    const stokAwal = row.stok_awal !== undefined && row.stok_awal !== '' ? Number(row.stok_awal) : (Number(fallbackOpening) || 0);
+                    const qtyOut = Number(row.qty_out) || 0;
+                    const metrics = getInventoryRowMetrics(item, { ...row, stok_awal: stokAwal });
+                    const stokAkhir = metrics.closing;
+                    const qtyTerpakai = qtyOut;
+                    const unitPrice = metrics.unitCost;
+                    const nilaiRupiah = metrics.usageValue;
 
                     // FEFO Expiry (H-3)
                     const expDate = row.expiry_date || item.brand || '';
                     const fefo = getExpiryColor(expDate);
+                    const isExpiringSoon = fefo?.color === 'red';
 
                     return (
                       <tr key={item.id} style={{ background: fefo?.color === 'red' ? 'rgba(239,68,68,0.1)' : fefo?.color === 'yellow' ? 'rgba(245,158,11,0.1)' : fefo?.color === 'green' ? 'rgba(16,185,129,0.05)' : 'transparent' }}>
-                        <td style={{ padding: '12px' }}>
-                          <div style={{ fontWeight: 600 }}>{item.name} {fefo && (
-                            <span style={{ marginLeft: 8, fontWeight: 700, fontSize: '10px', padding: '2px 8px', borderRadius: 4, background: fefo.color === 'red' ? '#fee2e2' : fefo.color === 'yellow' ? '#fef08a' : '#bbf7d0', color: fefo.color === 'red' ? '#b91c1c' : fefo.color === 'yellow' ? '#854d0e' : '#166534' }}>{fefo.label} {fefo.days} hari</span>
-                          )}</div>
-                          <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-sm text-[var(--text-primary)]">{item.name}</span>
+                            {fefo && (
+                              <span style={{ fontWeight: 700, fontSize: '10px', padding: '2px 8px', borderRadius: 4, whiteSpace: 'nowrap', background: fefo.color === 'red' ? '#fee2e2' : fefo.color === 'yellow' ? '#fef08a' : '#bbf7d0', color: fefo.color === 'red' ? '#b91c1c' : fefo.color === 'yellow' ? '#854d0e' : '#166534' }}>
+                                {fefo.label} {fefo.days} hari
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-[var(--text-muted)] whitespace-nowrap mt-0.5">
                             Rp {unitPrice.toLocaleString('id-ID')} / {item.unit || 'unit'}
                           </div>
+                          <label className="mt-2 flex items-center gap-2 text-xs font-medium" style={{ color: row.is_counted ? '#047857' : '#92400e' }}>
+                            <input
+                              type="checkbox"
+                              checked={Boolean(row.is_counted)}
+                              disabled={isLocked}
+                              onChange={e => handleCountedChange(item.id, e.target.checked)}
+                            />
+                            {row.is_counted ? 'Sudah dihitung' : 'Konfirmasi hitung fisik'}
+                          </label>
                         </td>
                         <td style={{ padding: '8px' }}>
-                          <input type="number" min="0" disabled={isLocked} className="form-control" style={{ width: '100%', padding: '6px', textAlign: 'center' }} value={row.stok_awal ?? item.qty_resto ?? item.stock ?? ''} onChange={e => handleChange(item.id, 'stok_awal', e.target.value)} onKeyDown={e => handleKeyDown(e, idx, 1, 'stok_awal')} data-row={idx} data-col={1} />
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            disabled
+                            className="form-control text-center font-mono tabular-nums text-sm py-1.5 px-2"
+                            style={{ width: '100%', minWidth: '75px' }}
+                            value={row.stok_awal !== undefined ? row.stok_awal : (fallbackOpening ?? '')}
+                            readOnly
+                            onFocus={e => e.target.select()}
+                            onKeyDown={e => handleKeyDown(e, idx, 1, 'stok_awal')}
+                            data-row={idx}
+                            data-col={1}
+                          />
                         </td>
                         <td style={{ padding: '8px' }}>
-                          <div className="flex items-center gap-1">
-                            <input type="number" min="0" disabled={isLocked} className="form-control" style={{ width: '100%', padding: '6px', textAlign: 'center' }} value={row.qty_in ?? ''} onChange={e => handleChange(item.id, 'qty_in', e.target.value)} onKeyDown={e => handleKeyDown(e, idx, 2, 'qty_in')} data-row={idx} data-col={2} />
-                            <button onClick={() => setPhotoModal({ isOpen: true, bucket: 'receipt-photos', contextName: `Penerimaan_IN_${item.name}` })} className="p-1.5 text-blue-600 bg-blue-50 rounded hover:bg-blue-100" title="Upload Nota/Struk" disabled={isLocked}><Camera size={14}/></button>
+                          <div className="flex items-center gap-1.5 w-full">
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              disabled
+                              className="form-control text-center font-mono tabular-nums text-sm py-1.5 px-2 flex-1"
+                              style={{ minWidth: '70px' }}
+                              value={row.qty_in ?? ''}
+                              readOnly
+                              onFocus={e => e.target.select()}
+                              onKeyDown={e => handleKeyDown(e, idx, 2, 'qty_in')}
+                              data-row={idx}
+                              data-col={2}
+                              placeholder="0"
+                            />
                           </div>
                         </td>
                         <td style={{ padding: '8px' }}>
-                          <input type="number" min="0" disabled={isLocked} className="form-control" style={{ width: '100%', padding: '6px', textAlign: 'center' }} value={row.qty_out ?? ''} onChange={e => handleChange(item.id, 'qty_out', e.target.value)} onKeyDown={e => handleKeyDown(e, idx, 3, 'qty_out')} data-row={idx} data-col={3} />
-                        </td>
-                        <td style={{ padding: '8px', background: 'rgba(239,68,68,0.1)' }}>
-                          <input type="date" disabled={isLocked} className="form-control" style={{ width: '100%', padding: '6px', fontSize: '0.75rem', color: isExpiringSoon ? '#dc2626' : 'inherit', fontWeight: isExpiringSoon ? 700 : 400 }} value={expDate} onChange={async (e) => {
-                            handleChange(item.id, 'expiry_date', e.target.value);
-                            try {
-                              await api.updateMaterial(item.id, { brand: e.target.value });
-                            } catch (err) { console.error('Failed to save exp date', err); }
-                          }} />
-                        </td>
-                        <td style={{ padding: '8px', background: 'rgba(239,68,68,0.05)' }}>
-                          <div className="flex items-center gap-1">
-                            <input type="number" min="0" disabled={isLocked} className="form-control" style={{ width: '100%', padding: '6px', textAlign: 'center', color: '#dc2626' }} value={row.waste ?? ''} onChange={e => handleChange(item.id, 'waste', e.target.value)} onKeyDown={e => handleKeyDown(e, idx, 4, 'waste')} data-row={idx} data-col={4} />
-                            <button onClick={() => setPhotoModal({ isOpen: true, bucket: 'waste-photos', contextName: `Waste_${item.name}` })} className="p-1.5 text-red-600 bg-red-50 rounded hover:bg-red-100" title="Foto Bukti Limbah" disabled={isLocked}><Camera size={14}/></button>
-                          </div>
-                        </td>
-                        <td style={{ padding: '8px', background: 'rgba(245,158,11,0.05)' }}>
-                          <input type="number" min="0" disabled={isLocked} className="form-control" style={{ width: '100%', padding: '6px', textAlign: 'center', fontWeight: 600 }} value={row.full_qty ?? ''} onChange={e => handleChange(item.id, 'full_qty', e.target.value)} onKeyDown={e => handleKeyDown(e, idx, 5, 'full_qty')} data-row={idx} data-col={5} />
-                        </td>
-                        <td style={{ padding: '8px', background: 'rgba(245,158,11,0.05)' }}>
-                          {isBeer ? (
-                            <input type="number" disabled className="form-control" style={{ width: '100%', padding: '6px', textAlign: 'center', fontWeight: 600, background: '#f3f4f6' }} value={0} />
-                          ) : (
-                            <input type="number" min="0" disabled={isLocked} className="form-control" style={{ width: '100%', padding: '6px', textAlign: 'center', fontWeight: 600 }} value={row.broken ?? ''} onChange={e => handleChange(item.id, 'broken', e.target.value)} onKeyDown={e => handleKeyDown(e, idx, 6, 'broken')} data-row={idx} data-col={6} />
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            disabled={isLocked}
+                            className="form-control text-center font-mono tabular-nums text-sm py-1.5 px-2"
+                            style={{ width: '100%', minWidth: '75px' }}
+                            value={row.qty_out ?? ''}
+                            onChange={e => handleChange(item.id, 'qty_out', e.target.value)}
+                            onFocus={e => e.target.select()}
+                            onKeyDown={e => handleKeyDown(e, idx, 3, 'qty_out')}
+                            data-row={idx}
+                            data-col={3}
+                            placeholder="0"
+                          />
+                          {Number(row.production_usage_qty) > 0 && (
+                            <div className="mt-1 text-center text-[10px] font-semibold text-indigo-700" title="Pemakaian bahan yang sudah dicatat otomatis dari batch produksi; tidak perlu dimasukkan ulang ke OUT manual.">
+                              Produksi: {Number(row.production_usage_qty).toLocaleString('id-ID')} {item.unit || ''}
+                            </div>
                           )}
                         </td>
-                        <td style={{ padding: '12px', textAlign: 'center', fontWeight: 700, background: 'rgba(16,185,129,0.05)', color: '#047857' }}>
-                          {stokAkhir}
+                        <td style={{ padding: '8px', background: 'rgba(239,68,68,0.1)' }}>
+                          <input
+                            type="date"
+                            disabled={isLocked}
+                            className="form-control text-xs py-1.5 px-2 text-center"
+                            style={{ width: '100%', minWidth: '120px', color: isExpiringSoon ? '#dc2626' : 'inherit', fontWeight: isExpiringSoon ? 700 : 400 }}
+                            value={expDate}
+                            onChange={e => handleChange(item.id, 'expiry_date', e.target.value)}
+                          />
                         </td>
-                        <td style={{ padding: '12px', textAlign: 'center', fontWeight: 700, background: 'rgba(139,92,246,0.05)', color: qtyTerpakai < 0 ? '#ef4444' : '#6d28d9' }}>
-                          {qtyTerpakai}
+                        <td style={{ padding: '8px', background: 'rgba(239,68,68,0.05)' }}>
+                          <div className="flex flex-col gap-1 w-full">
+                            <div className="flex items-center gap-1.5 w-full">
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                disabled
+                                className="form-control text-center font-mono tabular-nums text-sm py-1.5 px-2 flex-1 text-red-600 font-semibold"
+                                style={{ minWidth: '70px' }}
+                                value={row.waste ?? ''}
+                                readOnly
+                                onFocus={e => e.target.select()}
+                                onKeyDown={e => handleKeyDown(e, idx, 4, 'waste')}
+                                data-row={idx}
+                                data-col={4}
+                                placeholder={row.transaction_waste ? String(row.transaction_waste) : '0'}
+                              />
+                            </div>
+                            {Number(row.transaction_waste) > 0 && (
+                              <div className="text-[10px] text-red-500 font-semibold text-center whitespace-nowrap bg-red-50/80 rounded py-0.5 px-1 border border-red-200/50" title="Akumulasi dari Catatan Limbah hari ini">
+                                Log: {row.transaction_waste} {item.unit || ''}
+                              </div>
+                            )}
+                          </div>
                         </td>
-                        <td style={{ padding: '12px', textAlign: 'right', fontWeight: 600 }}>
+                        <td style={{ padding: '8px', background: 'rgba(245,158,11,0.05)' }}>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            disabled={isLocked}
+                            className="form-control text-center font-mono tabular-nums text-sm py-1.5 px-2 font-semibold text-amber-800"
+                            style={{ width: '100%', minWidth: '75px' }}
+                            value={row.full_qty ?? ''}
+                            onChange={e => handleChange(item.id, 'full_qty', e.target.value)}
+                            onFocus={e => e.target.select()}
+                            onKeyDown={e => handleKeyDown(e, idx, 5, 'full_qty')}
+                            data-row={idx}
+                            data-col={5}
+                            placeholder="0"
+                          />
+                        </td>
+                        <td style={{ padding: '8px', background: 'rgba(245,158,11,0.05)' }}>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              disabled={isLocked}
+                              className="form-control text-center font-mono tabular-nums text-sm py-1.5 px-2 font-semibold text-amber-800"
+                              style={{ width: '100%', minWidth: '75px' }}
+                              value={row.broken ?? ''}
+                              onChange={e => handleChange(item.id, 'broken', e.target.value)}
+                              onFocus={e => e.target.select()}
+                              onKeyDown={e => handleKeyDown(e, idx, 6, 'broken')}
+                              data-row={idx}
+                              data-col={6}
+                              placeholder="0"
+                            />
+                        </td>
+                        <td className="text-center font-mono tabular-nums font-bold whitespace-nowrap" style={{ padding: '12px 10px', background: 'rgba(16,185,129,0.05)', color: stokAkhir === null ? '#b45309' : '#047857' }}>
+                          {stokAkhir === null ? 'Belum dihitung' : stokAkhir}
+                        </td>
+                        <td className="text-center font-mono tabular-nums font-bold whitespace-nowrap" style={{ padding: '12px 10px', background: 'rgba(139,92,246,0.05)', color: qtyTerpakai < 0 ? '#ef4444' : '#6d28d9' }}>
+                          <div>{qtyTerpakai}</div>
+                          <div title="Stock-based usage = opening + non-consumption movements - closing - waste - production input" className="mt-1 text-[10px] font-medium" style={{ color: Math.abs(metrics.usageVariance) > 0.0001 ? '#b45309' : '#047857' }}>
+                            Basis stok: {metrics.stockBasedUsage === null ? '—' : metrics.stockBasedUsage.toLocaleString('id-ID')}
+                            {metrics.usageVariance !== null && Math.abs(metrics.usageVariance) > 0.0001 ? ` • selisih ${metrics.usageVariance.toLocaleString('id-ID')}` : ''}
+                          </div>
+                        </td>
+                        <td className="text-right font-mono tabular-nums font-semibold whitespace-nowrap" style={{ padding: '12px 16px' }}>
                           Rp {nilaiRupiah.toLocaleString('id-ID')}
                         </td>
                       </tr>
@@ -745,32 +1001,32 @@ export default function DailyInventory({ category, initialTab }) {
                   })
                 )}
                 {!loading && items.length === 0 && (
-                    <tr>
-                      <td colSpan="10" style={{ textAlign: 'center', padding: '48px 24px', color: '#6b7280' }}>
-                        <div style={{ maxWidth: '420px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                          <Package size={36} style={{ marginBottom: '12px', opacity: 0.4 }} />
-                          <p style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '6px', color: 'var(--text-primary)' }}>
-                            Belum Ada Master Bahan Baku
-                          </p>
-                          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-                            Daftar barang pada Form EOD diambil otomatis dari Master Bahan Baku (<strong>Stock Ledger</strong>). Silakan tambahkan bahan terlebih dahulu di menu <strong>Stock Ledger</strong> agar dapat dicatat stok fisiknya di sini.
-                          </p>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            )}
-          </div>
-          
-          <PhotoUploaderModal 
-            isOpen={photoModal.isOpen} 
-            onClose={() => setPhotoModal({ isOpen: false, bucket: '', contextName: '' })} 
-            bucket={photoModal.bucket}
-            contextName={photoModal.contextName}
-          />
+                  <tr>
+                    <td colSpan="11" style={{ textAlign: 'center', padding: '48px 24px', color: '#6b7280' }}>
+                      <div style={{ maxWidth: '420px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <Package size={36} style={{ marginBottom: '12px', opacity: 0.4 }} />
+                        <p style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '6px', color: 'var(--text-primary)' }}>
+                          Belum Ada Master Bahan Baku
+                        </p>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                          Daftar barang pada Form EOD diambil otomatis dari Master Bahan Baku (<strong>Stock Ledger</strong>). Silakan tambahkan bahan terlebih dahulu di menu <strong>Stock Ledger</strong> agar dapat dicatat stok fisiknya di sini.
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
+
+        <PhotoUploaderModal 
+          isOpen={photoModal.isOpen} 
+          onClose={() => setPhotoModal({ isOpen: false, bucket: '', contextName: '' })} 
+          bucket={photoModal.bucket}
+          contextName={photoModal.contextName}
+        />
       </div>
+    </div>
   );
 }

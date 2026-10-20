@@ -272,6 +272,10 @@ export default function StockLedger() {
   const handleAdjustSubmit = async (e) => {
     e.preventDefault();
     if (!adjustItem || !adjustQty || isNaN(adjustQty)) return;
+    if (!adjustNotes.trim()) {
+      alert('Catatan/alasan penyesuaian wajib diisi. Untuk pembelian gunakan modul Purchasing; untuk OUT gunakan Daily Inventory; untuk waste gunakan Catatan Limbah; dan untuk transfer gunakan modul Transfer.');
+      return;
+    }
     if (!window.confirm(`Konfirmasi penyesuaian stok untuk ${adjustItem.name}?`)) return;
     try {
       await onAdjustStock(adjustItem.name, adjustLoc, adjustType, parseFloat(adjustQty), adjustNotes);
@@ -829,18 +833,11 @@ export default function StockLedger() {
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Type</label>
+                <label className="form-label">Jenis Koreksi</label>
+                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "6px" }}>Form ini hanya untuk koreksi/saldo awal; bukan pembelian, pemakaian OUT, waste, atau transfer.</div>
                 <select className="form-control" value={adjustType} onChange={e => setAdjustType(e.target.value)}>
                   <optgroup label="Stok Masuk">
-                    <option value="IN">Stock In (Purchase / Manual)</option>
-                    <option value="TRANSFER">Transfer Antar Lokasi</option>
-                  </optgroup>
-                  <optgroup label="Stok Keluar (Pengurangan)">
-                    <option value="OUT">Stock Out (Lain-lain)</option>
-                    <option value="WASTE">Basi / Kualitas Drop (Waste)</option>
-                    <option value="BREAKAGE">Pecah / Rusak (Breakage)</option>
-                    <option value="EXPIRED">Kedaluwarsa (Expired)</option>
-                    <option value="COMP">Makan Karyawan / Tester (Comp)</option>
+                    <option value="IN">Koreksi IN / saldo awal (bukan pembelian)</option>
                   </optgroup>
                 </select>
               </div>

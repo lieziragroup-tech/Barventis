@@ -162,7 +162,7 @@ export default function DashboardLayout() {
   // match here is not a behavior regression, it's the bug fix.
   const role = activeUser?.role === 'SuperAdmin' ? 'Super Admin' : activeUser?.role;
   const isSuperAdmin = role === 'Super Admin';
-  const isTenant = ['Admin / Owner', 'Owner', 'Staff', 'Bar', 'Kitchen', 'Central', 'Service', 'Purchasing'].includes(role);
+  const isTenant = ['Admin / Owner', 'Owner', 'Supervisor', 'Staff', 'Bar', 'Kitchen', 'Central', 'Service', 'Kasir', 'Purchasing'].includes(role);
 
   const hasAccess = (allowedRoles) => allowedRoles.includes(role);
 

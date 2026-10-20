@@ -1,20 +1,21 @@
 import React, { Suspense } from 'react';
-import { ClipboardList, Beer, TrendingUp, Trash2, AlertTriangle } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { ClipboardList, Trash2, AlertTriangle, Factory } from 'lucide-react';
 import TabContainer from '../../components/shared/TabContainer';
 
 const DailyInventory = React.lazy(() => import('./DailyInventory'));
-const QuickUsageLogger = React.lazy(() => import('../../components/shared/QuickUsageLogger'));
 const UsageRecap = React.lazy(() => import('./UsageRecap'));
 const WasteLogs = React.lazy(() => import('./WasteLogs'));
 const ExpiryMonitor = React.lazy(() => import('./ExpiryMonitor'));
+const MaterialProduction = React.lazy(() => import('./MaterialProduction'));
 
 
 const TABS = [
-  { key: 'quick-usage', label: 'Catat Pemakaian (Quick OUT)', icon: TrendingUp },
   { key: 'bahan', label: 'Semua Bahan', icon: ClipboardList },
   { key: 'pemakaian', label: 'Rekap Pemakaian', icon: ClipboardList },
   { key: 'waste', label: 'Catatan Limbah', icon: Trash2 },
   { key: 'expiry', label: 'Pantau Kedaluwarsa', icon: AlertTriangle },
+  { key: 'production', label: 'Proses Produksi', icon: Factory },
 ];
 
 const Loading = () => (
@@ -24,15 +25,20 @@ const Loading = () => (
 );
 
 export default function DailyInventoryHub() {
+  const { activeUser } = useAuth();
+  const role = activeUser?.role === 'SuperAdmin' ? 'Super Admin' : activeUser?.role;
+  const canUseProduction = ['Admin / Owner', 'Owner', 'Supervisor', 'Bar', 'Kitchen', 'Central'].includes(role);
+  const visibleTabs = canUseProduction ? TABS : TABS.filter(tab => tab.key !== 'production');
+
   return (
-    <TabContainer tabs={TABS}>
+    <TabContainer tabs={visibleTabs}>
       {(activeTab) => (
         <Suspense fallback={<Loading />}>
-          {activeTab === 'quick-usage' && <QuickUsageLogger />}
           {activeTab === 'bahan' && <DailyInventory />}
           {activeTab === 'pemakaian' && <UsageRecap />}
           {activeTab === 'waste' && <WasteLogs />}
           {activeTab === 'expiry' && <ExpiryMonitor />}
+          {activeTab === 'production' && <MaterialProduction />}
         </Suspense>
       )}
     </TabContainer>

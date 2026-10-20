@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ClipboardList, ShoppingCart, FileText, Boxes, Warehouse, Wrench,
-  TrendingUp, Trash2, AlertTriangle, Tag, Utensils, BarChart3,
+  ClipboardList, ShoppingCart, FileText, Boxes, Warehouse,
+  Trash2, AlertTriangle, Tag, Utensils, BarChart3,
   BookOpen, ArrowRightLeft, Settings, History, Calculator, FileSpreadsheet,
   UploadCloud, MonitorSmartphone
 } from 'lucide-react';
@@ -20,7 +20,6 @@ const MENU_MAP = {
     { id: 'adjustments', label: 'Audit', icon: FileText }
   ],
   '/dashboard/daily-inventory': [
-    { id: 'quick-usage', label: 'Quick OUT', icon: TrendingUp },
     { id: 'bahan', label: 'Semua', icon: ClipboardList },
     { id: 'pemakaian', label: 'Rekap', icon: ClipboardList },
     { id: 'waste', label: 'Limbah', icon: Trash2 },
@@ -41,7 +40,6 @@ const MENU_MAP = {
     { id: 'cost-control', label: 'Cost', icon: Calculator },
     { id: 'laporan', label: 'Laporan', icon: FileSpreadsheet }
   ],
-
   '/dashboard/penjualan': [
     { id: 'upload', label: 'Upload', icon: UploadCloud },
     { id: 'raw', label: 'Raw Data', icon: FileText },
@@ -56,7 +54,7 @@ export default function ContextualFloatingNav({ isSidebarOpen = false }) {
   const [activeTab, setActiveTab] = useState('');
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
 
-  // Detect virtual keyboard to avoid covering mobile keyboards
+  // Detect virtual keyboard on mobile to avoid overlapping
   useEffect(() => {
     const handleResize = () => {
       setIsKeyboardOpen(window.innerHeight < 500);
@@ -79,8 +77,8 @@ export default function ContextualFloatingNav({ isSidebarOpen = false }) {
     }
   }, [location.search, currentMenu]);
 
-  // Do not show if no menu for this page
-  if (!currentMenu) {
+  // Do not show if no menu for this page, or if mobile sidebar is open, or if virtual keyboard is active
+  if (!currentMenu || currentMenu.length <= 1 || isSidebarOpen || isKeyboardOpen) {
     return null;
   }
 
@@ -92,73 +90,68 @@ export default function ContextualFloatingNav({ isSidebarOpen = false }) {
   };
 
   return (
-    <div className="lg:hidden pointer-events-none">
-      <AnimatePresence>
-        {!isSidebarOpen && !isKeyboardOpen && (
-          <motion.nav
-            layout
-            key="morphing-dynamic-island"
-            initial={{ opacity: 0, scale: 0.88, y: 32, x: '-50%' }}
-            animate={{ opacity: 1, scale: 1, y: 0, x: '-50%' }}
-            exit={{ opacity: 0, scale: 0.88, y: 28, x: '-50%' }}
-            transition={{
-              type: 'spring',
-              stiffness: 420,
-              damping: 30,
-              mass: 0.6
-            }}
-            className="pointer-events-auto fixed bottom-20 left-1/2 z-[45] max-w-[94vw] bg-[var(--bg-secondary)]/95 backdrop-blur-2xl border border-[var(--border)]/80 shadow-[0_12px_36px_rgba(0,0,0,0.18)] rounded-full p-1.5 flex items-center gap-1.5 overflow-hidden select-none"
-            style={{ touchAction: 'manipulation' }}
-            aria-label="Navigasi Cepat Sub-Menu"
-          >
-            {currentMenu.map((item) => {
-              const isActive = activeTab === item.id;
-              const Icon = item.icon;
+    <div className="xl:hidden fixed bottom-16 md:bottom-5 left-1/2 -translate-x-1/2 z-40 pointer-events-none select-none max-w-[95vw]">
+      <motion.nav
+        initial={{ opacity: 0, y: 16, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 12, scale: 0.95 }}
+        transition={{
+          type: 'spring',
+          stiffness: 450,
+          damping: 32,
+          mass: 0.7
+        }}
+        className="pointer-events-auto bg-white/95 dark:bg-[var(--bg-secondary)]/95 text-[var(--text-primary)] backdrop-blur-2xl border border-[var(--border)] shadow-[0_8px_30px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)] rounded-full p-1.5 flex items-center gap-1 sm:gap-1.5 overflow-hidden"
+        style={{ touchAction: 'manipulation' }}
+        aria-label="Navigasi Dynamic Island Sub-Menu"
+      >
+        {currentMenu.map((item) => {
+          const isActive = activeTab === item.id;
+          const Icon = item.icon;
 
-              return (
-                <motion.button
-                  layout
-                  key={item.id}
-                  onClick={() => handleTabClick(item.id)}
-                  whileTap={{ scale: 0.94 }}
-                  transition={{
-                    layout: { type: 'spring', stiffness: 450, damping: 32 },
-                    opacity: { duration: 0.2 }
-                  }}
-                  className={`relative flex items-center justify-center gap-2 rounded-full cursor-pointer transition-colors ${
-                    isActive
-                      ? 'bg-[var(--accent)] text-white font-bold shadow-md px-3.5 py-1.5 h-8.5'
-                      : 'w-8.5 h-8.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]/60'
-                  }`}
-                  title={item.label}
-                  aria-label={item.label}
-                >
-                  <Icon size={16} className="shrink-0" />
+          return (
+            <motion.button
+              key={item.id}
+              layout
+              type="button"
+              onClick={() => handleTabClick(item.id)}
+              whileTap={{ scale: 0.92 }}
+              transition={{
+                layout: { type: 'spring', stiffness: 500, damping: 35 },
+                opacity: { duration: 0.15 }
+              }}
+              className={`relative flex items-center justify-center gap-2 rounded-full cursor-pointer transition-colors ${
+                isActive
+                  ? 'bg-[var(--accent,#059669)] hover:bg-[var(--accent-hover,#047857)] text-white font-semibold shadow-[0_2px_10px_rgba(5,150,105,0.25)] px-3.5 py-1.5 h-9 sm:h-9.5'
+                  : 'w-9 h-9 sm:w-9.5 sm:h-9.5 text-[var(--text-secondary)] hover:text-[var(--accent)] hover:bg-emerald-50/70 dark:hover:bg-emerald-950/30'
+              }`}
+              title={item.label}
+              aria-label={item.label}
+            >
+              <Icon size={17} className={`shrink-0 ${isActive ? 'text-white' : 'text-[var(--text-secondary)]'}`} />
 
-                  <AnimatePresence mode="popLayout" initial={false}>
-                    {isActive && (
-                      <motion.span
-                        key="label"
-                        initial={{ opacity: 0, width: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, width: 'auto', scale: 1 }}
-                        exit={{ opacity: 0, width: 0, scale: 0.9 }}
-                        transition={{
-                          type: 'spring',
-                          stiffness: 450,
-                          damping: 32
-                        }}
-                        className="text-xs tracking-tight whitespace-nowrap overflow-hidden inline-block"
-                      >
-                        {item.label}
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
-                </motion.button>
-              );
-            })}
-          </motion.nav>
-        )}
-      </AnimatePresence>
+              <AnimatePresence mode="popLayout" initial={false}>
+                {isActive && (
+                  <motion.span
+                    key={`label-${item.id}`}
+                    initial={{ opacity: 0, width: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, width: 'auto', scale: 1 }}
+                    exit={{ opacity: 0, width: 0, scale: 0.9 }}
+                    transition={{
+                      type: 'spring',
+                      stiffness: 500,
+                      damping: 35
+                    }}
+                    className="text-xs sm:text-sm font-medium tracking-tight whitespace-nowrap overflow-hidden inline-block"
+                  >
+                    {item.label}
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </motion.button>
+          );
+        })}
+      </motion.nav>
     </div>
   );
 }

@@ -180,6 +180,7 @@ export default function Purchasing() {
   const addToCart = (material) => {
     setCart(prev => [...prev, {
       cart_id: Date.now() + Math.random(),
+      request_key: `purchase-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
       material_id: material.id,
       name: material.name,
       unit: material.unit,
@@ -231,7 +232,8 @@ export default function Purchasing() {
         unit_price: parseFloat(item.unit_price),
         notes: `Pembelian Multi-Cart by ${activeUser?.name || 'Sistem'}`,
         destination: item.destination || 'RESTO',
-        expiry_date: item.expiry_date || null
+        expiry_date: item.expiry_date || null,
+        request_key: item.request_key || String(item.cart_id)
       })));
 
       setCart([]);
@@ -1207,6 +1209,7 @@ export default function Purchasing() {
 
             setCart(prev => [...prev, {
               cart_id: Date.now() + Math.random(),
+              request_key: `purchase-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
               material_id: material.id,
               name: material.name,
               unit: unitLabel || material.unit,

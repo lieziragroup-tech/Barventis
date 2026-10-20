@@ -636,6 +636,16 @@ body::before {
   white-space: nowrap;
 }
 
+/* Hide default spinner arrows from number inputs in tables for clean layout */
+.custom-table input[type="number"]::-webkit-outer-spin-button,
+.custom-table input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.custom-table input[type="number"] {
+  -moz-appearance: textfield;
+}
+
 /* =========================================================================
    Table Skeleton & Subtle Loading Overlay
    ========================================================================= */

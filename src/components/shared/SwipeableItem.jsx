@@ -55,7 +55,7 @@ const SwipeableItem = ({ children, onDelete, threshold = -80 }) => {
       <div 
         className="relative bg-white w-full h-full transition-transform duration-200 ease-out"
         style={{ 
-          transform: \`translateX(\${offset}px)\`,
+          transform: `translateX(${offset}px)`,
           touchAction: 'pan-y', // Allow vertical scrolling, intercept horizontal
           zIndex: 1
         }}

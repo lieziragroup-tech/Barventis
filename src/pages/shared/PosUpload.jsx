@@ -42,7 +42,7 @@ function RecipeCombobox({ recipes, materials, value, onSelect, placeholder }) {
 
   // Gabungkan resep + bahan baku jadi satu daftar pencarian. Milih bahan baku
   // di sini cuma rename nama menu di sales (bukan bikin resep baru) — deduksi
-  // stok 1:1-nya sudah ditangani fallback materialMapByName di processESBAndDeduct.
+  // theoretical usage follows the matched recipe; actual OUT is confirmed in Daily Inventory.
   const allTargets = useMemo(() => {
     const recipeItems = recipes.map(r => ({ id: 'r-' + r.id, name: r.menu_name, sub: r.category, kind: 'Resep' }));
     const materialItems = (materials || []).map(m => ({ id: 'm-' + m.id, name: m.name, sub: m.category, kind: 'Bahan' }));
@@ -416,7 +416,7 @@ export default function PosUpload() {
         ? mappedSales.filter(s => activeCats.includes(s.category))
         : mappedSales;
 
-      const res = await api.processESBAndDeduct(finalSales, {
+      const res = await api.processESBSalesImport(finalSales, {
           mode: parsedData.uploadMode || 'append',
           periodMonth: parsedData.periodMonth,
           periodYear: parsedData.periodYear,
@@ -432,7 +432,9 @@ export default function PosUpload() {
       const createdOk = newRecipeResults.filter(r => r.success);
       const createdFailed = newRecipeResults.filter(r => !r.success);
 
-      let msg = `Sukses memproses ESB! Memotong stok untuk ${res.deducted_materials} bahan.`;
+      let msg = res.duplicate
+        ? (res.message || 'File ESB ini sudah pernah diimpor. Tidak ada data yang ditambahkan ulang.')
+        : `Sukses mengimpor penjualan ESB. Stok fisik tidak dipotong otomatis; theoretical usage dihitung untuk ${res.theoretical_materials || 0} bahan, sedangkan OUT dikonfirmasi di Daily Inventory.`;
       if (res.unmapped_items?.length > 0) {
           msg += ` Ada ${res.unmapped_items.length} menu yang dilewati (tidak ada resep).`;
       }
@@ -443,7 +445,7 @@ export default function PosUpload() {
           msg += ` ${res.data_issues.length} bahan punya data qty/harga tidak valid (dilewati dari perhitungan biaya) — cek Recipe Builder.`;
           console.warn('[PosUpload] Data issues saat commit:', res.data_issues);
       }
-      setUploadStatus({ type: (createdFailed.length > 0 || res.data_issues?.length > 0) ? 'warning' : 'success', message: msg });
+      setUploadStatus({ type: (res.duplicate ? 'warning' : (createdFailed.length > 0 || res.data_issues?.length > 0) ? 'warning' : 'success'), message: msg });
 
       if (createdOk.length > 0) {
         setPendingRecipeReview(prev => [...prev, ...createdOk]);

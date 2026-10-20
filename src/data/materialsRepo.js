@@ -1,5 +1,41 @@
 import { supabase } from '../lib/supabase';
 
+const SHELF_LIFE_STORAGE_PREFIX = 'barventis_mat_shelf_life_';
+
+function getLocalShelfLifeMap(tenantId) {
+  if (typeof window === 'undefined' || !tenantId) return {};
+  try {
+    const raw = localStorage.getItem(`${SHELF_LIFE_STORAGE_PREFIX}${tenantId}`);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function setLocalShelfLife(tenantId, materialId, days) {
+  if (typeof window === 'undefined' || !tenantId || !materialId) return;
+  try {
+    const map = getLocalShelfLifeMap(tenantId);
+    if (days !== null && days !== undefined && !isNaN(days)) {
+      map[materialId] = Number(days);
+    } else {
+      delete map[materialId];
+    }
+    localStorage.setItem(`${SHELF_LIFE_STORAGE_PREFIX}${tenantId}`, JSON.stringify(map));
+  } catch (err) {
+    console.warn('Failed to save local shelf life:', err);
+  }
+}
+
+function mergeShelfLife(tenantId, items) {
+  if (!items || !tenantId) return items;
+  const map = getLocalShelfLifeMap(tenantId);
+  return items.map(item => ({
+    ...item,
+    shelf_life_days: item.shelf_life_days ?? map[item.id] ?? null
+  }));
+}
+
 export const materialsRepo = {
   getAll: async (tenantId) => {
     if (!tenantId) throw new Error("Missing active session.");
@@ -10,7 +46,7 @@ export const materialsRepo = {
       .eq('is_active', true)
       .order('name');
     if (error) throw error;
-    return data;
+    return mergeShelfLife(tenantId, data);
   },
 
   getPaged: async (tenantId, { page = 1, pageSize = 20, search = '', category = 'ALL' } = {}) => {
@@ -25,32 +61,71 @@ export const materialsRepo = {
       .range((page - 1) * pageSize, page * pageSize - 1);
 
     if (error) throw error;
-    return { data, total: count || 0, page, pageSize };
+    return { data: mergeShelfLife(tenantId, data), total: count || 0, page, pageSize };
   },
 
   create: async (tenantId, material) => {
     if (!tenantId) throw new Error("Missing active session.");
-    const { data, error } = await supabase
-      .from('materials')
-      .insert([{ ...material, tenant_id: tenantId }])
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
+    const shelfLifeVal = material.shelf_life_days;
+    try {
+      const { data, error } = await supabase
+        .from('materials')
+        .insert([{ ...material, tenant_id: tenantId }])
+        .select()
+        .single();
+      if (error) throw error;
+      if (shelfLifeVal !== undefined) setLocalShelfLife(tenantId, data.id, shelfLifeVal);
+      return { ...data, shelf_life_days: data.shelf_life_days ?? shelfLifeVal };
+    } catch (insertErr) {
+      if (insertErr.message && insertErr.message.includes('shelf_life_days')) {
+        const fallbackMaterial = { ...material };
+        delete fallbackMaterial.shelf_life_days;
+        const { data, error } = await supabase
+          .from('materials')
+          .insert([{ ...fallbackMaterial, tenant_id: tenantId }])
+          .select()
+          .single();
+        if (error) throw error;
+        if (shelfLifeVal !== undefined) setLocalShelfLife(tenantId, data.id, shelfLifeVal);
+        return { ...data, shelf_life_days: shelfLifeVal };
+      }
+      throw insertErr;
+    }
   },
 
   update: async (tenantId, id, updates) => {
     if (!tenantId) throw new Error("Missing active session.");
-    const { data, error } = await supabase
-      .from('materials')
-      .update(updates)
-      .eq('id', id)
-      .eq('tenant_id', tenantId)
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
+    const shelfLifeVal = updates.shelf_life_days;
+    try {
+      const { data, error } = await supabase
+        .from('materials')
+        .update(updates)
+        .eq('id', id)
+        .eq('tenant_id', tenantId)
+        .select()
+        .single();
+      if (error) throw error;
+      if (shelfLifeVal !== undefined) setLocalShelfLife(tenantId, id, shelfLifeVal);
+      return { ...data, shelf_life_days: data.shelf_life_days ?? shelfLifeVal };
+    } catch (updateErr) {
+      if (updateErr.message && updateErr.message.includes('shelf_life_days')) {
+        const fallbackUpdates = { ...updates };
+        delete fallbackUpdates.shelf_life_days;
+        const { data, error } = await supabase
+          .from('materials')
+          .update(fallbackUpdates)
+          .eq('id', id)
+          .eq('tenant_id', tenantId)
+          .select()
+          .single();
+        if (error) throw error;
+        if (shelfLifeVal !== undefined) setLocalShelfLife(tenantId, id, shelfLifeVal);
+        return { ...data, shelf_life_days: shelfLifeVal };
+      }
+      throw updateErr;
+    }
   },
+
 
   delete: async (tenantId, id) => {
     if (!tenantId) throw new Error("Missing active session.");
