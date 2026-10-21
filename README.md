@@ -21,7 +21,7 @@ Semua keputusan arsitektur, rekam jejak, dan *Business Goals* tersimpan dalam fo
 
 File: `supabase/migrations/20261020000000_daily_inventory_cost_control_v3.sql`
 
-The v3 working copy consolidates daily inventory under `daily_inventories` + `daily_inventory_items`, uses `transactions` as the stock-movement source of truth, makes EOD close/reopen and purchase/transfer/waste/production posting transactional and idempotent, and separates staff-confirmed actual OUT from theoretical COGS derived from ESB sales and recipes. The semi-finished-material production workflow is available as the `Proses Produksi` tab inside Daily Inventory Hub.
+The v3 working copy consolidates daily inventory under `daily_inventories` + `daily_inventory_items`, uses `transactions` as the stock-movement source of truth, makes EOD close/reopen and purchase/transfer/waste posting transactional and idempotent, and separates staff-confirmed actual OUT from theoretical COGS derived from ESB sales and recipes. The `Proses Produksi` UI/API/report workflow has been removed in v6. Legacy database tables and historical transactions remain intact to avoid destructive history changes.
 
 **Deployment status:** the migration has not been applied to a live database, and no live Supabase connection was provided. Back up the database and apply/test the migration in staging first. See `IMPLEMENTATION_NOTES_Daily_Inventory_Cost_Control_v3.md` for rollout order, known constraints, reconciliation items, and acceptance checklist. A frontend syntax check passed, but the full npm build/tests could not be run because dependency installation timed out in this environment.
 
@@ -39,3 +39,31 @@ Migrations (run in staging first):
 - `supabase/migrations/20261021000000_daily_inventory_broken_fefo_v4.sql` (additive v4)
 
 See `IMPLEMENTATION_NOTES_Daily_Inventory_Cost_Control_v4.md` for deployment selection, first-use configuration, known limitations, and acceptance criteria. No production database was changed by producing this package.
+
+
+## Daily Inventory & Cost Control v6 — IN input fix and FULL derivation
+
+The v6 update fixes the IN entry path: non-expiry materials have an editable manual IN field; expiry-tracked materials use multiple receipt-lot rows (quantity + expiry date per lot), with the total IN derived from the lot split. Source-derived Purchasing/transfer IN remains displayed separately and must not be typed again. The server posts manual IN and receipt lot records idempotently only on successful EOD close.
+
+FULL is calculated from book closing balance (`opening + posted stock movements - OUT - WASTE`, with valid adjustments applied), without subtracting BROKEN to derive FULL. In days without incoming/waste/other movement, that reduces to opening stock minus OUT. BROKEN is weighed manually and then validated independently against the calculated book balance.
+
+Additional migration: `supabase/migrations/20261023000000_daily_inventory_in_input_fix_v6.sql`. Run after successful v3/v4/v5 migrations. If starting from a database that has not applied those migrations, use the separate v6 all-in-one SQL bundle in staging. Never run the all-in-one and individual migrations as parallel/repeated rollout paths on the same database.
+
+The source has been syntax-transpiled for the modified JS/JSX files and domain examples were checked. Full Vite build, complete test suite, and SQL execution against PostgreSQL/Supabase remain staging prerequisites; no production database was changed. See `IMPLEMENTATION_NOTES_Daily_Inventory_Cost_Control_v6.md`.
+
+
+## Daily Inventory v6 follow-up fix
+
+- Daily Inventory opens the editable **Form Input EOD** tab by default; REKAP is read-only output. The visible `IN` cell shows **total IN for the day** (Purchasing/transfer receipts plus any manual delta). Users type the total, and the client stores only the amount above source-derived receipts to prevent duplicate inventory movements.
+- Manual IN is persisted in Draft; it posts one idempotent stock transaction only during successful EOD closing. A locked EOD remains read-only until an authorized reopen.
+- `FULL` is inferred from book closing, never from subtracting BROKEN. When there are no receipts, waste, transfers or other movements, this simplifies to opening stock minus OUT. Legitimate incoming stock still has to be included in the ending balance.
+- The dedicated `Proses Produksi` UI/API/report workflow is not available. Existing historical records are retained for balance continuity.
+
+
+## UI follow-up v6.1: IN entry
+
+- The Daily Inventory component now opens in `Form Input EOD` by default. The prior default was `REKAP`, which is a read-only table and made the IN column appear non-editable.
+- The editable EOD column is labelled `IN (Total)`. It displays auto receipts plus manual delta; when a user types a total, only the delta above Purchasing/transfer receipts is persisted as manual IN.
+- On expiry-tracked items, multi-lot detail must equal that manual delta. Draft values persist; stock ledger/master balance changes only after successful EOD close.
+- FULL is independent of BROKEN. It derives from book closing, which is opening less OUT on days without legitimate IN/WASTE/other stock movements; new receipt quantities cannot be ignored without corrupting closing stock.
+- No dedicated `Proses Produksi` entry point is available. Existing historic stock transaction rows remain for audit and balance continuity.

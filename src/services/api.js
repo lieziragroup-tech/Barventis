@@ -258,6 +258,8 @@ export const api = {
           ...row,
           stok_awal: row.opening_qty_snapshot ?? row.prev_full_qty ?? row.stok_awal,
           qty_in: row.in_qty ?? row.qty_in,
+          manual_in_qty: Number(row.manual_in_qty) || 0,
+          manual_in_lots: Array.isArray(row.manual_in_lots) ? row.manual_in_lots : [],
           qty_out: row.out_qty_input != null ? row.out_qty_input : (row.out_confirmed === false ? '' : (row.out_qty ?? row.qty_out ?? '')),
           out_qty_normalized: row.out_qty ?? null,
           out_qty_input: row.out_qty_input ?? null,
@@ -278,7 +280,7 @@ export const api = {
       });
     }
 
-    // Source-derived daily quantities. IN and WASTE must not be re-entered in EOD.
+    // Source-derived daily quantities. Auto receipts are included in the visible IN total; EOD only stores any manual delta over those receipts. WASTE remains source-derived.
     const validWasteTypes = ['WASTE', 'BREAKAGE', 'EXPIRED', 'COMP'];
     const { data: dailyTxRows, error: dailyTxErr } = await supabase
       .from('transactions')
@@ -299,7 +301,7 @@ export const api = {
       const mId = tx.material_id;
       const signedQty = Number(tx.qty) || 0;
       const q = Math.abs(signedQty);
-      if (['IN', 'PURCHASE_IN', 'TRANSFER'].includes(tx.type) && signedQty > 0) {
+      if (['IN', 'PURCHASE_IN', 'TRANSFER'].includes(tx.type) && signedQty > 0 && tx.source_module !== 'daily_inventory_manual_in') {
         inTxMap[mId] = (inTxMap[mId] || 0) + q;
       }
       if (validWasteTypes.includes(tx.type)) {
@@ -312,7 +314,7 @@ export const api = {
       // Production input and staff-confirmed OUT are consumption, not non-consumption
       // stock movements. Exclude them so physical depletion remains visible in the
       // stock-based reconciliation. Production output IN remains a legitimate receipt.
-      if (tx.type !== 'POS_SALE' && tx.type !== 'POS_DEDUCTION' &&
+      if (tx.source_module !== 'daily_inventory_manual_in' && tx.type !== 'POS_SALE' && tx.type !== 'POS_DEDUCTION' &&
           !(tx.type === 'OUT' && ['daily_inventory', 'production'].includes(tx.source_module))) {
         netStockMovementMap[mId] = (netStockMovementMap[mId] || 0) + signedQty;
       }
@@ -389,6 +391,8 @@ export const api = {
           opening_active_open_lot_id: previousOpeningPartsMap[m.id]?.activeOpenLotId ?? null,
           net_stock_movement: netStockMovementMap[m.id] || 0,
           qty_in: incoming,
+          manual_in_qty: 0,
+          manual_in_lots: [],
           qty_out: '',
           out_confirmed: false,
           zero_activity_confirmed: false,
@@ -409,6 +413,8 @@ export const api = {
         invMap[m.id].net_stock_movement = netStockMovementMap[m.id] || 0;
         invMap[m.id].production_usage_qty = productionUsageMap[m.id] || 0;
         invMap[m.id].qty_in = incoming;
+        invMap[m.id].manual_in_qty = Number(invMap[m.id].manual_in_qty) || 0;
+        invMap[m.id].manual_in_lots = Array.isArray(invMap[m.id].manual_in_lots) ? invMap[m.id].manual_in_lots : [];
         invMap[m.id].transaction_waste = loggedWaste;
         invMap[m.id].waste = loggedWaste;
       }
@@ -435,8 +441,8 @@ export const api = {
       // Keep the prior broken weigh-in and recompute inferred FULL rather than showing stale parts.
       if (isBrokenTrackingEnabled(m) && invMap[m.id].opening_broken_qty !== null && invMap[m.id].opening_broken_qty !== undefined) {
         const openingParts = calculateInferredFullFromBroken(m, Number(invMap[m.id].stok_awal) || 0, Number(invMap[m.id].opening_broken_qty));
-        if (openingParts.valid) invMap[m.id].opening_full_qty = openingParts.fullQty;
-        else invMap[m.id].opening_parts_reconciliation_required = true;
+        invMap[m.id].opening_full_qty = openingParts.fullQty;
+        if (!openingParts.valid) invMap[m.id].opening_parts_reconciliation_required = true;
       }
 
       invMap[m.id].broken_unit = getPackContentUnitFromMaterial(m);
@@ -480,6 +486,8 @@ export const api = {
     const itemsToSave = items.map(item => ({
       material_id: Number(item.material_id),
       opening_qty: Number(item.opening_qty) || 0,
+      manual_in_qty: Number(item.manual_in_qty) || 0,
+      manual_in_lots: Array.isArray(item.manual_in_lots) ? item.manual_in_lots : [],
       opening_full_qty: item.opening_full_qty ?? null,
       opening_broken_qty: item.opening_broken_qty ?? null,
       out_qty: item.out_qty === '' || item.out_qty === null || item.out_qty === undefined ? null : Number(item.out_qty),
@@ -497,7 +505,7 @@ export const api = {
       is_counted: Boolean(item.is_counted),
       opening_qty_source: item.opening_qty_source || 'CLIENT_OR_LEGACY_FALLBACK'
     }));
-    const { data, error } = await supabase.rpc('atomic_save_daily_inventory_v4', {
+    const { data, error } = await supabase.rpc('save_daily_inventory_manual_in_v6', {
       p_tenant_id: tenantId,
       p_date: date,
       p_location: location,
@@ -525,91 +533,6 @@ export const api = {
     return data;
   },
 
-  // Production recipes and runs are part of the inventory source-of-truth workflow.
-  // Recipe inputs are saved atomically; a run posts the raw-material OUT and
-  // semi-finished material IN in one database transaction.
-  getProductionRecipes: async () => {
-    const tenantId = await getActiveTenantId();
-    if (!tenantId) return [];
-    const [{ data: batches, error: batchErr }, { data: ingredients, error: ingredientErr }, materials] = await Promise.all([
-      supabase.from('production_batches').select('*').eq('tenant_id', tenantId).eq('is_active', true).order('batch_name'),
-      supabase.from('production_batch_ingredients').select('batch_id, material_id, qty, unit').eq('tenant_id', tenantId),
-      api.getMaterials()
-    ]);
-    if (batchErr) throw new Error('Gagal memuat resep produksi: ' + batchErr.message);
-    if (ingredientErr) throw new Error('Gagal memuat bahan resep produksi: ' + ingredientErr.message);
-    const materialMap = new Map((materials || []).map(m => [Number(m.id), m]));
-    return (batches || []).map(batch => ({
-      ...batch,
-      output_material: materialMap.get(Number(batch.output_material_id)) || null,
-      ingredients: (ingredients || []).filter(i => Number(i.batch_id) === Number(batch.id)).map(i => ({
-        ...i,
-        material: materialMap.get(Number(i.material_id)) || null,
-      })),
-    }));
-  },
-  saveProductionRecipe: async (recipe) => {
-    const tenantId = await requireTenantId();
-    const userId = await getActiveUserId();
-    const ingredients = (recipe.ingredients || []).map(i => ({
-      material_id: Number(i.material_id), qty: Number(i.qty), unit: String(i.unit || '').trim(),
-    }));
-    const { data, error } = await supabase.rpc('atomic_save_production_recipe_v3', {
-      p_tenant_id: tenantId,
-      p_batch_id: recipe.id ? Number(recipe.id) : null,
-      p_batch_name: String(recipe.batch_name || '').trim(),
-      p_output_material_id: Number(recipe.output_material_id),
-      p_yield_qty: Number(recipe.yield_qty),
-      p_yield_unit: String(recipe.yield_unit || '').trim(),
-      p_source_note: String(recipe.source_note || '').trim() || null,
-      p_ingredients: ingredients,
-      p_user_id: userId,
-    });
-    if (error) throw new Error('Gagal menyimpan resep produksi: ' + error.message);
-    await logAudit('SAVE_PRODUCTION_RECIPE', `Menyimpan resep produksi ${recipe.batch_name}.`);
-    return data;
-  },
-  recordProductionRun: async ({ batchId, outputQty, date, location, notes, requestKey }) => {
-    const tenantId = await requireTenantId();
-    const userId = await getActiveUserId();
-    const { data, error } = await supabase.rpc('atomic_record_production_run_v3', {
-      p_tenant_id: tenantId,
-      p_batch_id: Number(batchId),
-      p_output_qty: Number(outputQty),
-      p_date: date,
-      p_location: location,
-      p_notes: String(notes || '').trim() || null,
-      p_request_key: requestKey || createRequestKey(),
-      p_user_id: userId,
-    });
-    if (error) throw new Error('Gagal memposting batch produksi: ' + error.message);
-    await logAudit('RECORD_PRODUCTION_RUN', `Mencatat produksi bahan untuk tanggal ${date}, lokasi ${location}.`);
-    return data;
-  },
-  getProductionRuns: async (date, location) => {
-    const tenantId = await getActiveTenantId();
-    if (!tenantId) return [];
-    let query = supabase.from('production_runs').select('*').eq('tenant_id', tenantId);
-    if (date) query = query.eq('run_date', date);
-    if (location) query = query.eq('location', location);
-    const { data: runs, error: runsErr } = await query.order('created_at', { ascending: false }).limit(100);
-    if (runsErr) throw new Error('Gagal memuat riwayat produksi: ' + runsErr.message);
-    if (!runs?.length) return [];
-    const runIds = runs.map(r => r.id);
-    const [{ data: runItems, error: itemsErr }, materials] = await Promise.all([
-      supabase.from('production_run_items').select('*').eq('tenant_id', tenantId).in('run_id', runIds),
-      api.getMaterials(),
-    ]);
-    if (itemsErr) throw new Error('Gagal memuat detail batch produksi: ' + itemsErr.message);
-    const materialMap = new Map((materials || []).map(m => [Number(m.id), m]));
-    return runs.map(run => ({
-      ...run,
-      output_material: materialMap.get(Number(run.output_material_id)) || null,
-      ingredients: (runItems || []).filter(i => i.run_id === run.id).map(i => ({
-        ...i, material: materialMap.get(Number(i.material_id)) || null,
-      })),
-    }));
-  },
   getNearestExpiry: async () => {
     // Note: Table stock_ledger_entries does not exist in standard schema (PGRST205).
     // Return empty map to avoid 404 / PGRST205 schema cache errors on load.

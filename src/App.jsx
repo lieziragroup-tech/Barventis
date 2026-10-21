@@ -176,8 +176,6 @@ export default function App() {
             </ProtectedRoute>
           } />
 
-          {/* [6] Proses Produksi tersedia sebagai tab pada Daily Inventory Hub agar operator memakai satu workspace. */}
-
           {/* [7] Cost Control & Laporan */}
           <Route path="cost-report" element={
             <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central', 'Bar', 'Staff']}>

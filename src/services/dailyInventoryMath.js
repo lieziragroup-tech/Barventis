@@ -89,6 +89,19 @@ export function calculateDailyInventoryMetrics({ opening = 0, incoming = 0, netM
   };
 }
 
+/**
+ * The IN field in Daily Inventory shows the total for the day. Purchasing/transfer
+ * receipts are already included as sourceInQty; only the difference is saved as
+ * a manual IN, so a user cannot accidentally duplicate source receipts.
+ */
+export function manualInDeltaFromTotal(totalInInput, sourceInQty = 0) {
+  if (totalInInput === '' || totalInInput === null || totalInInput === undefined) return '';
+  const total = Number(totalInInput);
+  const source = Number(sourceInQty) || 0;
+  if (!Number.isFinite(total) || !Number.isFinite(source)) return Number.NaN;
+  return Number((total - source).toFixed(4));
+}
+
 export function getLocalDateISO(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -199,27 +212,45 @@ export function getStockUnitsPerPack(material) {
   }
 }
 
-/** Infer closed packages from the current book balance minus manually weighed BROKEN. */
+/** Infer FULL from book closing balance only; BROKEN is used solely for reconciliation. */
 export function calculateInferredFullFromBroken(material, bookClosingQty, brokenQty, options = {}) {
   const tolerancePacks = Number(options.tolerancePacks ?? 0.005);
   const closing = Number(bookClosingQty);
   const broken = Number(brokenQty);
-  if (!Number.isFinite(closing) || !Number.isFinite(broken) || closing < -1e-8 || broken < 0) {
-    return { valid: false, fullQty: null, rawFullQty: null, brokenStockQty: null, physicalEquivalentQty: null, varianceQty: null, reason: 'Kuantitas stok atau BROKEN tidak valid.' };
+  if (!Number.isFinite(closing) || closing < -1e-8) {
+    return { valid: false, fullQty: null, rawFullQty: null, brokenStockQty: null, physicalEquivalentQty: null, varianceQty: null, reason: 'Saldo stok akhir tidak valid.' };
   }
+
+  // FULL is inferred from the book closing balance alone. In a no-movement day,
+  // book closing is opening stock minus OUT. Valid IN/WASTE/transfer movements still
+  // affect book closing so the inferred FULL and measured BROKEN can reconcile.
+  // The weighed BROKEN value never affects the candidate FULL count.
+  let packStockQty;
+  try {
+    packStockQty = getStockUnitsPerPack(material);
+  } catch {
+    packStockQty = null;
+  }
+  if (!Number.isFinite(packStockQty) || packStockQty <= 0) {
+    return { valid: false, fullQty: null, rawFullQty: null, brokenStockQty: null, packStockQty: null, physicalEquivalentQty: null, varianceQty: null, reason: `Ukuran kemasan untuk ${material?.name || 'material'} belum valid.` };
+  }
+  const rawFullQty = closing / packStockQty;
+  const fullQty = Math.max(0, Math.floor(rawFullQty + 1e-8));
+  if (!Number.isFinite(broken) || broken < 0) {
+    return { valid: false, fullQty, rawFullQty, brokenStockQty: null, packStockQty, physicalEquivalentQty: null, varianceQty: null, reason: 'Kuantitas BROKEN harus berupa angka tidak negatif.' };
+  }
+
   let brokenStockQty;
   try {
     brokenStockQty = convertQtyToStockUnit(material, broken, getBrokenUnitLabel(material));
   } catch (error) {
-    return { valid: false, fullQty: null, rawFullQty: null, brokenStockQty: null, physicalEquivalentQty: null, varianceQty: null, reason: error.message };
+    return { valid: false, fullQty, rawFullQty, brokenStockQty: null, packStockQty, physicalEquivalentQty: null, varianceQty: null, reason: error.message };
   }
-  const packStockQty = getStockUnitsPerPack(material);
-  const remainingForFull = closing - brokenStockQty;
-  const rawFullQty = remainingForFull / packStockQty;
-  const nearestFull = Math.round(rawFullQty);
-  const valid = remainingForFull >= -1e-8 && rawFullQty >= -tolerancePacks && Math.abs(rawFullQty - nearestFull) <= tolerancePacks;
-  const fullQty = valid ? Math.max(0, nearestFull) : null;
-  const physicalEquivalentQty = valid ? fullQty * packStockQty + brokenStockQty : null;
+  const physicalEquivalentQty = fullQty * packStockQty + brokenStockQty;
+  const varianceQty = physicalEquivalentQty - closing;
+  const toleranceQty = tolerancePacks * packStockQty;
+  const brokenFitsOneOpenPack = brokenStockQty < packStockQty - 1e-8 || (brokenStockQty <= 1e-8 && closing <= 1e-8);
+  const valid = brokenFitsOneOpenPack && Math.abs(varianceQty) <= toleranceQty;
   return {
     valid,
     fullQty,
@@ -227,9 +258,9 @@ export function calculateInferredFullFromBroken(material, bookClosingQty, broken
     brokenStockQty,
     packStockQty,
     physicalEquivalentQty,
-    varianceQty: valid ? physicalEquivalentQty - closing : null,
-    reason: valid ? null : (remainingForFull < -1e-8
-      ? 'BROKEN melebihi saldo buku akhir.'
-      : 'Sisa saldo tidak membentuk jumlah kemasan utuh. Periksa OUT, IN, WASTE, konversi kemasan, dan hasil timbang BROKEN.'),
+    varianceQty: valid ? varianceQty : null,
+    reason: valid ? null : (!brokenFitsOneOpenPack
+      ? 'BROKEN harus kurang dari isi satu kemasan utuh; periksa satuan dan aturan satu lot terbuka.'
+      : 'BROKEN hasil timbang tidak cocok dengan saldo akhir berdasarkan stok awal dan mutasi IN/OUT/WASTE. Periksa input dan penimbangan.'),
   };
 }

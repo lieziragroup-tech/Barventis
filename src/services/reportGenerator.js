@@ -161,9 +161,6 @@ export async function generateReports(salesData, dbData, XLSX, unitConversionMap
   // 11. SO Glass & Tool
   sheets['SO Glass & Tool'] = buildSOGlassToolSheet(dbData, XLSX);
 
-  // 12. Proses Produksi Bahan
-  sheets['Proses Produksi Bahan'] = buildProsesProduksiSheet(dbData, XLSX);
-
   // 13. Cost Control
   sheets['COST CONTROL'] = buildCostControlSheet(salesData, dbData, daysInMonth, period, XLSX, unitConversionMap);
 
@@ -390,27 +387,6 @@ export async function generatePDF(salesData, dbData, unitConversionMap = new Map
     doc.setFontSize(9);
     doc.text('Data SO Glass & Tool diambil dari input manual.', 14, y + 5);
     doc.text('Lengkapi data aset dan gelas melalui halaman Stock Opname.', 14, y + 11);
-  }
-
-  // 11. Proses Produksi Bahan
-  {
-    const y = addPage('Proses Produksi Bahan');
-    doc.setFontSize(9);
-    doc.text('Data Proses Produksi Bahan berisi cutting portion dan produksi bahan.', 14, y + 5);
-    doc.text('Data ini diambil dari recipe ingredients yang sudah terdaftar di sistem.', 14, y + 11);
-
-    const rows = dbData.recipes.slice(0, 50).map(r => {
-      const ings = r.recipe_ingredients || [];
-      const ingList = ings.map(ig => `${ig.materials?.name || '?'} ${ig.qty_in_use}${ig.unit}`).join(', ');
-      return [r.menu_name, ingList, fmtNum(r.basic_cost)];
-    });
-    doc.autoTable({
-      startY: y + 16,
-      head: [['Menu', 'Bahan (Qty)', 'Basic Cost']],
-      body: rows,
-      styles: { fontSize: 7 },
-      headStyles: { fillColor: [41, 128, 185] }
-    });
   }
 
   // 12. Daily Inventory Barang summary
@@ -954,31 +930,6 @@ function buildSOGlassToolSheet(dbData, XLSX) {
   if (toolMats.length === 0) {
     // Placeholder
     rows.push(['', '(Data aset & gelas belum tersedia di database - input manual)']);
-  }
-
-  return XLSX.utils.aoa_to_sheet(rows);
-}
-
-function buildProsesProduksiSheet(dbData, XLSX) {
-  const rows = [];
-  rows.push(['Cutting Portion', '', '', '', '', '', '', '', '', 'Produksi Bahan']);
-  rows.push(['']);
-  rows.push(['TANGGAL/BULAN', 'NAMA ITEM', 'Qnty', 'Berat Awal ', 'Tripping', 'Berat Bersih', 'qty recipe', 'Portion', '', 'Nama Manu', 'QTY RECIPE', 'YIELD ', 'PORTION', 'Harga']);
-
-  // Build from recipes
-  const recipes = dbData.recipes || [];
-  for (const r of recipes) {
-    const ings = r.recipe_ingredients || [];
-    if (ings.length === 0) continue;
-
-    rows.push(['', '', '', '', '', '', '', '', '', `Produksi ${r.menu_name}`]);
-    for (const ig of ings) {
-      rows.push(['', '', '', '', '', '', '', '', '',
-        r.menu_name, `${ig.materials?.name || ''} = ${ig.qty_in_use} ${ig.unit}`,
-        '', '1 Porsi', r.basic_cost || ''
-      ]);
-    }
-    rows.push([]); // spacer
   }
 
   return XLSX.utils.aoa_to_sheet(rows);

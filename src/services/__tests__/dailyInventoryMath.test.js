@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateClosingStockQty, calculateDailyInventoryMetrics, calculateInferredFullFromBroken, convertQtyToStockUnit, getLocalDateISO } from '../dailyInventoryMath';
+import { calculateClosingStockQty, calculateDailyInventoryMetrics, calculateInferredFullFromBroken, convertQtyToStockUnit, getLocalDateISO, manualInDeltaFromTotal } from '../dailyInventoryMath';
 
 describe('calculateDailyInventoryMetrics', () => {
   it('uses staff-confirmed OUT as actual usage and keeps waste separate', () => {
@@ -57,18 +57,27 @@ describe('getLocalDateISO', () => {
 });
 
 describe('calculateInferredFullFromBroken', () => {
-  it('infers full packs from book closing and the weighed open bottle', () => {
+  it('infers FULL from opening balance after OUT and other posted movements, then validates weighed BROKEN', () => {
+    // Opening 5 bottles - OUT 0.2 bottle = book closing 4.8 bottles.
     const result = calculateInferredFullFromBroken({ name: 'Sirup', unit: 'botol', full_pack: 'Botol = 1000 ml' }, 4.8, 800);
     expect(result.valid).toBe(true);
     expect(result.fullQty).toBe(4);
     expect(result.physicalEquivalentQty).toBeCloseTo(4.8, 5);
   });
 
+  it('calculates FULL from opening minus OUT when no other movement exists', () => {
+    const bookClosing = calculateDailyInventoryMetrics({ opening: 5, incoming: 0, out: 1.2, waste: 0, closing: 0 }).expectedClosing;
+    const result = calculateInferredFullFromBroken({ name: 'Sirup', unit: 'botol', full_pack: 'Botol = 1000 ml' }, bookClosing, 800);
+    expect(bookClosing).toBeCloseTo(3.8, 6);
+    expect(result.valid).toBe(true);
+    expect(result.fullQty).toBe(3);
+  });
+
   it('requires reconciliation when BROKEN cannot leave a whole pack remainder', () => {
     const result = calculateInferredFullFromBroken({ name: 'Sirup', unit: 'botol', full_pack: 'Botol = 1000 ml' }, 4.8, 900);
     expect(result.valid).toBe(false);
-    expect(result.fullQty).toBeNull();
-    expect(result.reason).toMatch(/jumlah kemasan utuh/i);
+    expect(result.fullQty).toBe(4); // FULL stays derived from book balance even when BROKEN fails validation.
+    expect(result.reason).toMatch(/BROKEN harus kurang|tidak cocok/i);
   });
 });
 
@@ -88,5 +97,22 @@ describe('convertQtyToStockUnit', () => {
 
   it('rejects negative input to protect stock calculations', () => {
     expect(() => convertQtyToStockUnit({ name: 'Sirup', unit: 'botol', full_pack: 'Botol = 1000 ml' }, -1, 'ml')).toThrow(/tidak negatif/i);
+  });
+});
+
+
+describe('manualInDeltaFromTotal', () => {
+  it('subtracts source-derived receipts from the editable total IN to prevent duplicate entry', () => {
+    expect(manualInDeltaFromTotal(7, 5)).toBe(2);
+    expect(manualInDeltaFromTotal(5, 5)).toBe(0);
+    expect(manualInDeltaFromTotal(2, 0)).toBe(2);
+  });
+
+  it('keeps a below-source total negative so draft/closing validation can reject it', () => {
+    expect(manualInDeltaFromTotal(4, 5)).toBe(-1);
+  });
+
+  it('allows a blank visible IN field while the user edits', () => {
+    expect(manualInDeltaFromTotal('', 0)).toBe('');
   });
 });

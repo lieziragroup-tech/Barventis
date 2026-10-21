@@ -338,6 +338,7 @@ DECLARE
   v_book_closing numeric;
   v_raw_full numeric;
   v_full numeric;
+  v_physical_total numeric;
   v_incoming numeric;
   v_waste numeric;
   v_production_usage numeric;
@@ -468,11 +469,15 @@ BEGIN
     END IF;
 
     v_pack_units := GREATEST(public.stock_units_per_pack_v3(p_tenant_id, v_material_id), 0.000001);
-    v_raw_full := (v_book_closing - v_broken_base) / v_pack_units;
-    v_full := round(v_raw_full);
+    -- FULL is inferred from book balance only, never derived by subtracting the weighed BROKEN.
+    -- When there is no IN/WASTE/other movement, book balance is opening stock minus OUT.
+    -- BROKEN is then validated independently against the book balance.
+    v_raw_full := v_book_closing / v_pack_units;
+    v_full := GREATEST(floor(v_raw_full + 0.00000001), 0);
+    v_physical_total := v_full * v_pack_units + v_broken_base;
     IF v_broken_tracking AND p_is_closing THEN
-      IF v_book_closing - v_broken_base < -0.0001 OR abs(v_raw_full - v_full) > 0.005 THEN
-        RAISE EXCEPTION 'BROKEN % tidak konsisten dengan saldo akhir %. Kandidat FULL=% kemasan. Periksa OUT, IN, WASTE, satuan dan hasil timbang.', v_material.name, v_book_closing, v_raw_full;
+      IF v_broken_base >= v_pack_units - 0.0001 OR abs(v_physical_total - v_book_closing) > (0.005 * v_pack_units) THEN
+        RAISE EXCEPTION 'BROKEN % tidak konsisten dengan saldo akhir %. FULL hasil sistem=% kemasan dan BROKEN=% satuan stok. Periksa OUT, IN, WASTE, satuan dan hasil timbang.', v_material.name, v_book_closing, v_full, v_broken_base;
       END IF;
     END IF;
 
@@ -711,7 +716,7 @@ BEGIN
     END IF;
   END LOOP;
 
-  RETURN v_result || jsonb_build_object('version',4,'opening_policy','previous_closed_eod_plus_ledger','full_policy','inferred_from_book_balance_minus_broken','lot_policy','single_open_lot_fefo');
+  RETURN v_result || jsonb_build_object('version',4,'opening_policy','previous_closed_eod_plus_ledger','full_policy','inferred_from_book_balance_then_validate_broken','lot_policy','single_open_lot_fefo');
 END;
 $function$;
 
