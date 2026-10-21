@@ -1042,6 +1042,11 @@ export default function DailyInventory({ category, initialTab }) {
                     const fallbackOpening = location === 'CENTRAL' ? item.qty_central : (item.qty_resto ?? item.stock);
                     const stokAwal = row.stok_awal !== undefined && row.stok_awal !== '' ? Number(row.stok_awal) : (Number(fallbackOpening) || 0);
                     const qtyOut = Number(row.qty_out) || 0;
+                    // Keep this value in the row-render scope; it is used by the OUT input placeholder.
+                    // A zero value is only considered confirmed when the explicit zero-confirmation flag is set.
+                    const outConfirmed = Boolean(row.out_confirmed)
+                      || row.zero_activity_confirmed === true
+                      || (row.qty_out !== '' && row.qty_out !== null && row.qty_out !== undefined);
                     const metrics = getInventoryRowMetrics(item, { ...row, stok_awal: stokAwal });
                     const stokAkhir = metrics.closing;
                     const qtyTerpakai = qtyOut;

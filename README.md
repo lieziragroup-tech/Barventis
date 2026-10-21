@@ -71,3 +71,7 @@ The source has been syntax-transpiled for the modified JS/JSX files and domain e
 ## Daily Inventory / Cost Control v6.2 UI fix
 
 Baca `IMPLEMENTATION_NOTES_Daily_Inventory_Cost_Control_v6_2.md` untuk perubahan field IN (Total), konsistensi FULL awal dan FULL closing, perapian helper text, dan input BROKEN di Catatan Limbah.
+
+
+## Hotfix v6.2.1 — `outConfirmed` runtime error
+The OUT input's placeholder previously referenced `outConfirmed` outside its declaration scope. It is now computed inside the `paginatedItems.map` row renderer. This is a frontend-only hotfix and requires no SQL migration. See `IMPLEMENTATION_NOTES_Daily_Inventory_Cost_Control_v6_2.md`.

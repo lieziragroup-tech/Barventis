@@ -48,3 +48,13 @@ Jalankan hanya bila perlu memastikan migration sebelumnya sudah diterapkan. Jang
 - Ganti `src/pages/shared/DailyInventory.jsx` di branch yang dibangun Vercel dengan versi dari paket ini, atau deploy seluruh source package v6.2 jika folder repository sama dengan baseline paket.
 - Push perubahan ke branch deployment, lalu cek build Vercel.
 - Uji di staging: IN otomatis saja, IN manual tanpa penerimaan, total IN + penerimaan otomatis, total IN di bawah penerimaan otomatis, OUT/WASTE memengaruhi FULL, BROKEN disimpan dari Catatan Limbah, dan closing esok hari mewarisi saldo EOD sebelumnya.
+
+
+## Hotfix v6.2.1 — Runtime `outConfirmed` ReferenceError
+
+The rendered OUT input placeholder referenced `outConfirmed` from a scope where it was not defined. This caused a runtime crash when the Daily Inventory table rendered. The row renderer now derives `outConfirmed` inside `paginatedItems.map`, using the row's saved confirmation flag, explicit zero-activity confirmation, or an entered OUT value.
+
+- **Database migration required:** No. This is a frontend scope fix only.
+- **Files changed:** `src/pages/shared/DailyInventory.jsx`.
+- **Validation:** confirmed all `outConfirmed` UI references now have a valid row-local declaration and archive integrity checked. Full Vite build was not run in this environment because node dependencies are not installed here.
+- **Deployment:** deploy this source fix to the branch used by Vercel, then reload Daily Inventory. Do not rerun SQL for this runtime error.
