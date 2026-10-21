@@ -122,7 +122,7 @@ export default function StockLedger() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [dependencyDeleteModal, setDependencyDeleteModal] = useState(null);
-  const [newItem, setNewItem] = useState({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15, initial_qty_resto: 0, initial_qty_central: 0 });
+  const [newItem, setNewItem] = useState({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15, initial_qty_resto: 0, initial_qty_central: 0, broken_tracking_enabled: true, expiry_tracking_enabled: false });
   const [selectedItems, setSelectedItems] = useState([]);
 
   // Supplier & Purchase integration states
@@ -355,7 +355,7 @@ export default function StockLedger() {
       }
 
       setShowAddModal(false);
-      setNewItem({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15, initial_qty_resto: 0, initial_qty_central: 0 });
+      setNewItem({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15, initial_qty_resto: 0, initial_qty_central: 0, broken_tracking_enabled: true, expiry_tracking_enabled: false });
     } catch (err) {
       // Friendly message for DB-level duplicate (race condition edge case)
       if (err.message?.includes('duplicate key') || err.message?.includes('unique constraint')) {
@@ -917,6 +917,16 @@ export default function StockLedger() {
                 price={editItem.new_price ?? editItem.price}
                 onChangeFullPack={fp => setEditItem({ ...editItem, full_pack: fp })}
               />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-3">
+                <label className="flex items-start gap-2 rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+                  <input type="checkbox" checked={Boolean(editItem.broken_tracking_enabled)} onChange={e => setEditItem({ ...editItem, broken_tracking_enabled: e.target.checked })} />
+                  <span><strong className="block text-sm">Wajib timbang BROKEN saat closing</strong><small style={{ color: 'var(--text-muted)' }}>Sisa isi kemasan terbuka diinput manual pada Daily Inventory.</small></span>
+                </label>
+                <label className="flex items-start gap-2 rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+                  <input type="checkbox" checked={Boolean(editItem.expiry_tracking_enabled)} onChange={e => setEditItem({ ...editItem, expiry_tracking_enabled: e.target.checked })} />
+                  <span><strong className="block text-sm">Lacak lot / expired date</strong><small style={{ color: 'var(--text-muted)' }}>Penerimaan ditelusuri per lot dan dikeluarkan mengikuti FEFO.</small></span>
+                </label>
+              </div>
               <div className="form-group">
                 <label className="form-label">Min Stock</label>
                 <input type="number" className="form-control" value={editItem.min_stock || 15} onChange={e => setEditItem({ ...editItem, min_stock: parseInt(e.target.value) || 15 })} />
@@ -964,7 +974,7 @@ export default function StockLedger() {
 
       {/* Add New Material Slide-over Modal */}
       {showAddModal && (
-        <div onClick={() => { setShowAddModal(false); setNewItem({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15, initial_qty_resto: 0, initial_qty_central: 0 }); }} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.2s ease' }}>
+        <div onClick={() => { setShowAddModal(false); setNewItem({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15, initial_qty_resto: 0, initial_qty_central: 0, broken_tracking_enabled: true, expiry_tracking_enabled: false }); }} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.2s ease' }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: '450px', background: 'var(--bg-primary)', height: '100vh', padding: '32px 24px', overflowY: 'auto', borderLeft: '1px solid var(--border)', boxShadow: '-10px 0 30px rgba(0,0,0,0.1)', animation: 'slideInRight 0.3s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Tambah Bahan Baru</h3>
@@ -1019,6 +1029,16 @@ export default function StockLedger() {
                 price={newItem.price}
                 onChangeFullPack={fp => setNewItem({ ...newItem, full_pack: fp })}
               />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-3">
+                <label className="flex items-start gap-2 rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+                  <input type="checkbox" checked={Boolean(newItem.broken_tracking_enabled)} onChange={e => setNewItem({ ...newItem, broken_tracking_enabled: e.target.checked })} />
+                  <span><strong className="block text-sm">Wajib timbang BROKEN saat closing</strong><small style={{ color: 'var(--text-muted)' }}>Sisa isi kemasan terbuka diinput manual pada Daily Inventory.</small></span>
+                </label>
+                <label className="flex items-start gap-2 rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+                  <input type="checkbox" checked={Boolean(newItem.expiry_tracking_enabled)} onChange={e => setNewItem({ ...newItem, expiry_tracking_enabled: e.target.checked })} />
+                  <span><strong className="block text-sm">Lacak lot / expired date</strong><small style={{ color: 'var(--text-muted)' }}>Penerimaan ditelusuri per lot dan dikeluarkan mengikuti FEFO.</small></span>
+                </label>
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div className="form-group">
                   <label className="form-label">Min Stock</label>

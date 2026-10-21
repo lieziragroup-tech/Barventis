@@ -9,7 +9,7 @@ import { parsePackSize, calculateIngredientCost, getUnitPrice, computeRecipeCost
 // Overhead % away from 5%.
 import { storeLog } from './activityLogService';
 import { calculateUsageVariance } from './varianceCalculator';
-import { getLocalDateISO } from './dailyInventoryMath';
+import { getLocalDateISO, calculateInferredFullFromBroken, isBrokenTrackingEnabled } from './dailyInventoryMath';
 
 let activeTenantId = null;
 let activeUserId = null;
@@ -21,6 +21,15 @@ let activeBranchId = null;
 
 // Helper to sanitize search strings for PostgREST .or() filters to prevent injection
 const sanitizePostgrest = (str) => String(str).replace(/[,.()"'\\]/g, ' ').trim();
+
+const getPackContentUnitFromMaterial = (material) => {
+  const fullPack = String(material?.full_pack || '').trim();
+  if (fullPack.includes('=')) {
+    const right = fullPack.split('=').slice(1).join('=').trim();
+    return right.match(/^([0-9]+(?:\.[0-9]+)?)\s*(.*?)\s*$/)?.[2]?.trim() || material?.unit || '';
+  }
+  return fullPack.match(/^([0-9]+(?:\.[0-9]+)?)\s*(.*?)\s*$/)?.[2]?.trim() || material?.unit || '';
+};
 
 const createRequestKey = () => {
   try {
@@ -166,7 +175,7 @@ export const api = {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { items: [], inventory: {} };
     let materialsList = await api.getMaterials();
-    materialsList = (materialsList || []).filter(m => (m.category || '').toUpperCase() !== 'ASSET');
+    materialsList = (materialsList || []).filter(m => (m.category || '').toUpperCase() !== 'ASSET' && m.is_active !== false);
 
     // 1. Get header for date
     const { data: header, error: headerErr } = await supabase
@@ -192,14 +201,23 @@ export const api = {
       .limit(1);
     if (previousHeaderErr) throw previousHeaderErr;
     const previousOpeningMap = {};
+    const previousOpeningPartsMap = {};
     const previousHeader = previousHeaders?.[0] || null;
     if (previousHeader) {
       const { data: previousItems, error: previousItemsErr } = await supabase
         .from('daily_inventory_items')
-        .select('material_id, closing_qty')
+        .select('material_id, closing_qty, full_qty, broken_qty, broken_unit, broken_confirmed, active_open_lot_id')
         .eq('inventory_id', previousHeader.id);
       if (previousItemsErr) throw previousItemsErr;
       const closingMap = Object.fromEntries((previousItems || []).map(item => [item.material_id, Number(item.closing_qty) || 0]));
+      (previousItems || []).forEach(item => {
+        previousOpeningPartsMap[item.material_id] = {
+          full: item.full_qty ?? null,
+          broken: item.broken_confirmed ? (item.broken_qty ?? null) : null,
+          brokenUnit: item.broken_unit || null,
+          activeOpenLotId: item.active_open_lot_id || null,
+        };
+      });
       const { data: carryRows, error: carryErr } = await supabase
         .from('transactions')
         .select('material_id, type, qty, is_reversed, source_module, date, created_at')
@@ -218,8 +236,8 @@ export const api = {
         const isAfterLastCloseDate = tx.date > previousHeader.date ||
           (tx.date === previousHeader.date && tx.created_at && new Date(tx.created_at).getTime() > previousCloseTs);
         if (!isAfterLastCloseDate || ['POS_SALE', 'POS_DEDUCTION'].includes(tx.type)) return;
-        const isWaste = ['WASTE', 'BREAKAGE', 'EXPIRED', 'COMP'].includes(tx.type);
-        if (isWaste) return; // waste is handled as its own line in stock metrics
+        // Waste/expired/breakage are signed stock movements too. Carry them from the last
+        // closed snapshot so yesterday's loss is not added back into today's opening balance.
         const materialId = tx.material_id;
         netCarryByMaterial[materialId] = (netCarryByMaterial[materialId] || 0) + (Number(tx.qty) || 0);
       });
@@ -238,14 +256,24 @@ export const api = {
       (itemRows || []).forEach(row => {
         invMap[row.material_id] = {
           ...row,
-          stok_awal: row.prev_full_qty ?? row.stok_awal,
+          stok_awal: row.opening_qty_snapshot ?? row.prev_full_qty ?? row.stok_awal,
           qty_in: row.in_qty ?? row.qty_in,
-          qty_out: row.out_qty ?? row.qty_out,
+          qty_out: row.out_qty_input != null ? row.out_qty_input : (row.out_confirmed === false ? '' : (row.out_qty ?? row.qty_out ?? '')),
+          out_qty_normalized: row.out_qty ?? null,
+          out_qty_input: row.out_qty_input ?? null,
+          out_unit: row.out_unit || null,
+          out_confirmed: row.out_confirmed ?? (row.out_qty != null || row.qty_out != null),
+          zero_activity_confirmed: Boolean(row.zero_activity_confirmed),
           waste: row.waste_qty ?? row.waste ?? 0,
-          broken: Boolean(row.is_counted) ? (row.broken_qty ?? row.broken ?? 0) : '',
-          full_qty: Boolean(row.is_counted) ? (row.full_qty ?? 0) : '',
-          is_counted: Boolean(row.is_counted),
-          expiry_date: row.expiry_date || undefined
+          broken: Boolean(row.broken_confirmed ?? row.is_counted) ? (row.broken_qty ?? row.broken ?? '') : '', // raw weighed input; closing_broken_qty_base is normalized for stock math only
+          broken_confirmed: Boolean(row.broken_confirmed ?? row.is_counted),
+          full_qty: '',
+          is_counted: Boolean(row.broken_confirmed ?? row.is_counted),
+          opening_full_qty: row.opening_full_qty ?? previousOpeningPartsMap[row.material_id]?.full ?? null,
+          opening_broken_qty: row.opening_broken_qty ?? previousOpeningPartsMap[row.material_id]?.broken ?? null,
+          opening_active_open_lot_id: row.opening_active_open_lot_id ?? previousOpeningPartsMap[row.material_id]?.activeOpenLotId ?? null,
+          active_open_lot_id: row.active_open_lot_id || null,
+          reconciliation_status: row.reconciliation_status || null
         };
       });
     }
@@ -298,24 +326,77 @@ export const api = {
     if (costsErr && costsErr.code !== 'PGRST205') throw costsErr;
     const costMap = Object.fromEntries((locationCosts || []).map(c => [c.material_id, Number(c.average_unit_cost) || 0]));
 
+    // Lot inventory is separate from the daily material row. Daily Inventory
+    // shows the earliest active expiry and the current opened lot, never a single
+    // editable expiry date that could overwrite multi-lot receipt history.
+    const materialIds = materialsList.map(m => m.id).filter(Boolean);
+    let batchRows = [];
+    let openLotRows = [];
+    if (materialIds.length) {
+      const [{ data: batches, error: batchesErr }, { data: openLots, error: openLotsErr }] = await Promise.all([
+        supabase.from('material_batches')
+          .select('id, material_id, batch_no, expiry_date, expired_date, qty_resto, qty_central, status, lot_qty_verified')
+          .eq('tenant_id', tenantId)
+          .in('material_id', materialIds)
+          .in('status', ['ACTIVE', 'active']),
+        supabase.from('material_open_lot_state')
+          .select('material_id, active_open_lot_id')
+          .eq('tenant_id', tenantId)
+          .eq('location', location),
+      ]);
+      if (batchesErr) throw new Error('Gagal memuat lot/expired date: ' + batchesErr.message);
+      if (openLotsErr) throw new Error('Gagal memuat lot terbuka: ' + openLotsErr.message);
+      batchRows = batches || [];
+      openLotRows = openLots || [];
+    }
+    const openLotByMaterial = Object.fromEntries(openLotRows.map(row => [row.material_id, row.active_open_lot_id]));
+    const batchById = Object.fromEntries(batchRows.map(batch => [batch.id, batch]));
+    const batchesByMaterial = {};
+    batchRows.forEach(batch => {
+      const availableQty = Number(location === 'CENTRAL' ? batch.qty_central : batch.qty_resto) || 0;
+      if (availableQty <= 0) return;
+      const materialId = batch.material_id;
+      if (!batchesByMaterial[materialId]) batchesByMaterial[materialId] = [];
+      batchesByMaterial[materialId].push({ ...batch, availableQty, effectiveExpiry: batch.expired_date || batch.expiry_date || null });
+    });
+    Object.values(batchesByMaterial).forEach(list => list.sort((a, b) => {
+      if (!a.effectiveExpiry && !b.effectiveExpiry) return String(a.id).localeCompare(String(b.id));
+      if (!a.effectiveExpiry) return 1;
+      if (!b.effectiveExpiry) return -1;
+      return String(a.effectiveExpiry).localeCompare(String(b.effectiveExpiry));
+    }));
+
     // Populate all active stock materials. An unchecked blank physical count is
     // intentionally different from a counted zero.
     materialsList.forEach(m => {
       const loggedWaste = txWasteMap[m.id] || 0;
       const incoming = inTxMap[m.id] || 0;
       const locationQty = location === 'CENTRAL' ? m.qty_central : (m.qty_resto ?? m.stock);
-      const openingFallback = previousOpeningMap[m.id] ?? (Number(locationQty) || 0);
+      // First operational day: materials.qty_* already reflects same-day purchases,
+      // waste, production and transfers. Back out those posted mutations so the day's
+      // receipts are not counted twice when EOD computes the closing balance.
+      const todaysNonConsumption = Number(netStockMovementMap[m.id]) || 0;
+      const todaysWaste = Number(txWasteMap[m.id]) || 0;
+      const todaysProductionInput = Number(productionUsageMap[m.id]) || 0;
+      const estimatedOpening = Math.max(0, (Number(locationQty) || 0) - todaysNonConsumption + todaysWaste + todaysProductionInput);
+      const openingFallback = previousOpeningMap[m.id] ?? estimatedOpening;
       if (!invMap[m.id]) {
         invMap[m.id] = {
           stok_awal: openingFallback,
           opening_qty_source: previousOpeningMap[m.id] !== undefined ? 'PREVIOUS_CLOSED_EOD_PLUS_LEDGER' : 'LEGACY_CURRENT_BALANCE_ESTIMATE',
+          opening_full_qty: previousOpeningPartsMap[m.id]?.full ?? null,
+          opening_broken_qty: previousOpeningPartsMap[m.id]?.broken ?? null,
+          opening_active_open_lot_id: previousOpeningPartsMap[m.id]?.activeOpenLotId ?? null,
           net_stock_movement: netStockMovementMap[m.id] || 0,
           qty_in: incoming,
-          qty_out: 0,
+          qty_out: '',
+          out_confirmed: false,
+          zero_activity_confirmed: false,
           production_usage_qty: productionUsageMap[m.id] || 0,
           waste: loggedWaste,
           transaction_waste: loggedWaste,
-          broken: 0,
+          broken: '',
+          broken_confirmed: false,
           full_qty: '',
           is_counted: false
         };
@@ -331,7 +412,56 @@ export const api = {
         invMap[m.id].transaction_waste = loggedWaste;
         invMap[m.id].waste = loggedWaste;
       }
+      const materialBatches = batchesByMaterial[m.id] || [];
+      const activeOpenLotId = invMap[m.id].active_open_lot_id || openLotByMaterial[m.id] || null;
+      const activeOpenLotRaw = activeOpenLotId ? batchById[activeOpenLotId] : null;
+      const activeOpenLotQty = activeOpenLotRaw ? Number(location === 'CENTRAL' ? activeOpenLotRaw.qty_central : activeOpenLotRaw.qty_resto) || 0 : 0;
+      const activeOpenLot = activeOpenLotQty > 0 ? activeOpenLotRaw : null;
+      const activeExpiry = activeOpenLot?.expired_date || activeOpenLot?.expiry_date || null;
+      const earliestBatch = materialBatches.find(batch => batch.effectiveExpiry) || null;
+      const earliestExpiry = earliestBatch?.effectiveExpiry || null;
+      const availableLotQty = materialBatches.reduce((sum, batch) => sum + Number(batch.availableQty || 0), 0);
+      const locationStockQty = Number(location === 'CENTRAL' ? m.qty_central : (m.qty_resto ?? m.stock)) || 0;
+      const hasUnverifiedLot = materialBatches.some(batch => batch.lot_qty_verified !== true);
+      // Waste and production input have already decreased material master balances; in legacy
+      // rows the lot quantities may not yet have been decremented until EOD. Compare on a common
+      // pre-consumption basis to avoid a false mismatch for today's recorded activity.
+      const lotComparisonStock = locationStockQty + (Number(txWasteMap[m.id]) || 0) + (Number(productionUsageMap[m.id]) || 0);
+      const lotBalanceMismatch = Math.abs(availableLotQty - lotComparisonStock) > 0.0001;
+      invMap[m.id].active_open_lot_id = activeOpenLot?.id || null;
+      invMap[m.id].opening_full_qty = invMap[m.id].opening_full_qty ?? previousOpeningPartsMap[m.id]?.full ?? null;
+      invMap[m.id].opening_broken_qty = invMap[m.id].opening_broken_qty ?? previousOpeningPartsMap[m.id]?.broken ?? null;
+      // Late valid movements after a previous close can change the total opening balance.
+      // Keep the prior broken weigh-in and recompute inferred FULL rather than showing stale parts.
+      if (isBrokenTrackingEnabled(m) && invMap[m.id].opening_broken_qty !== null && invMap[m.id].opening_broken_qty !== undefined) {
+        const openingParts = calculateInferredFullFromBroken(m, Number(invMap[m.id].stok_awal) || 0, Number(invMap[m.id].opening_broken_qty));
+        if (openingParts.valid) invMap[m.id].opening_full_qty = openingParts.fullQty;
+        else invMap[m.id].opening_parts_reconciliation_required = true;
+      }
+
+      invMap[m.id].broken_unit = getPackContentUnitFromMaterial(m);
+      // Legacy EOD rows stored OUT in the tracked stock unit. Preserve that unit
+      // while editing old drafts; new rows default to the content unit.
+      if (!invMap[m.id].out_unit) {
+        invMap[m.id].out_unit = (invMap[m.id].out_qty_normalized != null && invMap[m.id].out_qty_input == null)
+          ? (m.unit || getPackContentUnitFromMaterial(m))
+          : (Boolean(m.broken_tracking_enabled) ? getPackContentUnitFromMaterial(m) : (m.unit || ''));
+      }
+      invMap[m.id].broken_tracking_enabled = Boolean(m.broken_tracking_enabled);
+      invMap[m.id].expiry_tracking_enabled = Boolean(m.expiry_tracking_enabled);
+      invMap[m.id].next_expiry_date = earliestExpiry;
+      invMap[m.id].active_open_lot_expiry_date = activeExpiry;
+      invMap[m.id].fefo_exception = Boolean(activeExpiry && earliestExpiry && activeExpiry > earliestExpiry);
+      invMap[m.id].lot_reconciliation_required = Boolean(invMap[m.id].expiry_tracking_enabled && (hasUnverifiedLot || lotBalanceMismatch || (locationStockQty > 0 && materialBatches.length === 0)));
+      invMap[m.id].lot_balance_summary = { available_qty: availableLotQty, stock_qty: locationStockQty, unverified_count: materialBatches.filter(batch => batch.lot_qty_verified !== true).length };
       invMap[m.id].cost_per_unit = costMap[m.id] || Number(m.avg_cost || m.price) || 0;
+      m.next_expiry_date = earliestExpiry;
+      m.active_open_lot_id = activeOpenLot?.id || null;
+      m.active_open_lot_expiry_date = activeExpiry;
+      m.fefo_exception = Boolean(activeExpiry && earliestExpiry && activeExpiry > earliestExpiry);
+      m.lot_reconciliation_required = invMap[m.id].lot_reconciliation_required;
+      m.broken_tracking_enabled = Boolean(m.broken_tracking_enabled);
+      m.expiry_tracking_enabled = Boolean(m.expiry_tracking_enabled);
     });
 
     return {
@@ -349,16 +479,25 @@ export const api = {
     const user = userId || await getActiveUserId();
     const itemsToSave = items.map(item => ({
       material_id: Number(item.material_id),
-      opening_qty: Number(item.stok_awal) || 0,
-      out_qty: Number(item.qty_out) || 0,
-      full_qty: Number(item.full_qty) || 0,
-      broken_qty: Number(item.broken) || 0,
+      opening_qty: Number(item.opening_qty) || 0,
+      opening_full_qty: item.opening_full_qty ?? null,
+      opening_broken_qty: item.opening_broken_qty ?? null,
+      out_qty: item.out_qty === '' || item.out_qty === null || item.out_qty === undefined ? null : Number(item.out_qty),
+      out_qty_input: item.out_qty_input === '' || item.out_qty_input === null || item.out_qty_input === undefined ? null : Number(item.out_qty_input),
+      out_unit: item.out_unit || null,
+      fefo_override_reason: item.fefo_override_reason || null,
+      out_confirmed: Boolean(item.out_confirmed),
+      zero_activity_confirmed: Boolean(item.zero_activity_confirmed),
+      broken_qty: item.broken_qty === '' || item.broken_qty === null || item.broken_qty === undefined ? null : Number(item.broken_qty),
+      broken_unit: item.broken_unit || null,
+      broken_confirmed: Boolean(item.broken_confirmed),
+      full_qty: item.full_qty == null ? null : Number(item.full_qty),
       closing_qty: Number(item.closing_qty) || 0,
+      opening_active_open_lot_id: item.opening_active_open_lot_id || null,
       is_counted: Boolean(item.is_counted),
-      expiry_date: item.expiry_date || null,
       opening_qty_source: item.opening_qty_source || 'CLIENT_OR_LEGACY_FALLBACK'
     }));
-    const { data, error } = await supabase.rpc('atomic_save_daily_inventory_v3', {
+    const { data, error } = await supabase.rpc('atomic_save_daily_inventory_v4', {
       p_tenant_id: tenantId,
       p_date: date,
       p_location: location,
@@ -374,7 +513,7 @@ export const api = {
   unlockDailyInventory: async (date, location = 'RESTO') => {
     const tenantId = await requireTenantId();
     const userId = await getActiveUserId();
-    const { data, error } = await supabase.rpc('reopen_daily_inventory_session_v3', {
+    const { data, error } = await supabase.rpc('reopen_daily_inventory_session_v4', {
       p_tenant_id: tenantId,
       p_date: date,
       p_location: location,
@@ -1623,7 +1762,7 @@ export const api = {
 
     // One atomic RPC locks both balances, values the transfer using source WAC,
     // and writes paired OUT/IN ledger rows under one transfer_group_id.
-    const { data: result, error: transferErr } = await supabase.rpc('atomic_transfer_stock_location_wac', {
+    const { data: result, error: transferErr } = await supabase.rpc('atomic_transfer_stock_location_wac_v4', {
       p_tenant_id: tenantId,
       p_material_id: material_id,
       p_qty: qty,
@@ -3616,7 +3755,7 @@ export const api = {
     };
     const requestKey = purchaseData.request_key || createRequestKey();
 
-    const { data: rpcResult, error: rpcErr } = await supabase.rpc('atomic_record_purchase_location_wac', {
+    const { data: rpcResult, error: rpcErr } = await supabase.rpc('atomic_record_purchase_location_wac_v4', {
       p_tenant_id: tenantId,
       p_material_id: payload.material_id,
       p_supplier_id: payload.supplier_id,

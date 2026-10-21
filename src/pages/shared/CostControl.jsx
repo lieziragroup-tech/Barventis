@@ -42,8 +42,8 @@ export default function CostControl() {
   }, [period]);
 
   // Re-calculate all metrics dynamically on the frontend to support Tab Filtering
-  const { openingStock, totalPembelian, closingStock, pemakaianBulan, totalSalesBeverage, beverageCostPct, wasteValuation, statusLabel, filteredOpnameItems, actualDailyUsageCost, dailyStockBasedUsageCost, theoreticalCogsCost, theoreticalUsageItems, reconciliationDifference, closedEodSessions, openingStockEstimated, closingStockEstimated } = useMemo(() => {
-    if (!reportData) return { openingStock: 0, totalPembelian: 0, closingStock: 0, pemakaianBulan: 0, totalSalesBeverage: 0, beverageCostPct: 0, wasteValuation: 0, statusLabel: 'SAFE', filteredOpnameItems: [], actualDailyUsageCost: 0, dailyStockBasedUsageCost: 0, theoreticalCogsCost: 0, theoreticalUsageItems: 0, reconciliationDifference: 0, closedEodSessions: 0, openingStockEstimated: false, closingStockEstimated: false };
+  const { openingStock, totalPembelian, closingStock, pemakaianBulan, totalSalesBeverage, beverageCostPct, wasteValuation, statusLabel, filteredOpnameItems, actualDailyUsageCost, theoreticalCogsCost, theoreticalUsageItems, reconciliationDifference, closedEodSessions, openingStockEstimated, closingStockEstimated } = useMemo(() => {
+    if (!reportData) return { openingStock: 0, totalPembelian: 0, closingStock: 0, pemakaianBulan: 0, totalSalesBeverage: 0, beverageCostPct: 0, wasteValuation: 0, statusLabel: 'SAFE', filteredOpnameItems: [], actualDailyUsageCost: 0, theoreticalCogsCost: 0, theoreticalUsageItems: 0, reconciliationDifference: 0, closedEodSessions: 0, openingStockEstimated: false, closingStockEstimated: false };
 
     let purchases = 0;
     let cogsIngredients = 0;
@@ -110,7 +110,6 @@ export default function CostControl() {
       statusLabel: stat,
       filteredOpnameItems: filteredOpnames,
       actualDailyUsageCost: Number(reportData.metrics?.actual_daily_usage_cost) || 0,
-      dailyStockBasedUsageCost: Number(reportData.metrics?.daily_stock_based_usage_cost) || 0,
       theoreticalCogsCost: Number(reportData.metrics?.theoretical_cogs_cost) || 0,
       theoreticalUsageItems: Number(reportData.metrics?.theoretical_usage_items) || 0,
       reconciliationDifference: Number(reportData.metrics?.reconciliation_difference_after_usage_and_waste) || 0,
@@ -198,7 +197,7 @@ export default function CostControl() {
     { item: 'Total Pemakaian (COGS Aktual + Overhead)', value: pemakaianBulan },
     { item: 'Pemakaian Harian Aktual (OUT manual / konsumsi akhir)', value: actualDailyUsageCost },
     { item: 'Theoretical COGS (ESB × Resep)', value: theoreticalCogsCost },
-    { item: 'Pemakaian Harian dari Rekonsiliasi Stok', value: dailyStockBasedUsageCost },
+    { item: 'Catatan depletion harian berbasis ledger', value: 'Estimasi buku — bukan rekonsiliasi fisik independen karena FULL diinferensikan' },
     { item: 'Sisa Selisih Setelah Pemakaian Harian dan Waste', value: reconciliationDifference },
     { item: 'Sesi EOD Final', value: closedEodSessions },
     { item: 'Total F&B Sales', value: totalSalesBeverage },
@@ -469,13 +468,16 @@ export default function CostControl() {
             <div className="glass-card" style={{ padding: '18px 20px', borderLeft: `3px solid ${Math.abs(reconciliationDifference) > 0.01 ? 'var(--warning)' : 'var(--success)'}` }}>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '7px' }}>Selisih Rekonsiliasi</div>
               <div style={{ fontSize: '1.35rem', fontWeight: 800, color: Math.abs(reconciliationDifference) > 0.01 ? 'var(--warning)' : 'var(--success)' }}>{formatIDR(reconciliationDifference)}</div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '5px' }}>COGS berbasis stok − OUT aktual − waste. Selisih perlu ditelusuri, bukan otomatis dianggap kehilangan.</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '5px' }}>COGS berbasis stok − OUT aktual − waste. Nilai ini dapat memuat selisih periode dan bukan bukti kehilangan secara otomatis.</div>
             </div>
             <div className="glass-card" style={{ padding: '18px 20px' }}>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '7px' }}>EOD Final Tercatat</div>
               <div style={{ fontSize: '1.35rem', fontWeight: 800 }}>{closedEodSessions}</div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '5px' }}>Sesi lokasi/tanggal yang dikunci selama periode ini.</div>
             </div>
+          </div>
+          <div role="note" style={{ marginTop: '-12px', marginBottom: '24px', padding: '12px 14px', borderRadius: '10px', background: 'var(--bg-secondary)', color: 'var(--text-secondary)', fontSize: '0.76rem', lineHeight: 1.5 }}>
+            Catatan pengukuran: FULL dihitung dari saldo buku dan BROKEN yang ditimbang, bukan hitung fisik independen atas kemasan utuh. Karena itu, estimasi depletion harian dari ledger tidak boleh diperlakukan sebagai rekonsiliasi fisik mandiri; gunakan Stock Opname yang disahkan untuk rekonsiliasi stok independen.
           </div>
 
           {/* Daily Table */}
