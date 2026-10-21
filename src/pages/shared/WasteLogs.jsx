@@ -3,6 +3,9 @@ import {
   Search,
   Plus,
   X,
+  Save,
+  ChevronLeft,
+  ChevronRight,
   Trash2,
   AlertTriangle,
   RotateCcw,
@@ -26,6 +29,7 @@ import { api } from '../../services/api';
 import Pagination from '../../components/shared/Pagination';
 import { formatIDR } from '../../services/costUtils';
 import { exportToExcel } from '../../services/export/excelExporter';
+import { getBrokenUnitLabel, getLocalDateISO, isBrokenTrackingEnabled } from '../../services/dailyInventoryMath';
 
 const WASTE_TYPES = [
   { value: 'WASTE', label: 'Basi / Kualitas Drop / Spoilage', color: 'bg-red-500/15 text-red-600 border-red-500/20' },
@@ -83,6 +87,123 @@ export default function WasteLogs() {
   });
   const [photoPreview, setPhotoPreview] = useState(null);
   const [materialSearch, setMaterialSearch] = useState('');
+
+  // BROKEN is a closing physical remainder, not a waste transaction. It is edited
+  // from the Waste Logs area but saved onto the existing Daily Inventory draft.
+  const [showBrokenModal, setShowBrokenModal] = useState(false);
+  const [brokenDate, setBrokenDate] = useState(() => getLocalDateISO());
+  const [brokenLocation, setBrokenLocation] = useState('RESTO');
+  const [brokenRows, setBrokenRows] = useState([]);
+  const [brokenLoading, setBrokenLoading] = useState(false);
+  const [brokenSaving, setBrokenSaving] = useState(false);
+  const [brokenError, setBrokenError] = useState('');
+  const [brokenSearch, setBrokenSearch] = useState('');
+  const [brokenDebouncedSearch, setBrokenDebouncedSearch] = useState('');
+  const [brokenPage, setBrokenPage] = useState(1);
+  const [brokenSessionExists, setBrokenSessionExists] = useState(false);
+  const [brokenSessionLocked, setBrokenSessionLocked] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setBrokenDebouncedSearch(brokenSearch.trim().toLowerCase()), 300);
+    return () => clearTimeout(timer);
+  }, [brokenSearch]);
+
+  useEffect(() => {
+    setBrokenPage(1);
+  }, [brokenDebouncedSearch, brokenDate, brokenLocation]);
+
+  const loadBrokenRows = useCallback(async () => {
+    setBrokenLoading(true);
+    setBrokenError('');
+    try {
+      const eod = await api.getDailyInventoryEodData(brokenDate, brokenLocation);
+      setBrokenSessionExists(Boolean(eod?.header));
+      setBrokenSessionLocked(Boolean(eod?.isLocked));
+      const rows = (eod?.items || [])
+        .filter(material => isBrokenTrackingEnabled(material))
+        .map(material => {
+          const row = eod?.inventory?.[material.id] || {};
+          return {
+            material_id: Number(material.id),
+            name: material.name,
+            unit: getBrokenUnitLabel(material) || material.unit || '',
+            broken_qty: row.broken === '' || row.broken === null || row.broken === undefined ? '' : String(row.broken),
+            broken_confirmed: Boolean(row.broken_confirmed ?? row.is_counted),
+            expiry_tracking_enabled: Boolean(material.expiry_tracking_enabled),
+            dirty: false,
+          };
+        });
+      setBrokenRows(rows);
+      if (!eod?.header) {
+        setBrokenError('Sesi EOD belum dibuat. Isi IN/OUT di Daily Inventory, lalu klik Simpan Progress sebelum memasukkan BROKEN.');
+      } else if (eod?.isLocked) {
+        setBrokenError('EOD sudah terkunci. Buka kunci/revisi EOD melalui Daily Inventory sebelum mengubah BROKEN.');
+      }
+    } catch (err) {
+      setBrokenRows([]);
+      setBrokenSessionExists(false);
+      setBrokenSessionLocked(false);
+      setBrokenError(err.message || 'Gagal memuat daftar BROKEN.');
+    } finally {
+      setBrokenLoading(false);
+    }
+  }, [brokenDate, brokenLocation]);
+
+  useEffect(() => {
+    if (showBrokenModal) loadBrokenRows();
+  }, [showBrokenModal, loadBrokenRows]);
+
+  const filteredBrokenRows = useMemo(() => {
+    if (!brokenDebouncedSearch) return brokenRows;
+    return brokenRows.filter(row => [row.name, row.material_id]
+      .some(value => String(value || '').toLowerCase().includes(brokenDebouncedSearch)));
+  }, [brokenRows, brokenDebouncedSearch]);
+  const brokenPageSize = 20;
+  const brokenTotalPages = Math.max(1, Math.ceil(filteredBrokenRows.length / brokenPageSize));
+  const visibleBrokenPage = Math.min(brokenPage, brokenTotalPages);
+  const visibleBrokenRows = filteredBrokenRows.slice((visibleBrokenPage - 1) * brokenPageSize, visibleBrokenPage * brokenPageSize);
+
+  const handleBrokenChange = (materialId, value) => {
+    setBrokenRows(prev => prev.map(row => row.material_id === materialId
+      ? { ...row, broken_qty: value === '' ? '' : String(value).replace(',', '.'), dirty: true }
+      : row));
+  };
+
+  const handleSaveBroken = async () => {
+    setBrokenError('');
+    if (!brokenSessionExists) {
+      setBrokenError('Simpan Progress di Daily Inventory terlebih dahulu.');
+      return;
+    }
+    if (brokenSessionLocked) {
+      setBrokenError('EOD terkunci. Buka kunci/revisi EOD terlebih dahulu.');
+      return;
+    }
+    const changedRows = brokenRows.filter(row => row.dirty && row.broken_qty !== '');
+    if (!changedRows.length) {
+      setBrokenError('Belum ada perubahan BROKEN. Isi angka, termasuk 0 jika tidak ada sisa kemasan terbuka.');
+      return;
+    }
+    setBrokenSaving(true);
+    try {
+      await api.saveDailyInventoryBrokenCounts(
+        brokenDate,
+        brokenLocation,
+        changedRows.map(row => ({
+          material_id: row.material_id,
+          name: row.name,
+          broken_qty: Number(row.broken_qty),
+          broken_unit: row.unit,
+        }))
+      );
+      toast.showSuccess(`BROKEN closing berhasil disimpan untuk ${changedRows.length} material. Stok tidak dipotong oleh pencatatan ini.`);
+      setShowBrokenModal(false);
+    } catch (err) {
+      setBrokenError(err.message || 'Gagal menyimpan BROKEN closing.');
+    } finally {
+      setBrokenSaving(false);
+    }
+  };
 
   // Fetch waste logs from backend
   const fetchLogs = useCallback(async () => {
@@ -388,6 +509,19 @@ export default function WasteLogs() {
             <span className="hidden sm:inline">Export Excel</span>
           </button>
 
+          <button
+            type="button"
+            className="btn btn-secondary text-xs md:text-sm flex items-center gap-2 py-2 px-3.5"
+            onClick={() => {
+              setBrokenError('');
+              setBrokenSearch('');
+              setShowBrokenModal(true);
+            }}
+            title="Input sisa kemasan terbuka saat closing"
+          >
+            <Package size={16} />
+            <span>Input BROKEN Closing</span>
+          </button>
           <button
             type="button"
             className="btn btn-primary text-xs md:text-sm flex items-center gap-2 py-2 px-4 shadow font-bold"
@@ -879,6 +1013,88 @@ export default function WasteLogs() {
           </div>
         )}
       </div>
+
+      {/* MODAL: BROKEN CLOSING COUNT (not a waste movement) */}
+      {showBrokenModal && (
+        <div
+          className="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-3 md:p-5 bg-black/60 backdrop-blur-sm animate-fadeIn"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !brokenSaving) setShowBrokenModal(false);
+          }}
+        >
+          <div className="modal-card w-full max-w-4xl max-h-[92vh] bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl flex flex-col shadow-2xl overflow-hidden animate-scaleUp">
+            <div className="p-4 md:p-5 border-b border-[var(--border)] flex items-center justify-between gap-3 shrink-0 bg-[var(--bg-secondary)]/40">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-amber-500/15 text-amber-600"><Package size={20} /></div>
+                <div>
+                  <h2 className="text-base md:text-lg font-bold text-[var(--text-primary)]">BROKEN — Sisa Kemasan Terbuka</h2>
+                  <p className="text-xs text-[var(--text-secondary)]">Masukkan hasil timbang closing gabungan per material. Ini tidak memotong stok dan bukan transaksi waste.</p>
+                </div>
+              </div>
+              <button type="button" className="btn-icon p-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]" onClick={() => !brokenSaving && setShowBrokenModal(false)} title="Tutup"><X size={20} /></button>
+            </div>
+
+            <div className="p-4 md:p-5 flex-1 overflow-y-auto space-y-4">
+              {brokenError && (
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-700 text-xs flex items-start gap-2">
+                  <AlertCircle size={16} className="shrink-0 mt-0.5" /><span>{brokenError}</span>
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-[var(--text-primary)]">Tanggal EOD</label>
+                  <input type="date" className="form-control text-sm py-2" value={brokenDate} disabled={brokenSaving} onChange={e => {
+                    if (brokenRows.some(row => row.dirty) && !window.confirm('Perubahan BROKEN belum disimpan. Ganti tanggal dan buang perubahan tersebut?')) return;
+                    setBrokenDate(e.target.value);
+                  }} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-[var(--text-primary)]">Lokasi</label>
+                  <select className="form-control text-sm py-2" value={brokenLocation} disabled={brokenSaving} onChange={e => {
+                    if (brokenRows.some(row => row.dirty) && !window.confirm('Perubahan BROKEN belum disimpan. Ganti lokasi dan buang perubahan tersebut?')) return;
+                    setBrokenLocation(e.target.value);
+                  }}>
+                    <option value="RESTO">Resto</option><option value="CENTRAL">Central</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-[var(--text-primary)]">Cari material</label>
+                  <div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" /><input className="form-control pl-8 text-sm py-2" value={brokenSearch} disabled={brokenLoading || brokenSaving} onChange={e => setBrokenSearch(e.target.value)} placeholder="Nama atau ID material..." /></div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[var(--border)] overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-[var(--bg-secondary)] text-[var(--text-secondary)]"><tr><th className="px-4 py-3 text-left font-semibold">Material</th><th className="px-4 py-3 text-left font-semibold w-64">BROKEN closing</th></tr></thead>
+                    <tbody>
+                      {brokenLoading ? (
+                        <tr><td colSpan={2} className="px-4 py-8 text-center text-[var(--text-secondary)]">Memuat material...</td></tr>
+                      ) : visibleBrokenRows.length ? visibleBrokenRows.map(row => (
+                        <tr key={row.material_id} className="border-t border-[var(--border)]">
+                          <td className="px-4 py-3"><div className="font-semibold text-[var(--text-primary)]">{row.name}</div><div className="text-xs text-[var(--text-secondary)]">ID {row.material_id}</div></td>
+                          <td className="px-4 py-3"><div className="flex items-center gap-2"><input type="number" min="0" step="any" className="form-control text-right font-mono" value={row.broken_qty} disabled={brokenSaving || brokenSessionLocked || !brokenSessionExists} onChange={e => handleBrokenChange(row.material_id, e.target.value)} aria-label={`BROKEN closing ${row.name}`} placeholder="0" /><span className="text-xs text-[var(--text-secondary)] min-w-8">{row.unit}</span></div></td>
+                        </tr>
+                      )) : (
+                        <tr><td colSpan={2} className="px-4 py-8 text-center text-[var(--text-secondary)]">{brokenRows.length ? 'Tidak ada material yang cocok.' : 'Tidak ada material yang membutuhkan input BROKEN.'}</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="px-4 py-3 border-t border-[var(--border)] flex items-center justify-between gap-3 text-xs text-[var(--text-secondary)]">
+                  <span>{filteredBrokenRows.length ? `Menampilkan ${(visibleBrokenPage - 1) * brokenPageSize + 1}–${Math.min(visibleBrokenPage * brokenPageSize, filteredBrokenRows.length)} dari ${filteredBrokenRows.length}` : '0 material'} · kosongkan jika belum ditimbang; masukkan 0 jika terkonfirmasi tidak ada sisa terbuka.</span>
+                  <div className="flex items-center gap-2 shrink-0"><button type="button" className="btn btn-secondary px-2 py-1" disabled={visibleBrokenPage <= 1} onClick={() => setBrokenPage(page => Math.max(1, page - 1))}><ChevronLeft size={14}/></button><span>{visibleBrokenPage}/{brokenTotalPages}</span><button type="button" className="btn btn-secondary px-2 py-1" disabled={visibleBrokenPage >= brokenTotalPages} onClick={() => setBrokenPage(page => Math.min(brokenTotalPages, page + 1))}><ChevronRight size={14}/></button></div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-[var(--border)] flex items-center justify-between gap-3 bg-[var(--bg-secondary)]/30">
+              <span className="text-xs text-[var(--text-secondary)]">{brokenRows.filter(row => row.dirty && row.broken_qty !== '').length} perubahan</span>
+              <div className="flex gap-2"><button type="button" className="btn btn-secondary text-xs py-2 px-4" disabled={brokenSaving} onClick={() => setShowBrokenModal(false)}>Batal</button><button type="button" className="btn btn-primary text-xs py-2 px-4 flex items-center gap-2" disabled={brokenSaving || brokenLoading || !brokenSessionExists || brokenSessionLocked} onClick={handleSaveBroken}>{brokenSaving ? <RotateCcw size={14} className="animate-spin"/> : <Save size={14}/>}Simpan BROKEN</button></div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL 1: INPUT MANUAL WASTE */}
       {showInputModal && (

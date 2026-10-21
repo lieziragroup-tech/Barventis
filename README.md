@@ -67,3 +67,7 @@ The source has been syntax-transpiled for the modified JS/JSX files and domain e
 - On expiry-tracked items, multi-lot detail must equal that manual delta. Draft values persist; stock ledger/master balance changes only after successful EOD close.
 - FULL is independent of BROKEN. It derives from book closing, which is opening less OUT on days without legitimate IN/WASTE/other stock movements; new receipt quantities cannot be ignored without corrupting closing stock.
 - No dedicated `Proses Produksi` entry point is available. Existing historic stock transaction rows remain for audit and balance continuity.
+
+## Daily Inventory / Cost Control v6.2 UI fix
+
+Baca `IMPLEMENTATION_NOTES_Daily_Inventory_Cost_Control_v6_2.md` untuk perubahan field IN (Total), konsistensi FULL awal dan FULL closing, perapian helper text, dan input BROKEN di Catatan Limbah.

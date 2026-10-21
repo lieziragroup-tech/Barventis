@@ -518,6 +518,38 @@ export const api = {
     return data;
   },
 
+  saveDailyInventoryBrokenCounts: async (date, location = 'RESTO', items = []) => {
+    const tenantId = await requireTenantId();
+    const userId = await getActiveUserId();
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new Error('Tidak ada perubahan BROKEN yang perlu disimpan.');
+    }
+    const payload = items.map(item => {
+      const quantity = Number(item.broken_qty);
+      if (!Number.isFinite(quantity) || quantity < 0) {
+        throw new Error(`BROKEN untuk ${item.name || 'material'} harus berupa angka nol atau lebih.`);
+      }
+      if (!item.material_id || !String(item.broken_unit || '').trim()) {
+        throw new Error('Material dan satuan BROKEN wajib diisi.');
+      }
+      return {
+        material_id: Number(item.material_id),
+        broken_qty: quantity,
+        broken_unit: String(item.broken_unit).trim(),
+      };
+    });
+    const { data, error } = await supabase.rpc('save_daily_inventory_broken_counts_v7', {
+      p_tenant_id: tenantId,
+      p_date: date,
+      p_location: location,
+      p_items: payload,
+      p_user_id: userId,
+    });
+    if (error) throw new Error('Gagal menyimpan BROKEN closing: ' + error.message);
+    await logAudit('SAVE_DAILY_BROKEN_COUNTS', `Mencatat ${payload.length} BROKEN closing pada ${date}, lokasi ${location}. Tidak membuat mutasi stok.`);
+    return data;
+  },
+
   unlockDailyInventory: async (date, location = 'RESTO') => {
     const tenantId = await requireTenantId();
     const userId = await getActiveUserId();

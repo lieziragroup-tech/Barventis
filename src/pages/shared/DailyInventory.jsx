@@ -131,12 +131,17 @@ export default function DailyInventory({ category, initialTab }) {
         zero_activity_confirmed: false,
       };
       const nextRow = { ...existing, [field]: parsedValue };
-      if (field === 'manual_in_total_input') {
-        // The visible IN cell is the total IN for the day. Receipts already posted
-        // by Purchasing/transfers are included in this total; only the excess is
-        // treated as a manual IN, avoiding the old confusing 'IN tambahan' field.
-        const sourceIn = Number(existing.qty_in) || 0;
-        nextRow.manual_in_qty = manualInDeltaFromTotal(parsedValue, sourceIn);
+      if (field === 'in_total_input') {
+        // The visible IN field is the complete daily total. The database stores
+        // only its manual delta because Purchasing/transfers already contribute
+        // source-derived IN transactions; this prevents double-counting receipts.
+        const sourceInQty = Number(existing.qty_in ?? initialItem?.qty_in) || 0;
+        nextRow.manual_in_total_input = parsedValue;
+        // Clearing the visible total must not silently erase source receipts.
+        // A negative delta keeps the row invalid until the user restores a valid total.
+        nextRow.manual_in_qty = parsedValue === ''
+          ? -sourceInQty
+          : manualInDeltaFromTotal(parsedValue, sourceInQty);
       }
       if (field === 'qty_out') {
         nextRow.out_confirmed = parsedValue !== '';
@@ -181,8 +186,10 @@ export default function DailyInventory({ category, initialTab }) {
     const current = prev[itemId] || {};
     const lots = Array.isArray(current.manual_in_lots) ? current.manual_in_lots : [];
     const totalQty = lots.reduce((sum, lot) => sum + (Number(lot.qty) > 0 ? Number(lot.qty) : 0), 0);
-    const totalIn = (Number(current.qty_in) || 0) + totalQty;
-    return { ...prev, [itemId]: { ...current, manual_in_qty: Number(totalQty.toFixed(4)), manual_in_total_input: Number(totalIn.toFixed(4)) } };
+    const sourceInQty = Number(current.qty_in) || 0;
+    const manualQty = Number(totalQty.toFixed(4));
+    const totalInQty = Number((sourceInQty + manualQty).toFixed(4));
+    return { ...prev, [itemId]: { ...current, manual_in_qty: manualQty, manual_in_total_input: String(totalInQty) } };
   });
   const changeManualInLot = (itemId, lotKey, field, value) => updateManualInLots(itemId, lots => lots.map(lot => {
     if (lot.lot_key !== lotKey) return lot;
@@ -200,7 +207,7 @@ export default function DailyInventory({ category, initialTab }) {
       setSuccess('Tidak ada kolom OUT kosong yang perlu dikonfirmasi.');
       return;
     }
-    const approved = window.confirm(`Konfirmasi OUT = 0 untuk ${candidates.length} material yang kolom OUT-nya belum diisi? BROKEN tetap harus ditimbang sesuai kebijakan material.`);
+    const approved = window.confirm(`Konfirmasi OUT = 0 untuk ${candidates.length} material yang kolom OUT-nya belum diisi?`);
     if (!approved) return;
     setInventory(prev => {
       const next = { ...prev };
@@ -210,7 +217,7 @@ export default function DailyInventory({ category, initialTab }) {
       });
       return next;
     });
-    setSuccess(`${candidates.length} material dikonfirmasi OUT = 0. Pastikan BROKEN tetap diisi dari hasil timbang closing.`);
+    setSuccess(`${candidates.length} material dikonfirmasi OUT = 0.`);
     setError('');
   };
 
@@ -361,15 +368,6 @@ export default function DailyInventory({ category, initialTab }) {
         nextInput.focus();
         nextInput.select();
       }
-    } else if (e.key === 'Tab' && !e.shiftKey && colIndex === 3) {
-      // Quick-entry path: OUT -> BROKEN in the same row.
-      e.preventDefault();
-      const nextInput = document.querySelector(`input[data-row="${rowIndex}"][data-col="6"]`);
-      if (nextInput) { nextInput.focus(); nextInput.select(); }
-    } else if (e.key === 'Tab' && e.shiftKey && colIndex === 6) {
-      e.preventDefault();
-      const previousInput = document.querySelector(`input[data-row="${rowIndex}"][data-col="3"]`);
-      if (previousInput) { previousInput.focus(); previousInput.select(); }
     }
   };
 
@@ -381,7 +379,7 @@ export default function DailyInventory({ category, initialTab }) {
       const metrics = getInventoryRowMetrics(item, { ...row, stok_awal: stokAwal }, isClosing);
       const brokenTracking = isBrokenTrackingEnabled(item);
       const manualIn = row.manual_in_qty === '' || row.manual_in_qty == null ? 0 : Number(row.manual_in_qty);
-      if (!Number.isFinite(manualIn) || manualIn < 0) throw new Error(`${item.name}: Total IN tidak boleh lebih kecil dari penerimaan yang sudah tercatat otomatis.`);
+      if (!Number.isFinite(manualIn) || manualIn < 0) throw new Error(`${item.name}: IN total tidak boleh lebih kecil dari penerimaan otomatis (${Number(row.qty_in) || 0} ${item.unit || ''}).`);
       const manualInLotsInput = Array.isArray(row.manual_in_lots) ? row.manual_in_lots : [];
       const manualInLots = manualInLotsInput.filter(lot => Number(lot.qty) > 0 || String(lot.expiry_date || '').trim() || String(lot.batch_no || '').trim());
       if (isClosing && item.expiry_tracking_enabled && manualIn > 0) {
@@ -750,7 +748,7 @@ export default function DailyInventory({ category, initialTab }) {
                 <p className="m-0 leading-relaxed text-[var(--text-secondary)]">
                   {activeTab === 'REKAP' 
                     ? 'Rekap Harian meninjau stok awal, IN, OUT aktual staf, waste, stok fisik, pemakaian harian, dan selisih rekonsiliasi untuk kebutuhan audit manajerial.'
-                    : 'Form EOD diisi staf setiap hari. IN menampilkan total harian (penerimaan otomatis + tambahan manual), OUT diisi/dikonfirmasi staf, WASTE berasal dari log, BROKEN ditimbang manual saat closing, dan FULL dihitung otomatis dari saldo buku. Stok akhir closing menjadi stok awal hari berikutnya.'
+                    : 'Form EOD diisi staf setiap hari. IN menampilkan total harian, OUT dikonfirmasi staf, WASTE berasal dari Catatan Limbah, BROKEN diinput dari hasil timbang melalui Catatan Limbah, dan FULL dihitung otomatis dari saldo awal serta mutasi hari ini. Stok akhir closing menjadi stok awal hari berikutnya.'
                   }
                 </p>
               </div>
@@ -922,7 +920,7 @@ export default function DailyInventory({ category, initialTab }) {
               </button>
             </div>
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
-              <span>{filteredItems.length ? `Menampilkan ${(visiblePage - 1) * pageSize + 1}–${Math.min(visiblePage * pageSize, filteredItems.length)} dari ${filteredItems.length} material` : 'Tidak ada material yang cocok dengan pencarian'} · pencarian diperbarui setelah jeda 300 ms</span>
+              <span>{filteredItems.length ? `Menampilkan ${(visiblePage - 1) * pageSize + 1}–${Math.min(visiblePage * pageSize, filteredItems.length)} dari ${filteredItems.length} material` : 'Tidak ada material yang cocok dengan pencarian'}</span>
               <div className="flex items-center gap-2">
                 <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px' }} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={visiblePage <= 1} aria-label="Halaman sebelumnya"><ChevronLeft size={15} /></button>
                 <span>Halaman {visiblePage} / {totalPages}</span>
@@ -1008,16 +1006,15 @@ export default function DailyInventory({ category, initialTab }) {
               </tbody>
             </table>
           ) : (
-            <table className="custom-table" style={{ width: '100%', minWidth: '1240px' }}>
+            <table className="custom-table" style={{ width: '100%', minWidth: '1120px' }}>
               <thead>
                 <tr>
                   <th style={{ padding: '12px 16px', textAlign: 'left', minWidth: '220px' }} className="whitespace-nowrap">Barang</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '100px', width: '100px' }} className="whitespace-nowrap">Stok Awal</th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '100px', width: '100px' }} className="whitespace-nowrap">Stok Awal (FULL)</th>
                   <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '125px', width: '125px' }} className="whitespace-nowrap">IN (Total)</th>
                   <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '100px', width: '100px' }} className="whitespace-nowrap">OUT</th>
                   <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '130px', width: '130px', background: 'rgba(239,68,68,0.05)' }} className="whitespace-nowrap">WASTE</th>
                   <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '100px', width: '100px', background: 'rgba(245,158,11,0.05)' }} className="whitespace-nowrap">FULL</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '100px', width: '100px', background: 'rgba(245,158,11,0.05)' }} className="whitespace-nowrap">BROKEN</th>
                   <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '100px', width: '100px', background: 'rgba(16,185,129,0.05)' }} className="whitespace-nowrap">Stok Akhir</th>
                   <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '105px', width: '105px', background: 'rgba(139,92,246,0.05)' }} className="whitespace-nowrap">Terpakai</th>
                   <th style={{ padding: '12px 16px', textAlign: 'right', minWidth: '135px', width: '135px' }} className="whitespace-nowrap">Nilai (Rp)</th>
@@ -1035,7 +1032,6 @@ export default function DailyInventory({ category, initialTab }) {
                       { width: '130px', type: 'text', align: 'center' },
                       { width: '100px', type: 'text', align: 'center' },
                       { width: '100px', type: 'text', align: 'center' },
-                      { width: '100px', type: 'text', align: 'center' },
                       { width: '105px', type: 'text', align: 'center' },
                       { width: '135px', type: 'text', align: 'right' }
                     ]}
@@ -1049,12 +1045,14 @@ export default function DailyInventory({ category, initialTab }) {
                     const metrics = getInventoryRowMetrics(item, { ...row, stok_awal: stokAwal });
                     const stokAkhir = metrics.closing;
                     const qtyTerpakai = qtyOut;
-                    const brokenTracking = isBrokenTrackingEnabled(item);
-                    const brokenUnit = getBrokenUnitLabel(item);
-                    const outConfirmed = Boolean(row.out_confirmed) || row.zero_activity_confirmed === true || (row.qty_out !== '' && row.qty_out !== null && row.qty_out !== undefined);
-                    const brokenConfirmed = !brokenTracking || Boolean(row.broken_confirmed ?? row.is_counted);
-                    const openFull = row.opening_full_qty ?? '—';
-                    const openBroken = row.opening_broken_qty ?? '—';
+                    const openingBroken = row.opening_broken_qty == null ? 0 : Number(row.opening_broken_qty) || 0;
+                    const inferredOpening = calculateInferredFullFromBroken(item, stokAwal, openingBroken);
+                    const savedOpeningFull = row.opening_full_qty === null || row.opening_full_qty === undefined || row.opening_full_qty === ''
+                      ? null : Number(row.opening_full_qty);
+                    // Both opening FULL and current FULL use package-count units. Never
+                    // fall back to raw ml/g stock balance, which made the two columns
+                    // show incomparable values such as 1450 versus 1.
+                    const displayOpeningFull = inferredOpening?.fullQty ?? (Number.isFinite(savedOpeningFull) ? savedOpeningFull : 0);
                     const unitPrice = metrics.unitCost;
                     const nilaiRupiah = metrics.usageValue;
 
@@ -1077,19 +1075,6 @@ export default function DailyInventory({ category, initialTab }) {
                           <div className="text-xs text-[var(--text-muted)] whitespace-nowrap mt-0.5">
                             Rp {unitPrice.toLocaleString('id-ID')} / {item.unit || 'unit'}
                           </div>
-                          <div className="mt-2 text-[11px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                            Opening: {openFull} FULL · {openBroken} {brokenUnit} BROKEN
-                          </div>
-                          <div className="mt-1 flex flex-wrap gap-1.5 text-[10px] font-semibold">
-                            <span className="rounded px-1.5 py-0.5" style={{ background: outConfirmed ? '#dcfce7' : '#fef3c7', color: outConfirmed ? '#166534' : '#92400e' }}>
-                              {outConfirmed ? (row.zero_activity_confirmed ? 'OUT = 0 dikonfirmasi' : 'OUT dikonfirmasi') : 'OUT belum dikonfirmasi'}
-                            </span>
-                            {brokenTracking && <span className="rounded px-1.5 py-0.5" style={{ background: brokenConfirmed ? '#dcfce7' : '#ffedd5', color: brokenConfirmed ? '#166534' : '#9a3412' }}>
-                              {brokenConfirmed ? 'BROKEN ditimbang' : 'Wajib timbang BROKEN'}
-                            </span>}
-                          </div>
-                          {item.fefo_exception && <div className="mt-1 text-[10px] text-amber-700 font-semibold">Periksa FEFO: lot aktif bukan expiry terdekat</div>}
-                          {item.lot_reconciliation_required && <div className="mt-1 text-[10px] text-amber-700 font-semibold">Saldo lot perlu diverifikasi manager</div>}
                         </td>
                         <td style={{ padding: '8px' }}>
                           <input
@@ -1099,8 +1084,10 @@ export default function DailyInventory({ category, initialTab }) {
                             disabled
                             className="form-control text-center font-mono tabular-nums text-sm py-1.5 px-2"
                             style={{ width: '100%', minWidth: '75px' }}
-                            value={row.stok_awal !== undefined ? row.stok_awal : (fallbackOpening ?? '')}
+                            value={displayOpeningFull}
                             readOnly
+                            aria-label={`Stok awal dalam FULL untuk ${item.name}`}
+                            title="Jumlah kemasan utuh dari saldo awal; dihitung berdasarkan ukuran kemasan master."
                             onFocus={e => e.target.select()}
                             onKeyDown={e => handleKeyDown(e, idx, 1, 'stok_awal')}
                             data-row={idx}
@@ -1110,14 +1097,14 @@ export default function DailyInventory({ category, initialTab }) {
                         <td style={{ padding: '8px' }}>
                           <input
                             type="number"
-                            min={Number(row.qty_in) || 0}
+                            min={0}
                             step="any"
                             disabled={isLocked}
                             className="form-control text-center font-mono tabular-nums text-sm py-1.5 px-2"
-                            style={{ minWidth: '70px' }}
-                            title="Isi total IN hari ini. Penerimaan Purchasing/transfer sudah termasuk; hanya kelebihannya yang dicatat sebagai IN manual."
-                            value={row.manual_in_total_input ?? ((Number(row.qty_in) || 0) + (Number(row.manual_in_qty) || 0))}
-                            onChange={e => handleChange(item.id, 'manual_in_total_input', e.target.value)}
+                            style={{ width: '100%', minWidth: '70px' }}
+                            title="Masukkan total IN hari ini. Penerimaan Purchasing/transfer sudah termasuk; sistem hanya menyimpan selisih manualnya."
+                            value={row.manual_in_total_input ?? String(Number(((Number(row.qty_in) || 0) + (Number(row.manual_in_qty) || 0)).toFixed(4)))}
+                            onChange={e => handleChange(item.id, 'in_total_input', e.target.value)}
                             onFocus={e => e.target.select()}
                             onKeyDown={e => handleKeyDown(e, idx, 2, 'manual_in_qty')}
                             data-row={idx}
@@ -1127,9 +1114,8 @@ export default function DailyInventory({ category, initialTab }) {
                           />
                           {item.expiry_tracking_enabled && (
                             <details className="text-left mt-1" style={{ fontSize: '11px' }}>
-                              <summary className="cursor-pointer font-semibold text-amber-700 select-none">Rincian lot untuk IN manual ({(row.manual_in_lots || []).length})</summary>
+                              <summary className="cursor-pointer font-semibold text-amber-700 select-none">Kelola lot IN ({(row.manual_in_lots || []).length})</summary>
                               <div className="mt-2 rounded-md border p-2 flex flex-col gap-2" style={{ minWidth: '250px', background: 'var(--surface-card, white)' }}>
-                                <div className="text-[10px] leading-tight" style={{ color: 'var(--text-secondary)' }}>Kolom IN menampilkan total harian. IN otomatis dari penerimaan tidak perlu diinput ulang. Isi rincian lot hanya untuk bagian IN tambahan manual; jumlah seluruh lot harus sama dengan total IN dikurangi penerimaan otomatis.</div>
                                 {(row.manual_in_lots || []).map((lot, lotIdx) => (
                                   <div key={lot.lot_key || lotIdx} className="rounded border p-2 flex flex-col gap-1.5">
                                     <div className="flex items-center justify-between gap-2">
@@ -1142,17 +1128,11 @@ export default function DailyInventory({ category, initialTab }) {
                                   </div>
                                 ))}
                                 <button type="button" className="btn btn-secondary text-xs py-1.5" disabled={isLocked} onClick={() => addManualInLot(item.id)}>+ Tambah lot</button>
-                                <div className="text-right text-[10px]" style={{ color: 'var(--text-secondary)' }}>IN manual yang perlu dirinci: {(row.manual_in_lots || []).reduce((sum, lot) => sum + (Number(lot.qty) > 0 ? Number(lot.qty) : 0), 0).toLocaleString('id-ID')} {item.unit || ''}</div>
-                                <button type="button" className="btn btn-secondary text-xs py-1.5" disabled={isLocked} onClick={() => setManualInToLotTotal(item.id)}>Isi total IN (otomatis + lot manual)</button>
+                                <div className="text-right text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Total lot: {(row.manual_in_lots || []).reduce((sum, lot) => sum + (Number(lot.qty) > 0 ? Number(lot.qty) : 0), 0).toLocaleString('id-ID')} {item.unit || ''}</div>
+                                <button type="button" className="btn btn-secondary text-xs py-1.5" disabled={isLocked} onClick={() => setManualInToLotTotal(item.id)}>Gunakan total lot</button>
                               </div>
                             </details>
                           )}
-                          <div className="mt-1 text-center text-[10px] leading-tight" style={{ color: 'var(--text-muted)' }}>
-                            Dari Purchasing/transfer: {Number(row.qty_in) || 0} {item.unit || ''}
-                          </div>
-                          <div className="text-center text-[10px] leading-tight" style={{ color: 'var(--text-muted)' }}>
-                            {item.expiry_tracking_enabled ? `IN manual setelah penerimaan otomatis: ${(Number(row.manual_in_qty) || 0).toLocaleString('id-ID')} ${item.unit || ''}; rincian lot wajib` : `Bagian manual: ${(Number(row.manual_in_qty) || 0).toLocaleString('id-ID')} ${item.unit || 'unit'}`}
-                          </div>
                         </td>
                         <td style={{ padding: '8px' }}>
                           <input
@@ -1168,9 +1148,8 @@ export default function DailyInventory({ category, initialTab }) {
                             onKeyDown={e => handleKeyDown(e, idx, 3, 'qty_out')}
                             data-row={idx}
                             data-col={3}
-                            placeholder={outConfirmed ? 'OUT dikonfirmasi' : 'Isi OUT aktual'}
+                            placeholder={outConfirmed ? 'Terkonfirmasi' : '0'}
                           />
-                          <div className="mt-1 text-center text-[10px]" style={{ color: 'var(--text-muted)' }}>Input: {row.out_unit || (brokenTracking ? brokenUnit : item.unit)}{brokenTracking && row.out_unit !== item.unit ? ` · setara stok ${metrics.outStockQty == null ? '—' : metrics.outStockQty.toLocaleString('id-ID')} ${item.unit || ''}` : ''}</div>
                         </td>
                         <td style={{ padding: '8px', background: 'rgba(239,68,68,0.05)' }}>
                           <div className="flex flex-col gap-1 w-full">
@@ -1191,49 +1170,18 @@ export default function DailyInventory({ category, initialTab }) {
                                 placeholder={row.transaction_waste ? String(row.transaction_waste) : '0'}
                               />
                             </div>
-                            {Number(row.transaction_waste) > 0 && (
-                              <div className="text-[10px] text-red-500 font-semibold text-center whitespace-nowrap bg-red-50/80 rounded py-0.5 px-1 border border-red-200/50" title="Akumulasi dari Catatan Limbah hari ini">
-                                Log: {row.transaction_waste} {item.unit || ''}
-                              </div>
-                            )}
                           </div>
                         </td>
                         <td style={{ padding: '8px', background: 'rgba(245,158,11,0.05)' }}>
-                          <div className="text-center font-mono tabular-nums text-sm py-2 font-bold text-amber-800" title="FULL dihitung otomatis dari stok buku. Tanpa IN/WASTE/mutasi lain: stok awal dikurangi OUT. BROKEN hanya untuk rekonsiliasi.">
+                          <div className="text-center font-mono tabular-nums text-sm py-2 font-bold text-amber-800">
                             {metrics.fullQty === null ? '—' : metrics.fullQty.toLocaleString('id-ID')}
                           </div>
-                          <div className="text-center text-[10px] text-[var(--text-muted)]">otomatis</div>
-                        </td>
-                        <td style={{ padding: '8px', background: 'rgba(245,158,11,0.05)' }}>
-                            <input
-                              type="number"
-                              min="0"
-                              step="any"
-                              disabled={isLocked || !brokenTracking}
-                              className="form-control text-center font-mono tabular-nums text-sm py-1.5 px-2 font-semibold text-amber-800"
-                              style={{ width: '100%', minWidth: '75px' }}
-                              value={brokenTracking ? (row.broken ?? '') : ''}
-                              onChange={e => handleChange(item.id, 'broken', e.target.value)}
-                              aria-label={`BROKEN closing ${item.name} (${brokenUnit})`}
-                              onFocus={e => e.target.select()}
-                              onKeyDown={e => handleKeyDown(e, idx, 6, 'broken')}
-                              data-row={idx}
-                              data-col={6}
-                              placeholder={brokenTracking ? `0 ${brokenUnit}` : 'N/A'}
-                            />
-                            {brokenTracking && <div className="text-center text-[10px] text-[var(--text-muted)] mt-1">{brokenUnit} · timbang closing</div>}
-                            {!brokenTracking && <div className="text-center text-[10px] text-[var(--text-muted)] mt-1">Tidak berlaku</div>}
                         </td>
                         <td className="text-center font-mono tabular-nums font-bold whitespace-nowrap" style={{ padding: '12px 10px', background: 'rgba(16,185,129,0.05)', color: metrics.reconciliationRequired ? '#b45309' : '#047857' }}>
                           {stokAkhir === null ? 'Perlu tinjau' : Number(stokAkhir).toLocaleString('id-ID')}
-                          {metrics.reconciliationRequired && <div className="mt-1 text-[10px] text-amber-700 whitespace-normal">{metrics.reconciliationReason}</div>}
                         </td>
                         <td className="text-center font-mono tabular-nums font-bold whitespace-nowrap" style={{ padding: '12px 10px', background: 'rgba(139,92,246,0.05)', color: qtyTerpakai < 0 ? '#ef4444' : '#6d28d9' }}>
                           <div>{qtyTerpakai}</div>
-                          <div title="Estimasi depletion ledger dihitung dari saldo buku; bukan pengukuran fisik independen karena FULL diinferensikan." className="mt-1 text-[10px] font-medium" style={{ color: Math.abs(metrics.usageVariance) > 0.0001 ? '#b45309' : '#047857' }}>
-                            Estimasi ledger: {metrics.stockBasedUsage === null ? '—' : metrics.stockBasedUsage.toLocaleString('id-ID')}
-                            {metrics.usageVariance !== null && Math.abs(metrics.usageVariance) > 0.0001 ? ` • selisih ${metrics.usageVariance.toLocaleString('id-ID')}` : ''}
-                          </div>
                         </td>
                         <td className="text-right font-mono tabular-nums font-semibold whitespace-nowrap" style={{ padding: '12px 16px' }}>
                           Rp {nilaiRupiah.toLocaleString('id-ID')}
@@ -1243,18 +1191,18 @@ export default function DailyInventory({ category, initialTab }) {
                   })
                 )}
                 {!loading && items.length > 0 && filteredItems.length === 0 && (
-                  <tr><td colSpan="10" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>Tidak ada material yang cocok dengan pencarian “{searchTerm}”.</td></tr>
+                  <tr><td colSpan="9" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>Tidak ada material yang cocok dengan pencarian “{searchTerm}”.</td></tr>
                 )}
                 {!loading && items.length === 0 && (
                   <tr>
-                    <td colSpan="10" style={{ textAlign: 'center', padding: '48px 24px', color: '#6b7280' }}>
+                    <td colSpan="9" style={{ textAlign: 'center', padding: '48px 24px', color: '#6b7280' }}>
                       <div style={{ maxWidth: '420px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                         <Package size={36} style={{ marginBottom: '12px', opacity: 0.4 }} />
                         <p style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '6px', color: 'var(--text-primary)' }}>
                           Belum Ada Master Bahan Baku
                         </p>
                         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-                          Daftar barang pada Form EOD diambil otomatis dari Master Bahan Baku (<strong>Stock Ledger</strong>). Kolom IN menampilkan total masuk hari ini; penerimaan Purchasing/transfer sudah masuk otomatis, dan hanya tambahan yang belum tercatat yang perlu diinput.
+                          Daftar material dimuat dari Master Bahan Baku. Penerimaan yang sudah tercatat di Purchasing atau transfer ikut terhitung otomatis.
                         </p>
                       </div>
                     </td>
