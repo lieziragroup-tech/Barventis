@@ -267,7 +267,7 @@ export const api = {
           out_confirmed: row.out_confirmed ?? (row.out_qty != null || row.qty_out != null),
           zero_activity_confirmed: Boolean(row.zero_activity_confirmed),
           waste: row.waste_qty ?? row.waste ?? 0,
-          broken: Boolean(row.broken_confirmed ?? row.is_counted) ? (row.broken_qty ?? row.broken ?? '') : '', // raw weighed input; closing_broken_qty_base is normalized for stock math only
+          broken: (row.broken_confirmed ?? row.is_counted) ? (row.broken_qty ?? row.broken ?? '') : '', // raw weighed input; closing_broken_qty_base is normalized for stock math only
           broken_confirmed: Boolean(row.broken_confirmed ?? row.is_counted),
           full_qty: '',
           is_counted: Boolean(row.broken_confirmed ?? row.is_counted),
@@ -451,7 +451,7 @@ export const api = {
       if (!invMap[m.id].out_unit) {
         invMap[m.id].out_unit = (invMap[m.id].out_qty_normalized != null && invMap[m.id].out_qty_input == null)
           ? (m.unit || getPackContentUnitFromMaterial(m))
-          : (Boolean(m.broken_tracking_enabled) ? getPackContentUnitFromMaterial(m) : (m.unit || ''));
+          : (m.broken_tracking_enabled ? getPackContentUnitFromMaterial(m) : (m.unit || ''));
       }
       invMap[m.id].broken_tracking_enabled = Boolean(m.broken_tracking_enabled);
       invMap[m.id].expiry_tracking_enabled = Boolean(m.expiry_tracking_enabled);

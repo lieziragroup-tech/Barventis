@@ -1,5 +1,4 @@
-/* eslint-disable react-hooks/set-state-in-effect */
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Plus, Edit2, Search, Trash2, Calendar, ShoppingCart, User, UploadCloud } from 'lucide-react';
 import { api } from '../../services/api';
 import ExportButton from '../../components/shared/ExportButton';
@@ -7,8 +6,11 @@ import PrintButton from '../../components/shared/PrintButton';
 import { exportWithAudit } from '../../services/export/exportAudit';
 import Pagination from '../../components/shared/Pagination';
 import BulkImport from '../../components/BulkImport';
+import SwipeableItem from '../../components/shared/SwipeableItem';
 import { TableSkeletonRows, TableLoadingOverlay } from '../../components/shared/TableSkeleton';
 import { useAuth } from '../../contexts/AuthContext';
+
+const formatIDR = (val) => 'Rp ' + Number(val || 0).toLocaleString('id-ID');
 
 const PAGE_SIZE = 15;
 
@@ -202,6 +204,7 @@ export default function Purchasing() {
   const removeCartItem = (cartId) => {
     setCart(prev => prev.filter(item => item.cart_id !== cartId));
   };
+  const removeFromCart = removeCartItem;
 
   const handlePrepareSavePurchases = () => {
     if (cart.length === 0) return setNotification({ type: 'error', text: 'Keranjang pembelian kosong.' });

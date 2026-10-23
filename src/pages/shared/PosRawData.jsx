@@ -3,7 +3,7 @@ import { Search, Calendar, FileText as Database, FileText as FileSpreadsheet } f
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatIDR } from '../../services/costUtils';
-import { translateDbError } from '../../utils/errorHandler';
+import { translateDbError } from '../../utils/dbMessageHelper';
 
 // Debounce function
 function debounce(func, wait) {

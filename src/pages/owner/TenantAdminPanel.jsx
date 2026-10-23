@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
-import { translateDbError } from '../../utils/errorHandler';
+import { translateDbError } from '../../utils/dbMessageHelper';
 import { useData } from '../../contexts/DataContext';
 import {
   Users, Building, Link as LinkIcon, Trash2, Copy, Clock, CheckCircle, XCircle, Store, MapPin, Plus, RotateCcw, AlertCircle

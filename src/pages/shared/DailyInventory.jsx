@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { getExpiryColor } from '../../utils/expiryColor';
-import { Calendar, FileText, PlusCircle, Save, Loader2, Lock, Unlock, Info, Package, Camera, HelpCircle, ChevronDown, X, AlertCircle, Search, ChevronLeft, ChevronRight, CheckCheck, Eye, AlertTriangle } from 'lucide-react';
+import { Calendar, FileText, PlusCircle, Save, Loader2, Lock, Unlock, Info, Package, Camera, HelpCircle, ChevronDown, X, AlertCircle, Search, ChevronLeft, ChevronRight, CheckCheck, Eye, AlertTriangle, Plus, Check, Clock, Trash2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
 import ExportButton from '../../components/shared/ExportButton';
@@ -10,7 +10,7 @@ import { TableSkeletonRows, TableLoadingOverlay } from '../../components/shared/
 import PhotoUploaderModal from '../../components/shared/PhotoUploaderModal';
 import { calculateDailyInventoryMetrics, calculateInferredFullFromBroken, convertQtyToStockUnit, getBrokenUnitLabel, isBrokenTrackingEnabled, getLocalDateISO, manualInDeltaFromTotal } from '../../services/dailyInventoryMath';
 
-export default function DailyInventory({ category, initialTab }) {
+export default function DailyInventory({ category: _category, initialTab }) {
   const { activeUser } = useAuth();
   // Daily Inventory is primarily an input workflow. Open the editable EOD form by default;
   // users can switch to REKAP whenever they need historical output.
@@ -32,6 +32,24 @@ export default function DailyInventory({ category, initialTab }) {
   const [showClosingPreview, setShowClosingPreview] = useState(false);
   const [closingPreview, setClosingPreview] = useState(null);
   const [lotOverrideReason, setLotOverrideReason] = useState('');
+
+  // Auto-save State (5 seconds debounce)
+  const [autoSaveStatus, setAutoSaveStatus] = useState('idle'); // 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
+  const [lastSavedTime, setLastSavedTime] = useState(null);
+  const autoSaveTimerRef = useRef(null);
+  const isDirtyRef = useRef(false);
+
+  // Quick Record Waste Modal State
+  const [wasteModal, setWasteModal] = useState({
+    isOpen: false,
+    item: null,
+    qty: '',
+    type: 'WASTE',
+    reason: 'Tumpah / Salah Racik (Spoilage)',
+    notes: '',
+    submitting: false,
+    error: ''
+  });
 
   // REKAP state
   const [records, setRecords] = useState([]);
@@ -156,6 +174,7 @@ export default function DailyInventory({ category, initialTab }) {
       }
       return { ...prev, [itemId]: nextRow };
     });
+    triggerAutoSaveDebounce();
   };
 
   const createManualInLot = () => ({
@@ -435,18 +454,125 @@ export default function DailyInventory({ category, initialTab }) {
     await api.saveDailyInventory(date, itemsToSave, !!isClosing, activeUser?.id, location);
   };
 
+  const performSaveRef = useRef(null);
+  performSaveRef.current = performSave;
+
+  const triggerAutoSaveDebounce = useCallback(() => {
+    if (isLocked) return;
+    isDirtyRef.current = true;
+    setAutoSaveStatus('dirty');
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(async () => {
+      if (isDirtyRef.current && !isLocked && !saving && performSaveRef.current) {
+        setAutoSaveStatus('saving');
+        try {
+          await performSaveRef.current(false);
+          isDirtyRef.current = false;
+          setAutoSaveStatus('saved');
+          const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+          setLastSavedTime(nowStr);
+        } catch (_err) {
+          setAutoSaveStatus('error');
+        }
+      }
+    }, 5000);
+  }, [isLocked, saving]);
+
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, []);
+
   const handleSave = async () => {
     if (isLocked) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     setSaving(true);
     setError('');
     setSuccess('');
     try {
       await performSave(false);
+      isDirtyRef.current = false;
+      setAutoSaveStatus('saved');
+      const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+      setLastSavedTime(nowStr);
       setSuccess('Berhasil menyimpan draft stok harian.');
     } catch (err) {
+      setAutoSaveStatus('error');
       setError(err.message || 'Gagal menyimpan draft.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Quick Waste Modal Handlers
+  const openWasteModal = (item) => {
+    if (isLocked) return;
+    setWasteModal({
+      isOpen: true,
+      item,
+      qty: '',
+      type: 'WASTE',
+      reason: 'Tumpah / Salah Racik (Spoilage)',
+      notes: '',
+      submitting: false,
+      error: ''
+    });
+  };
+
+  const closeWasteModal = () => {
+    if (wasteModal.submitting) return;
+    setWasteModal({
+      isOpen: false,
+      item: null,
+      qty: '',
+      type: 'WASTE',
+      reason: 'Tumpah / Salah Racik (Spoilage)',
+      notes: '',
+      submitting: false,
+      error: ''
+    });
+  };
+
+  const handleSaveWasteFromModal = async (e) => {
+    e?.preventDefault();
+    if (!wasteModal.item) return;
+    const qtyNum = parseFloat(wasteModal.qty);
+    if (isNaN(qtyNum) || qtyNum <= 0) {
+      setWasteModal(prev => ({ ...prev, error: 'Jumlah limbah/waste harus lebih dari 0.' }));
+      return;
+    }
+    setWasteModal(prev => ({ ...prev, submitting: true, error: '' }));
+    try {
+      await api.recordWaste({
+        material_id: wasteModal.item.id,
+        quantity: qtyNum,
+        type: wasteModal.type,
+        location,
+        reason: wasteModal.reason || 'Limbah Harian Operasional',
+        notes: wasteModal.notes || '',
+        date
+      });
+
+      // Update local row in inventory state so it reflects immediately
+      const matId = wasteModal.item.id;
+      setInventory(prev => {
+        const cur = prev[matId] || {};
+        const oldWaste = Number(cur.waste) || 0;
+        return {
+          ...prev,
+          [matId]: {
+            ...cur,
+            waste: Number((oldWaste + qtyNum).toFixed(4))
+          }
+        };
+      });
+
+      setSuccess(`Limbah untuk ${wasteModal.item.name} (${qtyNum} ${wasteModal.item.unit}) berhasil dicatat dan masuk ke Catatan Limbah!`);
+      closeWasteModal();
+      triggerAutoSaveDebounce();
+    } catch (err) {
+      setWasteModal(prev => ({ ...prev, submitting: false, error: err.message || 'Gagal mencatat limbah.' }));
     }
   };
 
@@ -919,14 +1045,6 @@ export default function DailyInventory({ category, initialTab }) {
                 <CheckCheck size={15} style={{ marginRight: 6 }} /> Konfirmasi OUT = 0 untuk baris kosong
               </button>
             </div>
-            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
-              <span>{filteredItems.length ? `Menampilkan ${(visiblePage - 1) * pageSize + 1}–${Math.min(visiblePage * pageSize, filteredItems.length)} dari ${filteredItems.length} material` : 'Tidak ada material yang cocok dengan pencarian'}</span>
-              <div className="flex items-center gap-2">
-                <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px' }} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={visiblePage <= 1} aria-label="Halaman sebelumnya"><ChevronLeft size={15} /></button>
-                <span>Halaman {visiblePage} / {totalPages}</span>
-                <button type="button" className="btn btn-secondary" style={{ padding: '4px 8px' }} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={visiblePage >= totalPages} aria-label="Halaman berikutnya"><ChevronRight size={15} /></button>
-              </div>
-            </div>
           </div>
         )}
 
@@ -1009,15 +1127,42 @@ export default function DailyInventory({ category, initialTab }) {
             <table className="custom-table" style={{ width: '100%', minWidth: '1120px' }}>
               <thead>
                 <tr>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', minWidth: '220px' }} className="whitespace-nowrap">Barang</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '100px', width: '100px' }} className="whitespace-nowrap">Stok Awal (FULL)</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '125px', width: '125px' }} className="whitespace-nowrap">IN (Total)</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '100px', width: '100px' }} className="whitespace-nowrap">OUT</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '130px', width: '130px', background: 'rgba(239,68,68,0.05)' }} className="whitespace-nowrap">WASTE</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '100px', width: '100px', background: 'rgba(245,158,11,0.05)' }} className="whitespace-nowrap">FULL</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '100px', width: '100px', background: 'rgba(16,185,129,0.05)' }} className="whitespace-nowrap">Stok Akhir</th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '105px', width: '105px', background: 'rgba(139,92,246,0.05)' }} className="whitespace-nowrap">Terpakai</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'right', minWidth: '135px', width: '135px' }} className="whitespace-nowrap">Nilai (Rp)</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', minWidth: '220px' }} className="whitespace-nowrap">
+                    Bahan Baku
+                    <div className="text-[10px] font-normal text-[var(--text-muted)]">Nama & Satuan</div>
+                  </th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '110px', width: '110px' }} className="whitespace-nowrap">
+                    Stok Awal
+                    <div className="text-[10px] font-normal text-[var(--text-muted)]">Kemasan Utuh (Full)</div>
+                  </th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '125px', width: '125px' }} className="whitespace-nowrap">
+                    Barang Masuk
+                    <div className="text-[10px] font-normal text-[var(--text-muted)]">Total IN (PO/Beli)</div>
+                  </th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '110px', width: '110px' }} className="whitespace-nowrap">
+                    Pemakaian
+                    <div className="text-[10px] font-normal text-[var(--text-muted)]">OUT Barista/Dapur</div>
+                  </th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '135px', width: '135px', background: 'rgba(239,68,68,0.06)' }} className="whitespace-nowrap">
+                    Limbah / Rusak
+                    <div className="text-[10px] font-normal text-red-600">Catatan Waste</div>
+                  </th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '105px', width: '105px', background: 'rgba(245,158,11,0.06)' }} className="whitespace-nowrap">
+                    Sisa Utuh
+                    <div className="text-[10px] font-normal text-amber-700">Kemasan (Full)</div>
+                  </th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '110px', width: '110px', background: 'rgba(16,185,129,0.06)' }} className="whitespace-nowrap">
+                    Stok Akhir
+                    <div className="text-[10px] font-normal text-emerald-700">Estimasi Sistem</div>
+                  </th>
+                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '105px', width: '105px', background: 'rgba(139,92,246,0.06)' }} className="whitespace-nowrap">
+                    Total Terpakai
+                    <div className="text-[10px] font-normal text-purple-700">Hari Ini</div>
+                  </th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right', minWidth: '140px', width: '140px' }} className="whitespace-nowrap">
+                    Biaya HPP (Rp)
+                    <div className="text-[10px] font-normal text-[var(--text-muted)]">Nilai Pemakaian</div>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1157,24 +1302,21 @@ export default function DailyInventory({ category, initialTab }) {
                           />
                         </td>
                         <td style={{ padding: '8px', background: 'rgba(239,68,68,0.05)' }}>
-                          <div className="flex flex-col gap-1 w-full">
-                            <div className="flex items-center gap-1.5 w-full">
-                              <input
-                                type="number"
-                                min="0"
-                                step="any"
-                                disabled
-                                className="form-control text-center font-mono tabular-nums text-sm py-1.5 px-2 flex-1 text-red-600 font-semibold"
-                                style={{ minWidth: '70px' }}
-                                value={row.waste ?? ''}
-                                readOnly
-                                onFocus={e => e.target.select()}
-                                onKeyDown={e => handleKeyDown(e, idx, 4, 'waste')}
-                                data-row={idx}
-                                data-col={4}
-                                placeholder={row.transaction_waste ? String(row.transaction_waste) : '0'}
-                              />
-                            </div>
+                          <div className="flex items-center justify-center gap-1.5 w-full flex-wrap">
+                            <span className="font-mono tabular-nums text-sm font-bold text-red-600">
+                              {row.waste ? Number(row.waste).toLocaleString('id-ID') : '0'}
+                            </span>
+                            <span className="text-[10px] text-[var(--text-muted)]">{item.unit || ''}</span>
+                            {!isLocked && (
+                              <button
+                                type="button"
+                                onClick={() => openWasteModal(item)}
+                                title={`Catat limbah / waste untuk ${item.name}`}
+                                className="px-2 py-1 rounded-md text-[11px] font-bold text-red-700 bg-red-100 hover:bg-red-200 transition-colors shadow-xs ml-1 inline-flex items-center gap-1 shrink-0 cursor-pointer"
+                              >
+                                <Plus size={12} /> Catat
+                              </button>
+                            )}
                           </div>
                         </td>
                         <td style={{ padding: '8px', background: 'rgba(245,158,11,0.05)' }}>
@@ -1217,6 +1359,88 @@ export default function DailyInventory({ category, initialTab }) {
             </table>
           )}
         </div>
+
+        {/* Pagination di Bawah Tabel */}
+        {activeTab === 'EOD' && filteredItems.length > 0 && (
+          <div className="no-print mt-3 flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 rounded-xl border" style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+            <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+              Menampilkan <strong>{(visiblePage - 1) * pageSize + 1}–{Math.min(visiblePage * pageSize, filteredItems.length)}</strong> dari <strong>{filteredItems.length}</strong> bahan baku
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="btn btn-secondary text-xs"
+                style={{ padding: '5px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={visiblePage <= 1}
+                aria-label="Halaman sebelumnya"
+              >
+                <ChevronLeft size={14} /> Sebelumnya
+              </button>
+              <span className="text-xs font-semibold px-2">Halaman {visiblePage} / {totalPages}</span>
+              <button
+                type="button"
+                className="btn btn-secondary text-xs"
+                style={{ padding: '5px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={visiblePage >= totalPages}
+                aria-label="Halaman berikutnya"
+              >
+                Selanjutnya <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Sticky Floating Action Bar di Bawah */}
+        {activeTab === 'EOD' && !isLocked && (
+          <div className="no-print sticky bottom-3 z-30 mt-4 p-3.5 rounded-2xl border shadow-xl flex flex-wrap items-center justify-between gap-3" style={{ background: 'rgba(255, 255, 255, 0.96)', backdropFilter: 'blur(10px)', borderColor: 'var(--border)' }}>
+            <div className="flex items-center gap-2 text-xs">
+              {autoSaveStatus === 'saving' && (
+                <span className="flex items-center gap-1.5 text-amber-600 font-semibold">
+                  <Loader2 size={15} className="animate-spin" /> Menyimpan draft otomatis...
+                </span>
+              )}
+              {autoSaveStatus === 'saved' && (
+                <span className="flex items-center gap-1.5 text-emerald-700 font-semibold bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                  <Check size={14} /> Draft tersimpan otomatis {lastSavedTime ? `(pk ${lastSavedTime})` : ''}
+                </span>
+              )}
+              {autoSaveStatus === 'dirty' && (
+                <span className="flex items-center gap-1.5 text-amber-700 font-semibold bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
+                  <Clock size={14} /> Ada perubahan baru (auto-save dalam 5 dtk)...
+                </span>
+              )}
+              {(autoSaveStatus === 'idle' || autoSaveStatus === 'error') && (
+                <span className="text-[var(--text-muted)] flex items-center gap-1.5">
+                  <Clock size={14} /> {lastSavedTime ? `Draft terakhir tersimpan pk ${lastSavedTime}` : 'Otomatis menyimpan draft tiap 5 detik jeda input'}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                className="btn btn-secondary text-xs font-semibold"
+                style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                onClick={handleSave}
+                disabled={saving || loading}
+              >
+                {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                Simpan Draft
+              </button>
+              <button
+                type="button"
+                className="btn text-xs font-semibold"
+                style={{ background: '#059669', color: '#fff', padding: '8px 18px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                onClick={submitEODSettlement}
+                disabled={saving || loading}
+              >
+                {saving ? <Loader2 size={15} className="animate-spin" /> : <Lock size={15} />}
+                Closing Harian (EOD)
+              </button>
+            </div>
+          </div>
+        )}
 
         {showClosingPreview && closingPreview && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-3" role="dialog" aria-modal="true" aria-labelledby="closing-preview-title">
@@ -1297,6 +1521,132 @@ export default function DailyInventory({ category, initialTab }) {
           bucket={photoModal.bucket}
           contextName={photoModal.contextName}
         />
+
+        {/* Quick Record Waste Modal */}
+        {wasteModal.isOpen && wasteModal.item && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+            <div className="w-full max-w-md rounded-2xl bg-[var(--bg-secondary)] shadow-2xl p-5 border" style={{ borderColor: 'var(--border)' }}>
+              <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
+                <div>
+                  <h3 className="text-base font-bold text-red-600 flex items-center gap-2 m-0">
+                    <Trash2 size={18} /> Catat Limbah / Waste
+                  </h3>
+                  <p className="text-xs text-[var(--text-muted)] mt-1 mb-0">
+                    Bahan: <strong>{wasteModal.item.name}</strong> ({wasteModal.item.unit})
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeWasteModal}
+                  disabled={wasteModal.submitting}
+                  className="text-gray-400 hover:text-gray-600 p-1 rounded-lg cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {wasteModal.error && (
+                <div className="mt-3 p-2.5 text-xs rounded-lg bg-red-50 text-red-700 border border-red-200">
+                  {wasteModal.error}
+                </div>
+              )}
+
+              <form onSubmit={handleSaveWasteFromModal} className="mt-4 space-y-3.5">
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-[var(--text-secondary)]">
+                    Jumlah Limbah / Terbuang ({wasteModal.item.unit}) *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    required
+                    autoFocus
+                    placeholder="Contoh: 150 atau 2"
+                    value={wasteModal.qty}
+                    onChange={e => setWasteModal(prev => ({ ...prev, qty: e.target.value }))}
+                    className="form-control w-full text-base font-bold py-2 px-3 text-red-600 font-mono"
+                    disabled={wasteModal.submitting}
+                  />
+                  <span className="text-[10px] text-[var(--text-muted)] mt-1 block">
+                    Masukkan jumlah bahan yang terbuang dalam satuan <strong>{wasteModal.item.unit}</strong>.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-[var(--text-secondary)]">
+                    Kategori Limbah
+                  </label>
+                  <select
+                    value={wasteModal.type}
+                    onChange={e => setWasteModal(prev => ({ ...prev, type: e.target.value }))}
+                    className="form-control w-full text-xs py-2 px-2.5"
+                    disabled={wasteModal.submitting}
+                  >
+                    <option value="WASTE">Basi / Penurunan Kualitas (Spoilage)</option>
+                    <option value="BREAKAGE">Pecah / Rusak Fisik (Breakage)</option>
+                    <option value="EXPIRED">Kadaluarsa (Expired)</option>
+                    <option value="COMP">Tester / Complimentary (Comp)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-[var(--text-secondary)]">
+                    Penyebab / Alasan
+                  </label>
+                  <select
+                    value={wasteModal.reason}
+                    onChange={e => setWasteModal(prev => ({ ...prev, reason: e.target.value }))}
+                    className="form-control w-full text-xs py-2 px-2.5"
+                    disabled={wasteModal.submitting}
+                  >
+                    <option value="Tumpah / Salah Racik (Spoilage)">Tumpah / Salah Racik (Spoilage)</option>
+                    <option value="Basi / Bau Asam">Basi / Bau Asam</option>
+                    <option value="Lewat Expired Date">Lewat Expired Date</option>
+                    <option value="Pecah Saat Handling">Pecah Saat Handling</option>
+                    <option value="Susut Trimming Kitchen">Susut Trimming Kitchen</option>
+                    <option value="Kualitas Drop dari Supplier">Kualitas Drop dari Supplier</option>
+                    <option value="Lainnya">Lainnya</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-[var(--text-secondary)]">
+                    Catatan Tambahan (Opsional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Contoh: Tumpah saat rush hour siang..."
+                    value={wasteModal.notes}
+                    onChange={e => setWasteModal(prev => ({ ...prev, notes: e.target.value }))}
+                    className="form-control w-full text-xs py-1.5 px-2.5"
+                    disabled={wasteModal.submitting}
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+                  <button
+                    type="button"
+                    onClick={closeWasteModal}
+                    disabled={wasteModal.submitting}
+                    className="btn btn-secondary text-xs px-3.5 py-2 cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={wasteModal.submitting || !wasteModal.qty || Number(wasteModal.qty) <= 0}
+                    className="btn text-xs font-semibold px-4 py-2 flex items-center gap-1.5 cursor-pointer"
+                    style={{ background: '#dc2626', color: '#fff' }}
+                  >
+                    {wasteModal.submitting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                    {wasteModal.submitting ? 'Menyimpan...' : 'Simpan ke Catatan Limbah'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -77,7 +77,7 @@ export default function ExpiryMonitor() {
     } finally {
       setLoading(false);
     }
-  }, [profile?.tenant_id]);
+  }, [profile]);
 
   useEffect(() => {
     fetchExpiry();
