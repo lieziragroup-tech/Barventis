@@ -33,12 +33,50 @@ export default function DailyInventory({ category: _category, initialTab }) {
   const [closingPreview, setClosingPreview] = useState(null);
   const [lotOverrideReason, setLotOverrideReason] = useState('');
 
-  // Auto-save State (5 seconds debounce)
+  // Auto-save State (5 seconds debounce + Instant LocalStorage Mirror)
   const [autoSaveStatus, setAutoSaveStatus] = useState('idle'); // 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
   const [lastSavedTime, setLastSavedTime] = useState(null);
   const autoSaveTimerRef = useRef(null);
   const isDirtyRef = useRef(false);
+  const inventoryRef = useRef({});
+  const itemsRef = useRef([]);
+  const dateRef = useRef(date);
+  const locationRef = useRef(location);
+  const isLockedRef = useRef(isLocked);
+  const activeUserRef = useRef(activeUser);
+  
+  // Keep refs synchronized
+  inventoryRef.current = inventory;
+  itemsRef.current = items;
+  dateRef.current = date;
+  locationRef.current = location;
+  isLockedRef.current = isLocked;
+  activeUserRef.current = activeUser;
 
+  const getLocalDraftKey = useCallback((d = date, loc = location) => {
+    const tenantId = activeUser?.tenant_id || 'default';
+    return `barventis_daily_inv_draft_${tenantId}_${loc}_${d}`;
+  }, [activeUser?.tenant_id, date, location]);
+
+  const saveDraftToLocalStorage = useCallback((invState, d = date, loc = location) => {
+    try {
+      const key = getLocalDraftKey(d, loc);
+      localStorage.setItem(key, JSON.stringify({
+        savedAt: Date.now(),
+        date: d,
+        location: loc,
+        inventory: invState
+      }));
+    } catch (_e) {
+      // ignore quota errors
+    }
+  }, [getLocalDraftKey, date, location]);
+
+  const clearLocalDraft = useCallback((d = date, loc = location) => {
+    try {
+      localStorage.removeItem(getLocalDraftKey(d, loc));
+    } catch (_e) {}
+  }, [getLocalDraftKey, date, location]);
   // Quick Record Waste Modal State
   const [wasteModal, setWasteModal] = useState({
     isOpen: false,
@@ -110,14 +148,50 @@ export default function DailyInventory({ category: _category, initialTab }) {
       const { items: materialsList, inventory: invMap, isLocked: lockFlag } = await api.getDailyInventoryEodData(date, location);
       setItems(materialsList);
       setIsLocked(!!lockFlag);
-      setInventory(invMap || {});
+      
+      let mergedInventory = invMap || {};
+      // Rehydrate uncommitted changes from localStorage if available and not locked
+      if (!lockFlag) {
+        try {
+          const key = getLocalDraftKey(date, location);
+          const localRaw = localStorage.getItem(key);
+          if (localRaw) {
+            const parsed = JSON.parse(localRaw);
+            if (parsed && parsed.inventory && parsed.date === date && parsed.location === location) {
+              // Merge local modifications over server draft
+              const localInv = parsed.inventory;
+              const hydrated = { ...mergedInventory };
+              Object.keys(localInv).forEach(matId => {
+                if (hydrated[matId]) {
+                  const locRow = localInv[matId];
+                  hydrated[matId] = {
+                    ...hydrated[matId],
+                    ...(locRow.manual_in_total_input !== undefined ? { manual_in_total_input: locRow.manual_in_total_input } : {}),
+                    ...(locRow.manual_in_qty !== undefined ? { manual_in_qty: locRow.manual_in_qty } : {}),
+                    ...(locRow.manual_in_lots !== undefined ? { manual_in_lots: locRow.manual_in_lots } : {}),
+                    ...(locRow.qty_out !== undefined ? { qty_out: locRow.qty_out } : {}),
+                    ...(locRow.out_confirmed !== undefined ? { out_confirmed: locRow.out_confirmed } : {}),
+                    ...(locRow.zero_activity_confirmed !== undefined ? { zero_activity_confirmed: locRow.zero_activity_confirmed } : {}),
+                    ...(locRow.broken !== undefined ? { broken: locRow.broken } : {}),
+                    ...(locRow.broken_confirmed !== undefined ? { broken_confirmed: locRow.broken_confirmed } : {}),
+                  };
+                } else {
+                  hydrated[matId] = localInv[matId];
+                }
+              });
+              mergedInventory = hydrated;
+            }
+          }
+        } catch (_parseErr) {}
+      }
+      
+      setInventory(mergedInventory);
     } catch (err) {
       setError(err.message || 'Gagal memuat form EOD');
     } finally {
       setLoading(false);
     }
-  }, [date, location]);
-
+  }, [date, location, getLocalDraftKey]);
   useEffect(() => {
     if (activeTab === 'REKAP') {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -172,6 +246,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
         nextRow.broken_confirmed = parsedValue !== '' && parsedValue !== null && parsedValue !== undefined;
         nextRow.is_counted = nextRow.broken_confirmed;
       }
+      saveDraftToLocalStorage({ ...prev, [itemId]: nextRow });
       return { ...prev, [itemId]: nextRow };
     });
     triggerAutoSaveDebounce();
@@ -189,34 +264,39 @@ export default function DailyInventory({ category: _category, initialTab }) {
       const current = prev[itemId] || {};
       const lots = Array.isArray(current.manual_in_lots) ? current.manual_in_lots : [];
       const nextLots = updater(lots).map(lot => ({ ...lot }));
-      return {
+      const nextState = {
         ...prev,
         [itemId]: {
           ...current,
           manual_in_lots: nextLots,
-          // Keep total IN editable. Lot rows document only the manual portion above source-derived receipts.
         },
       };
+      saveDraftToLocalStorage(nextState);
+      return nextState;
     });
+    triggerAutoSaveDebounce();
   };
-
   const addManualInLot = itemId => updateManualInLots(itemId, lots => [...lots, createManualInLot()]);
-  const setManualInToLotTotal = itemId => setInventory(prev => {
-    const current = prev[itemId] || {};
-    const lots = Array.isArray(current.manual_in_lots) ? current.manual_in_lots : [];
-    const totalQty = lots.reduce((sum, lot) => sum + (Number(lot.qty) > 0 ? Number(lot.qty) : 0), 0);
-    const sourceInQty = Number(current.qty_in) || 0;
-    const manualQty = Number(totalQty.toFixed(4));
-    const totalInQty = Number((sourceInQty + manualQty).toFixed(4));
-    return { ...prev, [itemId]: { ...current, manual_in_qty: manualQty, manual_in_total_input: String(totalInQty) } };
-  });
+  const setManualInToLotTotal = itemId => {
+    setInventory(prev => {
+      const current = prev[itemId] || {};
+      const lots = Array.isArray(current.manual_in_lots) ? current.manual_in_lots : [];
+      const totalQty = lots.reduce((sum, lot) => sum + (Number(lot.qty) > 0 ? Number(lot.qty) : 0), 0);
+      const sourceInQty = Number(current.qty_in) || 0;
+      const manualQty = Number(totalQty.toFixed(4));
+      const totalInQty = Number((sourceInQty + manualQty).toFixed(4));
+      const nextState = { ...prev, [itemId]: { ...current, manual_in_qty: manualQty, manual_in_total_input: String(totalInQty) } };
+      saveDraftToLocalStorage(nextState);
+      return nextState;
+    });
+    triggerAutoSaveDebounce();
+  };
   const changeManualInLot = (itemId, lotKey, field, value) => updateManualInLots(itemId, lots => lots.map(lot => {
     if (lot.lot_key !== lotKey) return lot;
     const normalized = field === 'qty' ? (value === '' ? '' : String(value).replace(',', '.')) : value;
     return { ...lot, [field]: normalized };
   }));
   const removeManualInLot = (itemId, lotKey) => updateManualInLots(itemId, lots => lots.filter(lot => lot.lot_key !== lotKey));
-
   const confirmZeroActivityForUntouched = () => {
     const candidates = items.filter(item => {
       const row = inventory[item.id] || {};
@@ -234,8 +314,10 @@ export default function DailyInventory({ category: _category, initialTab }) {
         const current = next[item.id] || {};
         next[item.id] = { ...current, qty_out: '0', out_unit: current.out_unit || (isBrokenTrackingEnabled(item) ? getBrokenUnitLabel(item) : item.unit), out_confirmed: true, zero_activity_confirmed: true };
       });
+      saveDraftToLocalStorage(next);
       return next;
     });
+    triggerAutoSaveDebounce();
     setSuccess(`${candidates.length} material dikonfirmasi OUT = 0.`);
     setError('');
   };
@@ -461,7 +543,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
     if (isLocked) return;
     isDirtyRef.current = true;
     setAutoSaveStatus('dirty');
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(async () => {
       if (isDirtyRef.current && !isLocked && !saving && performSaveRef.current) {
         setAutoSaveStatus('saving');
@@ -471,23 +553,30 @@ export default function DailyInventory({ category: _category, initialTab }) {
           setAutoSaveStatus('saved');
           const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
           setLastSavedTime(nowStr);
-        } catch (_err) {
+        } catch (err) {
+          console.error('[DailyInventory] AutoSave error:', err);
           setAutoSaveStatus('error');
         }
       }
     }, 5000);
   }, [isLocked, saving]);
 
+  // Unmount / Navigation Flush: pastikan perubahan yang tertunda langsung dikirim ke DB saat pindah menu
   useEffect(() => {
     return () => {
-      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      clearTimeout(autoSaveTimerRef.current);
+      if (isDirtyRef.current && !isLockedRef.current && performSaveRef.current) {
+        // Execute immediate flush save to server before unmount
+        performSaveRef.current(false).catch(err => {
+          console.warn('[DailyInventory] Unmount flush failed, fallback kept in localStorage:', err);
+        });
+      }
     };
   }, []);
 
   const handleSave = async () => {
     if (isLocked) return;
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    setSaving(true);
+    clearTimeout(autoSaveTimerRef.current);
     setError('');
     setSuccess('');
     try {
@@ -592,10 +681,10 @@ export default function DailyInventory({ category: _category, initialTab }) {
     setSuccess('');
     try {
       await performSave(true);
+      clearLocalDraft(date, location);
       setIsLocked(true);
       setShowClosingPreview(false);
       setSuccess('Closing EOD berhasil disimpan dan dikunci. Stok akhir menjadi saldo awal operasional berikutnya.');
-      fetchRecords();
     } catch (err) {
       setError('Gagal closing EOD: ' + (err.message || 'Terjadi kesalahan'));
     } finally {

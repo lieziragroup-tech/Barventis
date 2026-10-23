@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateClosingStockQty, calculateDailyInventoryMetrics, calculateInferredFullFromBroken, convertQtyToStockUnit, getLocalDateISO, manualInDeltaFromTotal } from '../dailyInventoryMath';
+import { calculateClosingStockQty, calculateDailyInventoryMetrics, calculateInferredFullFromBroken, convertQtyToStockUnit, getLocalDateISO, getBrokenUnitLabel, isBrokenTrackingEnabled, getStockUnitsPerPack, manualInDeltaFromTotal } from '../dailyInventoryMath';
 
 describe('calculateDailyInventoryMetrics', () => {
   it('uses staff-confirmed OUT as actual usage and keeps waste separate', () => {
@@ -114,5 +114,111 @@ describe('manualInDeltaFromTotal', () => {
 
   it('allows a blank visible IN field while the user edits', () => {
     expect(manualInDeltaFromTotal('', 0)).toBe('');
+  });
+});
+
+// ─── Sprint 1 Augments (WB-01) ───────────────────────────────────────────────
+
+describe('WB-01: calculateInferredFullFromBroken — extended cases', () => {
+  // WB-01.1: normal path, canonical domain smoke (opening=5, OUT=200ml, BROKEN=800ml)
+  it('WB-01.1 — normal closing: opening 5 botol, OUT 200ml → FULL=4, total=4800ml', () => {
+    // book closing in stock unit (botol): 5 - 0.2 = 4.8
+    const result = calculateInferredFullFromBroken(
+      { name: 'Sirup', unit: 'botol', full_pack: 'Botol = 1000 ml' },
+      4.8, 800
+    );
+    expect(result.valid).toBe(true);
+    expect(result.fullQty).toBe(4);
+    expect(result.physicalEquivalentQty).toBeCloseTo(4.8, 5);
+  });
+
+  // WB-01.2: BROKEN 900ml tidak cocok → RECONCILIATION_REQUIRED
+  it('WB-01.2 — BROKEN > saldo sisa: flagged RECONCILIATION_REQUIRED, fullQty masih diturunkan dari saldo', () => {
+    const result = calculateInferredFullFromBroken(
+      { name: 'Sirup', unit: 'botol', full_pack: 'Botol = 1000 ml' },
+      4.8, 900
+    );
+    expect(result.valid).toBe(false);
+    expect(result.fullQty).toBe(4); // masih diturunkan dari saldo buku
+    expect(result.reason).toMatch(/BROKEN harus kurang|tidak cocok/i);
+  });
+
+  // WB-01.3: BROKEN agregat > 1 pack (saldo 4600ml, BROKEN 1600ml)
+  it('WB-01.3 — BROKEN agregat > 1 pack: ditolak karena harus < 1 kemasan utuh per aturan satu lot aktif', () => {
+    const result = calculateInferredFullFromBroken(
+      { name: 'Sirup', unit: 'botol', full_pack: 'Botol = 1000 ml' },
+      4.6, 1600
+    );
+    // BROKEN 1600ml >= packSize 1000ml → invalid; reason harus eksplisit
+    expect(result.valid).toBe(false);
+    expect(result.reason).toBeTruthy();
+  });
+
+  // WB-01.4: pack config missing + BROKEN > 0 → tidak bisa konversi BROKEN ke stock unit → invalid
+  it('WB-01.4 — pack config kosong + BROKEN > 0: konversi gagal, sistem return valid=false dengan reason', () => {
+    // unit='unit' + full_pack=null + broken=50 → getBrokenUnitLabel returns 'unit', convertQtyToStockUnit fails
+    // because no pack details can be resolved for a dimensional cross-unit conversion.
+    // Dengan BROKEN=0 sistem valid (fallback packSize=1); dengan BROKEN>0 dan unit ambigu → error path.
+    const result = calculateInferredFullFromBroken(
+      { name: 'Bahan Aneh', unit: 'unit', full_pack: '???invalid???' },
+      5, 50
+    );
+    // Unit konversi tidak bisa diselesaikan → valid false
+    expect(result.valid).toBe(false);
+    expect(result.reason).toBeTruthy();
+  });
+
+  // WB-01.3 lanjutan: no-movement day → opening FULL = FULL akhir
+  it('WB-01.3b — no-movement day: FULL akhir sama dengan opening FULL', () => {
+    // opening = 5 botol (5000ml), OUT=0, IN=0, WASTE=0 → book closing = 5
+    const result = calculateInferredFullFromBroken(
+      { name: 'Sirup', unit: 'botol', full_pack: 'Botol = 1000 ml' },
+      5, 0
+    );
+    expect(result.valid).toBe(true);
+    expect(result.fullQty).toBe(5);
+  });
+});
+
+describe('WB-01: isBrokenTrackingEnabled — material mode detection', () => {
+  // WB-01.10: material BASE_UNIT / non-broken → tracking disabled
+  it('WB-01.10a — explicit broken_tracking_enabled=false: tracking disabled', () => {
+    expect(isBrokenTrackingEnabled({ name: 'Sachet', unit: 'pcs', full_pack: null, broken_tracking_enabled: false })).toBe(false);
+  });
+
+  it('WB-01.10b — explicit broken_tracking_enabled=true: tracking enabled', () => {
+    expect(isBrokenTrackingEnabled({ name: 'Sirup', unit: 'botol', full_pack: 'Botol = 1000 ml', broken_tracking_enabled: true })).toBe(true);
+  });
+
+  it('WB-01.10c — material dengan full_pack ml/gram: tracking enabled otomatis', () => {
+    expect(isBrokenTrackingEnabled({ name: 'Susu', unit: 'botol', full_pack: 'Botol = 946 ml' })).toBe(true);
+  });
+
+  it('WB-01.10d — material tanpa full_pack konten: tracking tidak enabled', () => {
+    expect(isBrokenTrackingEnabled({ name: 'Item', unit: 'pcs', full_pack: null })).toBe(false);
+  });
+});
+
+describe('WB-01: getStockUnitsPerPack — konversi pack ke unit stok', () => {
+  it('WB-01.7 — pack = 1000 ml, unit = botol: returns 1 stock unit per pack', () => {
+    // 1 botol = 1 botol (tracked in botol)
+    const mat = { name: 'Sirup', unit: 'botol', full_pack: 'Botol = 1000 ml' };
+    // convertQtyToStockUnit(mat, 1000, 'ml') = 1 botol
+    expect(getStockUnitsPerPack(mat)).toBeCloseTo(1, 5);
+  });
+
+  it('WB-01.7b — pack = 1000 gr, unit = gr: returns 1000 gr per pack', () => {
+    const mat = { name: 'Kopi', unit: 'gr', full_pack: '1000 gr' };
+    expect(getStockUnitsPerPack(mat)).toBeCloseTo(1000, 2);
+  });
+});
+
+describe('WB-01: getBrokenUnitLabel — label satuan timbang BROKEN', () => {
+  it('WB-01.8 — material botol 1000ml: label BROKEN adalah ml', () => {
+    expect(getBrokenUnitLabel({ name: 'Sirup', unit: 'botol', full_pack: 'Botol = 1000 ml' })).toBe('ml');
+  });
+
+  it('WB-01.8b — material tanpa full_pack: fallback ke unit material', () => {
+    expect(getBrokenUnitLabel({ name: 'Item', unit: 'pcs', full_pack: null })).toBe('pcs');
   });
 });
