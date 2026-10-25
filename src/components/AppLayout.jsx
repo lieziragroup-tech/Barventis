@@ -605,7 +605,7 @@ export default function DashboardLayout() {
                 {isTenant && (
                   <>
                     {location.pathname === basePath && "Real-time F&B HPP analytics, top variance and metrics."}
-                    {location.pathname === `${basePath}/penjualan` && "Upload file POS (ESB), riwayat data mentah POS, dan terminal kasir web."}
+                    {location.pathname === `${basePath}/penjualan` && "Upload file penjualan kasir ESB dan integrasi resep otomatis."}
                     {location.pathname === `${basePath}/daily-inventory` && "Pencatatan stok harian bahan & bir, pemakaian, dan log limbah."}
                     {location.pathname === `${basePath}/procurement` && "Rencana belanja (marketlist), purchase order, dan penerimaan barang."}
                     {location.pathname === `${basePath}/pricing-cogs` && "Simulasi harga jual, resep minuman racikan (COGS Beverage), dan katalog bir."}

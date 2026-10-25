@@ -40,9 +40,7 @@ const MENU_MAP = {
     { id: 'cost-control', label: 'Cost Control', icon: Calculator }
   ],
   '/dashboard/penjualan': [
-    { id: 'upload', label: 'Upload', icon: UploadCloud },
-    { id: 'raw', label: 'Raw Data', icon: FileText },
-    { id: 'terminal', label: 'Terminal', icon: MonitorSmartphone }
+    { id: 'upload', label: 'Upload POS', icon: UploadCloud }
   ]
 };
 

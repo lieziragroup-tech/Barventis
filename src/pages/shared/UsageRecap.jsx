@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { Calendar, TrendingUp, Loader2 } from 'lucide-react';
+import { Calendar, TrendingUp, Loader2, AlertTriangle, FileText, Check, X, Sparkles } from 'lucide-react';
 import ExportButton from '../../components/shared/ExportButton';
 import { exportWithAudit } from '../../services/export/exportAudit';
 import { TableSkeletonRows } from '../../components/shared/TableSkeleton';
+import { adjustmentApi } from '../../services/upgradeModulesApi';
 
 // ponytail: inline component, no external state management. Add context when multi-page usage needed.
 export default function UsageRecap() {
@@ -21,6 +22,17 @@ export default function UsageRecap() {
   const [sortCol, setSortCol] = useState('total_terpakai');
   const [sortDir, setSortDir] = useState('desc');
 
+  // Justification Modal State
+  const [justificationModal, setJustificationModal] = useState({
+    isOpen: false,
+    material: null,
+    varianceQty: 0,
+    category: 'EVENT_NON_POS',
+    reason: '',
+    submitting: false,
+    error: '',
+    success: ''
+  });
   const fetchUsageData = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -41,13 +53,21 @@ export default function UsageRecap() {
       const headerIds = headers.map(h => h.id);
       const dateMap = Object.fromEntries(headers.map(h => [h.id, h.date]));
 
-      const [{ data: items, error: iErr }, materialsList] = await Promise.all([
+      const [{ data: items, error: iErr }, materialsList, { data: expectedUsageRows, error: eErr }] = await Promise.all([
         supabase.from('daily_inventory_items').select('*').in('inventory_id', headerIds),
-        api.getMaterials().catch(() => [])
+        api.getMaterials().catch(() => []),
+        supabase.from('expected_usage').select('material_id, expected_qty, total_sold')
+          .eq('tenant_id', tenantId)
+          .gte('week_start', startDate)
+          .lte('week_end', endDate)
       ]);
       if (iErr) throw iErr;
-
+      if (eErr) console.warn('[UsageRecap] Gagal memuat expected_usage:', eErr);
       const matsById = Object.fromEntries((materialsList || []).map(m => [m.id, m]));
+      const expectedByMat = {};
+      (expectedUsageRows || []).forEach(eu => {
+        expectedByMat[eu.material_id] = (expectedByMat[eu.material_id] || 0) + Number(eu.expected_qty || 0);
+      });
 
       // Aggregate per material across date range
       const agg = {};
@@ -69,7 +89,8 @@ export default function UsageRecap() {
             total_waste: 0,
             total_terpakai: 0,
             days_count: 0,
-            daily: {}
+            daily: {},
+            theoretical_qty: expectedByMat[r.material_id] || 0
           };
         }
         const a = agg[r.material_id];
@@ -90,14 +111,24 @@ export default function UsageRecap() {
         }
       });
 
-      setRecords(Object.values(agg).map(a => ({
-        ...a,
-        avg_per_day: a.days_count > 0 ? +(a.total_terpakai / a.days_count).toFixed(2) : 0,
-        total_cost: a.total_terpakai * a.price
-      })));
+      setRecords(Object.values(agg).map(a => {
+        const theoretical = Number(a.theoretical_qty || 0);
+        const actual = Number(a.total_terpakai || 0);
+        const gapQty = Number((actual - theoretical).toFixed(2));
+        const gapPct = theoretical > 0 ? Number(((gapQty / theoretical) * 100).toFixed(1)) : (actual > 0 ? 100 : 0);
+        const gapValue = Math.round(gapQty * a.price);
+        return {
+          ...a,
+          theoretical_qty: theoretical,
+          gap_qty: gapQty,
+          gap_pct: gapPct,
+          gap_value: gapValue,
+          avg_per_day: a.days_count > 0 ? +(a.total_terpakai / a.days_count).toFixed(2) : 0,
+          total_cost: a.total_terpakai * a.price
+        };
+      }));
     } catch (err) {
       setError(err.message || 'Gagal memuat data pemakaian');
-    } finally {
       setLoading(false);
     }
   }, [startDate, endDate]);
@@ -237,9 +268,11 @@ export default function UsageRecap() {
                 <th style={thStyle('total_in')} onClick={() => handleSort('total_in')}>Masuk <SortIcon col="total_in" /></th>
                 <th style={thStyle('total_out')} onClick={() => handleSort('total_out')}>Keluar <SortIcon col="total_out" /></th>
                 <th style={thStyle('total_waste')} onClick={() => handleSort('total_waste')}>Waste <SortIcon col="total_waste" /></th>
-                <th style={thStyle('total_terpakai')} onClick={() => handleSort('total_terpakai')}>Terpakai <SortIcon col="total_terpakai" /></th>
-                <th style={thStyle('avg_per_day')} onClick={() => handleSort('avg_per_day')}>Rata-rata/Hari <SortIcon col="avg_per_day" /></th>
+                <th style={thStyle('total_terpakai')} onClick={() => handleSort('total_terpakai')}>Fisik (EOD) <SortIcon col="total_terpakai" /></th>
+                <th style={thStyle('theoretical_qty')} onClick={() => handleSort('theoretical_qty')}>Teori (POS) <SortIcon col="theoretical_qty" /></th>
+                <th style={thStyle('gap_qty')} onClick={() => handleSort('gap_qty')}>GAP Selisih <SortIcon col="gap_qty" /></th>
                 <th style={thStyle('total_cost', 'right')} onClick={() => handleSort('total_cost')}>Biaya (Rp) <SortIcon col="total_cost" /></th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', minWidth: '120px' }}>Keterangan Event</th>
               </tr>
             </thead>
             <tbody>
@@ -269,8 +302,44 @@ export default function UsageRecap() {
                     <td style={{ textAlign: 'center' }}>{row.total_out}</td>
                     <td style={{ textAlign: 'center', color: row.total_waste > 0 ? '#ef4444' : 'inherit' }}>{row.total_waste}</td>
                     <td style={{ textAlign: 'center', fontWeight: 700 }}>{row.total_terpakai}</td>
-                    <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--accent)' }}>{row.avg_per_day}</td>
+                    <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>{row.theoretical_qty.toLocaleString('id-ID')}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      {row.gap_qty === 0 ? (
+                        <span className="badge text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Presisi (0)</span>
+                      ) : row.gap_qty > 0 ? (
+                        <span className="badge text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-800 font-mono">
+                          +{row.gap_qty} {row.unit}
+                        </span>
+                      ) : (
+                        <span className="badge text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-mono">
+                          {row.gap_qty} {row.unit}
+                        </span>
+                      )}
+                    </td>
                     <td style={{ textAlign: 'right', fontWeight: 600 }}>Rp {row.total_cost.toLocaleString('id-ID')}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      {row.gap_qty > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => setJustificationModal({
+                            isOpen: true,
+                            material: row,
+                            varianceQty: row.gap_qty,
+                            category: 'EVENT_NON_POS',
+                            reason: '',
+                            submitting: false,
+                            error: '',
+                            success: ''
+                          })}
+                          className="btn btn-secondary text-[11px] py-1 px-2.5 inline-flex items-center gap-1 text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-300"
+                          title="Ajukan keterangan selisih event untuk di-ACC Direktur"
+                        >
+                          <FileText size={12} /> Ajukan ACC
+                        </button>
+                      ) : (
+                        <span className="text-[11px] text-[var(--text-muted)]">—</span>
+                      )}
+                    </td>
                   </tr>
                 ))
               )}
@@ -291,13 +360,139 @@ export default function UsageRecap() {
                   <td style={{ textAlign: 'center', color: '#ef4444' }}>{totals.total_waste.toLocaleString('id-ID')}</td>
                   <td style={{ textAlign: 'center' }}>{totals.total_terpakai.toLocaleString('id-ID')}</td>
                   <td style={{ textAlign: 'center' }}>—</td>
+                  <td style={{ textAlign: 'center' }}>—</td>
                   <td style={{ textAlign: 'right' }}>Rp {totals.total_cost.toLocaleString('id-ID')}</td>
+                  <td style={{ textAlign: 'center' }}>—</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Modal Keterangan Event / Justifikasi GAP */}
+      {justificationModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="glass-card max-w-md w-full p-6 space-y-4 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600">
+                  <FileText size={18} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-[var(--text-primary)]">Keterangan Selisih / Event</h4>
+                  <p className="text-xs text-[var(--text-muted)] m-0">Pengajuan wewenang Head ke Manajer / Direktur</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setJustificationModal(prev => ({ ...prev, isOpen: false }))} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-3 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-[var(--text-muted)]">Bahan Baku:</span>
+                <strong className="text-[var(--text-primary)]">{justificationModal.material?.name}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--text-muted)]">GAP Selisih Tekor:</span>
+                <strong className="text-red-600 font-mono">+{justificationModal.varianceQty} {justificationModal.material?.unit}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--text-muted)]">Estimasi Biaya:</span>
+                <strong className="text-[var(--text-primary)] font-mono">Rp {Math.round(justificationModal.varianceQty * (justificationModal.material?.price || 0)).toLocaleString('id-ID')}</strong>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold block mb-1">Kategori Alasan:</label>
+                <select
+                  className="form-control text-xs w-full py-2 px-3"
+                  value={justificationModal.category}
+                  onChange={e => setJustificationModal(prev => ({ ...prev, category: e.target.value }))}
+                >
+                  <option value="EVENT_NON_POS">Event / Catering Khusus (Tanpa Kasir POS)</option>
+                  <option value="PROMO_COMP">Complimentary VIP / Tester Tamu</option>
+                  <option value="KALIBRASI_RASA">Kalibrasi Mesin & Dial-in Espresso</option>
+                  <option value="SPILLAGE">Tumpah Tak Terduga Saat Jam Sibuk</option>
+                  <option value="LAINNYA">Alasan Operasional Lainnya</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold block mb-1">Catatan Keterangan Resmi (Untuk Manajer / Direktur):</label>
+                <textarea
+                  rows={3}
+                  className="form-control text-xs w-full py-2 px-3"
+                  placeholder="Tuliskan nama acara, tanggal event, atau nomor BAP internal..."
+                  value={justificationModal.reason}
+                  onChange={e => setJustificationModal(prev => ({ ...prev, reason: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            {justificationModal.error && (
+              <div className="p-2 rounded bg-red-500/10 border border-red-500/20 text-red-600 text-xs">
+                {justificationModal.error}
+              </div>
+            )}
+            {justificationModal.success && (
+              <div className="p-2 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs flex items-center gap-1.5">
+                <Check size={14} /> {justificationModal.success}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)]">
+              <button
+                type="button"
+                className="btn btn-secondary text-xs py-2 px-3"
+                onClick={() => setJustificationModal(prev => ({ ...prev, isOpen: false }))}
+                disabled={justificationModal.submitting}
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                className="btn text-xs py-2 px-3"
+                style={{ background: '#059669', color: 'white' }}
+                disabled={justificationModal.submitting || !justificationModal.reason.trim()}
+                onClick={async () => {
+                  setJustificationModal(prev => ({ ...prev, submitting: true, error: '', success: '' }));
+                  try {
+                    await adjustmentApi.createAdjustment({
+                      material_id: justificationModal.material?.material_id,
+                      opname_date: endDate,
+                      system_qty: justificationModal.material?.theoretical_qty,
+                      physical_qty: justificationModal.material?.total_terpakai,
+                      variance_pct: justificationModal.material?.gap_pct,
+                      reason: justificationModal.reason.trim(),
+                      category: justificationModal.category
+                    });
+                    setJustificationModal(prev => ({
+                      ...prev,
+                      submitting: false,
+                      success: 'Keterangan event berhasil diajukan ke antrean ACC Direktur.'
+                    }));
+                    setTimeout(() => {
+                      setJustificationModal(prev => ({ ...prev, isOpen: false }));
+                    }, 1200);
+                  } catch (err) {
+                    setJustificationModal(prev => ({
+                      ...prev,
+                      submitting: false,
+                      error: err.message || 'Gagal mengajukan keterangan.'
+                    }));
+                  }
+                }}
+              >
+                {justificationModal.submitting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                Kirim ke Direktur
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
