@@ -44,14 +44,45 @@ export default function DailyInventory({ category: _category, initialTab }) {
   const locationRef = useRef(location);
   const isLockedRef = useRef(isLocked);
   const activeUserRef = useRef(activeUser);
-  
+  const performSaveRef = useRef(null);
+  // Quick Record Waste Modal State
+  const [wasteModal, setWasteModal] = useState({
+    isOpen: false,
+    item: null,
+    qty: '',
+    type: 'WASTE',
+    reason: 'Tumpah / Salah Racik (Spoilage)',
+    notes: '',
+    submitting: false,
+    error: ''
+  });
+
+  // REKAP state
+  const [records, setRecords] = useState([]);
+
+  // EOD state
+  const [items, setItems] = useState([]);
+  const [inventory, setInventory] = useState({});
+
   // Keep refs synchronized
-  inventoryRef.current = inventory;
-  itemsRef.current = items;
-  dateRef.current = date;
-  locationRef.current = location;
-  isLockedRef.current = isLocked;
-  activeUserRef.current = activeUser;
+  useEffect(() => {
+    inventoryRef.current = inventory;
+  }, [inventory]);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+  useEffect(() => {
+    dateRef.current = date;
+  }, [date]);
+  useEffect(() => {
+    locationRef.current = location;
+  }, [location]);
+  useEffect(() => {
+    isLockedRef.current = isLocked;
+  }, [isLocked]);
+  useEffect(() => {
+    activeUserRef.current = activeUser;
+  }, [activeUser]);
 
   const getLocalDraftKey = useCallback((d = date, loc = location) => {
     const tenantId = activeUser?.tenant_id || 'default';
@@ -77,25 +108,6 @@ export default function DailyInventory({ category: _category, initialTab }) {
       localStorage.removeItem(getLocalDraftKey(d, loc));
     } catch (_e) {}
   }, [getLocalDraftKey, date, location]);
-  // Quick Record Waste Modal State
-  const [wasteModal, setWasteModal] = useState({
-    isOpen: false,
-    item: null,
-    qty: '',
-    type: 'WASTE',
-    reason: 'Tumpah / Salah Racik (Spoilage)',
-    notes: '',
-    submitting: false,
-    error: ''
-  });
-
-  // REKAP state
-  const [records, setRecords] = useState([]);
-
-  // EOD state
-  const [items, setItems] = useState([]);
-  const [inventory, setInventory] = useState({});
-
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchTerm.trim().toLowerCase()), 300);
     return () => clearTimeout(timer);
@@ -535,10 +547,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
     });
     await api.saveDailyInventory(date, itemsToSave, !!isClosing, activeUser?.id, location);
   };
-
-  const performSaveRef = useRef(null);
   performSaveRef.current = performSave;
-
   const triggerAutoSaveDebounce = useCallback(() => {
     if (isLocked) return;
     isDirtyRef.current = true;
@@ -1214,9 +1223,9 @@ export default function DailyInventory({ category: _category, initialTab }) {
             </table>
           ) : (
             <table className="custom-table" style={{ width: '100%', minWidth: '1120px' }}>
-              <thead>
+              <thead className="sticky top-0 z-20 bg-[var(--bg-primary)]">
                 <tr>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', minWidth: '220px' }} className="whitespace-nowrap">
+                  <th style={{ padding: '12px 16px', textAlign: 'left', minWidth: '220px' }} className="whitespace-nowrap sticky left-0 z-30 bg-[var(--bg-primary)] shadow-[2px_0_5px_rgba(0,0,0,0.04)]">
                     Bahan Baku
                     <div className="text-[10px] font-normal text-[var(--text-muted)]">Nama & Satuan</div>
                   </th>
@@ -1302,7 +1311,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
 
                     return (
                       <tr key={item.id} style={{ background: fefo?.color === 'red' ? 'rgba(239,68,68,0.1)' : fefo?.color === 'yellow' ? 'rgba(245,158,11,0.1)' : fefo?.color === 'green' ? 'rgba(16,185,129,0.05)' : 'transparent' }}>
-                        <td style={{ padding: '12px 16px' }}>
+                        <td style={{ padding: '12px 16px' }} className="sticky left-0 z-10 bg-[var(--bg-primary)] shadow-[2px_0_5px_rgba(0,0,0,0.04)]">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-sm text-[var(--text-primary)]">{item.name}</span>
                             {fefo && (
@@ -1336,11 +1345,12 @@ export default function DailyInventory({ category: _category, initialTab }) {
                         <td style={{ padding: '8px' }}>
                           <input
                             type="number"
+                            inputMode="decimal"
                             min={0}
                             step="any"
                             disabled={isLocked}
-                            className="form-control text-center font-mono tabular-nums text-sm py-1.5 px-2"
-                            style={{ width: '100%', minWidth: '70px' }}
+                            className="form-control text-center font-mono tabular-nums text-sm py-2 px-2 min-h-[40px]"
+                            style={{ width: '100%', minWidth: '75px' }}
                             title="Masukkan total IN hari ini. Penerimaan Purchasing/transfer sudah termasuk; sistem hanya menyimpan selisih manualnya."
                             value={row.manual_in_total_input ?? String(Number(((Number(row.qty_in) || 0) + (Number(row.manual_in_qty) || 0)).toFixed(4)))}
                             onChange={e => handleChange(item.id, 'in_total_input', e.target.value)}
@@ -1376,10 +1386,11 @@ export default function DailyInventory({ category: _category, initialTab }) {
                         <td style={{ padding: '8px' }}>
                           <input
                             type="number"
+                            inputMode="decimal"
                             min="0"
                             step="any"
                             disabled={isLocked}
-                            className="form-control text-center font-mono tabular-nums text-sm py-1.5 px-2"
+                            className="form-control text-center font-mono tabular-nums text-sm py-2 px-2 min-h-[40px]"
                             style={{ width: '100%', minWidth: '75px' }}
                             value={row.qty_out ?? ''}
                             onChange={e => handleChange(item.id, 'qty_out', e.target.value)}
@@ -1401,9 +1412,9 @@ export default function DailyInventory({ category: _category, initialTab }) {
                                 type="button"
                                 onClick={() => openWasteModal(item)}
                                 title={`Catat limbah / waste untuk ${item.name}`}
-                                className="px-2 py-1 rounded-md text-[11px] font-bold text-red-700 bg-red-100 hover:bg-red-200 transition-colors shadow-xs ml-1 inline-flex items-center gap-1 shrink-0 cursor-pointer"
+                                className="px-2.5 py-1.5 rounded-md text-[11px] font-bold text-red-700 bg-red-100 hover:bg-red-200 transition-colors shadow-xs ml-1 inline-flex items-center gap-1 shrink-0 cursor-pointer min-h-[36px]"
                               >
-                                <Plus size={12} /> Catat
+                                <Plus size={13} /> Catat
                               </button>
                             )}
                           </div>
