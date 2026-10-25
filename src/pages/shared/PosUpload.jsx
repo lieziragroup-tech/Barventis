@@ -102,7 +102,7 @@ function RecipeCombobox({ recipes, materials, value, onSelect, placeholder }) {
 }
 
 export default function PosUpload() {
-  const { recipes, stock, fetchAllData } = useData();
+  const { recipes, stock, refreshData } = useData();
   const materials = stock; // alias for readability
   const navigate = useNavigate();
   const location = useLocation();
@@ -466,8 +466,9 @@ export default function PosUpload() {
       }
 
       setParsedData(null);
-      await fetchAllData(); // refresh app state
-    } catch (err) {
+      if (typeof refreshData === 'function') {
+        await refreshData();
+      }
       setUploadStatus({ type: 'error', message: err.message || 'Gagal memproses data.' });
     } finally {
       setLoading(false);

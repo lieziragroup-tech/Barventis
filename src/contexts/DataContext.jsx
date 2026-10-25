@@ -280,6 +280,7 @@ export const DataProvider = ({ children }) => {
     unitConversionMap,
     loadingData,
     refreshData: fetchAllData,
+    fetchAllData,
     showToast,
     currentTenant: activeUser ? { 
       id: activeUser.tenant_id, 
