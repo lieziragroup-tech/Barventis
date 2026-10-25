@@ -367,7 +367,7 @@ export default function DashboardLayout() {
                     <NavGroup title="Resep & Finansial" isHovered={isHovered}>
                       <NavItem to={`${basePath}/pricing-cogs`} label="Menu Pricing & COGS" icon={Tag} isHovered={isHovered} />
                       <NavItem to={`${basePath}/opname-assets`} label="Stock Opname & Aset" icon={Boxes} isHovered={isHovered} />
-                      <NavItem to={`${basePath}/cost-report`} label="Cost Control & Laporan" icon={Calculator} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/cost-report`} label="Cost Control" icon={Calculator} isHovered={isHovered} />
                     </NavGroup>
 
                     {hasAccess(['Admin / Owner', 'Owner']) && (
@@ -535,7 +535,7 @@ export default function DashboardLayout() {
                 <NavGroup title="Resep & Finansial" isHovered={true}>
                   <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pricing-cogs`} label="Menu Pricing & COGS" icon={Tag} isHovered={true} />
                   <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/opname-assets`} label="Stock Opname & Aset" icon={Boxes} isHovered={true} />
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/cost-report`} label="Cost Control & Laporan" icon={Calculator} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/cost-report`} label="Cost Control" icon={Calculator} isHovered={true} />
                 </NavGroup>
 
                 {hasAccess(['Admin / Owner', 'Owner']) && (
@@ -592,7 +592,7 @@ export default function DashboardLayout() {
                     {location.pathname === `${basePath}/pricing-cogs` && "Menu Pricing & COGS"}
                     {location.pathname === `${basePath}/opname-assets` && "Stock Opname & Aset"}
                     
-                    {location.pathname === `${basePath}/cost-report` && "Cost Control & Laporan SO Barista"}
+                    {location.pathname === `${basePath}/cost-report` && "Cost Control & Variansi Biaya"}
                     {location.pathname === `${basePath}/sistem` && "Pengaturan & Sistem"}
                   </>
                 )}
@@ -611,7 +611,7 @@ export default function DashboardLayout() {
                     {location.pathname === `${basePath}/pricing-cogs` && "Simulasi harga jual, resep minuman racikan (COGS Beverage), dan katalog bir."}
                     {location.pathname === `${basePath}/opname-assets` && "Stock opname inventory harian resto & central."}
                     
-                    {location.pathname === `${basePath}/cost-report` && "Audit variansi biaya bulanan dan ekspor 13 sheet laporan SO Barista."}
+                    {location.pathname === `${basePath}/cost-report` && "Audit variansi biaya bulanan, HPP aktual vs kasir, dan rasio biaya minuman."}
                     {location.pathname === `${basePath}/sistem` && "Buku stok, mutasi antar cabang, konfigurasi toko & RBAC, audit trail & backup."}
                   </>
                 )}
@@ -855,7 +855,7 @@ export default function DashboardLayout() {
           )}
           
           {isTenant && hasAccess(['Owner', 'Central', 'Bar', 'Staff']) && (
-            <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/cost-report`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Calculator size={20} /> Cost Control & Laporan</NavLink>
+            <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/cost-report`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Calculator size={20} /> Cost Control</NavLink>
           )}
           {isTenant && hasAccess(['Owner']) && (
             <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/sistem`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Settings size={20} /> Pengaturan & Sistem</NavLink>

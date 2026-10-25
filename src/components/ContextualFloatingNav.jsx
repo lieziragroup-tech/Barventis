@@ -37,8 +37,7 @@ const MENU_MAP = {
     { id: 'audit-backup', label: 'Audit', icon: History }
   ],
   '/dashboard/cost-report': [
-    { id: 'cost-control', label: 'Cost', icon: Calculator },
-    { id: 'laporan', label: 'Laporan', icon: FileSpreadsheet }
+    { id: 'cost-control', label: 'Cost Control', icon: Calculator }
   ],
   '/dashboard/penjualan': [
     { id: 'upload', label: 'Upload', icon: UploadCloud },
