@@ -110,10 +110,11 @@ for (const r of allRecipes) {
       const safeUnit = ing.unit.replace(/'/g, "''");
       
       sql.push(`    -- Ingredient: ${safeIngName}`);
-      sql.push(`    SELECT id INTO v_mat_id FROM public.materials WHERE tenant_id = v_tenant_id AND (name ILIKE '%${safeIngName}%' OR name ILIKE '%${safeIngName.split(' ')[0]}%') LIMIT 1;`);
+      sql.push(`    SELECT id INTO v_mat_id FROM public.materials WHERE tenant_id = v_tenant_id AND (name ILIKE '%${safeIngName}%' OR name ILIKE '${safeIngName}%') ORDER BY CASE WHEN name ILIKE '%${safeIngName}%' THEN 0 ELSE 1 END LIMIT 1;`);
       sql.push(`    IF v_mat_id IS NOT NULL THEN`);
       sql.push(`        INSERT INTO public.recipe_ingredients (recipe_id, material_id, qty_in_use, unit, unit_price, amount, tenant_id)`);
-      sql.push(`        VALUES (v_recipe_id, v_mat_id, ${ing.qty}, '${safeUnit}', ${ing.unit_price}, ${ing.amount}, v_tenant_id);`);
+      sql.push(`        VALUES (v_recipe_id, v_mat_id, ${ing.qty}, '${safeUnit}', ${ing.unit_price}, ${ing.amount}, v_tenant_id)`);
+      sql.push(`        ON CONFLICT (recipe_id, material_id) DO UPDATE SET qty_in_use = recipe_ingredients.qty_in_use + ${ing.qty}, amount = recipe_ingredients.amount + ${ing.amount};`);
       sql.push(`    END IF;\n`);
     }
   }

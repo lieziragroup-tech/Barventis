@@ -20,7 +20,7 @@ for (let i = 2; i < ph.length; i++) {
 
   const dateSerial = row[0];
   let txDate = '2026-08-01';
-  if (typeof dateSerial === 'number') {
+  if (typeof dateSerial === 'number' && dateSerial > 40000) {
     const d = new Date(Math.round((dateSerial - 25569) * 86400 * 1000));
     txDate = d.toISOString().split('T')[0];
   } else if (typeof dateSerial === 'string' && dateSerial.includes('-')) {
@@ -66,15 +66,14 @@ sql.push(`BEGIN`);
 sql.push(`    SELECT id INTO v_tenant_id FROM public.tenants LIMIT 1;`);
 sql.push(`    SELECT id INTO v_user_id FROM public.users WHERE tenant_id = v_tenant_id LIMIT 1;\n`);
 
-sql.push(`    -- 1. SEED TRANSAKSI SALDO AWAL (OPENING STOCK 1 AGUSTUS 2026)`);
-sql.push(`    -- Saldo Awal Resto`);
-sql.push(`    INSERT INTO public.transactions (tenant_id, date, type, location, qty, amount, notes, created_by)`);
-sql.push(`    VALUES (v_tenant_id, '2026-08-01', 'OPENING_STOCK', 'RESTO', 1, 27032848, 'Saldo Awal Resto per 1 Agustus 2026 (Sheet COST CONTROL J8)', v_user_id);\n`);
-
-sql.push(`    -- Saldo Awal Central`);
-sql.push(`    INSERT INTO public.transactions (tenant_id, date, type, location, qty, amount, notes, created_by)`);
-sql.push(`    VALUES (v_tenant_id, '2026-08-01', 'OPENING_STOCK', 'CENTRAL', 1, 21608886, 'Saldo Awal Central per 1 Agustus 2026 (Sheet COST CONTROL J9)', v_user_id);\n`);
-
+    sql.push(`    -- 1. SEED TRANSAKSI SALDO AWAL (OPENING STOCK 1 AGUSTUS 2026)`);
+    sql.push(`    -- Menggunakan enum sah: 'OPNAME_ADJ'`);
+    sql.push(`    -- Saldo Awal Resto`);
+    sql.push(`    INSERT INTO public.transactions (tenant_id, date, type, location, qty, amount, notes, created_by)`);
+    sql.push(`    VALUES (v_tenant_id, '2026-08-01', 'OPNAME_ADJ', 'RESTO', 1, 27032848, 'Saldo Awal Resto per 1 Agustus 2026 (Sheet COST CONTROL J8)', v_user_id);\n`);
+    sql.push(`    -- Saldo Awal Central`);
+    sql.push(`    INSERT INTO public.transactions (tenant_id, date, type, location, qty, amount, notes, created_by)`);
+    sql.push(`    VALUES (v_tenant_id, '2026-08-01', 'OPNAME_ADJ', 'CENTRAL', 1, 21608886, 'Saldo Awal Central per 1 Agustus 2026 (Sheet COST CONTROL J9)', v_user_id);\n`);
 sql.push(`    -- 2. SEED PEMBELIAN HARIAN AGUSTUS (INBOUND TRANSACTIONS)`);
 for (const p of purchases) {
   const safeName = p.name.replace(/'/g, "''");

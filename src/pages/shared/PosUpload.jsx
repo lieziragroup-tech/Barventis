@@ -2,8 +2,9 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Upload, FileSpreadsheet, CheckCircle,
-  Calendar, Database, ShieldAlert, X, AlertTriangle
+  Calendar, Database, ShieldAlert, X, AlertTriangle, Sparkles, Check, CheckCheck
 } from 'lucide-react';
+import { findBestMatch, isLikelyAddonOrFree } from '../../utils/fuzzyMatch';
 import { api } from '../../services/api';
 import { useData } from '../../contexts/DataContext';
 import { formatIDR } from '../../services/costUtils';
@@ -361,9 +362,22 @@ export default function PosUpload() {
         uploadMode: 'append'
       });
 
-      // Setup default mappings: semua missing menu → ignore
+      // Setup smart initial mappings: auto-match high confidence or suggest ignore for add-ons
+      const candidateTargets = [
+        ...recipes.map(r => ({ name: r.menu_name })),
+        ...materials.map(m => ({ name: m.name }))
+      ];
       const initMappings = {};
-      missingMenus.forEach(m => { initMappings[m.name] = { type: 'ignore' }; });
+      missingMenus.forEach(m => {
+        const suggestion = findBestMatch(m.name, candidateTargets, 0.70);
+        if (suggestion.confidence === 'high' && suggestion.match?.name) {
+          initMappings[m.name] = { type: 'map', targetName: suggestion.match.name, autoSuggested: true, score: suggestion.score };
+        } else if (isLikelyAddonOrFree(m.name)) {
+          initMappings[m.name] = { type: 'ignore', isAddon: true };
+        } else {
+          initMappings[m.name] = { type: 'ignore', suggestion: suggestion.match?.name ? suggestion : null };
+        }
+      });
       setMissingMenuMappings(initMappings);
 
     } catch (err) {
@@ -696,23 +710,94 @@ export default function PosUpload() {
               border: '1px solid rgba(239, 68, 68, 0.3)',
               background: 'rgba(239, 68, 68, 0.05)'
             }}>
-               <h3 style={{ color: 'var(--danger)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <AlertTriangle size={20} /> Warning: {summaryStats.missingMenus.length} Menu Tanpa Resep & Bahan
-               </h3>
-               <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '16px', marginTop: '8px' }}>
-                  Pilih aksi untuk setiap menu yang tidak dikenali: <strong>Abaikan</strong> (stok tidak dipotong), <strong>Buat Menu Baru</strong>, atau <strong>Map ke Menu Ada</strong>.
-               </p>
-
+               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                 <div>
+                   <h3 style={{ color: 'var(--danger)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                      <AlertTriangle size={20} /> Deteksi: {summaryStats.missingMenus.length} Menu Perlu Pemetaan
+                   </h3>
+                   <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 0, marginTop: '4px' }}>
+                      Sistem cerdas mencocokkan nama kasir ke resep secara otomatis. Periksa atau gunakan tombol cepat di bawah:
+                   </p>
+                 </div>
+                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                   <button
+                     type="button"
+                     onClick={() => {
+                       const candidateTargets = [
+                         ...recipes.map(r => ({ name: r.menu_name })),
+                         ...materials.map(m => ({ name: m.name }))
+                       ];
+                       setMissingMenuMappings(prev => {
+                         const next = { ...prev };
+                         summaryStats.missingMenus.forEach(m => {
+                           const matchResult = findBestMatch(m.name, candidateTargets, 0.65);
+                           if (matchResult.match?.name) {
+                             next[m.name] = { type: 'map', targetName: matchResult.match.name, autoSuggested: true, score: matchResult.score };
+                           }
+                         });
+                         return next;
+                       });
+                     }}
+                     className="btn"
+                     style={{ background: '#059669', color: 'white', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', padding: '6px 12px' }}
+                     title="Otomatis petakan menu dengan kemiripan tinggi"
+                   >
+                     <Sparkles size={14} /> Terapkan Rekomendasi Pintar
+                   </button>
+                   <button
+                     type="button"
+                     onClick={() => {
+                       setMissingMenuMappings(prev => {
+                         const next = { ...prev };
+                         summaryStats.missingMenus.forEach(m => {
+                           if (isLikelyAddonOrFree(m.name)) {
+                             next[m.name] = { type: 'ignore', isAddon: true };
+                           }
+                         });
+                         return next;
+                       });
+                     }}
+                     className="btn btn-secondary"
+                     style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', padding: '6px 12px' }}
+                     title="Abaikan item pelengkap seperti es batu, kemasan, atau gratis"
+                   >
+                     <CheckCheck size={14} /> Abaikan Semua Add-on
+                   </button>
+                 </div>
+               </div>
                <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
                   <table style={{ width: '100%', fontSize: '0.85rem' }}>
                     <tbody>
                       {summaryStats.missingMenus.map((m, i) => {
                          const mapping = missingMenuMappings[m.name] || { type: 'ignore' };
+                         const candidateTargets = [
+                           ...recipes.map(r => ({ name: r.menu_name })),
+                           ...materials.map(m => ({ name: m.name }))
+                         ];
+                         const smartMatch = findBestMatch(m.name, candidateTargets, 0.65);
                          return (
                          <tr key={i} style={{ borderBottom: '1px solid var(--border-light)' }}>
-                            <td style={{ padding: '8px', color: 'var(--text-primary)', fontWeight: 600, verticalAlign: 'top' }}>{m.name} <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--text-muted)' }}>({m.category})</span></td>
-                            <td style={{ padding: '8px', color: 'var(--text-muted)', verticalAlign: 'top' }}>{m.qty} terjual</td>
-                            <td style={{ padding: '8px', textAlign: 'right', verticalAlign: 'top' }}>
+                            <td style={{ padding: '8px', color: 'var(--text-primary)', fontWeight: 600, verticalAlign: 'middle' }}>
+                              <div>{m.name} <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--text-muted)' }}>({m.category})</span></div>
+                              {smartMatch.match && mapping.type !== 'map' && (
+                                <div style={{ marginTop: '4px' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMissingMenuMappings(prev => ({ ...prev, [m.name]: { type: 'map', targetName: smartMatch.match.name, score: smartMatch.score } }))}
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                                  >
+                                    <Sparkles size={11} /> Saran Cocok: {smartMatch.match.name} ({Math.round(smartMatch.score * 100)}%)
+                                  </button>
+                                </div>
+                              )}
+                              {mapping.type === 'map' && mapping.targetName && (
+                                <div className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1">
+                                  <Check size={12} /> Terpetakan ke: <strong>{mapping.targetName}</strong>
+                                </div>
+                              )}
+                            </td>
+                            <td style={{ padding: '8px', color: 'var(--text-muted)', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>{m.qty} terjual</td>
+                            <td style={{ padding: '8px', textAlign: 'right', verticalAlign: 'middle' }}>
                               <select
                                 className="form-control"
                                 style={{ width: '180px', padding: '6px 8px', fontSize: '0.8rem', height: 'auto', display: 'inline-block' }}
