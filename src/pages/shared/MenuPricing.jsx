@@ -11,6 +11,8 @@ export default function MenuPricing() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { recipes: contextRecipes, stock, refreshData, unitConversionMap } = useData();
+  const [loading, setLoading] = useState(true);
+  const [recipes, setRecipes] = useState([]);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [debouncedSearch, setDebouncedSearch] = useState('');
