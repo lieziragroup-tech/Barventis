@@ -5,7 +5,7 @@ import { api } from '../../services/api';
 import { Search, Camera, RefreshCw, X, Eye, Plus } from 'lucide-react';
 import { OFFICIAL_CATEGORIES } from './Marketlist';
 import { triggerHaptic } from '../../utils/haptics';
-import { formatIDR } from '../../services/costUtils';
+import { formatIDR, calculateIngredientCost } from '../../services/costUtils';
 import { getExpiryColor } from '../../utils/expiryColor';
 
 const COMMON_UNITS = ['gr', 'kg', 'ml', 'L', 'pck', 'pcs', 'btl', 'can'];
@@ -186,11 +186,9 @@ export default function SimplePrep() {
       yieldPct = normSource > 0 ? (normTarget / normSource) * 100 : 0;
     }
 
-    const sourcePricePerUnit = selectedSourceMat?.price || selectedSourceMat?.cost_per_base_unit || 0;
-    const totalSourceCost = sQty * sourcePricePerUnit;
+    const totalSourceCost = selectedSourceMat ? calculateIngredientCost(selectedSourceMat, sQty, sourceUnit) : 0;
     const newTargetHppPerUnit = tQty > 0 ? totalSourceCost / tQty : 0;
-    const estimatedWasteLoss = wQty * sourcePricePerUnit;
-
+    const estimatedWasteLoss = selectedSourceMat ? calculateIngredientCost(selectedSourceMat, wQty, wasteUnit) : 0;
     let yieldStatus = 'NORMAL';
     if (yieldPct >= 75) yieldStatus = 'EXCELLENT';
     else if (yieldPct < 50 && yieldPct > 0) yieldStatus = 'LOW';

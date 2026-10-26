@@ -1,14 +1,16 @@
-import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { RefreshCw, Search, ArrowRight, Save, AlertTriangle, ExternalLink } from 'lucide-react';
 import Pagination from '../../components/shared/Pagination';
+import { useData } from '../../contexts/DataContext';
+import { calculateIngredientCost } from '../../services/costUtils';
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
 
 export default function MenuPricing() {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [recipes, setRecipes] = useState([]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { recipes: contextRecipes, stock, refreshData, unitConversionMap } = useData();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -32,9 +34,31 @@ export default function MenuPricing() {
   const [simulatedPrices, setSimulatedPrices] = useState({});
   const [notification, setNotification] = useState(null);
 
-  const fetchRecipes = async () => {
+  // Compute live HPP map per recipe from ingredients
+  const liveCostMap = useMemo(() => {
+    const stockMapById = new Map((stock || []).map(s => [s.id, s]));
+    const stockMapByName = new Map((stock || []).map(s => [String(s.name || '').trim().toLowerCase(), s]));
+
+    const costMap = {};
+    (contextRecipes || []).forEach(r => {
+      const subtotal = (r.ingredients || []).reduce((acc, ing) => {
+        const mat = (ing.material_id && stockMapById.get(ing.material_id)) || stockMapByName.get(String(ing.item_name || '').trim().toLowerCase());
+        if (!mat) return acc + (Number(ing.amount) || 0);
+        const cost = calculateIngredientCost(mat, ing.qty_in_use, ing.unit, unitConversionMap);
+        return acc + cost;
+      }, 0);
+      const fixCostPct = r.fix_cost_pct != null ? parseFloat(r.fix_cost_pct) : 0.05;
+      const fixCost = Math.round(subtotal * fixCostPct);
+      const liveHpp = subtotal + fixCost;
+      costMap[r.id] = (liveHpp > 0 && liveHpp < 1000000) ? liveHpp : (Number(r.basic_cost) || liveHpp || 0);
+    });
+    return costMap;
+  }, [contextRecipes, stock, unitConversionMap]);
+
+  const fetchRecipes = useCallback(async () => {
     setLoading(true);
     try {
+      if (refreshData) await refreshData();
       const tenantId = await api.getActiveTenantId();
       const { data, error } = await supabase
         .from('recipes')
@@ -57,12 +81,11 @@ export default function MenuPricing() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [refreshData]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchRecipes();
-  }, []);
+  }, [fetchRecipes]);
 
   const handlePriceChange = (id, newPrice) => {
     setSimulatedPrices(prev => ({
@@ -84,25 +107,29 @@ export default function MenuPricing() {
     if (newPrice === parseFloat(recipe.selling_price)) return;
     
     try {
-      const newFoodCostPct = newPrice > 0 ? (parseFloat(recipe.basic_cost) / newPrice) : 0;
+      const hpp = liveCostMap[recipe.id] ?? parseFloat(recipe.basic_cost);
+      const newFoodCostPct = newPrice > 0 ? (hpp / newPrice) : 0;
 
       const { error } = await supabase
         .from('recipes')
         .update({ 
           selling_price: newPrice,
-          food_cost_pct: newFoodCostPct
+          food_cost_pct: newFoodCostPct,
+          basic_cost: hpp
         })
         .eq('id', recipe.id);
         
       if (error) throw error;
       
       setNotification({ type: 'success', text: `Harga ${recipe.menu_name} berhasil diperbarui.` });
+      if (refreshData) await refreshData();
       
       // Update local state
       setRecipes(prev => prev.map(r => r.id === recipe.id ? {
         ...r, 
         selling_price: newPrice,
-        food_cost_pct: newFoodCostPct
+        food_cost_pct: newFoodCostPct,
+        basic_cost: hpp
       } : r));
     } catch (err) {
       setNotification({ type: 'error', text: err.message });
@@ -185,14 +212,13 @@ export default function MenuPricing() {
             </thead>
             <tbody>
               {paginatedRecipes.map(r => {
-                const hpp = parseFloat(r.basic_cost);
+                const hpp = liveCostMap[r.id] ?? parseFloat(r.basic_cost);
                 const simPrice = simulatedPrices[r.id] || 0;
                 const simFc = simPrice > 0 ? (hpp / simPrice) * 100 : 0;
                 const isChanged = simPrice !== parseFloat(r.selling_price);
                 const isDanger = simFc > 30;
                 
                 const suggested = calculateSuggestedPrice(hpp);
-
                 return (
                   <tr key={r.id} style={{ background: isChanged ? 'rgba(16,185,129,0.05)' : 'transparent' }}>
                     <td style={{ fontWeight: 600 }}>{r.menu_name}</td>
@@ -230,7 +256,9 @@ export default function MenuPricing() {
                           <button 
                             className="btn btn-secondary" 
                             style={{ padding: '6px 8px', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', width: '100%' }}
-                            onClick={() => navigate('../recipes', { state: { targetRecipeId: r.id } })}
+                            onClick={() => {
+                              setSearchParams({ tab: 'cogs-all', targetRecipeId: r.id });
+                            }}
                             title="Edit Resep di Recipe Builder"
                           >
                             <ExternalLink size={12} /> Lihat Resep

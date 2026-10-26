@@ -54,20 +54,26 @@ export default function Recipes({ categoryFilter } = {}) {
     const map = {};
     stock.forEach(item => {
       const packInfo = parseFullPack(item.full_pack, item.unit);
-
       const { packUnitLabel } = getPackUnitInfo(item.full_pack, item.unit);
       const usageUnits = [...new Set([packInfo.unit, packUnitLabel])];
+      const effectivePrice = Number(item.new_price) > 0 ? Number(item.new_price) : Number(item.price || 0);
 
-      map[item.name] = {
+      const entry = {
         ...item,
+        price: effectivePrice,
         packSize: packInfo.size,
         packContentUnit: packInfo.unit,
         packUnitLabel,
         packDataInconsistent: !packInfo.consistent,
         usageUnits,
-        // Price per smallest unit (e.g., per gram, per ml, per pcs)
-        pricePerUnit: packInfo.size > 0 ? (item.new_price || item.price) / packInfo.size : 0
+        pricePerUnit: packInfo.size > 0 ? effectivePrice / packInfo.size : 0
       };
+
+      if (item.id != null) map[`id_${item.id}`] = entry;
+      if (item.name) {
+        map[item.name] = entry;
+        map[item.name.toLowerCase().trim()] = entry;
+      }
     });
     return map;
   }, [stock]);
@@ -210,11 +216,10 @@ export default function Recipes({ categoryFilter } = {}) {
 
 
   const calcRowAmount = (ing) => {
-    const info = stockMap[ing.item_name];
-    if (!info) {
-      if (ing.amount && ing.amount > 0) return ing.amount;
-      return 0;
-    }
+    const info = (ing.material_id && stockMap[`id_${ing.material_id}`])
+      || stockMap[ing.item_name]
+      || (ing.item_name && stockMap[ing.item_name.toLowerCase().trim()]);
+    if (!info) return Number(ing.amount) || 0;
     return calculateIngredientCost(info, ing.qty_in_use, ing.unit, unitConversionMap);
   };
 

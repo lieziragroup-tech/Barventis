@@ -257,14 +257,16 @@ export const menuEngApi = {
     if (error) {
       // View might not exist yet, fallback to direct query
       const { data: recipes } = await supabase.from('recipes')
-        .select('id, name, category, selling_price, total_cost, total_sold, menu_class, target_cost_percent')
+        .select('id, menu_name, category, selling_price, basic_cost, total_sold, menu_class, target_cost_percent')
         .eq('tenant_id', tenantId).gt('selling_price', 0);
       return (recipes || []).map(r => ({
         ...r,
-        margin: (r.selling_price || 0) - (r.total_cost || 0),
-        contribution: ((r.selling_price || 0) - (r.total_cost || 0)) * (r.total_sold || 0),
-        food_cost_pct: r.total_cost > 0 && r.selling_price > 0
-          ? +((r.total_cost / r.selling_price * 100).toFixed(1)) : 0
+        name: r.menu_name,
+        total_cost: r.basic_cost,
+        margin: (r.selling_price || 0) - (r.basic_cost || 0),
+        contribution: ((r.selling_price || 0) - (r.basic_cost || 0)) * (r.total_sold || 0),
+        food_cost_pct: r.basic_cost > 0 && r.selling_price > 0
+          ? +((r.basic_cost / r.selling_price * 100).toFixed(1)) : 0
       }));
     }
     return data || [];

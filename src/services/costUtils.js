@@ -77,11 +77,12 @@ export function isPackUnitConsistent(unit, fullPack) {
 
   const weightVolUnits = ['gr', 'grm', 'gram', 'ml', 'kg', 'l', 'ltr', 'liter', 'litre'];
   const isWeightVolUnit = weightVolUnits.includes(u);
-  if (!isWeightVolUnit) return true; // pcs/pck/watt/etc — no strong convention to check yet
   const hasWeightVolInFullPack = /(gr|grm|gram|ml|kg|l|ltr|liter|litre)\b/i.test(fp);
-  return hasWeightVolInFullPack;
+  if (isWeightVolUnit) return hasWeightVolInFullPack;
+  // If material unit is pack/pcs/btl but full_pack has gr/ml (e.g. 750 ml), it is valid for recipe ingredient scaling
+  if (hasWeightVolInFullPack) return true;
+  return true;
 }
-
 const normalizeUnitToken = (u) => {
   let x = (u || '').toString().toLowerCase().trim();
   if (x === 'grm' || x === 'gram' || x === 'grams') x = 'gr';
@@ -129,6 +130,14 @@ export function getPackUnitInfo(fullPack, materialUnit) {
     return {
       packUnitLabel: normalizeUnitToken(structured.packLabel) || normalizeUnitToken(materialUnit),
       contentUnit: normalizeUnitToken(structured.contentUnit) || normalizeUnitToken(materialUnit)
+    };
+  }
+  const legacy = String(fullPack || '').trim();
+  const match = legacy.match(/([\d.]+)\s*(gr|grm|gram|grams|kg|ml|l|ltr|liter|litre|pcs|pck|can|btl)\b/i);
+  if (match) {
+    return {
+      packUnitLabel: normalizeUnitToken(materialUnit),
+      contentUnit: normalizeUnitToken(match[2])
     };
   }
   const u = normalizeUnitToken(materialUnit);

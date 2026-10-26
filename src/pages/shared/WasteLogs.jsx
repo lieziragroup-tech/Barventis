@@ -27,7 +27,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { api } from '../../services/api';
 import Pagination from '../../components/shared/Pagination';
-import { formatIDR } from '../../services/costUtils';
+import { formatIDR, calculateIngredientCost } from '../../services/costUtils';
 import { exportToExcel } from '../../services/export/excelExporter';
 import { getBrokenUnitLabel, getLocalDateISO, isBrokenTrackingEnabled } from '../../services/dailyInventoryMath';
 
@@ -260,8 +260,8 @@ export default function WasteLogs() {
   const estimatedFormLoss = useMemo(() => {
     if (!selectedMaterial) return 0;
     const qty = parseFloat(wasteForm.quantity) || 0;
-    const price = parseFloat(selectedMaterial.price) || 0;
-    return qty * price;
+    if (qty <= 0) return 0;
+    return calculateIngredientCost(selectedMaterial, qty, selectedMaterial.unit);
   }, [selectedMaterial, wasteForm.quantity]);
 
   // Stock available at chosen location in form

@@ -7,6 +7,7 @@ import ExportButton from '../../components/shared/ExportButton';
 import { exportWithAudit } from '../../services/export/exportAudit';
 import { TableSkeletonRows } from '../../components/shared/TableSkeleton';
 import { adjustmentApi } from '../../services/upgradeModulesApi';
+import { calculateIngredientCost } from '../../services/costUtils';
 
 // ponytail: inline component, no external state management. Add context when multi-page usage needed.
 export default function UsageRecap() {
@@ -116,7 +117,9 @@ export default function UsageRecap() {
         const actual = Number(a.total_terpakai || 0);
         const gapQty = Number((actual - theoretical).toFixed(2));
         const gapPct = theoretical > 0 ? Number(((gapQty / theoretical) * 100).toFixed(1)) : (actual > 0 ? 100 : 0);
-        const gapValue = Math.round(gapQty * a.price);
+        const matDummy = { id: a.material_id, price: a.price, unit: a.unit, full_pack: a.full_pack };
+        const totalCost = calculateIngredientCost(matDummy, actual, a.unit);
+        const gapValue = gapQty !== 0 ? Math.round(calculateIngredientCost(matDummy, Math.abs(gapQty), a.unit) * (gapQty > 0 ? 1 : -1)) : 0;
         return {
           ...a,
           theoretical_qty: theoretical,
@@ -124,7 +127,7 @@ export default function UsageRecap() {
           gap_pct: gapPct,
           gap_value: gapValue,
           avg_per_day: a.days_count > 0 ? +(a.total_terpakai / a.days_count).toFixed(2) : 0,
-          total_cost: a.total_terpakai * a.price
+          total_cost: totalCost > 0 ? totalCost : (actual * a.price)
         };
       }));
     } catch (err) {
