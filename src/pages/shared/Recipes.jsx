@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { Search, Plus, Trash2, Save, X, UploadCloud, Coins, AlertTriangle, CheckCircle, ChefHat, RefreshCw, Download } from 'lucide-react';
 import BulkImport from '../../components/BulkImport';
 import Pagination from '../../components/shared/Pagination';
@@ -15,6 +15,7 @@ const ensureUids = (arr = []) => arr.map(x => ({ ...x, _uid: x._uid ?? rowUid() 
 
 export default function Recipes({ categoryFilter } = {}) {
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { stock, recipes, handleSaveRecipe: onSaveRecipe, handleAddRecipe: onAddRecipe, handleDeleteRecipe: onDeleteRecipe, refreshData, showToast, unitConversionMap } = useData();
   const [recalculating, setRecalculating] = useState(false);
   const [activeRecipe, setActiveRecipe] = useState(recipes[0] || null);
@@ -93,17 +94,18 @@ export default function Recipes({ categoryFilter } = {}) {
   useEffect(() => {
     if (recipes.length === 0) return;
     
-    // Check if we navigated here from another page wanting a specific recipe
-    if (location.state?.targetRecipeId) {
-      const target = recipes.find(r => r.id === location.state.targetRecipeId);
+    // Check target recipe from searchParams (?targetRecipeId=...) or location.state
+    const targetParamId = searchParams.get('targetRecipeId') || location.state?.targetRecipeId;
+    if (targetParamId) {
+      const target = recipes.find(r => String(r.id) === String(targetParamId));
       if (target) {
         setTimeout(() => handleSelectRecipe(target), 0);
-        // Clear the state so it doesn't trigger again on subsequent renders
-        window.history.replaceState({}, document.title);
+        if (location.state?.targetRecipeId) {
+          window.history.replaceState({}, document.title);
+        }
         return;
       }
     }
-
     const stillExists = activeRecipe && recipes.some(r => r.menu_name === activeRecipe.menu_name);
     if (!stillExists) {
       setTimeout(() => handleSelectRecipe(recipes[0]), 0);
