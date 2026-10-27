@@ -5605,9 +5605,13 @@ export const api = {
     location = 'RESTO',
     source_mat_id,
     source_qty,
+    source_unit = null,
     target_mat_id,
     target_qty,
+    target_unit = null,
     waste_qty = 0,
+    waste_unit = null,
+    new_target_hpp = null,
     photo_before = null,
     photo_waste = null,
     notes = '',
@@ -5691,11 +5695,32 @@ export const api = {
     }
 
 
+    // Ambil data master source & target untuk konversi satuan stok dan update HPP hasil trimming
+    let sourceMat = null;
+    let targetMat = null;
+    try {
+      const { data: matPair } = await supabase
+        .from('materials')
+        .select('*')
+        .in('id', [parseInt(source_mat_id, 10), parseInt(target_mat_id, 10)]);
+      sourceMat = (matPair || []).find(m => Number(m.id) === Number(source_mat_id));
+      targetMat = (matPair || []).find(m => Number(m.id) === Number(target_mat_id));
+    } catch (matErr) {
+      console.warn("Fetch material pair for olah bahan warning:", matErr);
+    }
+
+    const deductRes = sourceMat
+      ? convertQtyToStockUnit(sourceMat, parseFloat(source_qty), source_unit || sourceMat.unit)
+      : { qty: parseFloat(source_qty) };
+    const addRes = targetMat
+      ? convertQtyToStockUnit(targetMat, parseFloat(target_qty), target_unit || targetMat.unit)
+      : { qty: parseFloat(target_qty) };
+
     // 2. Atomic stock operations: Deduct raw material, Increment processed material
     try {
       await supabase.rpc('deduct_stock_atomic', {
         p_material_id: parseInt(source_mat_id, 10),
-        p_deduct_qty: parseFloat(source_qty)
+        p_deduct_qty: deductRes.qty
       });
     } catch (stockDeductErr) {
       console.warn("Stock deduct error:", stockDeductErr);
@@ -5704,12 +5729,30 @@ export const api = {
     try {
       await supabase.rpc('deduct_stock_atomic', {
         p_material_id: parseInt(target_mat_id, 10),
-        p_deduct_qty: -parseFloat(target_qty)
+        p_deduct_qty: -addRes.qty
       });
     } catch (stockAddErr) {
       console.warn("Stock addition error:", stockAddErr);
     }
 
+    // 2b. Update HPP bahan hasil trimming (target_mat_id) secara proporsional
+    if (targetMat && Number(new_target_hpp) > 0) {
+      try {
+        const packSize = parsePackSize(targetMat.full_pack) || 1;
+        const newPackPrice = Math.round(Number(new_target_hpp) * packSize);
+        await supabase
+          .from('materials')
+          .update({
+            price: newPackPrice,
+            new_price: newPackPrice,
+            avg_cost: newPackPrice,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', targetMat.id);
+      } catch (hppUpdateErr) {
+        console.warn("Update HPP target material warning:", hppUpdateErr);
+      }
+    }
     // 3. Record Waste if waste_qty > 0
     if (parseFloat(waste_qty) > 0) {
       try {

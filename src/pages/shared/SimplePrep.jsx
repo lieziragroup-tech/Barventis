@@ -48,6 +48,7 @@ export default function SimplePrep() {
   const [creatingRawMat, setCreatingRawMat] = useState(false);
   const [newRawMat, setNewRawMat] = useState({
     name: '',
+    trim_stage: 'RAW_UNTRIMMED', // 'RAW_UNTRIMMED' (Belum Trimming) | 'PREPPED_TRIMMED' (Sudah Trimming)
     category: 'Bahan Mentah / Raw Material',
     unit: 'kg',
     price: '',
@@ -56,14 +57,16 @@ export default function SimplePrep() {
     min_stock: '5'
   });
 
-  const openCreateRawModal = (initialName = '') => {
+  const openCreateRawModal = (initialName = '', stage = 'RAW_UNTRIMMED') => {
+    const isPrepped = stage === 'PREPPED_TRIMMED';
     setNewRawMat({
-      name: initialName || sourceSearch || '',
-      category: 'Bahan Mentah / Raw Material',
-      unit: 'kg',
+      name: initialName || (isPrepped ? targetSearch : sourceSearch) || '',
+      trim_stage: stage,
+      category: isPrepped ? 'Bahan Olahan / Prep' : 'Bahan Mentah / Raw Material',
+      unit: isPrepped ? 'ml' : 'kg',
       price: '',
-      qty_resto: '',
-      shelf_life_days: '',
+      qty_resto: '0',
+      shelf_life_days: isPrepped ? '3' : '',
       min_stock: '5'
     });
     setShowCreateRawModal(true);
@@ -72,10 +75,11 @@ export default function SimplePrep() {
   const handleCreateRawMaterial = async (e) => {
     e.preventDefault();
     if (!newRawMat.name.trim()) {
-      return toast.showError('Nama bahan mentah wajib diisi.');
+      return toast.showError('Nama bahan wajib diisi.');
     }
     setCreatingRawMat(true);
     try {
+      const isPrepped = newRawMat.trim_stage === 'PREPPED_TRIMMED';
       const defaultFullPack =
         newRawMat.unit === 'kg' ? '1000 gr' :
         newRawMat.unit === 'L' ? '1000 ml' :
@@ -83,20 +87,25 @@ export default function SimplePrep() {
 
       const created = await api.createMaterial({
         name: newRawMat.name.trim(),
-        category: newRawMat.category || 'Bahan Mentah / Raw Material',
+        category: newRawMat.category || (isPrepped ? 'Bahan Olahan / Prep' : 'Bahan Mentah / Raw Material'),
         unit: newRawMat.unit || 'kg',
         full_pack: defaultFullPack,
         price: parseFloat(newRawMat.price) || 0,
         qty_resto: parseFloat(newRawMat.qty_resto) || 0,
         shelf_life_days: newRawMat.shelf_life_days ? parseInt(newRawMat.shelf_life_days, 10) : null,
-        min_stock: parseFloat(newRawMat.min_stock) || 5
+        min_stock: parseFloat(newRawMat.min_stock) || 5,
+        is_preparable: !isPrepped // true = bahan mentah belum di-trimming, false = sudah di-trimming siap pakai
       });
       await refreshData();
-      handleSelectSource(created);
+      if (isPrepped) {
+        handleSelectTarget(created);
+      } else {
+        handleSelectSource(created);
+      }
       setShowCreateRawModal(false);
-      toast.showSuccess(`Bahan mentah "${created.name}" berhasil didaftarkan ke database dan dipilih!`);
+      toast.showSuccess(`Bahan "${created.name}" (${isPrepped ? 'Sudah Di-trimming' : 'Belum Di-trimming'}) berhasil didaftarkan!`);
     } catch (err) {
-      toast.showError(err.message || 'Gagal mendaftarkan bahan mentah baru.');
+      toast.showError(err.message || 'Gagal mendaftarkan bahan baru.');
     } finally {
       setCreatingRawMat(false);
     }
@@ -270,9 +279,13 @@ export default function SimplePrep() {
         location: 'RESTO',
         source_mat_id: selectedSourceMat.id,
         source_qty: sourceQty,
+        source_unit: sourceUnit,
         target_mat_id: selectedTargetMat.id,
         target_qty: targetQty,
+        target_unit: targetUnit,
         waste_qty: wasteQty || 0,
+        waste_unit: wasteUnit,
+        new_target_hpp: Math.round(analytics.newTargetHppPerUnit),
         photo_before: photoBefore,
         photo_waste: photoAfter,
         notes: notes,
@@ -528,7 +541,17 @@ export default function SimplePrep() {
 
               {/* Searchable Target Material */}
               <div className="relative">
-                <label className="text-xs font-bold text-gray-700 block mb-1.5">Pilih Bahan Jadi Hasil Olahan *</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-gray-700">Pilih Bahan Jadi Hasil Olahan (Sudah Di-trimming) *</label>
+                  <button
+                    type="button"
+                    onClick={() => openCreateRawModal(targetSearch, 'PREPPED_TRIMMED')}
+                    className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus size={12} />
+                    <span>+ Daftarkan Bahan Hasil Trimming</span>
+                  </button>
+                </div>
                 <div className="relative">
                   <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
                   <input
@@ -1040,8 +1063,14 @@ export default function SimplePrep() {
           <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-[var(--border)] animate-in fade-in zoom-in-95 duration-150">
             <div className="p-4 md:p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
               <div>
-                <h4 className="font-bold text-base text-gray-900">Setup Bahan Mentah Baru</h4>
-                <p className="text-xs text-gray-500 mt-0.5">Daftarkan langsung ke Big Master DB sebagai bahan mentah asal.</p>
+                <h4 className="font-bold text-base text-gray-900">
+                  {newRawMat.trim_stage === 'PREPPED_TRIMMED' ? 'Setup Bahan Hasil Olahan (Sudah Di-trimming)' : 'Setup Bahan Mentah Baru (Belum Di-trimming)'}
+                </h4>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {newRawMat.trim_stage === 'PREPPED_TRIMMED' 
+                    ? 'Daftarkan bahan bersih hasil trimming/peras/kupas untuk siap dipakai di resep.' 
+                    : 'Daftarkan bahan mentah kotor sesuai nota supplier sebelum dikupas/dipotong.'}
+                </p>
               </div>
               <button
                 type="button"
@@ -1053,12 +1082,59 @@ export default function SimplePrep() {
             </div>
 
             <form onSubmit={handleCreateRawMaterial} className="p-5 space-y-4">
+              {/* Pilihan Status Satuan Bahan */}
               <div>
-                <label className="text-xs font-bold text-gray-700 block mb-1">Nama Bahan Mentah *</label>
+                <label className="text-xs font-bold text-gray-700 block mb-1">Status Satuan Bahan *</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNewRawMat(prev => ({ 
+                      ...prev, 
+                      trim_stage: 'RAW_UNTRIMMED', 
+                      unit: 'kg',
+                      category: 'Bahan Mentah / Raw Material'
+                    }))}
+                    className={`p-2.5 rounded-xl border text-left text-xs transition-all cursor-pointer ${
+                      newRawMat.trim_stage !== 'PREPPED_TRIMMED'
+                        ? 'border-blue-500 bg-blue-50/70 text-blue-900 font-bold shadow-xs'
+                        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>1. Belum Di-trimming (Mentah)</span>
+                    </div>
+                    <div className="text-[10px] font-normal opacity-80 mt-0.5">Berat kotor nota beli (utuh/kulit/tulang)</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewRawMat(prev => ({ 
+                      ...prev, 
+                      trim_stage: 'PREPPED_TRIMMED', 
+                      unit: 'ml',
+                      category: 'Bahan Olahan / Prep'
+                    }))}
+                    className={`p-2.5 rounded-xl border text-left text-xs transition-all cursor-pointer ${
+                      newRawMat.trim_stage === 'PREPPED_TRIMMED'
+                        ? 'border-emerald-500 bg-emerald-50/70 text-emerald-900 font-bold shadow-xs'
+                        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>2. Sudah Di-trimming (Bersih)</span>
+                    </div>
+                    <div className="text-[10px] font-normal opacity-80 mt-0.5">Berat bersih siap pakai di resep menu</div>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-700 block mb-1">
+                  {newRawMat.trim_stage === 'PREPPED_TRIMMED' ? 'Nama Bahan Hasil Olahan *' : 'Nama Bahan Mentah *'}
+                </label>
                 <input
                   type="text"
                   required
-                  placeholder="Contoh: Jeruk Peras Segar, Daging Sapi Brisket..."
+                  placeholder={newRawMat.trim_stage === 'PREPPED_TRIMMED' ? 'Contoh: Jus Jeruk Peras Murni, Daging Slice Bersih...' : 'Contoh: Jeruk Peras Segar, Daging Sapi Brisket...'}
                   className="form-control w-full text-sm py-2"
                   value={newRawMat.name}
                   onChange={(e) => setNewRawMat({ ...newRawMat, name: e.target.value })}

@@ -73,3 +73,18 @@ Append one section per meaningful decision. Keep proposed and approved decisions
 - **Affected baseline requirements/modules:** `src/pages/shared/MenuEngineering.jsx`.
 - **Verification / rollback:** `npm run build` PASS, Vitest 276/276 PASS.
 - **Review trigger/date:** 2026-10-27
+
+## DEC-0006 — Clarify Trimming Stage in SimplePrep Setup & Auto-Update Processed Material HPP
+- **Date:** 2026-10-27
+- **Status:** `APPROVED`
+- **Decision owner:** Ayling & Izumi
+- **Context / problem:** Modal "Setup Bahan Mentah Baru" di `SimplePrep.jsx` belum membedakan secara tegas antara Bahan Mentah Belum Di-trimming (*Gross Weight / As Purchased*) dengan Bahan Jadi Hasil Olahan (*Edible Portion / Clean Yield*). Selain itu, tombol pendaftaran bahan olahan baru di Tahap 2 belum tersedia, stok mentah terpotong tanpa konversi satuan stok master, dan HPP bahan hasil trimming (`target_mat_id`) di database belum diperbarui otomatis saat batch olahan dicatat.
+- **Options considered:**
+  1. Hanya menambahkan teks keterangan statis pada modal.
+  2. Menambahkan pemilih status satuan bahan interaktif (`RAW_UNTRIMMED` vs `PREPPED_TRIMMED`), menambahkan tombol `+ Daftarkan Bahan Hasil Trimming` di Tahap 2, mengirimkan `source_unit`, `target_unit`, `waste_unit`, dan `new_target_hpp` ke backend, serta melakukan konversi satuan stok atomic dan update `price`/`new_price`/`avg_cost` di `api.recordOlahBahan`.
+- **Evidence/source:** `src/pages/shared/SimplePrep.jsx`, `src/services/api.js:5604-5755`.
+- **Decision and rationale:** Opsi 2 dipilih agar alur F&B Barventis konsisten dengan prinsip yield/edible portion: bahan mentah kotor dicatat sesuai nota supplier, sedangkan bahan hasil olahan otomatis menyerap biaya ampas ke HPP barunya dan siap dipakai pada resep menu.
+- **Consequences / trade-offs:** Tabel `materials` kolom `is_preparable` diisi `true` untuk bahan mentah belum di-trimming dan `false` untuk bahan hasil olahan siap pakai.
+- **Affected baseline requirements/modules:** `src/pages/shared/SimplePrep.jsx`, `src/services/api.js`.
+- **Verification / rollback:** `npm run build` PASS, Vitest 276/276 PASS.
+- **Review trigger/date:** 2026-10-27
