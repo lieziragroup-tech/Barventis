@@ -12,9 +12,10 @@ import ExportButton from '../../components/shared/ExportButton';
 import PrintButton from '../../components/shared/PrintButton';
 import { exportWithAudit } from '../../services/export/exportAudit';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatIDR, parsePackSize, isPackUnitConsistent, getPackUnitInfo, parseStructuredFullPack } from '../../services/costUtils';
+import { formatIDR, parseStructuredFullPack, resolvePackInfo } from '../../services/costUtils';
 import { api } from '../../services/api';
 import { locationService } from '../../services/locationService';
+import ErrorBoundary from '../../components/ErrorBoundary';
 
 // MANUAL UNIT CONVERSION (2026-08): lets a user say e.g. "1 Carton = 24 pcs"
 // directly in the Add/Edit Material form instead of typing a free-text Full
@@ -25,16 +26,20 @@ import { locationService } from '../../services/locationService';
 // already read `full_pack`/`unit` off the same material row. Left blank,
 // nothing changes: the plain "Full Pack Size" field below still works
 // exactly as before for materials that don't need a pack/content split.
-function KonversiSatuanFields({ packUnit, fullPack, price, onChangeFullPack }) {
+function KonversiSatuanFields({ packUnit, fullPack, price, onChangeFullPack, instanceId }) {
   const structured = parseStructuredFullPack(fullPack);
   const isi = structured ? String(structured.contentQty) : '';
   const satuanIsi = structured ? structured.contentUnit : '';
   const label = (packUnit || '').trim() || 'Pack';
+  // Unique datalist id — prevents DOM ambiguity when Add + Edit modals both render simultaneously
+  const datalistId = `satuan-isi-list-${instanceId || 'default'}`;
 
   const compose = (nextIsi, nextSatuan) => {
     const qty = parseFloat(nextIsi);
     if (nextIsi === '' || isNaN(qty) || qty <= 0) {
-      onChangeFullPack('');
+      // Jangan blank seluruh full_pack — hanya clear jika memang structured format.
+      // Jika full_pack adalah format lama ("1000 gr"), biarkan apa adanya.
+      if (structured) onChangeFullPack('');
       return;
     }
     onChangeFullPack(`${label} = ${nextIsi}${nextSatuan ? ' ' + nextSatuan : ''}`);
@@ -55,12 +60,16 @@ function KonversiSatuanFields({ packUnit, fullPack, price, onChangeFullPack }) {
           onChange={e => compose(e.target.value, satuanIsi)}
         />
         <input
-          type="text" list="satuan-isi-list" className="form-control" style={{ width: '110px' }}
+          type="text" list={datalistId} className="form-control" style={{ width: '110px' }}
           placeholder="pcs / gr / ml"
           value={satuanIsi}
-          onChange={e => compose(isi || '1', e.target.value)}
+          onChange={e => {
+            // Jika isi masih kosong dan user mengisi satuan, default qty ke 1 agar compose valid
+            // tapi jangan otomatis flush ke full_pack — compose hanya write jika qty valid
+            compose(isi || '', e.target.value);
+          }}
         />
-        <datalist id="satuan-isi-list">
+        <datalist id={datalistId}>
           <option value="pcs" /><option value="gr" /><option value="ml" />
         </datalist>
       </div>
@@ -74,18 +83,11 @@ function KonversiSatuanFields({ packUnit, fullPack, price, onChangeFullPack }) {
   );
 }
 
-// Resolve a material's Full Pack string into a usable { size, unit, consistent }
-// shape for the ledger table (same logic used in Recipes.jsx's stockMap).
-function parseFullPack(fullPack, materialUnit) {
-  const size = parsePackSize(fullPack);
-  const consistent = isPackUnitConsistent(materialUnit, fullPack);
-  const { contentUnit } = getPackUnitInfo(fullPack, materialUnit);
-  return { size: size > 0 && consistent ? size : 0, unit: contentUnit, consistent };
-}
+// ponytail: parseFullPack sekarang di-import sebagai resolvePackInfo dari costUtils (single source)
+const parseFullPack = resolvePackInfo;
 
-export default function StockLedger() {
+function StockLedgerInner() {
   const { profile } = useAuth();
-  "use no memo";
   const { currentTenant, stock, loadingData, handleAdjustStock, handleUpdateItem, handleAddItem, handleDeleteItem, refreshData } = useData();
   const onAdjustStock = handleAdjustStock;
   const onUpdateItem = handleUpdateItem;
@@ -381,7 +383,7 @@ export default function StockLedger() {
 
         const parsed = parseFullPack(item.full_pack, item.unit);
         const conversionLabel = parsed.size > 0 ? `${(total * parsed.size).toLocaleString('id-ID')} ${parsed.unit}` : '-';
-        const price = item.new_price || item.price || 0;
+        const price = Number(item.new_price) > 0 ? Number(item.new_price) : Number(item.price || 0);
         const totalVal = total * price;
 
         return {
@@ -450,7 +452,7 @@ export default function StockLedger() {
           resto: `${rQty} ${item.unit || ''}`,
           central: `${cQty} ${item.unit || ''}`,
           total: `${total} ${item.unit || ''}`,
-          price: `Rp ${(item.new_price || item.price || 0).toLocaleString('id-ID')}`,
+          price: `Rp ${(Number(item.new_price) > 0 ? Number(item.new_price) : Number(item.price || 0)).toLocaleString('id-ID')}`,
           status: statusText
         };
       });
@@ -667,7 +669,7 @@ export default function StockLedger() {
                         </div>
                       </td>
                       <td style={{ textAlign: 'right', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                        {formatIDR(item.new_price || item.price)}
+                        {formatIDR(Number(item.new_price) > 0 ? item.new_price : item.price)}
                       </td>
                       <td style={{ textAlign: 'center', display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
                         {expiryBadge} {badge}
@@ -916,6 +918,7 @@ export default function StockLedger() {
                 fullPack={editItem.full_pack}
                 price={editItem.new_price ?? editItem.price}
                 onChangeFullPack={fp => setEditItem({ ...editItem, full_pack: fp })}
+                instanceId="edit"
               />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-3">
                 <label className="flex items-start gap-2 rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
@@ -1028,6 +1031,7 @@ export default function StockLedger() {
                 fullPack={newItem.full_pack}
                 price={newItem.price}
                 onChangeFullPack={fp => setNewItem({ ...newItem, full_pack: fp })}
+                instanceId="add"
               />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-3">
                 <label className="flex items-start gap-2 rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
@@ -1129,4 +1133,8 @@ export default function StockLedger() {
       )}
     </div>
   );
+}
+
+export default function StockLedger(props) {
+  return <ErrorBoundary><StockLedgerInner {...props} /></ErrorBoundary>;
 }

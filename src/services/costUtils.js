@@ -70,18 +70,37 @@ export function parsePackSize(fullPack) {
 export function isPackUnitConsistent(unit, fullPack) {
   const u = (unit || '').toLowerCase().trim();
   const fp = (fullPack || '').toLowerCase().trim();
-  
+
+  if (!fp) return false; // empty full_pack is always inconsistent — can't derive unit price
+
   if (fp.includes('=')) {
-    return true; // We enforce consistency in the UI, so structured formats are always valid
+    // Structured "PackLabel = Qty Unit" — always valid; UI enforces correct entry
+    return true;
   }
 
-  const weightVolUnits = ['gr', 'grm', 'gram', 'ml', 'kg', 'l', 'ltr', 'liter', 'litre'];
+  const weightVolUnits = ['gr', 'grm', 'gram', 'grams', 'ml', 'kg', 'l', 'ltr', 'liter', 'litre'];
+  const containerUnits = ['pcs', 'pck', 'pack', 'btl', 'botol', 'bottle', 'carton', 'karton', 'crtn', 'ctn', 'dus', 'box', 'kaleng', 'can', 'galon', 'jerigen', 'drigen', 'sachet', 'jar'];
+
   const isWeightVolUnit = weightVolUnits.includes(u);
-  const hasWeightVolInFullPack = /(gr|grm|gram|ml|kg|l|ltr|liter|litre)\b/i.test(fp);
-  if (isWeightVolUnit) return hasWeightVolInFullPack;
-  // If material unit is pack/pcs/btl but full_pack has gr/ml (e.g. 750 ml), it is valid for recipe ingredient scaling
-  if (hasWeightVolInFullPack) return true;
-  return true;
+  const isContainerUnit = containerUnits.includes(u);
+
+  const hasWeightVolInFullPack = /(?<![a-z])(gr|grm|gram|grams|ml|kg|ltr|liter|litre)\b/i.test(fp)
+    || /\bl\b/i.test(fp); // standalone 'l' for liter — separate to avoid matching inside btl/ml
+  const hasCountInFullPack = /(pcs|pck|pack|btl|carton|karton|ctn|dus|box|kaleng|can)\b/i.test(fp);
+
+  if (isWeightVolUnit) {
+    // gr/ml material must have a weight/vol full_pack (e.g. "1000 gr", "750 ml")
+    // A full_pack of "1 pcs" for a gr-unit material is invalid (can't derive gr price from pcs count)
+    return hasWeightVolInFullPack;
+  }
+
+  if (isContainerUnit) {
+    // Container-unit material (pck/btl/carton) — full_pack can be weight/vol OR count; both valid
+    return hasWeightVolInFullPack || hasCountInFullPack;
+  }
+
+  // Unknown unit — accept if full_pack has any numeric content
+  return /\d/.test(fp);
 }
 const normalizeUnitToken = (u) => {
   let x = (u || '').toString().toLowerCase().trim();
@@ -89,6 +108,16 @@ const normalizeUnitToken = (u) => {
   if (x === 'l' || x === 'liter' || x === 'ltr' || x === 'litre') x = 'ml';
   return x;
 };
+
+// Satuan dasar takaran — gr dan ml adalah SETARA secara F&B (air 1 ml ≈ 1 gr).
+// Jika material.unit dan full_pack sama-sama satuan dasar ini, JANGAN kalikan packSize.
+const BASE_WEIGHT_VOL_UNITS = new Set(['gr', 'ml']);
+
+// Satuan kemasan beli — hanya ini yang boleh memicu perkalian packSize.
+const PACKAGE_CONTAINER_UNITS = new Set([
+  'pck', 'pack', 'btl', 'botol', 'bottle', 'carton', 'karton', 'crtn', 'ctn',
+  'dus', 'box', 'kaleng', 'can', 'galon', 'jerigen', 'drigen', 'sachet', 'jar',
+]);
 
 /**
  * MANUAL UNIT CONVERSION (2026-08): parse the structured "PackLabel = Qty Unit"
@@ -132,16 +161,31 @@ export function getPackUnitInfo(fullPack, materialUnit) {
       contentUnit: normalizeUnitToken(structured.contentUnit) || normalizeUnitToken(materialUnit)
     };
   }
+  const normMatUnit = normalizeUnitToken(materialUnit);
   const legacy = String(fullPack || '').trim();
   const match = legacy.match(/([\d.]+)\s*(gr|grm|gram|grams|kg|ml|l|ltr|liter|litre|pcs|pck|can|btl)\b/i);
   if (match) {
-    return {
-      packUnitLabel: normalizeUnitToken(materialUnit),
-      contentUnit: normalizeUnitToken(match[2])
-    };
+    const parsedContentUnit = normalizeUnitToken(match[2]);
+    // Guard: jika material.unit (gr/ml) DAN full_pack juga gr/ml (mis. unit='gr', full_pack='1000 ml'),
+    // keduanya adalah satuan dasar takaran — jangan perlakukan material.unit sebagai satuan kemasan
+    // karena akan menyebabkan qty dikali 1000x (bug HPP meledak).
+    if (BASE_WEIGHT_VOL_UNITS.has(normMatUnit) && BASE_WEIGHT_VOL_UNITS.has(parsedContentUnit)) {
+      return { packUnitLabel: parsedContentUnit, contentUnit: parsedContentUnit };
+    }
+    return { packUnitLabel: normMatUnit, contentUnit: parsedContentUnit };
   }
-  const u = normalizeUnitToken(materialUnit);
-  return { packUnitLabel: u, contentUnit: u };
+  return { packUnitLabel: normMatUnit, contentUnit: normMatUnit };
+}
+
+/**
+ * Shared helper: resolve full_pack + unit into { size, unit, consistent }.
+ * Single source of truth — import this instead of re-defining inline in each component.
+ */
+export function resolvePackInfo(fullPack, materialUnit) {
+  const size = parsePackSize(fullPack);
+  const consistent = isPackUnitConsistent(materialUnit, fullPack);
+  const { contentUnit } = getPackUnitInfo(fullPack, materialUnit);
+  return { size: size > 0 && consistent ? size : 0, unit: contentUnit, consistent };
 }
 
 /**
@@ -217,8 +261,12 @@ export function calculateIngredientCost(material, qtyInUse, recipeUnit, unitConv
     // "Data Quality Validation" panel), so this silent 0 is no longer a dead end.
     return 0;
   }
-  const ru = (recipeUnit || '').toString().toLowerCase().trim();
-  if (packUnitLabel && contentUnit && ru && ru === packUnitLabel && ru !== contentUnit) {
+  const ru = normalizeUnitToken(recipeUnit);
+  // Hanya kalikan packSize jika resep benar-benar memakai satuan KEMASAN (pck/btl/carton/dsb),
+  // BUKAN satuan dasar (gr/ml). Tanpa guard ini, unit='gr' + full_pack='1000 ml' menyebabkan
+  // qty dikali 1000x karena ru='gr' === packUnitLabel='gr' !== contentUnit='ml'.
+  const isRuContainer = PACKAGE_CONTAINER_UNITS.has(ru);
+  if (packUnitLabel && contentUnit && ru && ru === packUnitLabel && ru !== contentUnit && isRuContainer) {
     qty = qty * (packSize || 1);
   }
   return Math.round(qty * unitPrice);

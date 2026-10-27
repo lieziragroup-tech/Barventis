@@ -53,7 +53,7 @@ export default function StockOpname({ defaultLocation } = {}) {
           name: item.name,
           category: item.category,
           unit: item.unit,
-          price: item.new_price || item.price,
+          price: Number(item.new_price) > 0 ? Number(item.new_price) : Number(item.price || 0),
           // BUG-FIX 2026-08: full_pack wasn't carried over, so valAdjustment below
           // had no pack-size info to divide by and used the raw per-pack price instead.
           full_pack: item.full_pack,

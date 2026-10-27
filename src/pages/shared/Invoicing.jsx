@@ -123,7 +123,7 @@ export default function Invoicing() {
       ...updated[idx],
       material_id: item.id,
       item_name: item.name,
-      unit_price: item.new_price || item.price || 0,
+      unit_price: Number(item.new_price) > 0 ? Number(item.new_price) : Number(item.price || 0),
       unit: item.unit || 'pck'
     };
     setInvItems(updated);

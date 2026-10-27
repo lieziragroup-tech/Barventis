@@ -6,14 +6,15 @@ import Pagination from '../../components/shared/Pagination';
 import { useData } from '../../contexts/DataContext';
 import { api } from '../../services/api';
 import {
-  formatIDR, calculateIngredientCost, parsePackSize, isPackUnitConsistent, getPackUnitInfo
+  formatIDR, calculateIngredientCost, getPackUnitInfo, resolvePackInfo, computeRecipeCosts
 } from '../../services/costUtils';
+import ErrorBoundary from '../../components/ErrorBoundary';
 
 
 const rowUid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `r${Date.now()}${Math.random()}`);
 const ensureUids = (arr = []) => arr.map(x => ({ ...x, _uid: x._uid ?? rowUid() }));
 
-export default function Recipes({ categoryFilter } = {}) {
+function RecipesInner({ categoryFilter } = {}) {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const { stock, recipes, handleSaveRecipe: onSaveRecipe, handleAddRecipe: onAddRecipe, handleDeleteRecipe: onDeleteRecipe, refreshData, showToast, unitConversionMap } = useData();
@@ -42,13 +43,9 @@ export default function Recipes({ categoryFilter } = {}) {
 
 
 
-
-  const parseFullPack = (fullPack, materialUnit) => {
-    const size = parsePackSize(fullPack);
-    const consistent = isPackUnitConsistent(materialUnit, fullPack);
-    const { contentUnit } = getPackUnitInfo(fullPack, materialUnit);
-    return { size: size > 0 && consistent ? size : 0, unit: contentUnit, consistent };
-  };
+  // resolvePackInfo diimport dari costUtils — tidak perlu definisi lokal lagi
+  // ponytail: alias lokal untuk backward compat dengan code di bawah yang masih pakai parseFullPack
+  const parseFullPack = resolvePackInfo;
 
   // Build a mapping of inventory items with their pack size info for smart unit selection
   const stockMap = useMemo(() => {
@@ -77,6 +74,8 @@ export default function Recipes({ categoryFilter } = {}) {
       }
     });
     return map;
+  // parseFullPack = alias resolvePackInfo (pure fn dari costUtils, tidak perlu di deps)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stock]);
 
   // Select recipe
@@ -221,8 +220,17 @@ export default function Recipes({ categoryFilter } = {}) {
     const info = (ing.material_id && stockMap[`id_${ing.material_id}`])
       || stockMap[ing.item_name]
       || (ing.item_name && stockMap[ing.item_name.toLowerCase().trim()]);
-    if (!info) return Number(ing.amount) || 0;
+    // ponytail: jika material dihapus dari inventory, return 0 — jangan pakai stale ing.amount
+    // karena harga lama bisa sudah tidak valid. Row akan tampil merah via _unresolved flag.
+    if (!info) return 0;
     return calculateIngredientCost(info, ing.qty_in_use, ing.unit, unitConversionMap);
+  };
+
+  // Helper: apakah bahan baris ini tidak lagi ditemukan di inventory?
+  const isIngredientUnresolved = (ing) => {
+    return !((ing.material_id && stockMap[`id_${ing.material_id}`])
+      || stockMap[ing.item_name]
+      || (ing.item_name && stockMap[ing.item_name.toLowerCase().trim()]));
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -233,16 +241,24 @@ export default function Recipes({ categoryFilter } = {}) {
   const basicCost = useMemo(() => Math.round(subtotal + fixCost), [subtotal, fixCost]);
   const foodCostPct = useMemo(() => editedSellingPrice > 0 ? (basicCost / editedSellingPrice) : 0, [basicCost, editedSellingPrice]);
 
-  const computeLiveRecipeCost = (recipe) => {
-    const liveSubtotal = (recipe.ingredients || []).reduce((acc, ing) => acc + calcRowAmount(ing), 0);
+  // Precompute live cost for all recipes once — tidak per-render per-card
+  const liveCostMap = useMemo(() => {
+    const map = {};
+    recipes.forEach(recipe => {
+      const liveSubtotal = (recipe.ingredients || []).reduce((acc, ing) => acc + calcRowAmount(ing), 0);
+      const fixCostPct = recipe.fix_cost_pct != null ? parseFloat(recipe.fix_cost_pct) : api.getOverheadPct();
+      const { basicCost } = computeRecipeCosts({ subtotal: liveSubtotal, fixCostPct });
+      const sellingPrice = Number(recipe.selling_price) || 0;
+      map[recipe.id] = {
+        liveBasicCost: basicCost,
+        liveFoodCostPct: sellingPrice > 0 ? basicCost / sellingPrice : 0,
+      };
+    });
+    return map;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recipes, stockMap, unitConversionMap]);
 
-    const liveFixCostPct = recipe.fix_cost_pct != null ? parseFloat(recipe.fix_cost_pct) : api.getOverheadPct();
-    const liveFixCost = Math.round(liveSubtotal * liveFixCostPct);
-    const liveBasicCost = Math.round(liveSubtotal + liveFixCost);
-    const sellingPrice = Number(recipe.selling_price) || 0;
-    const liveFoodCostPct = sellingPrice > 0 ? liveBasicCost / sellingPrice : 0;
-    return { liveBasicCost, liveFoodCostPct };
-  };
+  const computeLiveRecipeCost = (recipe) => liveCostMap[recipe.id] ?? { liveBasicCost: 0, liveFoodCostPct: 0 };
 
   // Ingredient actions
   const handleQtyChange = (idx, val) => {
@@ -279,7 +295,7 @@ export default function Recipes({ categoryFilter } = {}) {
       ...updated[idx],
       item_name: item.name,
       unit: defaultUnit,
-      unit_price: item.new_price || item.price
+      unit_price: Number(item.new_price) > 0 ? Number(item.new_price) : Number(item.price || 0)
     };
     setEditedIngredients(updated);
     setOpenDropdown(null);
@@ -745,9 +761,11 @@ export default function Recipes({ categoryFilter } = {}) {
                   const availableUnits = getUnitsForItem(ing.item_name);
                   const packLabel = getPackLabel(ing.item_name);
                   const info = stockMap[ing.item_name];
+                  const unresolved = ing.item_name && isIngredientUnresolved(ing);
 
                   return (
-                    <tr key={ing._uid ?? idx}>
+                    <tr key={ing._uid ?? idx} style={unresolved ? { background: 'rgba(224,82,82,0.07)' } : undefined}
+                        title={unresolved ? `Bahan "${ing.item_name}" tidak ditemukan di inventory — hapus dari inventory atau periksa nama bahan.` : undefined}>
                       {/* Item Name with Autocomplete */}
                       <td style={{ position: 'relative' }}>
                         <input
@@ -790,7 +808,7 @@ export default function Recipes({ categoryFilter } = {}) {
                                     <span>•</span>
                                     <span>{item.full_pack}</span>
                                     <span>•</span>
-                                    <span style={{ color: 'var(--accent)' }}>{formatIDR(item.new_price || item.price)}</span>
+                                    <span style={{ color: 'var(--accent)' }}>{formatIDR(Number(item.new_price) > 0 ? item.new_price : item.price)}</span>
                                   </div>
                                 </li>
                               ))}
@@ -835,8 +853,8 @@ export default function Recipes({ categoryFilter } = {}) {
                       </td>
 
                       {/* Price per pack */}
-                      <td style={{ textAlign: 'right', fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={info ? formatIDR(info.new_price || info.price) : formatIDR(ing.unit_price)}>
-                        {info ? formatIDR(info.new_price || info.price) : formatIDR(ing.unit_price)}
+                       <td style={{ textAlign: 'right', fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={info ? formatIDR(Number(info.new_price) > 0 ? info.new_price : info.price) : formatIDR(ing.unit_price)}>
+                        {info ? formatIDR(Number(info.new_price) > 0 ? info.new_price : info.price) : formatIDR(ing.unit_price)}
                       </td>
 
                       {/* Amount */}
@@ -1081,4 +1099,8 @@ export default function Recipes({ categoryFilter } = {}) {
 
     </div>
   );
+}
+
+export default function Recipes(props) {
+  return <ErrorBoundary><RecipesInner {...props} /></ErrorBoundary>;
 }
