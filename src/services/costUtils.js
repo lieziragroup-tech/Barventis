@@ -265,7 +265,9 @@ export function calculateIngredientCost(material, qtyInUse, recipeUnit, unitConv
   // Hanya kalikan packSize jika resep benar-benar memakai satuan KEMASAN (pck/btl/carton/dsb),
   // BUKAN satuan dasar (gr/ml). Tanpa guard ini, unit='gr' + full_pack='1000 ml' menyebabkan
   // qty dikali 1000x karena ru='gr' === packUnitLabel='gr' !== contentUnit='ml'.
-  const isRuContainer = PACKAGE_CONTAINER_UNITS.has(ru);
+  const isRuContainer =
+    PACKAGE_CONTAINER_UNITS.has(ru) ||
+    (ru === 'pcs' && BASE_WEIGHT_VOL_UNITS.has(contentUnit));
   if (packUnitLabel && contentUnit && ru && ru === packUnitLabel && ru !== contentUnit && isRuContainer) {
     qty = qty * (packSize || 1);
   }

@@ -2147,23 +2147,39 @@ export const api = {
     const materialsMap = new Map(materials.map(m => [m.id, m]));
     const unitConversionMap = await api._loadUnitConversionMap(tenantId);
 
+    const mergedMap = new Map();
     for (const ing of recipeData.ingredients) {
       const material = materialsMap.get(ing.material_id);
       if (!material) continue;
 
-      const unitPrice = parseFloat(material.avg_cost || material.new_price || material.price || 0);
-      material.price = unitPrice; // Override so calculateIngredientCost uses it
-      const amount = calculateIngredientCost(material, parseFloat(ing.qty_in_use), ing.unit, unitConversionMap);
+      const qtyInUse = parseFloat(ing.qty_in_use) || 0;
+      const key = `${ing.material_id}`;
+      if (mergedMap.has(key)) {
+        mergedMap.get(key).qty_in_use += qtyInUse;
+      } else {
+        mergedMap.set(key, {
+          material,
+          material_id: ing.material_id,
+          qty_in_use: qtyInUse,
+          unit: ing.unit || material.unit || 'gr',
+        });
+      }
+    }
+
+    for (const item of mergedMap.values()) {
+      const unitPrice = parseFloat(item.material.avg_cost || item.material.new_price || item.material.price || 0);
+      item.material.price = unitPrice;
+      const amount = Math.round(calculateIngredientCost(item.material, item.qty_in_use, item.unit, unitConversionMap));
       subtotal += amount;
 
       ingredientRows.push({
         recipe_id: id,
         tenant_id: tenantId,
-        material_id: ing.material_id,
-        qty_in_use: parseFloat(ing.qty_in_use),
-        unit: ing.unit,
+        material_id: item.material_id,
+        qty_in_use: item.qty_in_use,
+        unit: item.unit,
         unit_price: unitPrice,
-        amount: parseFloat(amount.toFixed(2))
+        amount: amount
       });
     }
 
@@ -2179,11 +2195,13 @@ export const api = {
       subtotal, fixCostPct, foodCostPct: foodCostPctTarget,
       roundingDirection, roundingIncrement, priceAdjustment
     });
-    const sellingPrice = recipeData.selling_price_override != null
-      ? parseFloat(recipeData.selling_price_override)
-      : (sellingPriceFinal || parseFloat(recipeData.selling_price || 0));
+    const sellingPrice = Math.round(
+      recipeData.selling_price_override != null
+        ? parseFloat(recipeData.selling_price_override)
+        : (sellingPriceFinal || parseFloat(recipeData.selling_price || 0))
+    );
 
-    // 2. Update Recipe
+    // 2. Update Recipe (pastikan kolom int8 dibulatkan dengan Math.round)
     const { data: recipe, error: recipeErr } = await supabase
       .from('recipes')
       .update({
@@ -2193,10 +2211,10 @@ export const api = {
         ...(recipeData.category !== undefined ? { category: recipeData.category } : {}),
         ...(recipeData.image_url !== undefined ? { image_url: recipeData.image_url } : {}),
         selling_price: sellingPrice,
-        subtotal: parseFloat(subtotal.toFixed(2)),
+        subtotal: Math.round(subtotal),
         fix_cost_pct: fixCostPct,
-        fix_cost: parseFloat(fixCost.toFixed(2)),
-        basic_cost: parseFloat(basicCost.toFixed(2)),
+        fix_cost: Math.round(fixCost),
+        basic_cost: Math.round(basicCost),
         food_cost_pct: parseFloat(foodCostPctTarget.toFixed(4)),
         selling_price_raw: parseFloat((sellingPriceRaw || 0).toFixed(2)),
         rounding_direction: roundingDirection,
@@ -2209,22 +2227,26 @@ export const api = {
 
     if (recipeErr) throw new Error("Gagal update resep: " + recipeErr.message);
 
-    // 3. Replace Ingredients (insert new first, delete old only after that
-    // succeeds — see the identical fix in bulkImportRecipes above for why:
-    // deleting first meant a failed insert wiped the recipe's BOM with
-    // nothing to restore it, since these are two separate calls, not one
-    // atomic DB transaction.)
+    // 3. Upsert bahan baru/diubah berdasarkan (recipe_id, material_id), lalu hapus bahan yang dilepas
+    const newMaterialIds = new Set(ingredientRows.map(r => Number(r.material_id)));
     const { data: oldIngredientRows } = await supabase
       .from('recipe_ingredients')
-      .select('id')
+      .select('id, material_id')
       .eq('recipe_id', id);
-    const oldIngredientIds = (oldIngredientRows || []).map(r => r.id);
 
-    const { error: ingErr } = await supabase.from('recipe_ingredients').insert(ingredientRows);
-    if (ingErr) throw new Error("Gagal menyimpan bahan resep baru: " + ingErr.message);
+    if (ingredientRows.length > 0) {
+      const { error: ingErr } = await supabase
+        .from('recipe_ingredients')
+        .upsert(ingredientRows, { onConflict: 'recipe_id,material_id' });
+      if (ingErr) throw new Error("Gagal menyimpan bahan resep baru: " + ingErr.message);
+    }
 
-    if (oldIngredientIds.length > 0) {
-      await supabase.from('recipe_ingredients').delete().in('id', oldIngredientIds);
+    const idsToDelete = (oldIngredientRows || [])
+      .filter(r => !newMaterialIds.has(Number(r.material_id)))
+      .map(r => r.id);
+
+    if (idsToDelete.length > 0) {
+      await supabase.from('recipe_ingredients').delete().in('id', idsToDelete);
     }
 
     const formattedHpp = new Intl.NumberFormat('id-ID').format(recipe.basic_cost);
@@ -4542,17 +4564,23 @@ export const api = {
             // separate calls, not one DB transaction. Doing it this order
             // means a failed import can never destroy existing ingredient
             // data; the recipe just keeps its old (still-correct) BOM.
+            const newMaterialIds = new Set(ingredientsToInsert.map(r => Number(r.material_id)));
             const { data: oldIngredientRows } = await supabase
               .from('recipe_ingredients')
-              .select('id')
+              .select('id, material_id')
               .eq('recipe_id', recipeData.id);
-            const oldIngredientIds = (oldIngredientRows || []).map(r => r.id);
 
-            const { error: ingErr } = await supabase.from('recipe_ingredients').insert(ingredientsToInsert);
+            const { error: ingErr } = await supabase
+              .from('recipe_ingredients')
+              .upsert(ingredientsToInsert, { onConflict: 'recipe_id,material_id' });
             if (ingErr) throw new Error("Gagal menyimpan detail bahan resep: " + ingErr.message);
 
-            if (oldIngredientIds.length > 0) {
-              await supabase.from('recipe_ingredients').delete().in('id', oldIngredientIds);
+            const idsToDelete = (oldIngredientRows || [])
+              .filter(r => !newMaterialIds.has(Number(r.material_id)))
+              .map(r => r.id);
+
+            if (idsToDelete.length > 0) {
+              await supabase.from('recipe_ingredients').delete().in('id', idsToDelete);
             }
           }
         }

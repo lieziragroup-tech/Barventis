@@ -474,4 +474,12 @@ describe('convertQtyToStockUnit', () => {
     const material = { unit: 'pcs', full_pack: '1 pcs' };
     expect(convertQtyToStockUnit(material, 3, 'pcs')).toEqual({ qty: 3, resolved: true });
   });
+
+  it('correctly calculates cost when unit is pcs and content is ml/gr (e.g. Air Mineral 1000 ml / pcs)', () => {
+    const material = { unit: 'pcs', full_pack: '1000 ml', price: 2300 };
+    // 1 pcs should scale up by 1000 ml * 2.3/ml = 2300
+    expect(calculateIngredientCost(material, 1, 'pcs')).toBe(2300);
+    // 100 ml should cost 100 * 2.3 = 230
+    expect(calculateIngredientCost(material, 100, 'ml')).toBe(230);
+  });
 });

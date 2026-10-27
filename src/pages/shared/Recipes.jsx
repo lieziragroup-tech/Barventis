@@ -585,7 +585,7 @@ function RecipesInner({ categoryFilter } = {}) {
 
       {/* Right: Recipe Editor */}
       {activeRecipe ? (
-        <div className="glass-card animate-fade-in" style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '24px', overflow: 'hidden', border: '1px solid var(--border)' }}>
+        <div className="glass-card animate-fade-in" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '20px 24px', overflowY: 'auto', overflowX: 'hidden', border: '1px solid var(--border)' }}>
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '18px', marginBottom: '18px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', gap: '16px' }}>
             <div>
@@ -742,8 +742,8 @@ function RecipesInner({ categoryFilter } = {}) {
           </div>
 
           {/* Ingredients Table */}
-          <div className="table-container glass-scrollbar" style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', minHeight: '380px', maxHeight: '480px', marginBottom: '24px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
-            <table className="custom-table premium-table" style={{ width: '100%', minWidth: '750px', marginBottom: '220px' }}>
+          <div className="table-container glass-scrollbar" style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', minHeight: '140px', marginBottom: '16px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
+            <table className="custom-table premium-table" style={{ width: '100%', minWidth: '750px', marginBottom: '120px' }}>
               <thead>
                 <tr>
                   <th style={{ width: '28%' }}>Bahan Baku</th>
@@ -891,12 +891,16 @@ function RecipesInner({ categoryFilter } = {}) {
             display: 'flex', 
             justifyContent: 'space-between', 
             alignItems: 'center', 
-            background: 'rgba(30, 41, 59, 0.4)', 
+            background: 'rgba(30, 41, 59, 0.92)', 
             border: '1px solid var(--border)', 
-            padding: '14px 20px', 
+            padding: '12px 20px', 
             borderRadius: 'var(--radius-lg)', 
             flexShrink: 0,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
+            marginTop: 'auto',
+            position: 'sticky',
+            bottom: 0,
+            zIndex: 10,
+            boxShadow: '0 -4px 16px rgba(0,0,0,0.25)',
             backdropFilter: 'blur(10px)'
           }}>
             <div className="recipe-summary-info" style={{ display: 'flex', gap: '24px', fontSize: '0.825rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
