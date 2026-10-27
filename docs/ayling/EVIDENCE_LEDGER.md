@@ -8,5 +8,6 @@ Record consequential factual claims, external documentation checks, test runs, r
 | EV-0002 | 2026-10-27 | Fix infinite loading & full_pack cost in UsageRecap | OBSERVED | Code inspection & build | `npm run build` && `npm test` | 2026-10-27 | PASS | Build clean, 276/276 tests pass | Ayling & Izumi |
 | EV-0003 | 2026-10-27 | Align Onboarding & Guidebook with F&B Daily Inventory workflow | OBSERVED | Code inspection & build | `npm run build` && `npm test` | 2026-10-27 | PASS | Build clean, 276/276 tests pass | Ayling & Izumi |
 | EV-0004 | 2026-10-27 | Fix .form-control cascade layer and SimplePrep inputs & default full_pack | OBSERVED | Code inspection & build | `npm run build` && `npm test` | 2026-10-27 | PASS | Build clean, 276/276 tests pass | Ayling & Izumi |
+| EV-0005 | 2026-10-27 | Add debounced search, sorting, category/quadrant filters, and pagination to MenuEngineering | OBSERVED | Code inspection & build | `npm run build` && `npm test` | 2026-10-27 | PASS | Build clean, 276/276 tests pass | Ayling & Izumi |
 
 Allowed classifications: `OBSERVED`, `SOURCE-BACKED`, `INFERRED`, `ASSUMPTION`, `UNKNOWN`, `NOT RUN`. For tests use `PASS`, `FAIL`, `NOT RUN`, `BLOCKED` in Result.

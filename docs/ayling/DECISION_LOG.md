@@ -58,3 +58,18 @@ Append one section per meaningful decision. Keep proposed and approved decisions
 - **Affected baseline requirements/modules:** `src/index.css`, `src/pages/shared/SimplePrep.jsx`.
 - **Verification / rollback:** `npm run build` PASS, Vitest 276/276 PASS.
 - **Review trigger/date:** 2026-10-27
+
+## DEC-0005 — Menu Engineering Matrix: Search with Debounce, Multi-Filter, Sorting & Pagination
+- **Date:** 2026-10-27
+- **Status:** `APPROVED`
+- **Decision owner:** Ayling & Izumi
+- **Context / problem:** Modul Menu Engineering Matrix (`MenuEngineering.jsx`) menampilkan data tabel utuh tanpa search bar di UI, tanpa filter kategori menu, tanpa kemampuan sorting multi-kolom, dan paginasi sebelumnya belum aktif menghubungkan `paginatedItems` ke tampilan tabel.
+- **Options considered:**
+  1. Hanya menambahkan search bar sederhana tanpa sorting atau filter kategori.
+  2. Menambahkan search bar ter-debounce (`useDebounce`, 300ms) dengan tombol clear, filter dropdown kategori dinamis + kuadran BCG, per-page selector (10/20/50/100), sorting klik header (nama, harga jual, COGS, margin, total terjual, kontribusi Rp, food cost %), serta integrasi penuh komponen `Pagination`.
+- **Evidence/source:** `src/pages/shared/MenuEngineering.jsx`, `src/hooks/useDebounce.js`, `src/components/shared/Pagination.jsx`.
+- **Decision and rationale:** Opsi 2 dipilih agar user operasional F&B dan owner mudah menyortir menu terbaik/terburuk berdasarkan kontribusi margin atau volume terjual, terutama saat katalog menu mencapai puluhan hingga ratusan resep.
+- **Consequences / trade-offs:** State `currentPage` otomatis di-reset ke 1 setiap kali query pencarian, filter, atau sorting berubah.
+- **Affected baseline requirements/modules:** `src/pages/shared/MenuEngineering.jsx`.
+- **Verification / rollback:** `npm run build` PASS, Vitest 276/276 PASS.
+- **Review trigger/date:** 2026-10-27
