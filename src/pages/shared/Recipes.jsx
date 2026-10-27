@@ -891,7 +891,7 @@ function RecipesInner({ categoryFilter } = {}) {
             display: 'flex', 
             justifyContent: 'space-between', 
             alignItems: 'center', 
-            background: 'rgba(30, 41, 59, 0.92)', 
+            background: '#ffffff', 
             border: '1px solid var(--border)', 
             padding: '12px 20px', 
             borderRadius: 'var(--radius-lg)', 
@@ -900,7 +900,7 @@ function RecipesInner({ categoryFilter } = {}) {
             position: 'sticky',
             bottom: 0,
             zIndex: 10,
-            boxShadow: '0 -4px 16px rgba(0,0,0,0.25)',
+            boxShadow: '0 -4px 16px rgba(0,0,0,0.08)',
             backdropFilter: 'blur(10px)'
           }}>
             <div className="recipe-summary-info" style={{ display: 'flex', gap: '24px', fontSize: '0.825rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
