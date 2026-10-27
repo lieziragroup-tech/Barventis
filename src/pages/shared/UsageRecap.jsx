@@ -39,7 +39,10 @@ export default function UsageRecap() {
     setError('');
     try {
       const tenantId = await api.getActiveTenantId();
-      if (!tenantId) { setRecords([]); return; }
+      if (!tenantId) {
+        setRecords([]);
+        return;
+      }
 
       // Fetch all daily_inventories headers in date range
       const { data: headers, error: hErr } = await supabase
@@ -49,8 +52,10 @@ export default function UsageRecap() {
         .gte('date', startDate)
         .lte('date', endDate);
       if (hErr) throw hErr;
-      if (!headers || headers.length === 0) { setRecords([]); return; }
-
+      if (!headers || headers.length === 0) {
+        setRecords([]);
+        return;
+      }
       const headerIds = headers.map(h => h.id);
       const dateMap = Object.fromEntries(headers.map(h => [h.id, h.date]));
 
@@ -79,11 +84,15 @@ export default function UsageRecap() {
         if (cat === 'BEER' || cat === 'ASSET') return; // Bahan only
 
         if (!agg[r.material_id]) {
+          const effectivePrice = Number(mat.avg_cost) > 0
+            ? Number(mat.avg_cost)
+            : (Number(mat.new_price) > 0 ? Number(mat.new_price) : (Number(mat.price) || 0));
           agg[r.material_id] = {
             material_id: r.material_id,
             name: mat.name,
             unit: mat.unit || 'unit',
-            price: Number(mat.price) || 0,
+            full_pack: mat.full_pack || '',
+            price: effectivePrice,
             category: mat.category || '',
             total_in: 0,
             total_out: 0,
@@ -127,11 +136,12 @@ export default function UsageRecap() {
           gap_pct: gapPct,
           gap_value: gapValue,
           avg_per_day: a.days_count > 0 ? +(a.total_terpakai / a.days_count).toFixed(2) : 0,
-          total_cost: totalCost > 0 ? totalCost : (actual * a.price)
+          total_cost: totalCost
         };
       }));
     } catch (err) {
       setError(err.message || 'Gagal memuat data pemakaian');
+    } finally {
       setLoading(false);
     }
   }, [startDate, endDate]);
@@ -289,7 +299,9 @@ export default function UsageRecap() {
                     { width: '70px', type: 'text', align: 'center' },
                     { width: '80px', type: 'text', align: 'center' },
                     { width: '80px', type: 'text', align: 'center' },
-                    { width: '110px', type: 'text', align: 'right' }
+                    { width: '80px', type: 'text', align: 'center' },
+                    { width: '110px', type: 'text', align: 'right' },
+                    { width: '90px', type: 'text', align: 'center' }
                   ]}
                 />
               ) : (
@@ -348,7 +360,7 @@ export default function UsageRecap() {
               )}
               {!loading && records.length === 0 && (
                 <tr>
-                  <td colSpan="7" style={{ textAlign: 'center', padding: '48px', color: '#6b7280' }}>
+                  <td colSpan="9" style={{ textAlign: 'center', padding: '48px', color: '#6b7280' }}>
                     <Calendar size={48} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
                     <p style={{ fontWeight: 500, margin: 0 }}>Tidak ada data pemakaian untuk periode ini</p>
                     <p style={{ fontSize: '0.75rem', margin: '4px 0 0' }}>Pilih rentang tanggal dan pastikan ada data inventaris harian.</p>
@@ -403,7 +415,7 @@ export default function UsageRecap() {
               </div>
               <div className="flex justify-between">
                 <span className="text-[var(--text-muted)]">Estimasi Biaya:</span>
-                <strong className="text-[var(--text-primary)] font-mono">Rp {Math.round(justificationModal.varianceQty * (justificationModal.material?.price || 0)).toLocaleString('id-ID')}</strong>
+                <strong className="text-[var(--text-primary)] font-mono">Rp {Math.abs(justificationModal.material?.gap_value || 0).toLocaleString('id-ID')}</strong>
               </div>
             </div>
 
