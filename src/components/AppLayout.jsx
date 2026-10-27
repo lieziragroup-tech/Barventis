@@ -932,6 +932,9 @@ export default function DashboardLayout() {
             // Route dynamically based on Onboarding output
             if (tab === 'stock') navigate(`${basePath}/sistem?tab=stock-ledger`);
             if (tab === 'recipes') navigate(`${basePath}/pricing-cogs?tab=cogs-beverage`);
+            if (tab === 'daily') navigate(`${basePath}/daily-inventory`);
+            if (tab === 'pos') navigate(`${basePath}/penjualan`);
+            if (tab === 'cost-report') navigate(`${basePath}/cost-report`);
           }}
           onDismiss={() => {
             setShowOnboarding(false);

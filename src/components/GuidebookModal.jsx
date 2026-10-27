@@ -1,262 +1,526 @@
-import { X, BookOpen, Settings, ShoppingCart, Calculator, Store, LineChart } from 'lucide-react';
+import { useState } from 'react';
+import { 
+  X, 
+  BookOpen, 
+  Settings, 
+  ShoppingCart, 
+  Calculator, 
+  Store, 
+  LineChart, 
+  Scale, 
+  HelpCircle, 
+  LayoutDashboard, 
+  ClipboardList, 
+  Boxes, 
+  Trash2, 
+  ArrowRight, 
+  CheckCircle2, 
+  AlertTriangle,
+  Flame,
+  Layers
+} from 'lucide-react';
 
 export default function GuidebookModal({ isOpen, onClose }) {
+  const [activeTab, setActiveTab] = useState('workflow');
+
   if (!isOpen) return null;
 
   return (
-    <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', animation: 'fadeIn 0.2s ease-out' }}>
-      <div style={{ background: 'var(--bg-primary)', width: '100%', maxWidth: '800px', maxHeight: '90vh', borderRadius: 'var(--radius-xl)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'scaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+    <div style={{ 
+      position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, 
+      background: 'rgba(6, 9, 19, 0.85)', 
+      backdropFilter: 'blur(12px)', 
+      zIndex: 9999, 
+      display: 'flex', alignItems: 'center', justifyContent: 'center', 
+      padding: '20px', 
+      animation: 'fadeIn 0.2s ease-out' 
+    }}>
+      <div style={{ 
+        background: 'var(--bg-primary)', 
+        width: '100%', maxWidth: '860px', maxHeight: '92vh', 
+        borderRadius: 'var(--radius-xl)', 
+        boxShadow: '0 30px 60px -12px rgba(0,0,0,0.6)', 
+        border: '1px solid var(--border)', 
+        display: 'flex', flexDirection: 'column', 
+        overflow: 'hidden' 
+      }}>
         
         {/* Header */}
-        <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-secondary)' }}>
+        <div style={{ 
+          padding: '20px 28px', 
+          borderBottom: '1px solid var(--border)', 
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+          background: 'var(--bg-secondary)' 
+        }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'var(--accent-glow)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <BookOpen size={20} />
+            <div style={{ 
+              width: '42px', height: '42px', borderRadius: '12px', 
+              background: 'var(--accent-glow, rgba(99,102,241,0.15))', 
+              color: 'var(--accent)', 
+              display: 'flex', alignItems: 'center', justifyContent: 'center' 
+            }}>
+              <BookOpen size={22} />
             </div>
             <div>
-              <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Buku Panduan Sistem</h2>
-              <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Pahami alur kerja Barventis dalam 4 langkah mudah</p>
+              <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                Buku Panduan Sistem Barventis
+              </h2>
+              <p style={{ margin: '2px 0 0', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                Pedoman alur kerja operasional F&B: Bar, Kitchen, Purchasing & Cost Control
+              </p>
             </div>
           </div>
-          <button onClick={onClose} style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)', transition: 'all 0.2s' }} onMouseOver={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.borderColor = 'var(--text-secondary)'; }} onMouseOut={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)'; }}>
+          <button 
+            onClick={onClose} 
+            style={{ 
+              background: 'var(--bg-primary)', 
+              border: '1px solid var(--border)', 
+              borderRadius: '50%', 
+              width: '36px', height: '36px', 
+              display: 'flex', alignItems: 'center', justifyContent: 'center', 
+              cursor: 'pointer', color: 'var(--text-muted)', 
+              transition: 'all 0.2s' 
+            }}
+          >
             <X size={18} />
           </button>
         </div>
 
-        {/* Content */}
-        <div style={{ padding: '32px', overflowY: 'auto', background: 'var(--bg-primary)' }}>
+        {/* Tab Buttons */}
+        <div style={{ 
+          display: 'flex', gap: '8px', padding: '12px 28px', 
+          background: 'var(--bg-tertiary, var(--bg-secondary))', 
+          borderBottom: '1px solid var(--border)',
+          overflowX: 'auto'
+        }}>
+          {[
+            { id: 'workflow', label: '1. Alur Kerja Utama', icon: Layers },
+            { id: 'full-broken', label: '2. Rahasia FULL & BROKEN', icon: Scale },
+            { id: 'modules', label: '3. Kamus Modul & Menu', icon: LayoutDashboard },
+            { id: 'faq', label: '4. FAQ & Anti-Bocor HPP', icon: HelpCircle }
+          ].map(tab => {
+            const TabIcon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  padding: '8px 16px', borderRadius: 'var(--radius-md)',
+                  fontSize: '0.82rem', fontWeight: isActive ? 700 : 500,
+                  background: isActive ? 'var(--accent)' : 'transparent',
+                  color: isActive ? '#fff' : 'var(--text-secondary)',
+                  border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <TabIcon size={16} />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Content Area */}
+        <div style={{ padding: '28px', overflowY: 'auto', background: 'var(--bg-primary)', flex: 1 }}>
           
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', position: 'relative' }}>
-            {/* Connection Line */}
-            <div style={{ position: 'absolute', left: '23px', top: '40px', bottom: '40px', width: '2px', background: 'var(--border)', zIndex: 0 }}></div>
-
-            {/* Step 1 */}
-            <div style={{ display: 'flex', gap: '24px', position: 'relative', zIndex: 1 }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--bg-primary)', border: '2px solid var(--info)', color: 'var(--info)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 0 0 4px var(--bg-primary)' }}>
-                <Settings size={22} />
-              </div>
-              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '20px', flex: 1, display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: '200px' }}>
-                  <h3 style={{ margin: '0 0 8px', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>1. Persiapan Data Master</h3>
-                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                    Mulai dengan mengisi <strong>Stock Ledger</strong> (Daftar bahan baku dasar seperti Biji Kopi, Gula) beserta harganya. Kemudian, racik bahan tersebut menjadi sebuah menu di <strong>COGS / Resep</strong> (contoh: 1 porsi Kopi Susu butuh 15g Kopi & 20g Gula).
+          {/* TAB 1: WORKFLOW */}
+          {activeTab === 'workflow' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div style={{
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-lg)',
+                padding: '16px 20px',
+                display: 'flex', alignItems: 'center', gap: '14px'
+              }}>
+                <div style={{ color: 'var(--accent)' }}>
+                  <Layers size={24} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    Segitiga Operasional: Barista (Resto) ⇄ Purchasing ⇄ Central Warehouse
+                  </h4>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                    Barventis menyelaraskan pengadaan barang kartonan di Central, stok racik harian di Resto, dan audit variansi HPP bulanan.
                   </p>
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                    <span className="badge badge-info">Stock Ledger</span>
-                    <span className="badge badge-info">COGS / Resep</span>
+                </div>
+              </div>
+
+              {/* Step 1 */}
+              <div className="flow-card">
+                <div className="flow-number" style={{ borderColor: 'var(--info)', color: 'var(--info)' }}>1</div>
+                <div className="flow-content">
+                  <div className="flow-header">
+                    <div>
+                      <h3>1. Master Bahan Baku & Resep Menu</h3>
+                      <p>Daftarkan bahan baku di <strong>Stock Ledger</strong> dengan satuan dasar (gram/ml) dan ukuran kemasan (pack). Setelah itu, racik menu di <strong>COGS / Resep</strong>. HPP modal per porsi langsung terkunci otomatis.</p>
+                      <div className="badge-row">
+                        <span className="badge badge-info">Stock Ledger</span>
+                        <span className="badge badge-info">COGS / Resep</span>
+                        <span className="badge badge-info">Menu Pricing</span>
+                      </div>
+                    </div>
+                    <img src="/images/guide_step1.jpg" alt="Master Data" className="guide-thumb" />
                   </div>
                 </div>
-                <img src="/images/guide_step1.jpg" alt="Master Data" style={{ width: '120px', height: '120px', objectFit: 'cover', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }} />
               </div>
-            </div>
 
-            {/* Step 2 */}
-            <div style={{ display: 'flex', gap: '24px', position: 'relative', zIndex: 1 }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--bg-primary)', border: '2px solid var(--warning)', color: 'var(--warning)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 0 0 4px var(--bg-primary)' }}>
-                <ShoppingCart size={22} />
-              </div>
-              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '20px', flex: 1, display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: '200px' }}>
-                  <h3 style={{ margin: '0 0 8px', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>2. Pembelian & Stok Masuk</h3>
-                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                    Gunakan menu <strong>Purchasing</strong> untuk mencatat pengeluaran harian atau menu <strong>Invoicing</strong> jika Anda memesan dalam partai besar (PO) ke Supplier. Saat barang diterima (Received), stok akan <em>otomatis bertambah</em> di Gudang Utama (Central).
-                  </p>
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                    <span className="badge badge-warning">Purchasing</span>
-                    <span className="badge badge-warning">Invoicing</span>
+              {/* Step 2 */}
+              <div className="flow-card">
+                <div className="flow-number" style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}>2</div>
+                <div className="flow-content">
+                  <div className="flow-header">
+                    <div>
+                      <h3>2. Belanja (Purchasing) & Transfer Central-ke-Resto</h3>
+                      <p>Belanja harian (pasar/supplier) dicatat di <strong>Marketlist & Pembelian</strong>. Pengadaan grosir kartonan masuk ke Central. Saat meja bar kekurangan bahan, lakukan <strong>Transfer Bahan</strong> dari Central ke Resto.</p>
+                      <div className="badge-row">
+                        <span className="badge badge-warning">Purchasing / PO</span>
+                        <span className="badge badge-warning">Transfer Internal</span>
+                        <span className="badge badge-warning">Penerimaan (GRN)</span>
+                      </div>
+                    </div>
+                    <img src="/images/guide_step2.jpg" alt="Pembelian" className="guide-thumb" />
                   </div>
                 </div>
-                <img src="/images/guide_step2.jpg" alt="Pembelian" style={{ width: '120px', height: '120px', objectFit: 'cover', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }} />
               </div>
-            </div>
 
-            {/* Step 3 */}
-            <div style={{ display: 'flex', gap: '24px', position: 'relative', zIndex: 1 }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--bg-primary)', border: '2px solid var(--accent)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 0 0 4px var(--bg-primary)' }}>
-                <Store size={22} />
-              </div>
-              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '20px', flex: 1, display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: '200px' }}>
-                  <h3 style={{ margin: '0 0 8px', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>3. Kasir & Penjualan (POS)</h3>
-                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                    Setiap kali ada pesanan di <strong>POS Terminal</strong>, sistem akan otomatis melihat resep dari menu tersebut dan <em>mengurangi stok bahan baku</em> yang sesuai dari Gudang Resto secara seketika (Real-time deduction).
-                  </p>
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                    <span className="badge badge-accent">POS Terminal</span>
-                    <span className="badge badge-accent">Auto-Deduction</span>
+              {/* Step 3 */}
+              <div className="flow-card">
+                <div className="flow-number" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>3</div>
+                <div className="flow-content">
+                  <div className="flow-header">
+                    <div>
+                      <h3>3. Kasir Berjalan & Closing EOD Barista</h3>
+                      <p>Setiap transaksi penjualan kasir (POS) memotong stok teoretis sesuai resep. Di akhir shift malam, barista cukup mengisi <strong>Daily Inventory</strong>: hitung kemasan utuh (FULL) dan timbang kemasan buka (BROKEN).</p>
+                      <div className="badge-row">
+                        <span className="badge badge-accent">POS Terminal</span>
+                        <span className="badge badge-accent">Daily Inventory EOD</span>
+                        <span className="badge badge-accent">Lapor Limbah (Waste)</span>
+                      </div>
+                    </div>
+                    <img src="/images/guide_step3.jpg" alt="Kasir & Closing" className="guide-thumb" />
                   </div>
                 </div>
-                <img src="/images/guide_step3.jpg" alt="Kasir POS" style={{ width: '120px', height: '120px', objectFit: 'cover', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }} />
               </div>
-            </div>
 
-            {/* Step 4 */}
-            <div style={{ display: 'flex', gap: '24px', position: 'relative', zIndex: 1 }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--bg-primary)', border: '2px solid var(--success)', color: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 0 0 4px var(--bg-primary)' }}>
-                <LineChart size={22} />
-              </div>
-              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '20px', flex: 1, display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: '200px' }}>
-                  <h3 style={{ margin: '0 0 8px', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>4. Laporan & Kontrol</h3>
-                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                    Di penghujung hari/bulan, buka <strong>Barista Report</strong> untuk melihat total penjualan dan <strong>Cost Control</strong> untuk melihat Margin Keuntungan. Lakukan <strong>Stock Opname</strong> sesekali untuk menyamakan stok fisik dengan sistem.
-                  </p>
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                    <span className="badge badge-success">Barista Report</span>
-                    <span className="badge badge-success">Cost Control</span>
-                    <span className="badge badge-success">Stock Opname</span>
+              {/* Step 4 */}
+              <div className="flow-card">
+                <div className="flow-number" style={{ borderColor: 'var(--success)', color: 'var(--success)' }}>4</div>
+                <div className="flow-content">
+                  <div className="flow-header">
+                    <div>
+                      <h3>4. Rekonsiliasi Otomatis & Cost Control</h3>
+                      <p>Sistem membandingkan pemakaian fisik aktual (EOD) dengan penjualan kasir (POS). Selisih porsi (over-portioning) atau barang hilang langsung muncul di <strong>Cost Control Report</strong>. Lakukan Stock Opname bulanan untuk audit final.</p>
+                      <div className="badge-row">
+                        <span className="badge badge-success">Cost Control Hub</span>
+                        <span className="badge badge-success">Audit Variansi Biaya</span>
+                        <span className="badge badge-success">Stock Opname</span>
+                      </div>
+                    </div>
+                    <img src="/images/guide_step4.jpg" alt="Cost Control" className="guide-thumb" />
                   </div>
                 </div>
-                <img src="/images/guide_step4.jpg" alt="Laporan" style={{ width: '120px', height: '120px', objectFit: 'cover', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }} />
               </div>
             </div>
+          )}
 
-          </div>
+          {/* TAB 2: FULL & BROKEN */}
+          {activeTab === 'full-broken' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(6,182,212,0.08) 100%)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-xl)',
+                padding: '24px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                  <Scale size={24} style={{ color: 'var(--accent)' }} />
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                    Mengapa Barventis Memakai Konsep FULL & BROKEN?
+                  </h3>
+                </div>
+                <p style={{ margin: 0, fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  Di industri F&B, sumber kekacauan stok terbesar adalah <strong>botol yang sudah dibuka di meja bar</strong>. Jika staf hanya menebak "kira-kira tinggal setengah botol", maka dalam seminggu stok sistem akan rusak dan perhitungan HPP tidak akurat.
+                </p>
+              </div>
 
-          <div style={{ marginTop: '32px', background: 'var(--bg-secondary)', padding: '16px', borderRadius: 'var(--radius-md)', display: 'flex', gap: '16px', alignItems: 'center', border: '1px dashed var(--border)' }}>
-            <div style={{ color: 'var(--text-muted)' }}>
-              <Calculator size={24} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                <div style={{
+                  background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-lg)', padding: '20px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                    <span style={{ 
+                      background: 'rgba(59,130,246,0.15)', color: '#3b82f6', 
+                      fontWeight: 800, padding: '4px 10px', borderRadius: '6px', fontSize: '0.8rem' 
+                    }}>
+                      FULL
+                    </span>
+                    <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      Kemasan Utuh (Belum Dibuka)
+                    </h4>
+                  </div>
+                  <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+                    Jumlah botol, karton, atau pack yang masih bersegel rapi di rak/chiller. Dihitung per satuan pack (misal: <strong>3 botol</strong>).
+                  </p>
+                </div>
+
+                <div style={{
+                  background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-lg)', padding: '20px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                    <span style={{ 
+                      background: 'rgba(6,182,212,0.15)', color: '#06b6d4', 
+                      fontWeight: 800, padding: '4px 10px', borderRadius: '6px', fontSize: '0.8rem' 
+                    }}>
+                      BROKEN
+                    </span>
+                    <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      Kemasan Terbuka (Timbang Aktual)
+                    </h4>
+                  </div>
+                  <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+                    Sisa isi dari botol yang sedang dipakai di speed rail meja bar. Timbang dengan timbangan digital dalam satuan dasar (misal: <strong>350 ml</strong> atau <strong>180 gr</strong>).
+                  </p>
+                </div>
+              </div>
+
+              {/* Ilustrasi Rumus */}
+              <div style={{
+                background: 'var(--bg-secondary)', border: '1px dashed var(--border)',
+                borderRadius: 'var(--radius-lg)', padding: '20px'
+              }}>
+                <h4 style={{ margin: '0 0 10px', fontSize: '0.9rem', fontWeight: 700, color: 'var(--accent)' }}>
+                  📐 Rumus Stok Closing Otomatis Sistem
+                </h4>
+                <div style={{
+                  background: 'var(--bg-primary)', padding: '12px 16px', borderRadius: 'var(--radius-md)',
+                  fontFamily: 'monospace', fontSize: '0.9rem', color: 'var(--text-primary)', marginBottom: '12px',
+                  border: '1px solid var(--border)'
+                }}>
+                  Total Stok Fisik = (FULL × Ukuran Pack) + BROKEN
+                </div>
+                <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+                  <strong>Contoh Sirup Karamel (1 pack = 750 ml):</strong> Barista mencatat 2 botol utuh di chiller (FULL = 2) dan 1 botol terbuka di meja bar ditimbang sisa 250 ml (BROKEN = 250). Sistem otomatis mengunci stok riil adalah <strong>1.750 ml</strong>. Besok paginya, angka 1.750 ml otomatis diwariskan jadi <em>Saldo Awal (Opening)</em>.
+                </p>
+              </div>
+
+              <div style={{
+                background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)',
+                borderRadius: 'var(--radius-md)', padding: '14px 18px', display: 'flex', gap: '12px', alignItems: 'center'
+              }}>
+                <AlertTriangle size={20} style={{ color: '#f59e0b', flexShrink: 0 }} />
+                <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                  <strong>Aturan EOD:</strong> Jika suatu bahan tidak ada pemakaian hari ini, jangan diisi 0. Sistem akan mempertahankan stok warisan closing kemarin.
+                </p>
+              </div>
             </div>
-            <div>
-              <h4 style={{ margin: '0 0 4px', fontSize: '0.9rem', fontWeight: 700 }}>Tips HPP (Harga Pokok Penjualan)</h4>
-              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Harga bahan di Resep akan selalu mengikuti harga rata-rata bahan terakhir Anda (dari Purchasing/Invoice). Margin Anda selalu dihitung secara real-time.</p>
-            </div>
-          </div>
+          )}
 
-          <div style={{ marginTop: '40px' }}>
-            <h3 style={{ margin: '0 0 16px', fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', borderBottom: '2px solid var(--border)', paddingBottom: '12px' }}>Panduan Menu (Sesuai Sidebar)</h3>
-            
-            {/* Group: Menu Utama */}
-            <div style={{ marginBottom: '24px' }}>
-              <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--accent)', marginBottom: '16px' }}>📁 Menu Utama</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-                <div className="guide-card">
-                  <h5>Dashboard</h5>
-                  <p><strong>Fungsi:</strong> Ringkasan performa bisnis, grafik pendapatan, dan peringatan dini stok kritis.</p>
-                  <p className="how-to"><strong>Cara Pakai:</strong> Buka untuk melihat omset hari ini. Cek bagian "Critical Stock" untuk tahu barang apa yang harus segera dibeli.</p>
+          {/* TAB 3: MODULES DIRECTORY */}
+          {activeTab === 'modules' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div>
+                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--accent)', marginBottom: '12px' }}>
+                  🍹 Lantai Bar & Dapur (Operasional Shift)
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '12px' }}>
+                  <div className="module-item">
+                    <h5>Daily Inventory EOD</h5>
+                    <p>Form pencatatan fisik penutupan shift (FULL & BROKEN). Diisi barista tiap malam.</p>
+                  </div>
+                  <div className="module-item">
+                    <h5>Olah Bahan (Simple Prep)</h5>
+                    <p>Mencatat produksi batch setengah jadi (rebusan teh 10L, simple syrup, perasan jeruk).</p>
+                  </div>
+                  <div className="module-item">
+                    <h5>Lapor Limbah (Waste)</h5>
+                    <p>Mencatat bahan basi, tumpah, atau botol pecah dengan lampiran foto bukti.</p>
+                  </div>
                 </div>
-                <div className="guide-card">
-                  <h5>Stock Ledger</h5>
-                  <p><strong>Fungsi:</strong> Buku besar tempat pendaftaran bahan baku dasar (kopi, gula, susu) dan monitor sisa stok (Resto vs Central).</p>
-                  <p className="how-to"><strong>Cara Pakai:</strong> Klik "Tambah Item" untuk bahan baru. Klik tombol mata untuk melihat mutasi/histori keluar-masuk stok barang tersebut.</p>
+              </div>
+
+              <div>
+                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--warning)', marginBottom: '12px' }}>
+                  📦 Gudang Central & Pengadaan (Purchasing)
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '12px' }}>
+                  <div className="module-item">
+                    <h5>Marketlist & Pembelian</h5>
+                    <p>Daftar rencana belanja harian dan input nota belanjaan pasar langsung ke resto.</p>
+                  </div>
+                  <div className="module-item">
+                    <h5>Invoicing / PO Supplier</h5>
+                    <p>Pemesanan kartonan besar ke supplier resmi lengkap dengan cetak format PDF.</p>
+                  </div>
+                  <div className="module-item">
+                    <h5>Transfer Central ⇄ Resto</h5>
+                    <p>Pencatatan perpindahan bahan dari gudang pusat ke meja bar agar stok sinkron.</p>
+                  </div>
                 </div>
-                <div className="guide-card">
-                  <h5>Daily Inventory</h5>
-                  <p><strong>Fungsi:</strong> Pencatatan stok harian ringan oleh Barista (biasanya di awal atau akhir shift).</p>
-                  <p className="how-to"><strong>Cara Pakai:</strong> Masukkan angka fisik di bar dan klik Save. Sistem akan mencatatnya tanpa melakukan koreksi sistem berat.</p>
-                </div>
-                <div className="guide-card">
-                  <h5>Upload POS Sales</h5>
-                  <p><strong>Fungsi:</strong> Mengunggah laporan penjualan dari mesin kasir (jika tidak terhubung otomatis) untuk memotong stok sesuai resep.</p>
-                  <p className="how-to"><strong>Cara Pakai:</strong> Upload file Excel/CSV hasil tarikan dari Moka/Majoo/kasir. Sistem akan memotong stok otomatis.</p>
-                </div>
-                <div className="guide-card">
-                  <h5>F&B Recipes</h5>
-                  <p><strong>Fungsi:</strong> Pembuatan racikan menu (COGS). Menghitung modal (HPP) per porsi berdasarkan harga bahan baku.</p>
-                  <p className="how-to"><strong>Cara Pakai:</strong> Pilih menu, tambahkan bahan-bahannya (misal: 15g kopi), lalu klik "Simpan". HPP akan langsung terhitung.</p>
-                </div>
-                <div className="guide-card">
-                  <h5>Menu Pricing</h5>
-                  <p><strong>Fungsi:</strong> Penentuan harga jual menu agar margin keuntungan selalu terjaga di persentase ideal.</p>
-                  <p className="how-to"><strong>Cara Pakai:</strong> Lihat HPP menu, masukkan harga jual yang Anda inginkan, sistem akan menampilkan persentase margin keuntungan Anda.</p>
+              </div>
+
+              <div>
+                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--success)', marginBottom: '12px' }}>
+                  📊 Resep, Finansial & Cost Control
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '12px' }}>
+                  <div className="module-item">
+                    <h5>Recipe Builder & HPP (COGS)</h5>
+                    <p>Menentukan komposisi racikan menu. HPP dihitung otomatis dari harga beli rata-rata.</p>
+                  </div>
+                  <div className="module-item">
+                    <h5>Upload Penjualan POS</h5>
+                    <p>Mengunggah laporan omzet dari kasir POS untuk pemotongan stok otomatis via resep.</p>
+                  </div>
+                  <div className="module-item">
+                    <h5>Cost Control Report</h5>
+                    <p>Audit variansi biaya bulanan, deteksi pemborosan barista, dan target rasio biaya ≤27%.</p>
+                  </div>
                 </div>
               </div>
             </div>
+          )}
 
-            {/* Group: Operasional */}
-            <div style={{ marginBottom: '24px' }}>
-              <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--warning)', marginBottom: '16px' }}>⚙️ Operasional</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-                <div className="guide-card">
-                  <h5>Pembelian & Supplier</h5>
-                  <p><strong>Fungsi:</strong> Mencatat nota belanja harian dan mengelola kontak Supplier.</p>
-                  <p className="how-to"><strong>Cara Pakai:</strong> Buka tab "Input Pembelian", masukkan bahan yang dibeli, QTY, dan Harga. Otomatis menambah stok dan memperbarui harga rata-rata.</p>
+          {/* TAB 4: FAQ & ANTI-BOCOR */}
+          {activeTab === 'faq' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {[
+                {
+                  q: 'Kenapa HPP menu saya tiba-tiba naik atau berwarna merah?',
+                  a: 'HPP Barventis menggunakan metode rata-rata tertimbang (Moving Weighted Average) dari belanja terbaru. Jika supplier menaikkan harga atau ada input harga nota yang salah di menu Purchasing, HPP resep akan otomatis menyesuaikan.'
+                },
+                {
+                  q: 'Kenapa ada variansi (selisih) antara sisa fisik dan penjualan POS?',
+                  a: 'Ada 3 kemungkinan utama: (1) Barista over-portioning (menuang takaran melebihi resep standar), (2) Ada tumpahan/waste yang belum dilaporkan di form Lapor Limbah, atau (3) Nama item di kasir POS belum dipetakan (mapping) ke resep COGS.'
+                },
+                {
+                  q: 'Kapan sebaiknya melakukan Stock Opname menyeluruh?',
+                  a: 'Disarankan dilakukan di akhir bulan secara serentak di dua zona (Resto dan Central). Stock Opname berfungsi mereset baseline fisik resmi dan menghitung audit laba/rugi bulanan.'
+                },
+                {
+                  q: 'Bagaimana cara menangani bahan olahan batch (seperti Simple Syrup atau Seduhan Teh)?',
+                  a: 'Gunakan modul "Olah Bahan / Simple Prep". Masukkan bahan mentah yang dipakai (misal 1 kg Gula + 1 liter Air), sistem akan memotong stok gula dan air, lalu menambah stok baru "Simple Syrup 1.500 ml" dengan HPP yang sudah terakumulasi.'
+                }
+              ].map((item, idx) => (
+                <div key={idx} style={{
+                  background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-lg)', padding: '16px 20px'
+                }}>
+                  <h4 style={{ margin: '0 0 6px', fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    ❓ {item.q}
+                  </h4>
+                  <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+                    {item.a}
+                  </p>
                 </div>
-                <div className="guide-card">
-                  <h5>Invoicing / PO</h5>
-                  <p><strong>Fungsi:</strong> Membuat Purchase Order partai besar ke Supplier dan bisa dicetak (PDF).</p>
-                  <p className="how-to"><strong>Cara Pakai:</strong> Klik "Buat Invoice Baru", isi barang. Klik "Cetak / PDF" untuk dikirim ke Supplier via WhatsApp. Klik "Terima" jika barang sudah sampai.</p>
-                </div>
-                <div className="guide-card">
-                  <h5>Stock Opname</h5>
-                  <p><strong>Fungsi:</strong> Menyamakan jumlah stok fisik di gudang dengan data di sistem (komputer).</p>
-                  <p className="how-to"><strong>Cara Pakai:</strong> Buat Opname Baru, keliling gudang & hitung fisik barang, masukkan ke sistem, lalu "Selesaikan Opname" agar sistem menyesuaikan selisihnya.</p>
-                </div>
-                <div className="guide-card">
-                  <h5>Cek Fisik & Waste</h5>
-                  <p><strong>Fungsi:</strong> Mencatat barang yang tumpah, basi, atau terbuang (waste).</p>
-                  <p className="how-to"><strong>Cara Pakai:</strong> Jika ada susu basi, catat di sini beserta alasannya (misal: "Basi karena kulkas mati"). Stok akan otomatis dikurangi.</p>
-                </div>
-                <div className="guide-card">
-                  <h5>Asset & Equipment</h5>
-                  <p><strong>Fungsi:</strong> Mencatat barang non-konsumsi (Mesin Kopi, Chiller, Meja) dan melacak nilai penyusutan.</p>
-                  <p className="how-to"><strong>Cara Pakai:</strong> Tambah aset beserta masa pakainya (misal: 3 tahun). Sistem akan menghitung penyusutan per bulan.</p>
-                </div>
-                <div className="guide-card">
-                  <h5>Cost Control</h5>
-                  <p><strong>Fungsi:</strong> Laporan laba/rugi kotor berdasarkan HPP vs Harga Jual (Profit Margin).</p>
-                  <p className="how-to"><strong>Cara Pakai:</strong> Buka untuk menganalisa menu mana yang paling menguntungkan dan mana yang marginnya bocor (kemahalan bahan).</p>
-                </div>
-              </div>
+              ))}
             </div>
-
-            {/* Group: System */}
-            <div>
-              <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '16px' }}>🛡️ System</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-                <div className="guide-card">
-                  <h5>Audit Logs</h5>
-                  <p><strong>Fungsi:</strong> CCTV Sistem. Mencatat setiap perubahan data dan aktivitas (Siapa melakukan apa dan jam berapa).</p>
-                  <p className="how-to"><strong>Cara Pakai:</strong> Gunakan kotak pencarian untuk melacak jika ada stok yang tiba-tiba berubah secara mencurigakan.</p>
-                </div>
-                <div className="guide-card">
-                  <h5>Tenant Settings</h5>
-                  <p><strong>Fungsi:</strong> Mengganti profil perusahaan (Nama, Logo, Alamat).</p>
-                  <p className="how-to"><strong>Cara Pakai:</strong> Sesuaikan data restoran Anda di sini. Data ini akan muncul di kop Invoice/PO cetak.</p>
-                </div>
-                <div className="guide-card">
-                  <h5>Backup & Restore</h5>
-                  <p><strong>Fungsi:</strong> Menyimpan database secara manual ke dalam file (Export) untuk keamanan.</p>
-                  <p className="how-to"><strong>Cara Pakai:</strong> Klik "Backup Data" secara berkala (misal: seminggu sekali) agar data Anda memiliki cadangan aman.</p>
-                </div>
-                <div className="guide-card">
-                  <h5>Maintenance</h5>
-                  <p><strong>Fungsi:</strong> Pengaturan akun Staff (Karyawan), Hak Akses (Role), dan kalkulasi ulang HPP seluruh sistem.</p>
-                  <p className="how-to"><strong>Cara Pakai:</strong> Tambah akun untuk Barista/Gudang di sini. Jika HPP dirasa tidak sinkron, gunakan tombol "Hitung Ulang HPP".</p>
-                </div>
-              </div>
-            </div>
-
-          </div>
+          )}
 
           <style>{`
-            .guide-card {
-              background: var(--bg-secondary);
-              padding: 16px;
-              border-radius: var(--radius-lg);
-              border: 1px solid var(--border);
+            .flow-card {
+              display: flex;
+              gap: 18px;
+              position: relative;
             }
-            .guide-card h5 {
-              margin: 0 0 8px 0;
-              font-size: 1rem;
+            .flow-number {
+              width: 38px;
+              height: 38px;
+              border-radius: 50%;
+              background: var(--bg-primary);
+              border: 2px solid;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-weight: 800;
+              font-size: 0.9rem;
+              flex-shrink: 0;
+            }
+            .flow-content {
+              background: var(--bg-secondary);
+              border: 1px solid var(--border);
+              border-radius: var(--radius-lg);
+              padding: 18px 20px;
+              flex: 1;
+            }
+            .flow-header {
+              display: flex;
+              gap: 16px;
+              align-items: center;
+              justify-content: space-between;
+              flex-wrap: wrap;
+            }
+            .flow-header h3 {
+              margin: 0 0 6px;
+              font-size: 1.05rem;
               font-weight: 700;
               color: var(--text-primary);
             }
-            .guide-card p {
-              margin: 0 0 8px 0;
+            .flow-header p {
+              margin: 0 0 10px;
               font-size: 0.85rem;
               color: var(--text-secondary);
               line-height: 1.5;
+              max-width: 540px;
             }
-            .guide-card p.how-to {
-              background: rgba(0,0,0,0.03);
-              padding: 8px;
-              border-radius: var(--radius-sm);
-              border-left: 3px solid var(--accent);
-              margin-bottom: 0;
+            .guide-thumb {
+              width: 100px;
+              height: 100px;
+              object-fit: cover;
+              border-radius: var(--radius-md);
+              border: 1px solid var(--border);
+              box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+            }
+            .badge-row {
+              display: flex;
+              gap: 8px;
+              flex-wrap: wrap;
+            }
+            .badge {
+              font-size: 0.72rem;
+              font-weight: 600;
+              padding: 3px 8px;
+              border-radius: 4px;
+            }
+            .badge-info {
+              background: rgba(59,130,246,0.15);
+              color: #3b82f6;
+            }
+            .badge-warning {
+              background: rgba(245,158,11,0.15);
+              color: #f59e0b;
+            }
+            .badge-accent {
+              background: rgba(99,102,241,0.15);
+              color: var(--accent);
+            }
+            .badge-success {
+              background: rgba(16,185,129,0.15);
+              color: #10b981;
+            }
+            .module-item {
+              background: var(--bg-tertiary, var(--bg-primary));
+              padding: 14px;
+              border-radius: var(--radius-md);
+              border: 1px solid var(--border);
+            }
+            .module-item h5 {
+              margin: 0 0 4px 0;
+              font-size: 0.88rem;
+              font-weight: 700;
+              color: var(--text-primary);
+            }
+            .module-item p {
+              margin: 0;
+              font-size: 0.78rem;
+              color: var(--text-muted);
+              line-height: 1.45;
             }
           `}</style>
-
         </div>
       </div>
     </div>

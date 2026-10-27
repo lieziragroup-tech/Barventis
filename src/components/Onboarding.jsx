@@ -1,33 +1,64 @@
 import { useState } from 'react';
-import { Package, BookOpen, UploadCloud, ArrowRight, Sparkles } from 'lucide-react';
+import { 
+  Package, 
+  BookOpen, 
+  ClipboardCheck, 
+  UploadCloud, 
+  ArrowRight, 
+  Sparkles, 
+  CheckCircle2, 
+  HelpCircle,
+  TrendingDown
+} from 'lucide-react';
 
 const STEPS = [
   {
+    id: 'stock',
     icon: Package,
-    title: 'Tambah Bahan Baku Pertama',
-    subtitle: 'Mulai dengan mendaftarkan bahan-bahan yang digunakan di restoran Anda',
-    description: 'Bahan baku adalah fondasi sistem ini. Setelah ditambahkan, semua stok, resep, dan laporan HPP akan terhubung ke sini.',
+    badge: 'Langkah 1 • Master Data',
+    title: 'Daftarkan Bahan Baku & Kemasan',
+    subtitle: 'Kunci satuan dasar (gram / ml) dan ukuran pack botol/karton',
+    description: 'Bahan baku adalah fondasi Barventis. Masukkan nama bahan, harga beli, dan ukuran kemasan (misal 1 botol = 750 ml). Sistem akan menggunakannya untuk menghitung stok utuh vs sisa timbang.',
     action: 'stock',
-    actionLabel: 'Buka Manajemen Stok →',
-    color: 'var(--accent)'
+    actionLabel: 'Buka Stock Ledger →',
+    color: 'var(--accent)',
+    highlight: 'Contoh: Susu Fresh (1.000 ml), Biji Kopi House Blend (1.000 gr), Sirup Karamel (750 ml).'
   },
   {
+    id: 'recipes',
     icon: BookOpen,
-    title: 'Buat Resep & Hitung HPP',
-    subtitle: 'Daftarkan resep menu beserta komposisi bahan dan biaya produksinya',
-    description: 'Sistem akan otomatis menghitung Harga Pokok Produksi (HPP) setiap menu berdasarkan bahan yang Anda input.',
+    badge: 'Langkah 2 • Costing / COGS',
+    title: 'Buat Resep & Kunci HPP Menu',
+    subtitle: 'Modal per porsi terhitung otomatis dari harga bahan baku',
+    description: 'Rakit menu minuman/makanan dengan memasukkan gramasi atau mililiter bahan. HPP (Harga Pokok Penjualan) akan otomatis dihitung dan diperbarui real-time saat harga belanja berubah.',
     action: 'recipes',
     actionLabel: 'Buka Recipe Builder →',
-    color: 'var(--success)'
+    color: 'var(--success)',
+    highlight: 'Contoh: 1 porsi Iced Latte = 18 gr Espresso + 150 ml Susu + 20 ml Sirup. HPP otomatis Rp 6.200.'
   },
   {
+    id: 'daily',
+    icon: ClipboardCheck,
+    badge: 'Langkah 3 • Operasional EOD',
+    title: 'Closing Harian: FULL & BROKEN',
+    subtitle: 'Barista cukup hitung botol utuh dan timbang botol terbuka',
+    description: 'Rahasia akurasi Barventis: Barista tidak perlu pusing mengira-ngira isi botol. Cukup catat kemasan utuh (FULL) di rak dan timbang kemasan yang sedang terpakai (BROKEN) dalam satuan ml/gr.',
+    action: 'daily',
+    actionLabel: 'Buka Daily Inventory →',
+    color: '#06b6d4',
+    highlight: 'Contoh: 3 botol Sirup utuh (FULL = 3) + 1 botol terbuka di meja bar ditimbang sisa 420 ml (BROKEN = 420).'
+  },
+  {
+    id: 'pos',
     icon: UploadCloud,
-    title: 'Sinkronisasi Data POS',
-    subtitle: 'Upload laporan penjualan dari kasir POS Anda untuk deduct stok otomatis',
-    description: 'Upload file Excel dari Moka, Pawoon, Olsera, atau kasir apapun. Sistem akan mencocokkan menu dan memotong stok bahan secara otomatis.',
+    badge: 'Langkah 4 • Audit & Rekonsiliasi',
+    title: 'Sinkronisasi POS & Deteksi Kebocoran',
+    subtitle: 'Bandingkan pemakaian riil vs teoretis penjualan kasir',
+    description: 'Tarik laporan kasir POS (ESB, Moka, dsb). Sistem akan memotong stok secara teoretis sesuai resep dan langsung membandingkannya dengan sisa fisik closing. Selisih (variance) bocor langsung terdeteksi!',
     action: 'pos',
     actionLabel: 'Buka POS Sync →',
-    color: 'var(--warning)'
+    color: 'var(--warning)',
+    highlight: 'Deteksi otomatis: over-portioning barista, tumpah tak tercatat, atau pemborosan bahan.'
   }
 ];
 
@@ -45,68 +76,100 @@ export default function Onboarding({ onNavigate, onDismiss, tenantName }) {
       zIndex: 2000, padding: '20px'
     }}>
       <div className="glass-card" style={{
-        width: '100%', maxWidth: '520px',
-        padding: '40px 36px',
+        width: '100%', maxWidth: '560px',
+        padding: '36px 32px',
         border: '1px solid var(--border)',
         boxShadow: '0 30px 60px rgba(0,0,0,0.5)',
         position: 'relative'
       }}>
         {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
             <Sparkles size={18} style={{ color: 'var(--warning)' }} />
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>
               Setup Awal — {tenantName || 'Tenant Baru'}
             </span>
           </div>
-           <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>
-            Selamat Datang di Barventis! 🎉
+          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>
+            Selamat Datang di Barventis!
           </h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-            Ikuti 3 langkah ini untuk mulai menggunakan sistem
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+            Pahami alur kerja Daily Inventory & Cost Control dalam 4 langkah mudah
           </p>
         </div>
 
         {/* Step indicators */}
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '28px', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', justifyContent: 'center' }}>
           {STEPS.map((s, i) => (
-            <div key={i} style={{
-              flex: 1, height: '4px', borderRadius: '4px',
-              // Each completed bar uses its OWN step color (was always the active step's). (LOW #24)
-              background: i <= currentStep ? s.color : 'rgba(255,255,255,0.08)',
-              transition: 'background 0.3s'
-            }} />
+            <div 
+              key={s.id} 
+              onClick={() => setCurrentStep(i)}
+              style={{
+                flex: 1, height: '4px', borderRadius: '4px',
+                background: i <= currentStep ? s.color : 'rgba(255,255,255,0.08)',
+                cursor: 'pointer',
+                transition: 'background 0.3s'
+              }} 
+            />
           ))}
         </div>
 
         {/* Step card */}
         <div style={{
           background: 'var(--bg-tertiary)',
-          border: `1px solid ${step.color}22`,
+          border: `1px solid ${step.color}33`,
           borderRadius: 'var(--radius-xl)',
-          padding: '28px 24px',
-          marginBottom: '24px'
+          padding: '24px',
+          marginBottom: '20px'
         }}>
-          <div style={{
-            width: '52px', height: '52px', borderRadius: 'var(--radius-lg)',
-            background: `${step.color}18`, display: 'flex',
-            alignItems: 'center', justifyContent: 'center',
-            color: step.color, marginBottom: '16px'
-          }}>
-            <Icon size={26} />
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '14px' }}>
+            <div style={{
+              width: '46px', height: '46px', borderRadius: 'var(--radius-lg)',
+              background: `${step.color}18`, display: 'flex',
+              alignItems: 'center', justifyContent: 'center',
+              color: step.color, flexShrink: 0
+            }}>
+              <Icon size={24} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <span style={{ 
+                fontSize: '0.7rem', 
+                color: step.color, 
+                fontWeight: 700, 
+                textTransform: 'uppercase', 
+                letterSpacing: '0.5px' 
+              }}>
+                {step.badge}
+              </span>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)', margin: '4px 0 2px' }}>
+                {step.title}
+              </h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0 }}>
+                {step.subtitle}
+              </p>
+            </div>
           </div>
-          <span style={{ fontSize: '0.7rem', color: step.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Langkah {currentStep + 1} dari 3
-          </span>
-           <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)', margin: '6px 0 8px' }}>
-            {step.title}
-          </h3>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.55, marginBottom: '20px' }}>
+
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.55, marginBottom: '14px' }}>
             {step.description}
           </p>
+
+          <div style={{ 
+            background: 'var(--bg-secondary)', 
+            border: '1px solid var(--border)', 
+            borderRadius: 'var(--radius-md)', 
+            padding: '10px 12px', 
+            marginBottom: '18px',
+            fontSize: '0.78rem',
+            color: 'var(--text-secondary)'
+          }}>
+            <strong style={{ color: 'var(--text-primary)' }}>💡 Praktik Lapangan: </strong> 
+            {step.highlight}
+          </div>
+
           <button
             className="btn btn-primary"
-            style={{ width: '100%', justifyContent: 'center', padding: '10px 20px' }}
+            style={{ width: '100%', justifyContent: 'center', padding: '10px 20px', gap: '8px' }}
             onClick={() => {
               onNavigate(step.action);
               onDismiss();
@@ -116,7 +179,7 @@ export default function Onboarding({ onNavigate, onDismiss, tenantName }) {
           </button>
         </div>
 
-        {/* Navigation */}
+        {/* Navigation & Skip */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', gap: '8px' }}>
             {currentStep > 0 && (

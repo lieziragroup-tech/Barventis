@@ -28,4 +28,18 @@ Append one section per meaningful decision. Keep proposed and approved decisions
 - **Affected baseline requirements/modules:** `UsageRecap.jsx`
 - **Verification / rollback:** Vitest test suite pass (276/276 passed), `npm run build` sukses.
 - **Review trigger/date:** 2026-10-27
-- **Review trigger/date:**
+
+## DEC-0003 — Onboarding & Guidebook Alignment to Barventis F&B Daily Inventory
+- **Date:** 2026-10-27
+- **Status:** `APPROVED`
+- **Decision owner:** Ayling & Izumi
+- **Context / problem:** File `CLAUDE.md` sebelumnya merupakan residu template generic maker-checker gudang umum. Komponen `Onboarding.jsx` dan `GuidebookModal.jsx` belum sepenuhnya merefleksikan alur operasional inti Barventis F&B (Daily Inventory FULL/BROKEN, segitiga logistik Bar-Central-Purchasing, serta rekonsiliasi variansi POS vs Fisik).
+- **Options considered:**
+  1. Memasang engine render video eksternal (Remotion) untuk tutorial.
+  2. Menyelaraskan modul interaktif native (`Onboarding.jsx` & `GuidebookModal.jsx`) dengan alur F&B Barventis tanpa menambah dependensi berat.
+- **Evidence/source:** `SPEC_Daily_Inventory_Cost_Control_Barventis_v4_FINAL_CONCEPT.md`, `business_process_discovery_barventis_13_sheets.md`, `CLAUDE.md`.
+- **Decision and rationale:** Opsi 2 dipilih sesuai prinsip zero-slop dan efisiensi performa. Menghapus `CLAUDE.md` lama, menerbitkan `CLAUDE.md` baru berbasis Barventis, serta memperbarui onboarding & guidebook dengan 4 langkah F&B dan tab interaktif FULL/BROKEN.
+- **Consequences / trade-offs:** `AppLayout.jsx` diperluas untuk menangani navigasi dinamis rute Onboarding (`stock`, `recipes`, `daily`, `pos`, `cost-report`).
+- **Affected baseline requirements/modules:** `CLAUDE.md`, `src/components/Onboarding.jsx`, `src/components/GuidebookModal.jsx`, `src/components/AppLayout.jsx`.
+- **Verification / rollback:** `npm run build` PASS, Vitest 276/276 PASS.
+- **Review trigger/date:** 2026-10-27
