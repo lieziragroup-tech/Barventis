@@ -88,3 +88,18 @@ Append one section per meaningful decision. Keep proposed and approved decisions
 - **Affected baseline requirements/modules:** `src/pages/shared/SimplePrep.jsx`, `src/services/api.js`.
 - **Verification / rollback:** `npm run build` PASS, Vitest 276/276 PASS.
 - **Review trigger/date:** 2026-10-27
+
+## DEC-0007 — Prevent HTTP 400 Bad Request on transactions enum & materials NOT NULL schema
+- **Date:** 2026-10-27
+- **Status:** `APPROVED`
+- **Decision owner:** Ayling & Izumi
+- **Context / problem:** Berdasarkan audit `Check-Manual/analisis_dan_solusi_error_400_supabase.md`, terjadi 3 titik HTTP 400 di konsol: (1) query `type=eq.TRANSFER_REQUEST` ditolak jika enum `transaction_type` di DB belum memiliki value tersebut, (2) insert material pertama kali gagal karena kolom `shelf_life_days` belum ada di skema remote, dan (3) insert fallback kedua gagal 400 akibat pelanggaran NOT NULL kolom `supplier` & `new_price`, serta tipe data `price` (int8) di tabel `public.materials`.
+- **Options considered:**
+  1. Hanya mengandalkan migrasi manual database tanpa proteksi aplikasi.
+  2. Mengimplementasikan payload normalizer `normalizeMaterialCreatePayload` di `materialsRepo.js` (default `supplier: '-'`, `new_price`, rounded `price`, dsb), caching ketiadaan kolom `shelf_life_days`, normalisasi lokasi (`RESTO`/`CENTRAL`) pada `createTransferRequest`, serta caching `__dbSupportsTransferRequestEnum` di memori agar UI tidak terus menerus menembak request 400 jika enum DB belum diupdate.
+- **Evidence/source:** `Check-Manual/analisis_dan_solusi_error_400_supabase.md`, `src/data/materialsRepo.js:3-130`, `src/services/api.js:1740-1786`.
+- **Decision and rationale:** Opsi 2 dipilih agar aplikasi resilient terhadap perbedaan versi skema database Supabase dan mencegah error merah berulang di sisi client.
+- **Consequences / trade-offs:** Nilai `supplier` default `'-'` dan `new_price` otomatis diisi sama dengan `price` jika tidak disertakan.
+- **Affected baseline requirements/modules:** `src/data/materialsRepo.js`, `src/services/api.js`.
+- **Verification / rollback:** `npm run build` PASS, Vitest 276/276 PASS.
+- **Review trigger/date:** 2026-10-27

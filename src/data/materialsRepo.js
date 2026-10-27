@@ -1,7 +1,37 @@
 import { supabase } from '../lib/supabase';
 
 const SHELF_LIFE_STORAGE_PREFIX = 'barventis_mat_shelf_life_';
+let dbSupportsShelfLifeColumn = true;
 
+function normalizeMaterialCreatePayload(tenantId, material) {
+  const roundedPrice = Math.round(Number(material.price) || 0);
+  const newPrice = Number(material.new_price ?? material.price ?? 0);
+  const unit = (material.unit || 'pcs').trim();
+  const defaultFullPack =
+    unit === 'kg' ? '1000 gr' :
+    unit === 'L' ? '1000 ml' :
+    `1 ${unit}`;
+
+  return {
+    ...material,
+    tenant_id: tenantId,
+    name: String(material.name || '').trim(),
+    category: material.category || 'Bahan Mentah / Raw Material',
+    supplier: material.supplier != null && String(material.supplier).trim() !== '' ? String(material.supplier).trim() : '-',
+    unit: unit,
+    full_pack: material.full_pack != null && String(material.full_pack).trim() !== '' ? String(material.full_pack).trim() : defaultFullPack,
+    price: roundedPrice,
+    new_price: newPrice,
+    qty_resto: Number(material.qty_resto) || 0,
+    qty_central: Number(material.qty_central) || 0,
+    min_stock: Number(material.min_stock ?? 5),
+    par_stock: Number(material.par_stock ?? 0),
+    is_active: material.is_active ?? true,
+    is_preparable: Boolean(material.is_preparable),
+    broken_tracking_enabled: Boolean(material.broken_tracking_enabled),
+    expiry_tracking_enabled: Boolean(material.expiry_tracking_enabled)
+  };
+}
 function getLocalShelfLifeMap(tenantId) {
   if (typeof window === 'undefined' || !tenantId) return {};
   try {
@@ -67,27 +97,34 @@ export const materialsRepo = {
   create: async (tenantId, material) => {
     if (!tenantId) throw new Error("Missing active session.");
     const shelfLifeVal = material.shelf_life_days;
+    const basePayload = normalizeMaterialCreatePayload(tenantId, material);
+
+    if (!dbSupportsShelfLifeColumn) {
+      delete basePayload.shelf_life_days;
+    }
+
     try {
       const { data, error } = await supabase
         .from('materials')
-        .insert([{ ...material, tenant_id: tenantId }])
+        .insert([basePayload])
         .select()
         .single();
       if (error) throw error;
       if (shelfLifeVal !== undefined) setLocalShelfLife(tenantId, data.id, shelfLifeVal);
-      return { ...data, shelf_life_days: data.shelf_life_days ?? shelfLifeVal };
+      return { ...data, shelf_life_days: data.shelf_life_days ?? shelfLifeVal ?? null };
     } catch (insertErr) {
       if (insertErr.message && insertErr.message.includes('shelf_life_days')) {
-        const fallbackMaterial = { ...material };
+        dbSupportsShelfLifeColumn = false;
+        const fallbackMaterial = { ...basePayload };
         delete fallbackMaterial.shelf_life_days;
         const { data, error } = await supabase
           .from('materials')
-          .insert([{ ...fallbackMaterial, tenant_id: tenantId }])
+          .insert([fallbackMaterial])
           .select()
           .single();
         if (error) throw error;
         if (shelfLifeVal !== undefined) setLocalShelfLife(tenantId, data.id, shelfLifeVal);
-        return { ...data, shelf_life_days: shelfLifeVal };
+        return { ...data, shelf_life_days: shelfLifeVal ?? null };
       }
       throw insertErr;
     }

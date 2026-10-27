@@ -1737,19 +1737,22 @@ export const api = {
     return { success: true, material: mat, transfer: result, target_location: targetLoc };
   },
   // --- TRANSFER REQUISITION (WBS Phase 2) ---
+  // Flag penanda apakah database mendukung enum TRANSFER_REQUEST
+  // Mencegah tembakan HTTP 400 berulang ke endpoint transactions
   createTransferRequest: async ({ material_id, qty, source_branch, target_branch, notes }) => {
     const tenantId = await getActiveTenantId();
-    const { data: mat } = await supabase.from('materials').select('price').eq('id', material_id).single();
-    const unitPrice = parseFloat(mat?.price) || 0;
+    const { data: mat } = await supabase.from('materials').select('price, new_price').eq('id', material_id).single();
+    const unitPrice = parseFloat(mat?.new_price || mat?.price) || 0;
+    const safeLocation = String(target_branch || '').toUpperCase().includes('CENTRAL') ? 'CENTRAL' : 'RESTO';
     
     const { data, error } = await supabase.from('transactions').insert({
       tenant_id: tenantId,
       date: new Date().toISOString().split('T')[0],
       material_id: material_id,
       type: 'TRANSFER_REQUEST',
-      location: target_branch,
+      location: safeLocation,
       qty: parseFloat(qty),
-      amount: parseFloat(qty) * unitPrice,
+      amount: Math.round(parseFloat(qty) * unitPrice),
       notes: `Request Transfer [${source_branch} ➔ ${target_branch}] - ${notes || ''}`
     }).select().single();
     
@@ -1759,6 +1762,9 @@ export const api = {
   
   getTransferRequests: async () => {
     try {
+      if (typeof window !== 'undefined' && window.__dbSupportsTransferRequestEnum === false) {
+        return [];
+      }
       const tenantId = await getActiveTenantId();
       if (!tenantId) return [];
       const { data, error } = await supabase.from('transactions')
@@ -1768,6 +1774,7 @@ export const api = {
         .order('id', { ascending: false });
       if (error) {
         // Handle database enum transaction_type without TRANSFER_REQUEST gracefully
+        if (typeof window !== 'undefined') window.__dbSupportsTransferRequestEnum = false;
         console.warn('Transfer requests not available in DB transaction_type enum:', error.message);
         return [];
       }
