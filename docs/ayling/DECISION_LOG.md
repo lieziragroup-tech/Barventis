@@ -43,3 +43,18 @@ Append one section per meaningful decision. Keep proposed and approved decisions
 - **Affected baseline requirements/modules:** `CLAUDE.md`, `src/components/Onboarding.jsx`, `src/components/GuidebookModal.jsx`, `src/components/AppLayout.jsx`.
 - **Verification / rollback:** `npm run build` PASS, Vitest 276/276 PASS.
 - **Review trigger/date:** 2026-10-27
+
+## DEC-0004 — Fix CSS Cascade Layer Conflict on .form-control & Default full_pack in SimplePrep
+- **Date:** 2026-10-27
+- **Status:** `APPROVED`
+- **Decision owner:** Ayling & Izumi
+- **Context / problem:** Input numerik pada SimplePrep.jsx (Banyaknya Diambil, Hasil Bersih, Berat Ampas) menyusut menjadi kapsul kecil (~28px total padding, 0px content width) karena `.form-control` di `src/index.css` berada di luar `@layer`, menimpa utilities Tailwind v4 (`w-24` dan `flex-1`). Selain itu, modal `+ Daftarkan Bahan Baru` membuat bahan tanpa `full_pack`, memicu kalkulasi HPP Rp 0.
+- **Options considered:**
+  1. Menggunakan CSS `!important` di setiap elemen form SimplePrep.
+  2. Membungkus `.form-control` ke dalam `@layer components` di `src/index.css`, menambahkan style inline eksplisit (`flex: 1 1 0%`, `minWidth: 120px`, `width: auto` dan `flex: 0 0 96px`) di SimplePrep.jsx, serta menginjeksi default `full_pack` pada `handleCreateRawMaterial`.
+- **Evidence/source:** `src/index.css:827`, `src/pages/shared/SimplePrep.jsx:79,437,575,682`.
+- **Decision and rationale:** Opsi 2 adalah solusi standar CSS Cascade Layer Tailwind v4 yang menyelesaikan masalah secara global untuk seluruh aplikasi tanpa hack `!important`, sekaligus melindungi perhitungan HPP olahan.
+- **Consequences / trade-offs:** Seluruh class utility Tailwind v4 dapat menimpa properti `.form-control` sesuai layer priority yang benar.
+- **Affected baseline requirements/modules:** `src/index.css`, `src/pages/shared/SimplePrep.jsx`.
+- **Verification / rollback:** `npm run build` PASS, Vitest 276/276 PASS.
+- **Review trigger/date:** 2026-10-27

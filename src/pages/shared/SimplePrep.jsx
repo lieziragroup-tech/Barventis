@@ -76,10 +76,16 @@ export default function SimplePrep() {
     }
     setCreatingRawMat(true);
     try {
+      const defaultFullPack =
+        newRawMat.unit === 'kg' ? '1000 gr' :
+        newRawMat.unit === 'L' ? '1000 ml' :
+        `1 ${newRawMat.unit || 'kg'}`;
+
       const created = await api.createMaterial({
         name: newRawMat.name.trim(),
         category: newRawMat.category || 'Bahan Mentah / Raw Material',
         unit: newRawMat.unit || 'kg',
+        full_pack: defaultFullPack,
         price: parseFloat(newRawMat.price) || 0,
         qty_resto: parseFloat(newRawMat.qty_resto) || 0,
         shelf_life_days: newRawMat.shelf_life_days ? parseInt(newRawMat.shelf_life_days, 10) : null,
@@ -434,7 +440,7 @@ export default function SimplePrep() {
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
                 <div className="sm:col-span-7">
                   <label className="text-xs font-bold text-gray-700 block mb-1.5">Banyaknya Diambil *</label>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 items-center">
                     <input
                       type="number"
                       step="any"
@@ -442,11 +448,13 @@ export default function SimplePrep() {
                       required
                       placeholder="0.00"
                       className="form-control flex-1 text-sm py-2 font-bold font-mono text-blue-700"
+                      style={{ flex: '1 1 0%', minWidth: '120px', width: 'auto' }}
                       value={sourceQty}
                       onChange={(e) => setSourceQty(e.target.value)}
                     />
                     <select
                       className="form-control w-24 text-xs font-bold"
+                      style={{ width: '96px', flex: '0 0 96px' }}
                       value={sourceUnit}
                       onChange={(e) => setSourceUnit(e.target.value)}
                     >
@@ -572,7 +580,7 @@ export default function SimplePrep() {
               {/* Target Qty & Unit */}
               <div>
                 <label className="text-xs font-bold text-gray-700 block mb-1.5">Dapat Berapa Banyak Hasil Bersih? *</label>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
                   <input
                     type="number"
                     step="any"
@@ -580,11 +588,13 @@ export default function SimplePrep() {
                     required
                     placeholder="0.00"
                     className="form-control flex-1 text-sm py-2 font-bold font-mono text-emerald-700"
+                    style={{ flex: '1 1 0%', minWidth: '120px', width: 'auto' }}
                     value={targetQty}
                     onChange={(e) => setTargetQty(e.target.value)}
                   />
                   <select
                     className="form-control w-24 text-xs font-bold"
+                    style={{ width: '96px', flex: '0 0 96px' }}
                     value={targetUnit}
                     onChange={(e) => setTargetUnit(e.target.value)}
                   >
@@ -679,18 +689,20 @@ export default function SimplePrep() {
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
                 <div className="sm:col-span-7">
                   <label className="text-xs font-bold text-gray-700 block mb-1.5">Berat Ampas Dibuang</label>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 items-center">
                     <input
                       type="number"
                       step="any"
                       min="0"
                       placeholder="0.00"
                       className="form-control flex-1 text-sm py-2 font-bold font-mono text-red-600"
+                      style={{ flex: '1 1 0%', minWidth: '120px', width: 'auto' }}
                       value={wasteQty}
                       onChange={(e) => setWasteQty(e.target.value)}
                     />
                     <select
                       className="form-control w-24 text-xs font-bold"
+                      style={{ width: '96px', flex: '0 0 96px' }}
                       value={wasteUnit}
                       onChange={(e) => setWasteUnit(e.target.value)}
                     >
