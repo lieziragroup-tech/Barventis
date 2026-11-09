@@ -1,10 +1,11 @@
+import { lazyWithRetry } from '../../utils/lazyWithRetry';
 import React, { Suspense } from 'react';
 import { ClipboardList, ShoppingCart, FileText } from 'lucide-react';
 import TabContainer from '../../components/shared/TabContainer';
 
-const Marketlist = React.lazy(() => import('./Marketlist'));
-const Purchasing = React.lazy(() => import('./Purchasing'));
-const Invoicing = React.lazy(() => import('./Invoicing'));
+const Marketlist = lazyWithRetry(() => import('./Marketlist'));
+const Purchasing = lazyWithRetry(() => import('./Purchasing'));
+const Invoicing = lazyWithRetry(() => import('./Invoicing'));
 
 const TABS = [
   { key: 'marketlist', label: 'Marketlist (Daftar Belanja)', icon: ClipboardList },

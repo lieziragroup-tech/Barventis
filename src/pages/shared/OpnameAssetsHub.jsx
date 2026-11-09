@@ -1,9 +1,10 @@
+import { lazyWithRetry } from '../../utils/lazyWithRetry';
 import React, { Suspense } from 'react';
 import { Boxes, Warehouse, Wrench, FileText } from 'lucide-react';
 import TabContainer from '../../components/shared/TabContainer';
 
-const StockOpname = React.lazy(() => import('./StockOpname'));
-const StockAdjustments = React.lazy(() => import('./StockAdjustments'));
+const StockOpname = lazyWithRetry(() => import('./StockOpname'));
+const StockAdjustments = lazyWithRetry(() => import('./StockAdjustments'));
 
 const TABS = [
   { key: 'resto', label: 'Stock Opname Resto', icon: Boxes },

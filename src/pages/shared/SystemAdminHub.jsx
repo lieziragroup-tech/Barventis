@@ -1,12 +1,13 @@
+import { lazyWithRetry } from '../../utils/lazyWithRetry';
 import React, { Suspense } from 'react';
 import { BookOpen, ArrowRightLeft, Settings, History } from 'lucide-react';
 import TabContainer from '../../components/shared/TabContainer';
 
-const StockLedger = React.lazy(() => import('./StockLedger'));
-const InterBranchTransfer = React.lazy(() => import('./InterBranchTransfer'));
-const TenantAdminPanel = React.lazy(() => import('../owner/TenantAdminPanel'));
-const AuditLogs = React.lazy(() => import('./AuditLogs'));
-const BackupCenter = React.lazy(() => import('./BackupCenter'));
+const StockLedger = lazyWithRetry(() => import('./StockLedger'));
+const InterBranchTransfer = lazyWithRetry(() => import('./InterBranchTransfer'));
+const TenantAdminPanel = lazyWithRetry(() => import('../owner/TenantAdminPanel'));
+const AuditLogs = lazyWithRetry(() => import('./AuditLogs'));
+const BackupCenter = lazyWithRetry(() => import('./BackupCenter'));
 
 const TABS = [
   { key: 'stock-ledger', label: 'Buku Stok (Stock Ledger)', icon: BookOpen },

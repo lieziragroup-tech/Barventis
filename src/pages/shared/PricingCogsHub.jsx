@@ -1,10 +1,11 @@
+import { lazyWithRetry } from '../../utils/lazyWithRetry';
 import React, { Suspense } from 'react';
 import { Tag, Utensils, BarChart3 } from 'lucide-react';
 import TabContainer from '../../components/shared/TabContainer';
 
-const MenuPricing = React.lazy(() => import('./MenuPricing'));
-const Recipes = React.lazy(() => import('./Recipes'));
-const MenuEngineering = React.lazy(() => import('./MenuEngineering'));
+const MenuPricing = lazyWithRetry(() => import('./MenuPricing'));
+const Recipes = lazyWithRetry(() => import('./Recipes'));
+const MenuEngineering = lazyWithRetry(() => import('./MenuEngineering'));
 
 const TABS = [
   { key: 'pricing', label: 'Menu Pricing & Simulasi Margin', icon: Tag },

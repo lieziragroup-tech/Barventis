@@ -6,41 +6,42 @@ import './App.css';
 
 // Components & Pages
 import ErrorBoundary from './components/ErrorBoundary';
+import { lazyWithRetry } from './utils/lazyWithRetry';
 import AuthScreen from './pages/auth/AuthScreen';
 
-const AppLayout = React.lazy(() => import('./components/AppLayout'));
-const Dashboard = React.lazy(() => import('./pages/shared/Dashboard'));
+const AppLayout = lazyWithRetry(() => import('./components/AppLayout'));
+const Dashboard = lazyWithRetry(() => import('./pages/shared/Dashboard'));
 
 // === Hub Pages (Konsolidasi 7+1 Menu SO BARISTA 2026) ===
-const BeverageSalesHub = React.lazy(() => import('./pages/shared/BeverageSalesHub'));
-const DailyInventoryHub = React.lazy(() => import('./pages/shared/DailyInventoryHub'));
-const ProcurementHub = React.lazy(() => import('./pages/shared/ProcurementHub'));
-const PricingCogsHub = React.lazy(() => import('./pages/shared/PricingCogsHub'));
-const OpnameAssetsHub = React.lazy(() => import('./pages/shared/OpnameAssetsHub'));
-const SimplePrep = React.lazy(() => import('./pages/shared/SimplePrep'));
-const CostControlReportHub = React.lazy(() => import('./pages/shared/CostControlReportHub'));
-const SystemAdminHub = React.lazy(() => import('./pages/shared/SystemAdminHub'));
+const BeverageSalesHub = lazyWithRetry(() => import('./pages/shared/BeverageSalesHub'));
+const DailyInventoryHub = lazyWithRetry(() => import('./pages/shared/DailyInventoryHub'));
+const ProcurementHub = lazyWithRetry(() => import('./pages/shared/ProcurementHub'));
+const PricingCogsHub = lazyWithRetry(() => import('./pages/shared/PricingCogsHub'));
+const OpnameAssetsHub = lazyWithRetry(() => import('./pages/shared/OpnameAssetsHub'));
+const SimplePrep = lazyWithRetry(() => import('./pages/shared/SimplePrep'));
+const CostControlReportHub = lazyWithRetry(() => import('./pages/shared/CostControlReportHub'));
+const SystemAdminHub = lazyWithRetry(() => import('./pages/shared/SystemAdminHub'));
 
 // === Legacy pages (masih dipakai langsung oleh Hub atau redirect) ===
-const StockLedger = React.lazy(() => import('./pages/shared/StockLedger'));
-const Recipes = React.lazy(() => import('./pages/shared/Recipes'));
-const MenuPricing = React.lazy(() => import('./pages/shared/MenuPricing'));
-const Marketlist = React.lazy(() => import('./pages/shared/Marketlist'));
-const StockOpname = React.lazy(() => import('./pages/shared/StockOpname'));
-const PhysicalCheck = React.lazy(() => import('./pages/shared/PhysicalCheck'));
-const DailyInventory = React.lazy(() => import('./pages/shared/DailyInventory'));
-const CostControl = React.lazy(() => import('./pages/shared/CostControl'));
-const Invoicing = React.lazy(() => import('./pages/shared/Invoicing'));
-const Purchasing = React.lazy(() => import('./pages/shared/Purchasing'));
-const AuditLogs = React.lazy(() => import('./pages/shared/AuditLogs'));
-const BackupCenter = React.lazy(() => import('./pages/shared/BackupCenter'));
-const InterBranchTransfer = React.lazy(() => import('./pages/shared/InterBranchTransfer'));
-const WasteLogs = React.lazy(() => import('./pages/shared/WasteLogs'));
-const SuperAdminPanel = React.lazy(() => import('./pages/superadmin/SuperAdminPanel'));
-const TenantAdminPanel = React.lazy(() => import('./pages/owner/TenantAdminPanel'));
-const PosTerminal = React.lazy(() => import('./pages/pos/PosTerminal'));
-const BaristaReport = React.lazy(() => import('./pages/shared/BaristaReport'));
-const LandingPage = React.lazy(() => import('./pages/landing/NewLandingPage.tsx'));
+const StockLedger = lazyWithRetry(() => import('./pages/shared/StockLedger'));
+const Recipes = lazyWithRetry(() => import('./pages/shared/Recipes'));
+const MenuPricing = lazyWithRetry(() => import('./pages/shared/MenuPricing'));
+const Marketlist = lazyWithRetry(() => import('./pages/shared/Marketlist'));
+const StockOpname = lazyWithRetry(() => import('./pages/shared/StockOpname'));
+const PhysicalCheck = lazyWithRetry(() => import('./pages/shared/PhysicalCheck'));
+const DailyInventory = lazyWithRetry(() => import('./pages/shared/DailyInventory'));
+const CostControl = lazyWithRetry(() => import('./pages/shared/CostControl'));
+const Invoicing = lazyWithRetry(() => import('./pages/shared/Invoicing'));
+const Purchasing = lazyWithRetry(() => import('./pages/shared/Purchasing'));
+const AuditLogs = lazyWithRetry(() => import('./pages/shared/AuditLogs'));
+const BackupCenter = lazyWithRetry(() => import('./pages/shared/BackupCenter'));
+const InterBranchTransfer = lazyWithRetry(() => import('./pages/shared/InterBranchTransfer'));
+const WasteLogs = lazyWithRetry(() => import('./pages/shared/WasteLogs'));
+const SuperAdminPanel = lazyWithRetry(() => import('./pages/superadmin/SuperAdminPanel'));
+const TenantAdminPanel = lazyWithRetry(() => import('./pages/owner/TenantAdminPanel'));
+const PosTerminal = lazyWithRetry(() => import('./pages/pos/PosTerminal'));
+const BaristaReport = lazyWithRetry(() => import('./pages/shared/BaristaReport'));
+const LandingPage = lazyWithRetry(() => import('./pages/landing/NewLandingPage.tsx'));
 
 const RouteErrorBoundary = ({ children }) => {
   const location = useLocation();

@@ -1,11 +1,12 @@
+import { lazyWithRetry } from '../../utils/lazyWithRetry';
 import React, { Suspense } from 'react';
 import { ClipboardList, Trash2, AlertTriangle } from 'lucide-react';
 import TabContainer from '../../components/shared/TabContainer';
 
-const DailyInventory = React.lazy(() => import('./DailyInventory'));
-const UsageRecap = React.lazy(() => import('./UsageRecap'));
-const WasteLogs = React.lazy(() => import('./WasteLogs'));
-const ExpiryMonitor = React.lazy(() => import('./ExpiryMonitor'));
+const DailyInventory = lazyWithRetry(() => import('./DailyInventory'));
+const UsageRecap = lazyWithRetry(() => import('./UsageRecap'));
+const WasteLogs = lazyWithRetry(() => import('./WasteLogs'));
+const ExpiryMonitor = lazyWithRetry(() => import('./ExpiryMonitor'));
 
 
 const TABS = [
