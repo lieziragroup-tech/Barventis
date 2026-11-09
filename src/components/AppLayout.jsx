@@ -5,7 +5,7 @@ import {
   LogOut, Bell, X, RefreshCw, Menu,
   LayoutDashboard, ClipboardList, UploadCloud,
   Tag, ShoppingCart, Boxes, Package,
-  Calculator, Settings, Wrench, Building2, Layout, Edit, MonitorSmartphone, BookOpen, Clock, Box, Scissors, FileSpreadsheet, Warehouse, Trash2
+  Calculator, Settings, Wrench, Building2, Layout, Edit, MonitorSmartphone, BookOpen, Clock, Box, Scissors, FileSpreadsheet, Warehouse, Trash2, ArrowRightLeft
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
@@ -321,6 +321,7 @@ export default function DashboardLayout() {
                     <NavItem to={basePath} exact label="Dashboard Bar" icon={LayoutDashboard} isHovered={isHovered} />
                     <NavItem to={`${basePath}/daily-inventory`} label="Daily EOD Minuman" icon={ClipboardList} isHovered={isHovered} />
                     <NavItem to={`${basePath}/olah-bahan`} label="Olah Buah & Sirup" icon={Scissors} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/transfer`} label="Mutasi & Ambil Barang" icon={ArrowRightLeft} isHovered={isHovered} />
                     <NavItem to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah Bar" icon={Trash2} isHovered={isHovered} />
                   </NavGroup>
                 )}
@@ -362,6 +363,7 @@ export default function DashboardLayout() {
                       <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory (Semua)" icon={ClipboardList} isHovered={isHovered} />
                       <NavItem to={`${basePath}/olah-bahan`} label="Olah Bahan Mentah" icon={Scissors} isHovered={isHovered} />
                       <NavItem to={`${basePath}/procurement`} label="Marketlist & Pembelian" icon={ShoppingCart} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/transfer`} label="Mutasi Antar Gudang" icon={ArrowRightLeft} isHovered={isHovered} />
                     </NavGroup>
 
                     <NavGroup title="Resep & Finansial" isHovered={isHovered}>
@@ -489,6 +491,7 @@ export default function DashboardLayout() {
                 <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard Bar" icon={LayoutDashboard} isHovered={true} />
                 <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily EOD Minuman" icon={ClipboardList} isHovered={true} />
                 <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/olah-bahan`} label="Olah Buah & Sirup" icon={Scissors} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/transfer`} label="Mutasi & Ambil Barang" icon={ArrowRightLeft} isHovered={true} />
                 <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah Bar" icon={Trash2} isHovered={true} />
               </NavGroup>
             )}
@@ -530,6 +533,7 @@ export default function DashboardLayout() {
                   <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory (Semua)" icon={ClipboardList} isHovered={true} />
                   <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/olah-bahan`} label="Olah Bahan Mentah" icon={Scissors} isHovered={true} />
                   <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/procurement`} label="Marketlist & Pembelian" icon={ShoppingCart} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/transfer`} label="Mutasi Antar Gudang" icon={ArrowRightLeft} isHovered={true} />
                 </NavGroup>
 
                 <NavGroup title="Resep & Finansial" isHovered={true}>

@@ -147,7 +147,7 @@ export default function AuditLogs() {
   return (
     <div className="audit-logs-container fade-in">
       {/* Quick Summary KPI (from a lightweight stats query — accurate across the whole history, not just this page) */}
-      <div className="kpi-grid" style={{ marginBottom: '24px' }}>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <div className="glass-card kpi-card">
           <div className="kpi-header">
             <span className="kpi-title">Total Aktivitas Sistem</span>
@@ -311,17 +311,7 @@ export default function AuditLogs() {
             Segarkan
           </button>
 
-          {/* Pending Sync Badge + Sync Now */}
-          {pendingCount > 0 && (
-            <button
-              className="btn btn-primary"
-              onClick={handleSyncNow}
-              style={{ padding: '10px 14px', height: '42px', display: 'flex', gap: '8px', alignItems: 'center', fontSize: '0.8rem' }}
-            >
-              <RefreshCw size={14} />
-              Sync {pendingCount} Logs
-            </button>
-          )}
+
         </div>
       </div>
 

@@ -21,6 +21,7 @@ export default function CostControl() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [showMethodNote, setShowMethodNote] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -393,128 +394,131 @@ export default function CostControl() {
               </div>
             </div>
           )}
-          {/* Dashboard 4 Cards Redesign */}
-          <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-            <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Total Beverage Sales</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)' }}>{formatIDR(totalSalesBeverage)}</div>
+          {/* Ringkasan Eksekutif Cost Control (4 Kartu Inti) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-4">
+            <div className="glass-card p-4 flex flex-col justify-between">
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '6px' }}>
+                Total Penjualan Beverage (POS)
+              </div>
+              <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                {formatIDR(totalSalesBeverage)}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                Target Maks HPP (27%): <strong>{formatIDR(totalSalesBeverage * 0.27)}</strong>
+              </div>
             </div>
-            
-            <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Actual COGS vs Theoretical</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>{formatIDR(pemakaianBulan)} <span style={{fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 500}}>vs {formatIDR(totalSalesBeverage * 0.27)}</span></div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>Theoretical computed at 27% target</div>
+
+            <div className="glass-card p-4 flex flex-col justify-between" style={{ borderLeft: '3px solid var(--accent)' }}>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '6px' }}>
+                HPP Aktual (Rekonsiliasi Stok)
+              </div>
+              <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--accent)' }}>
+                {formatIDR(pemakaianBulan)}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                Theoretical (ESB x Resep): <strong>{formatIDR(theoreticalCogsCost)}</strong>
+              </div>
             </div>
-            
-            <div className="glass-card" style={{ 
-              padding: '20px', display: 'flex', flexDirection: 'column',
-              background: beverageCostPct <= 27 ? 'rgba(81,207,102,0.04)' : 'rgba(255,107,107,0.04)',
-              border: `1px solid ${beverageCostPct <= 27 ? 'rgba(81,207,102,0.2)' : 'rgba(255,107,107,0.2)'}` 
-            }}>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Cost Variance Rate</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: beverageCostPct <= 27 ? 'var(--success)' : 'var(--danger)' }}>
+
+            <div
+              className="glass-card p-4 flex flex-col justify-between"
+              style={{
+                background: beverageCostPct <= 27 ? 'rgba(81,207,102,0.04)' : 'rgba(255,107,107,0.04)',
+                border: `1px solid ${beverageCostPct <= 27 ? 'rgba(81,207,102,0.25)' : 'rgba(255,107,107,0.25)'}`
+              }}
+            >
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '6px' }}>
+                Rasio Beverage Cost %
+              </div>
+              <div style={{ fontSize: '1.45rem', fontWeight: 800, color: beverageCostPct <= 27 ? 'var(--success)' : 'var(--danger)' }}>
                 {beverageCostPct.toFixed(2)}%
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                {beverageCostPct <= 27 ? <CheckCircle size={12} color="var(--success)"/> : <AlertTriangle size={12} color="var(--danger)"/>}
-                Variance vs 27% target: {(beverageCostPct - 27).toFixed(2)}%
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {beverageCostPct <= 27 ? <CheckCircle size={13} color="var(--success)" /> : <AlertTriangle size={13} color="var(--danger)" />}
+                <span>Selisih vs 27%: {(beverageCostPct - 27).toFixed(2)}%</span>
               </div>
             </div>
-            
-            <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'var(--bg-secondary)' }}>
-              <button className="btn btn-primary" style={{ width: '100%', textAlign: 'center', display: 'block', padding: '12px' }} onClick={() => {
-                const tr = document.querySelector('.table-container');
-                if (tr) tr.scrollIntoView({behavior: 'smooth'});
-              }}>
-                View Variance Details (Leaks)
+
+            <div className="glass-card p-4 flex flex-col justify-between">
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '6px' }}>
+                Pemakaian EOD & Selisih
+              </div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                {formatIDR(actualDailyUsageCost)}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                Selisih Rekonsiliasi: <strong style={{ color: Math.abs(reconciliationDifference) > 0.01 ? 'var(--warning)' : 'var(--success)' }}>{formatIDR(reconciliationDifference)}</strong> • EOD Lock: <strong>{closedEodSessions}</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Pita Rumus Baku HPP + Tombol Info Metodologi */}
+          <div className="glass-card p-3.5 mb-5" style={{ background: 'var(--bg-secondary)' }}>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 text-xs">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="font-bold text-[var(--text-secondary)] uppercase">Formula HPP:</span>
+                <span>Stok Awal <strong>{formatIDR(openingStock)}</strong></span>
+                <span>+ Belanja <strong>{formatIDR(totalPembelian)}</strong></span>
+                <span>- Stok Akhir <strong>{formatIDR(closingStock)}</strong></span>
+                <span>= HPP <strong style={{ color: 'var(--accent)' }}>{formatIDR(pemakaianBulan)}</strong></span>
+                <span className="text-rose-500">• Waste/Loss: <strong>{formatIDR(wasteValuation)}</strong></span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMethodNote(prev => !prev)}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--accent)] hover:underline shrink-0 self-start md:self-auto"
+              >
+                <Info size={13} />
+                <span>{showMethodNote ? 'Sembunyikan Catatan Metodologi' : 'Catatan Metodologi Pengukuran'}</span>
               </button>
             </div>
-          </div>
-
-          {/* Formula Cards */}
-          <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: '32px' }}>
-            {[
-              { label: '1. Stock Awal (Opening)', value: formatIDR(openingStock), sub: openingStockEstimated ? 'ESTIMASI — perlu rekonsiliasi saldo dan nilai awal' : 'Awal resto + gudang pusat (snapshot)' },
-              { label: '2. Pembelian (PO Received)', value: `+ ${formatIDR(totalPembelian)}`, sub: 'Barang masuk periode ini' },
-              { label: '3. Stock Akhir (Closing)', value: `- ${formatIDR(closingStock)}`, sub: closingStockEstimated ? 'ESTIMASI — biaya awal/WAC belum tervalidasi' : 'Stok opname atau EOD final' },
-              { label: 'Kerugian (Waste/Loss)', value: formatIDR(wasteValuation), sub: 'Basi, Pecah, Hilang (Di luar HPP)', warning: true },
-              { label: '4. Pemakaian (COGS)', value: `= ${formatIDR(pemakaianBulan)}`, sub: '(Awal + PO) - Akhir', accent: true }
-            ].map((card, i) => (
-              <div key={i} className="glass-card" style={{ padding: '16px 20px', borderLeft: card.accent ? '3px solid var(--accent)' : (card.warning ? '3px solid var(--danger)' : 'none') }}>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>{card.label}</div>
-                <div style={{ fontWeight: (card.accent || card.warning) ? 800 : 700, fontSize: '1.05rem', color: card.accent ? 'var(--accent)' : (card.warning ? 'var(--danger)' : 'var(--text-primary)') }}>{card.value}</div>
-                <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '4px' }}>{card.sub}</div>
+            {showMethodNote && (
+              <div
+                role="note"
+                className="mt-2.5 pt-2.5 border-t border-[var(--border)] text-[11px] text-[var(--text-secondary)] leading-relaxed"
+              >
+                Catatan pengukuran: FULL dihitung dari saldo buku dan BROKEN yang ditimbang, bukan hitung fisik independen atas kemasan utuh. Estimasi depletion harian dari ledger digunakan untuk pemantauan operasional harian, sedangkan rekonsiliasi HPP resmi mengacu pada Stock Opname yang disahkan.
               </div>
-            ))}
-          </div>
-
-          {/* Daily actual usage and inventory reconciliation are separate measures. */}
-          <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '28px' }}>
-            <div className="glass-card" style={{ padding: '18px 20px' }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '7px' }}>Pemakaian Harian Aktual</div>
-              <div style={{ fontSize: '1.35rem', fontWeight: 800 }}>{formatIDR(actualDailyUsageCost)}</div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '5px' }}>OUT yang dikonfirmasi staf; hanya dari sesi EOD final.</div>
-            </div>
-            <div className="glass-card" style={{ padding: '18px 20px' }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '7px' }}>Theoretical COGS (ESB × Resep)</div>
-              <div style={{ fontSize: '1.35rem', fontWeight: 800 }}>{formatIDR(theoreticalCogsCost)}</div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '5px' }}>{theoreticalUsageItems} baris bahan dari resep; tidak memotong stok fisik.</div>
-            </div>
-            <div className="glass-card" style={{ padding: '18px 20px' }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '7px' }}>COGS dari Rekonsiliasi Stok</div>
-              <div style={{ fontSize: '1.35rem', fontWeight: 800 }}>{formatIDR(pemakaianBulan)}</div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '5px' }}>Stok awal + pembelian − stok akhir; termasuk dampak waste dan selisih stok.</div>
-            </div>
-            <div className="glass-card" style={{ padding: '18px 20px', borderLeft: `3px solid ${Math.abs(reconciliationDifference) > 0.01 ? 'var(--warning)' : 'var(--success)'}` }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '7px' }}>Selisih Rekonsiliasi</div>
-              <div style={{ fontSize: '1.35rem', fontWeight: 800, color: Math.abs(reconciliationDifference) > 0.01 ? 'var(--warning)' : 'var(--success)' }}>{formatIDR(reconciliationDifference)}</div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '5px' }}>COGS berbasis stok − OUT aktual − waste. Nilai ini dapat memuat selisih periode dan bukan bukti kehilangan secara otomatis.</div>
-            </div>
-            <div className="glass-card" style={{ padding: '18px 20px' }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '7px' }}>EOD Final Tercatat</div>
-              <div style={{ fontSize: '1.35rem', fontWeight: 800 }}>{closedEodSessions}</div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '5px' }}>Sesi lokasi/tanggal yang dikunci selama periode ini.</div>
-            </div>
-          </div>
-          <div role="note" style={{ marginTop: '-12px', marginBottom: '24px', padding: '12px 14px', borderRadius: '10px', background: 'var(--bg-secondary)', color: 'var(--text-secondary)', fontSize: '0.76rem', lineHeight: 1.5 }}>
-            Catatan pengukuran: FULL dihitung dari saldo buku dan BROKEN yang ditimbang, bukan hitung fisik independen atas kemasan utuh. Karena itu, estimasi depletion harian dari ledger tidak boleh diperlakukan sebagai rekonsiliasi fisik mandiri; gunakan Stock Opname yang disahkan untuk rekonsiliasi stok independen.
+            )}
           </div>
 
           {/* Daily Table */}
-          <div className="glass-card" style={{ padding: '24px' }}>
+          <div className="glass-card" style={{ padding: '18px 20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
               <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Info size={16} style={{ color: 'var(--accent)' }} /> Daily Purchase vs Sales
               </h3>
 
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Filter Tanggal:</span>
-                <input
-                  type="date"
-                  className="form-control"
-                  style={{ padding: '4px 8px', fontSize: '0.8rem', width: '130px' }}
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  min={`${period}-01`}
-                  max={`${period}-31`}
-                />
-                <span style={{ color: 'var(--text-muted)' }}>-</span>
-                <input
-                  type="date"
-                  className="form-control"
-                  style={{ padding: '4px 8px', fontSize: '0.8rem', width: '130px' }}
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  min={dateFrom || `${period}-01`}
-                  max={`${period}-31`}
-                />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', width: '100%', maxWidth: '420px' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Filter Tanggal:</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: '1 1 240px', minWidth: 0 }}>
+                  <input
+                    type="date"
+                    className="form-control"
+                    style={{ padding: '5px 8px', fontSize: '0.78rem', flex: '1 1 110px', minWidth: 0, width: '100%' }}
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    min={`${period}-01`}
+                    max={`${period}-31`}
+                  />
+                  <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>-</span>
+                  <input
+                    type="date"
+                    className="form-control"
+                    style={{ padding: '5px 8px', fontSize: '0.78rem', flex: '1 1 110px', minWidth: 0, width: '100%' }}
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    min={dateFrom || `${period}-01`}
+                    max={`${period}-31`}
+                  />
+                </div>
                 {(dateFrom || dateTo) && (
                   <button
                     className="btn btn-secondary"
-                    style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                    style={{ padding: '4px 8px', fontSize: '0.75rem', flexShrink: 0 }}
                     onClick={() => { setDateFrom(''); setDateTo(''); }}
                   >
-                    Clear
+                    Reset
                   </button>
                 )}
               </div>

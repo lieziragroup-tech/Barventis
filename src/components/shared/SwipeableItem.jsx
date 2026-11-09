@@ -1,13 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Trash2 } from 'lucide-react';
 import { triggerHaptic } from '../../utils/haptics';
+import useIsMobile from '../../hooks/useIsMobile';
 
 const SwipeableItem = ({ children, onDelete, threshold = -80 }) => {
   const [offset, setOffset] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const startX = useRef(0);
   const currentX = useRef(0);
-  const isMobile = window.innerWidth < 768;
+  const isMobile = useIsMobile(768);
 
   const handleTouchStart = (e) => {
     if (!isMobile) return;

@@ -514,7 +514,7 @@ export const api = {
       p_user_id: user
     });
     if (error) throw new Error('Gagal menyimpan Daily Inventory secara atomik: ' + error.message);
-    await logAudit(isClosing ? 'LOCK_EOD' : 'SAVE_EOD', `Inventory tanggal ${date} lokasi ${location} ${(isClosing ? 'closing' : 'draft')}. ${items.length} items.`);
+    // Recorded atomically inside PostgreSQL RPC save_daily_inventory_v3
     return data;
   },
 
@@ -546,7 +546,7 @@ export const api = {
       p_user_id: userId,
     });
     if (error) throw new Error('Gagal menyimpan BROKEN closing: ' + error.message);
-    await logAudit('SAVE_DAILY_BROKEN_COUNTS', `Mencatat ${payload.length} BROKEN closing pada ${date}, lokasi ${location}. Tidak membuat mutasi stok.`);
+    // Recorded atomically inside PostgreSQL RPC save_daily_broken_counts
     return data;
   },
 
@@ -561,7 +561,7 @@ export const api = {
     });
     if (error) throw new Error('Gagal membuka ulang EOD: ' + error.message);
 
-    await logAudit('UNLOCK_EOD', `Buka kunci lembar EOD tanggal ${date} lokasi ${location} menjadi draft untuk revisi.`);
+    // Recorded atomically inside PostgreSQL RPC reopen_daily_inventory_session_v3
     return data;
   },
 
@@ -3143,7 +3143,7 @@ export const api = {
   getCostControlReport: async (month) => {
     // month is "YYYY-MM"
     const tenantId = await getActiveTenantId();
-    await logAudit('VIEW_COST_CONTROL', `Membuka lembar laporan bulanan Cost Control periode: ${month}.`);
+    // Read-only view log removed to prevent audit_logs table bloat
 
     const startDate = `${month}-01`;
     // Calculate last date of month in JS
@@ -3882,7 +3882,7 @@ export const api = {
       .eq('tenant_id', tenantId);
 
     if (humanOnly) {
-      query = query.not('actor_id', 'is', null);
+      query = query.not('user_id', 'is', null).eq('is_system', false);
     }
 
     if (search && search.trim()) {

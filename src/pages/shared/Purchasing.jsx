@@ -9,6 +9,7 @@ import BulkImport from '../../components/BulkImport';
 import SwipeableItem from '../../components/shared/SwipeableItem';
 import { TableSkeletonRows, TableLoadingOverlay } from '../../components/shared/TableSkeleton';
 import { useAuth } from '../../contexts/AuthContext';
+import useIsMobile from '../../hooks/useIsMobile';
 
 const formatIDR = (val) => 'Rp ' + Number(val || 0).toLocaleString('id-ID');
 
@@ -101,7 +102,8 @@ export default function Purchasing() {
 
   // New Material Modal
   const [showNewMaterialModal, setShowNewMaterialModal] = useState(false);
-  const isMobile = window.innerWidth < 768;
+  const isMobile = useIsMobile(768);
+  const [editingPurchase, setEditingPurchase] = useState(null);
   const [newMaterialData, setNewMaterialData] = useState({ name: '', category: 'Bahan Baku Dasar', unit: 'pcs', price: '', min_stock: 15 });
 
   const fetchHistory = useCallback(async (targetPage, targetSearch, targetPeriod) => {
@@ -313,37 +315,45 @@ export default function Purchasing() {
     );
   };
 
-  const handleEditHistory = async (p) => {
-    const newQty = prompt(`Edit QTY untuk pembelian harian "${p.materials?.name}":\nFormat: Angka. (Contoh: 10)`, p.qty);
-    if (newQty === null) return;
-    const qtyFloat = parseFloat(newQty);
-    if (isNaN(qtyFloat) || qtyFloat <= 0) return alert('Quantity harus angka valid > 0');
+  const handleEditHistory = (p) => {
+    setEditingPurchase({
+      id: p.id,
+      name: p.materials?.name || 'Bahan Baku',
+      unit: p.unit || p.materials?.unit || 'unit',
+      qty: String(p.qty ?? ''),
+      unit_price: String(p.unit_price ?? ''),
+      date: p.date || new Date().toISOString().split('T')[0],
+      notes: p.notes || ''
+    });
+  };
 
-    const newPrice = prompt(`Edit Harga Satuan (Rp) untuk pembelian harian "${p.materials?.name}":\nFormat: Angka bulat tanpa titik/koma. (Contoh: 15000)`, p.unit_price);
-    if (newPrice === null) return;
-    const priceFloat = parseFloat(newPrice);
-    if (isNaN(priceFloat) || priceFloat <= 0) return alert('Harga harus angka valid > 0');
-
-    const newNotes = prompt(`Edit Catatan untuk pembelian harian "${p.materials?.name}":`, p.notes || '');
-    if (newNotes === null) return;
-
-    // Optional date edit
-    const newDate = prompt(`Edit Tanggal untuk pembelian harian "${p.materials?.name}":\nFormat: YYYY-MM-DD. (Contoh: 2026-08-30)`, p.date);
-    if (newDate === null) return;
-    // basic date validation
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) return alert('Format tanggal tidak valid. Harus YYYY-MM-DD');
+  const handleSaveEditHistory = async (e) => {
+    e.preventDefault();
+    if (!editingPurchase) return;
+    const qtyFloat = parseFloat(editingPurchase.qty);
+    const priceFloat = parseFloat(editingPurchase.unit_price);
+    if (isNaN(qtyFloat) || qtyFloat <= 0) {
+      return setNotification({ type: 'error', text: 'Kuantitas harus berupa angka lebih dari 0.' });
+    }
+    if (isNaN(priceFloat) || priceFloat < 0) {
+      return setNotification({ type: 'error', text: 'Harga satuan tidak valid.' });
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(editingPurchase.date)) {
+      return setNotification({ type: 'error', text: 'Format tanggal harus YYYY-MM-DD.' });
+    }
 
     setLoading(true);
     try {
-      await api.editTransactionAndAdjustStock(p.id, {
+      await api.editTransactionAndAdjustStock(editingPurchase.id, {
         qty: qtyFloat,
         unit_price: priceFloat,
-        notes: newNotes,
-        date: newDate
+        notes: editingPurchase.notes,
+        date: editingPurchase.date
       });
-      setNotification({ type: 'success', text: `Data pembelian "${p.materials?.name}" berhasil diperbarui.` });
-      fetchHistory(page, search);
-      fetchMasterData(); // Refresh current stock levels globally
+      setNotification({ type: 'success', text: `Data pembelian "${editingPurchase.name}" berhasil diperbarui.` });
+      setEditingPurchase(null);
+      fetchHistory(page, search, period);
+      fetchMasterData();
     } catch (err) {
       setNotification({ type: 'error', text: err.message });
     } finally {
@@ -923,6 +933,84 @@ export default function Purchasing() {
               itemLabel="pembelian"
               loading={historyLoading}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Edit Purchase History Modal (Single-Screen Replacement for 4 sequential prompts) */}
+      {editingPurchase && (
+        <div
+          className="modal-overlay"
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}
+          onClick={() => !loading && setEditingPurchase(null)}
+        >
+          <div
+            className="glass-card modal-card"
+            style={{ width: '440px', maxWidth: '100%', padding: '24px' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '4px' }}>
+              Edit Riwayat Pembelian
+            </h3>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '18px' }}>
+              {editingPurchase.name} ({editingPurchase.unit})
+            </p>
+            <form onSubmit={handleSaveEditHistory} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Kuantitas ({editingPurchase.unit}) *</label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0.01"
+                    required
+                    className="form-control"
+                    value={editingPurchase.qty}
+                    onChange={e => setEditingPurchase({ ...editingPurchase, qty: e.target.value })}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Harga Satuan (Rp) *</label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    required
+                    className="form-control"
+                    value={editingPurchase.unit_price}
+                    onChange={e => setEditingPurchase({ ...editingPurchase, unit_price: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Tanggal Pembelian *</label>
+                <input
+                  type="date"
+                  required
+                  className="form-control"
+                  value={editingPurchase.date}
+                  onChange={e => setEditingPurchase({ ...editingPurchase, date: e.target.value })}
+                />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Catatan Revisi</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={editingPurchase.notes}
+                  onChange={e => setEditingPurchase({ ...editingPurchase, notes: e.target.value })}
+                  placeholder="Catatan tambahan..."
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setEditingPurchase(null)} disabled={loading}>
+                  Batal
+                </button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={loading}>
+                  {loading ? 'Menyimpan...' : 'Simpan Perubahan'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

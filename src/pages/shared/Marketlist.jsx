@@ -7,13 +7,18 @@ import { useAuth } from '../../contexts/AuthContext';
 import Pagination from '../../components/shared/Pagination';
 
 export const OFFICIAL_CATEGORIES = [
-  'Drink & Beer',
-  'Syrup & Flavor',
-  'Dairy & Milk',
   'Coffee & Tea',
-  'Fruit & Produce',
-  'Liquor & Spirit',
+  'Milk & Soft Drink',
+  'Drink & Beer',
+  'Powder',
+  'Syrup & Souce',
+  'Fresh Fruit',
+  'Bahan Frozen',
+  'Dry Goods',
+  'ETC',
+  'Extra Cost',
   'Bahan Mentah / Raw Material',
+  'Bahan Olahan / Prep',
   'Consumable (Packaging)',
   'Glass & Tool (Asset)'
 ];
@@ -87,6 +92,11 @@ export default function Marketlist() {
   }, [searchTerm, categoryFilter]);
 
   
+  const availableCategories = useMemo(() => {
+    const dbCats = (materials || []).map(m => (m.category || '').trim()).filter(Boolean);
+    return Array.from(new Set([...OFFICIAL_CATEGORIES, ...dbCats]));
+  }, [materials]);
+
   const filteredMaterials = useMemo(() => {
     return materials.filter(m => {
       const matchSearch = m.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -207,7 +217,7 @@ export default function Marketlist() {
         </div>
         <select className="form-control sm:w-64" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
           <option value="ALL">Semua Kategori</option>
-          {OFFICIAL_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+          {availableCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
         </select>
       </div>
 
@@ -249,7 +259,7 @@ export default function Marketlist() {
                       <td>
                         {isEditing ? (
                           <select className="form-control w-full py-1 text-sm" value={editForm.category} onChange={e => setEditForm({...editForm, category: e.target.value})}>
-                            {OFFICIAL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                            {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
                           </select>
                         ) : (
                           <span className="badge badge-secondary text-xs">{mat.category || 'Belum Kategori'}</span>
@@ -357,7 +367,7 @@ export default function Marketlist() {
               <div>
                 <label className="form-label">Kategori Baku</label>
                 <select className="form-control w-full" value={newMaterial.category} onChange={e => setNewMaterial({...newMaterial, category: e.target.value})}>
-                  {OFFICIAL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-4">

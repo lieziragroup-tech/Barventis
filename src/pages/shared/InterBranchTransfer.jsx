@@ -18,17 +18,22 @@ import {
   Store,
   Send,
   HelpCircle,
-  ChevronDown
+  ChevronDown,
+  Trash2,
+  Sparkles
 } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
 import Pagination from '../../components/shared/Pagination';
+import MaterialAutocomplete from '../../components/shared/MaterialAutocomplete';
+import useIsMobile from '../../hooks/useIsMobile';
 import { locationService } from '../../services/locationService';
 
 export default function InterBranchTransfer() {
   const { currentTenant, stock, refreshData, showToast } = useData();
   const { activeUser } = useAuth();
+  const isMobile = useIsMobile(768);
   const [showTransferGuide, setShowTransferGuide] = useState(false);
 
   const [locations, setLocations] = useState(() => locationService.getLocations(currentTenant?.id));
@@ -53,13 +58,13 @@ export default function InterBranchTransfer() {
   const [page, setPage] = useState(1);
   const itemsPerPage = 10;
 
-  const [transferForm, setTransferForm] = useState({
-    item_id: '',
-    quantity: '',
+  // Multi-Item Transfer Cart & Global Route Header
+  const [routeHeader, setRouteHeader] = useState({
     source_branch: 'Central Warehouse',
     target_branch: 'Resto Bar',
     notes: ''
   });
+  const [transferCart, setTransferCart] = useState([]);
 
   const fetchTransfers = useCallback(async () => {
     setLoading(true);
@@ -80,7 +85,6 @@ export default function InterBranchTransfer() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTransfers();
   }, [fetchTransfers]);
 
@@ -95,37 +99,112 @@ export default function InterBranchTransfer() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showModal, submitting]);
 
-  // Selected item for transfer form
-  const selectedMaterial = useMemo(() => {
-    if (!transferForm.item_id || !stock) return null;
-    return stock.find(s => String(s.id) === String(transferForm.item_id)) || null;
-  }, [transferForm.item_id, stock]);
+  const isSourceCentral = useMemo(
+    () => String(routeHeader.source_branch || '').toLowerCase().includes('central'),
+    [routeHeader.source_branch]
+  );
 
-  // Source stock available
-  const availableSourceStock = useMemo(() => {
-    if (!selectedMaterial) return 0;
-    if (transferForm.source_branch.toLowerCase().includes('central')) {
-      return Number(selectedMaterial.qty_central) || 0;
-    }
-    return Number(selectedMaterial.qty_resto ?? selectedMaterial.stock) || 0;
-  }, [selectedMaterial, transferForm.source_branch]);
+  const getAvailableStockForMaterial = useCallback(
+    (mat) => {
+      if (!mat) return 0;
+      if (isSourceCentral) {
+        return Number(mat.qty_central) || 0;
+      }
+      return Number(mat.qty_resto ?? mat.stock) || 0;
+    },
+    [isSourceCentral]
+  );
 
-  // Target stock available (for destination reference)
-  const availableTargetStock = useMemo(() => {
-    if (!selectedMaterial) return 0;
-    if (transferForm.target_branch.toLowerCase().includes('central')) {
-      return Number(selectedMaterial.qty_central) || 0;
-    }
-    return Number(selectedMaterial.qty_resto ?? selectedMaterial.stock) || 0;
-  }, [selectedMaterial, transferForm.target_branch]);
-
-  // Swap locations helper
   const handleSwapBranches = () => {
-    setTransferForm(prev => ({
+    setRouteHeader(prev => ({
       ...prev,
       source_branch: prev.target_branch,
       target_branch: prev.source_branch
     }));
+  };
+
+  const handleAddMaterialToCart = (material) => {
+    if (!material) return;
+    setError('');
+    setTransferCart(prev => {
+      const existingIdx = prev.findIndex(item => String(item.material_id) === String(material.id));
+      if (existingIdx !== -1) {
+        const updated = [...prev];
+        const currentQty = parseFloat(updated[existingIdx].qty) || 0;
+        updated[existingIdx] = {
+          ...updated[existingIdx],
+          qty: String(currentQty + 1)
+        };
+        return updated;
+      }
+      return [
+        ...prev,
+        {
+          cart_id: `${material.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          material_id: material.id,
+          name: material.name,
+          sku: material.sku || '',
+          unit: material.unit || 'unit',
+          category: material.category || 'Umum',
+          qty_central: Number(material.qty_central || 0),
+          qty_resto: Number(material.qty_resto ?? material.stock ?? 0),
+          price: Number(material.new_price || material.price || 0),
+          qty: '1',
+          item_notes: ''
+        }
+      ];
+    });
+  };
+
+  const handleAutoFillLowRestoStock = () => {
+    if (!stock || stock.length === 0) return;
+    const candidates = stock.filter(m => {
+      const restoQty = Number(m.qty_resto ?? m.stock ?? 0);
+      const centralQty = Number(m.qty_central ?? 0);
+      const minStock = Number(m.min_stock ?? 5);
+      return restoQty <= minStock && centralQty > 0;
+    });
+
+    if (candidates.length === 0) {
+      if (showToast) showToast('Semua stok Resto di atas batas minimum atau stok Central sedang kosong.', 'info');
+      return;
+    }
+
+    setTransferCart(prev => {
+      const existingIds = new Set(prev.map(i => String(i.material_id)));
+      const additions = candidates
+        .filter(m => !existingIds.has(String(m.id)))
+        .map(m => {
+          const restoQty = Number(m.qty_resto ?? m.stock ?? 0);
+          const centralQty = Number(m.qty_central ?? 0);
+          const minStock = Number(m.min_stock ?? 5);
+          const suggestedQty = Math.min(centralQty, Math.max(1, minStock - restoQty));
+          return {
+            cart_id: `${m.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            material_id: m.id,
+            name: m.name,
+            sku: m.sku || '',
+            unit: m.unit || 'unit',
+            category: m.category || 'Umum',
+            qty_central: centralQty,
+            qty_resto: restoQty,
+            price: Number(m.new_price || m.price || 0),
+            qty: String(suggestedQty),
+            item_notes: 'Auto-restock stok tipis'
+          };
+        });
+      return [...prev, ...additions];
+    });
+  };
+
+  const updateCartItem = (cartId, field, value) => {
+    setTransferCart(prev =>
+      prev.map(item => (item.cart_id === cartId ? { ...item, [field]: value } : item))
+    );
+  };
+
+  const removeCartItem = (cartId) => {
+    setTransferCart(prev => prev.filter(item => item.cart_id !== cartId));
   };
 
   // Filtered transfers
@@ -178,72 +257,78 @@ export default function InterBranchTransfer() {
 
   const handleTransferSubmit = async (e) => {
     e?.preventDefault();
-    if (!transferForm.item_id) {
-      alert('Silakan pilih bahan baku yang akan ditransfer.');
+    if (transferCart.length === 0) {
+      setError('Keranjang mutasi masih kosong. Cari dan pilih minimal 1 bahan baku.');
       return;
     }
 
-    const qty = parseFloat(transferForm.quantity);
-    if (isNaN(qty) || qty <= 0) {
-      alert('Masukkan jumlah kuantitas transfer yang valid (lebih dari 0).');
+    if (routeHeader.source_branch === routeHeader.target_branch) {
+      setError('Lokasi asal dan lokasi tujuan tidak boleh sama.');
       return;
     }
 
-    if (transferForm.source_branch === transferForm.target_branch) {
-      alert('Lokasi asal dan lokasi tujuan tidak boleh sama.');
-      return;
-    }
-
-    if (availableSourceStock > 0 && qty > availableSourceStock) {
-      const confirmExceed = window.confirm(
-        `Perhatian: Kuantitas transfer (${qty}) melebihi stok tersedia di lokasi asal (${availableSourceStock} ${selectedMaterial?.unit || ''}). Apakah Anda ingin tetap melanjutkan?`
-      );
-      if (!confirmExceed) return;
+    for (const item of transferCart) {
+      const qty = parseFloat(item.qty);
+      if (isNaN(qty) || qty <= 0) {
+        setError(`Kuantitas untuk "${item.name}" harus lebih dari 0.`);
+        return;
+      }
+      const avail = isSourceCentral ? item.qty_central : item.qty_resto;
+      if (avail > 0 && qty > avail) {
+        const confirmExceed = window.confirm(
+          `Perhatian: Kuantitas transfer "${item.name}" (${qty} ${item.unit}) melebihi stok tercatat di ${routeHeader.source_branch} (${avail} ${item.unit}). Tetap lanjutkan?`
+        );
+        if (!confirmExceed) return;
+      }
     }
 
     setSubmitting(true);
     setError('');
 
     try {
-      if (activeUser?.role === 'Bar') {
-        await api.createTransferRequest({
-          material_id: transferForm.item_id,
-          qty: qty,
-          source_branch: transferForm.source_branch,
-          target_branch: transferForm.target_branch,
-          notes: transferForm.notes
-        });
-      } else {
-        await api.createTransfer({
-          material_id: transferForm.item_id,
-          quantity: qty,
-          source_branch: transferForm.source_branch,
-          target_branch: transferForm.target_branch,
-          notes: transferForm.notes
-        });
-      }
+      const isRequestMode = activeUser?.role === 'Bar';
+      await Promise.all(
+        transferCart.map(item => {
+          const combinedNotes = [routeHeader.notes, item.item_notes].filter(Boolean).join(' | ');
+          if (isRequestMode) {
+            return api.createTransferRequest({
+              material_id: item.material_id,
+              qty: parseFloat(item.qty),
+              source_branch: routeHeader.source_branch,
+              target_branch: routeHeader.target_branch,
+              notes: combinedNotes
+            });
+          }
+          return api.createTransfer({
+            material_id: item.material_id,
+            quantity: parseFloat(item.qty),
+            source_branch: routeHeader.source_branch,
+            target_branch: routeHeader.target_branch,
+            notes: combinedNotes
+          });
+        })
+      );
 
-
-      // Refresh both local transfer log & main data context (Stock Ledger, etc.)
       await fetchTransfers();
       if (refreshData) refreshData();
 
-      const successMsg = `Berhasil mentransfer ${qty} ${selectedMaterial?.unit || ''} "${selectedMaterial?.name || ''}" dari ${transferForm.source_branch} ke ${transferForm.target_branch}.`;
-      
+      const successMsg = isRequestMode
+        ? `Berhasil mengajukan permintaan transfer ${transferCart.length} item dari ${routeHeader.source_branch} ke ${routeHeader.target_branch}.`
+        : `Berhasil memindahkan ${transferCart.length} item dari ${routeHeader.source_branch} ke ${routeHeader.target_branch}.`;
+
       if (showToast) {
         showToast(successMsg, 'success');
       }
 
       setShowModal(false);
-      setTransferForm({
-        item_id: '',
-        quantity: '',
+      setTransferCart([]);
+      setRouteHeader({
         source_branch: 'Central Warehouse',
         target_branch: 'Resto Bar',
         notes: ''
       });
     } catch (err) {
-      console.error('Error creating transfer:', err);
+      console.error('Error creating batch transfer:', err);
       setError(err.message || 'Gagal memproses transfer stok.');
       if (showToast) showToast(err.message || 'Gagal memproses transfer.', 'error');
     } finally {
@@ -291,10 +376,10 @@ export default function InterBranchTransfer() {
             </div>
             <div>
               <h1 className="text-xl md:text-2xl font-black m-0" style={{ color: 'var(--text-primary)' }}>
-                Inter-Branch Transfer
+                Mutasi & Ambil Barang (Central ➔ Resto)
               </h1>
               <p className="text-xs md:text-sm mt-0.5 m-0" style={{ color: 'var(--text-secondary)' }}>
-                Mutasi & serah-terima fisik bahan baku antar lokasi internal (Central Warehouse & Outlet)
+                Cari bahan baku dengan cepat dan pindahkan banyak barang sekaligus dalam satu surat jalan
               </p>
             </div>
           </div>
@@ -311,7 +396,6 @@ export default function InterBranchTransfer() {
             <span className="hidden sm:inline">Refresh</span>
           </button>
 
-          {/* Interactive Guide Toggle Button */}
           <button
             type="button"
             className="btn btn-secondary text-xs md:text-sm flex items-center gap-1.5"
@@ -320,14 +404,12 @@ export default function InterBranchTransfer() {
               color: showTransferGuide ? 'var(--accent)' : 'var(--text-secondary)',
               borderColor: showTransferGuide ? 'var(--accent)' : 'var(--border)'
             }}
-            title="Panduan Transfer"
           >
             <HelpCircle size={15} />
             <span>Panduan</span>
             <ChevronDown size={13} className={`transition-transform duration-200 ${showTransferGuide ? 'rotate-180' : ''}`} />
           </button>
 
-          {/* Trigger Button to Open Modal */}
           <button
             className="btn btn-primary text-xs md:text-sm flex items-center gap-2 shadow font-bold"
             onClick={() => {
@@ -336,12 +418,11 @@ export default function InterBranchTransfer() {
             }}
           >
             <Plus size={17} />
-            <span>{activeUser?.role === 'Bar' ? 'Buat Permintaan Transfer' : 'Buat Transfer Baru'}</span>
+            <span>{activeUser?.role === 'Bar' ? 'Minta Barang dari Central' : 'Buat Mutasi Multi-Item'}</span>
           </button>
         </div>
       </div>
 
-      {/* Info Banner: Panduan Fungsi & Alur Transfer (Collapsible on demand) */}
       {showTransferGuide && (
         <div
           className="rounded-xl border p-3.5 text-xs transition-all animate-fadeIn"
@@ -355,55 +436,23 @@ export default function InterBranchTransfer() {
             <div className="flex items-start gap-2.5 flex-1">
               <div
                 className="p-1.5 rounded-lg shrink-0 mt-0.5"
-                style={{
-                  background: 'rgba(99, 102, 241, 0.18)',
-                  color: '#4f46e5'
-                }}
+                style={{ background: 'rgba(99, 102, 241, 0.18)', color: '#4f46e5' }}
               >
                 <Info size={16} />
               </div>
               <div className="flex-1 space-y-1">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h4 className="font-bold text-xs m-0 text-indigo-600 dark:text-indigo-400">
-                    📦 Panduan Alur Kerja Inter-Branch Transfer
-                  </h4>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300">
-                    Mutasi Internal
-                  </span>
-                </div>
-
+                <h4 className="font-bold text-xs m-0 text-indigo-600 dark:text-indigo-400">
+                  Panduan Mutasi Multi-Item (Central Warehouse ke Resto Bar)
+                </h4>
                 <p className="text-xs leading-relaxed m-0" style={{ color: 'var(--text-secondary)' }}>
-                  Fitur ini mencatat pergerakan fisik bahan dari <strong>Gudang Utama (Central)</strong> ke <strong>Outlet (Resto Bar / Kitchen)</strong>. Mutasi internal ini menjaga buku stok tetap sinkron tanpa memengaruhi nilai HPP.
+                  Ketik nama bahan baku di kotak pencarian (debounce 250ms), pilih semua barang yang akan diangkut ke keranjang mutasi, isi kuantitas per baris, lalu simpan sekaligus dalam satu klik.
                 </p>
-
-                <div className="pt-1.5 mt-1.5 border-t border-[var(--border)] grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
-                  <div className="flex items-start gap-1.5">
-                    <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
-                      1
-                    </span>
-                    <span className="text-[var(--text-secondary)]">Pilih item, gudang asal & tujuan.</span>
-                  </div>
-                  <div className="flex items-start gap-1.5">
-                    <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
-                      2
-                    </span>
-                    <span className="text-[var(--text-secondary)]">Sistem verifikasi stok asal agar tidak minus.</span>
-                  </div>
-                  <div className="flex items-start gap-1.5">
-                    <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
-                      3
-                    </span>
-                    <span className="text-[var(--text-secondary)]">Stok tersinkronisasi otomatis dengan nomor referensi transfer.</span>
-                  </div>
-                </div>
               </div>
             </div>
-
             <button
               type="button"
               onClick={() => setShowTransferGuide(false)}
               className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 rounded-md"
-              title="Tutup panduan"
             >
               <X size={15} />
             </button>
@@ -413,57 +462,57 @@ export default function InterBranchTransfer() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-        <div className="glass-card p-4 flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-500 shrink-0">
-            <ArrowRightLeft size={20} />
+        <div className="glass-card p-3.5 flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500 shrink-0">
+            <ArrowRightLeft size={18} />
           </div>
           <div>
-            <span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider block">
+            <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider block">
               Total Mutasi
             </span>
-            <div className="text-xl md:text-2xl font-extrabold text-[var(--text-primary)]">
-              {stats.totalCount} <span className="text-xs font-normal text-[var(--text-secondary)]">transaksi</span>
+            <div className="text-lg md:text-xl font-extrabold text-[var(--text-primary)]">
+              {stats.totalCount} <span className="text-xs font-normal text-[var(--text-secondary)]">item</span>
             </div>
           </div>
         </div>
 
-        <div className="glass-card p-4 flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-500 shrink-0">
-            <Calendar size={20} />
+        <div className="glass-card p-3.5 flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500 shrink-0">
+            <Calendar size={18} />
           </div>
           <div>
-            <span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider block">
+            <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider block">
               Bulan Ini
             </span>
-            <div className="text-xl md:text-2xl font-extrabold text-[var(--text-primary)]">
-              {stats.thisMonthCount} <span className="text-xs font-normal text-[var(--text-secondary)]">transaksi</span>
+            <div className="text-lg md:text-xl font-extrabold text-[var(--text-primary)]">
+              {stats.thisMonthCount} <span className="text-xs font-normal text-[var(--text-secondary)]">item</span>
             </div>
           </div>
         </div>
 
-        <div className="glass-card p-4 flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-500 shrink-0">
-            <Package size={20} />
+        <div className="glass-card p-3.5 flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500 shrink-0">
+            <Package size={18} />
           </div>
           <div>
-            <span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider block">
+            <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider block">
               Total Unit Dimutasi
             </span>
-            <div className="text-xl md:text-2xl font-extrabold text-[var(--text-primary)]">
+            <div className="text-lg md:text-xl font-extrabold text-[var(--text-primary)]">
               {stats.totalQty.toLocaleString('id-ID')} <span className="text-xs font-normal text-[var(--text-secondary)]">unit</span>
             </div>
           </div>
         </div>
 
-        <div className="glass-card p-4 flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-500 shrink-0">
-            <TrendingUp size={20} />
+        <div className="glass-card p-3.5 flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-purple-500/10 text-purple-500 shrink-0">
+            <TrendingUp size={18} />
           </div>
           <div>
-            <span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider block">
+            <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider block">
               Estimasi Valuasi
             </span>
-            <div className="text-lg md:text-xl font-extrabold text-[var(--text-primary)]">
+            <div className="text-base md:text-lg font-extrabold text-[var(--text-primary)]">
               Rp {stats.totalValuation.toLocaleString('id-ID')}
             </div>
           </div>
@@ -472,13 +521,12 @@ export default function InterBranchTransfer() {
 
       {/* Main Table Card */}
       <div className="glass-card p-4 md:p-6 space-y-4">
-        {/* Search and Filters */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" size={16} />
             <input
               type="text"
-              placeholder="Cari transfer, nama bahan, atau catatan..."
+              placeholder="Cari riwayat transfer, nama bahan, atau catatan..."
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
@@ -541,9 +589,36 @@ export default function InterBranchTransfer() {
 
         {requests.length > 0 && (
           <div className="mb-6">
-            <h3 className="text-lg font-bold text-amber-600 mb-3 flex items-center gap-2">
-              <AlertCircle size={20} /> Permintaan Transfer Menunggu Persetujuan
+            <h3 className="text-sm md:text-base font-bold text-amber-600 mb-3 flex items-center gap-2">
+              <AlertCircle size={18} /> Permintaan Transfer Menunggu Persetujuan ({requests.length})
             </h3>
+            <div className="space-y-2 md:hidden">
+              {requests.map(r => {
+                const match = r.notes ? r.notes.match(/Request Transfer \[([^\]]+) ➔ ([^\]]+)\](?: - (.*))?/) : null;
+                const source = match ? match[1] : 'Central Warehouse';
+                const target = match ? match[2] : 'Resto Bar';
+                const notes = match ? match[3] : r.notes;
+                return (
+                  <div key={r.id} className="p-3 rounded-xl border border-amber-200 bg-amber-50/40 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm">{r.materials?.name || '-'}</span>
+                      <span className="font-bold text-indigo-600 text-sm">{r.qty} {r.materials?.unit || ''}</span>
+                    </div>
+                    <div className="text-xs text-[var(--text-secondary)] flex items-center justify-between">
+                      <span>{source} ➔ <strong>{target}</strong></span>
+                      <span>{new Date(r.date).toLocaleDateString('id-ID')}</span>
+                    </div>
+                    {notes && <div className="text-xs italic text-[var(--text-secondary)]">"{notes}"</div>}
+                    {activeUser?.role !== 'Bar' && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <button onClick={() => handleApproveRequest(r.id)} disabled={loading} className="btn btn-primary py-1.5 px-3 text-xs flex-1 justify-center"><Check size={14}/> Setujui</button>
+                        <button onClick={() => handleRejectRequest(r.id)} disabled={loading} className="btn btn-secondary py-1.5 px-3 text-xs flex-1 justify-center text-rose-500"><X size={14}/> Tolak</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
             <div className="table-responsive hidden md:block border border-amber-200 rounded-xl overflow-hidden shadow-sm">
               <table className="table w-full">
                 <thead className="bg-amber-50 border-b border-amber-200 text-xs uppercase font-bold text-amber-800">
@@ -626,7 +701,7 @@ export default function InterBranchTransfer() {
                         Belum Ada Catatan Transfer
                       </p>
                       <p className="text-xs text-[var(--text-secondary)] mb-4">
-                        Klik tombol "Buat Transfer Baru" di atas untuk memindahkan stok bahan baku antar lokasi.
+                        Klik tombol di bawah untuk memindahkan banyak bahan baku sekaligus dari Central ke Resto.
                       </p>
                       <button
                         className="btn btn-primary text-xs flex items-center gap-1.5"
@@ -635,7 +710,7 @@ export default function InterBranchTransfer() {
                           setShowModal(true);
                         }}
                       >
-                        <Plus size={16} /> Buat Transfer Pertama
+                        <Plus size={16} /> Buat Mutasi Pertama
                       </button>
                     </div>
                   </td>
@@ -718,7 +793,7 @@ export default function InterBranchTransfer() {
                   setShowModal(true);
                 }}
               >
-                Buat Transfer Pertama
+                Buat Mutasi Pertama
               </button>
             </div>
           ) : (
@@ -767,7 +842,7 @@ export default function InterBranchTransfer() {
         )}
       </div>
 
-      {/* FORM MODAL: BUAT TRANSFER BARU */}
+      {/* MODAL KERANJANG MUTASI MULTI-ITEM (DEBOUNCED SEARCH) */}
       {showModal && (
         <div
           className="modal-overlay"
@@ -780,7 +855,7 @@ export default function InterBranchTransfer() {
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 1000,
-            padding: '16px'
+            padding: isMobile ? '10px' : '16px'
           }}
           onClick={(e) => {
             if (e.target === e.currentTarget && !submitting) {
@@ -791,12 +866,12 @@ export default function InterBranchTransfer() {
           <div
             className="modal-card"
             style={{
-              background: 'var(--bg-card)',
+              background: 'var(--bg-card, var(--bg-primary))',
               borderRadius: '20px',
               border: '1px solid var(--border)',
-              maxWidth: '620px',
+              maxWidth: '780px',
               width: '100%',
-              maxHeight: '90vh',
+              maxHeight: '92vh',
               display: 'flex',
               flexDirection: 'column',
               boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)',
@@ -804,23 +879,23 @@ export default function InterBranchTransfer() {
             }}
           >
             {/* Modal Header */}
-            <div className="p-5 border-b flex items-center justify-between shrink-0 bg-[var(--bg-secondary)]/40">
+            <div className="p-4 md:p-5 border-b flex items-center justify-between shrink-0 bg-[var(--bg-secondary)]/40">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
                   <Send size={20} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold m-0 text-[var(--text-primary)]">
-                    Buat Transfer Stok Baru
+                  <h3 className="text-base md:text-lg font-bold m-0 text-[var(--text-primary)]">
+                    {activeUser?.role === 'Bar' ? 'Keranjang Permintaan Barang Central' : 'Keranjang Mutasi Stok Multi-Item'}
                   </h3>
                   <p className="text-xs text-[var(--text-secondary)] m-0">
-                    Mutasi & serah-terima bahan baku fisik antar lokasi internal
+                    Cari bahan baku dengan cepat dan pilih semua barang yang akan dipindahkan sekaligus
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                className="btn-icon text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] p-1.5 rounded-lg transition-colors"
+                className="btn-icon text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1.5 rounded-lg"
                 onClick={() => !submitting && setShowModal(false)}
                 title="Tutup (Esc)"
               >
@@ -830,106 +905,40 @@ export default function InterBranchTransfer() {
 
             {/* Modal Form */}
             <form onSubmit={handleTransferSubmit} className="flex flex-col flex-1 overflow-hidden">
-              <div className="p-5 space-y-4 overflow-y-auto flex-1">
+              <div className="p-4 md:p-5 space-y-4 overflow-y-auto flex-1">
                 {error && (
-                  <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 text-xs flex items-center gap-2.5">
-                    <AlertCircle size={17} className="shrink-0" />
+                  <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 text-xs flex items-center gap-2">
+                    <AlertCircle size={16} className="shrink-0" />
                     <span>{error}</span>
                   </div>
                 )}
 
-                {/* Step 1: Pilih Bahan Baku */}
-                <div className="form-group space-y-1">
-                  <label className="form-label font-bold text-xs flex items-center justify-between">
-                    <span>1. Pilih Item / Bahan Baku *</span>
-                    {selectedMaterial && (
-                      <span className="text-indigo-600 dark:text-indigo-400 font-semibold text-xs">
-                        Satuan: {selectedMaterial.unit}
-                      </span>
+                {/* Step 1: Rute Asal -> Tujuan */}
+                <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)]/40 space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <label className="font-bold text-xs text-[var(--text-primary)]">
+                      1. Rute Perpindahan Gudang *
+                    </label>
+                    {isSourceCentral && (
+                      <button
+                        type="button"
+                        onClick={handleAutoFillLowRestoStock}
+                        className="btn btn-secondary py-1 px-2.5 text-[11px] flex items-center gap-1.5 text-indigo-600 border-indigo-500/30"
+                      >
+                        <Sparkles size={13} /> + Isi Otomatis Stok Tipis Resto
+                      </button>
                     )}
-                  </label>
-                  <select
-                    className="form-control text-sm py-2.5"
-                    required
-                    value={transferForm.item_id}
-                    onChange={(e) => setTransferForm({ ...transferForm, item_id: e.target.value })}
-                  >
-                    <option value="">-- Pilih Bahan Baku dari Master Data --</option>
-                    {(stock || []).map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name} {m.sku ? `(${m.sku})` : ''} - Satuan: {m.unit} | Kategori: {m.category || 'Umum'}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Real-Time Stock Status */}
-                {selectedMaterial && (
-                  <div className="p-3.5 rounded-xl bg-slate-500/5 border border-[var(--border)] text-xs space-y-2">
-                    <div className="flex items-center justify-between text-[var(--text-secondary)] font-semibold text-[11px] uppercase tracking-wider">
-                      <span>Ketersediaan Stok Terkini ({selectedMaterial.name})</span>
-                      <span>Satuan: {selectedMaterial.unit}</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <div
-                        className={`p-2.5 rounded-lg border flex items-center justify-between ${
-                          transferForm.source_branch.includes('Central')
-                            ? 'border-indigo-500/50 bg-indigo-500/10 ring-1 ring-indigo-500/30'
-                            : 'bg-[var(--bg-secondary)]'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Building size={16} className="text-slate-500 shrink-0" />
-                          <div>
-                            <span className="font-semibold block text-[var(--text-primary)] text-xs">Central Warehouse</span>
-                            <span className="text-[10px] text-[var(--text-secondary)]">Gudang Utama</span>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-sm font-black text-[var(--text-primary)] block">
-                            {Number(selectedMaterial.qty_central || 0).toLocaleString('id-ID')}
-                          </span>
-                          <span className="text-[10px] text-[var(--text-secondary)]">{selectedMaterial.unit}</span>
-                        </div>
-                      </div>
-
-                      <div
-                        className={`p-2.5 rounded-lg border flex items-center justify-between ${
-                          !transferForm.source_branch.includes('Central')
-                            ? 'border-indigo-500/50 bg-indigo-500/10 ring-1 ring-indigo-500/30'
-                            : 'bg-[var(--bg-secondary)]'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Store size={16} className="text-slate-500 shrink-0" />
-                          <div>
-                            <span className="font-semibold block text-[var(--text-primary)] text-xs">Resto Bar</span>
-                            <span className="text-[10px] text-[var(--text-secondary)]">Outlet Floor</span>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-sm font-black text-[var(--text-primary)] block">
-                            {Number(selectedMaterial.qty_resto ?? selectedMaterial.stock ?? 0).toLocaleString('id-ID')}
-                          </span>
-                          <span className="text-[10px] text-[var(--text-secondary)]">{selectedMaterial.unit}</span>
-                        </div>
-                      </div>
-                    </div>
                   </div>
-                )}
 
-                {/* Step 2: Rute Asal -> Tujuan with Swap */}
-                <div className="form-group space-y-1">
-                  <label className="form-label font-bold text-xs">2. Tentukan Rute Perpindahan *</label>
                   <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 items-center">
                     <div className="sm:col-span-2">
                       <label className="text-[11px] text-[var(--text-secondary)] font-medium mb-1 block">
                         Dari Lokasi (Asal)
                       </label>
                       <select
-                        className="form-control text-xs font-semibold py-2"
-                        value={transferForm.source_branch}
-                        onChange={(e) => setTransferForm({ ...transferForm, source_branch: e.target.value })}
+                        className="form-control text-xs font-semibold py-2 w-full"
+                        value={routeHeader.source_branch}
+                        onChange={(e) => setRouteHeader({ ...routeHeader, source_branch: e.target.value })}
                       >
                         {locations.filter(l => l.code !== 'ALL').map(l => (
                           <option key={l.code} value={l.name}>{l.name}</option>
@@ -940,11 +949,11 @@ export default function InterBranchTransfer() {
                     <div className="flex justify-center pt-1 sm:pt-4">
                       <button
                         type="button"
-                        className="p-2 rounded-full border border-[var(--border)] hover:bg-[var(--bg-secondary)] text-indigo-600 transition-all hover:scale-105"
+                        className="p-2 rounded-full border border-[var(--border)] hover:bg-[var(--bg-secondary)] text-indigo-600 transition-all"
                         onClick={handleSwapBranches}
-                        title="Tukar Arah Rute (Swap)"
+                        title="Tukar Arah Rute"
                       >
-                        <ArrowRightLeft size={16} />
+                        <ArrowRightLeft size={15} />
                       </button>
                     </div>
 
@@ -953,9 +962,9 @@ export default function InterBranchTransfer() {
                         Ke Lokasi (Tujuan)
                       </label>
                       <select
-                        className="form-control text-xs font-semibold py-2"
-                        value={transferForm.target_branch}
-                        onChange={(e) => setTransferForm({ ...transferForm, target_branch: e.target.value })}
+                        className="form-control text-xs font-semibold py-2 w-full"
+                        value={routeHeader.target_branch}
+                        onChange={(e) => setRouteHeader({ ...routeHeader, target_branch: e.target.value })}
                       >
                         {locations.filter(l => l.code !== 'ALL').map(l => (
                           <option key={l.code} value={l.name}>{l.name}</option>
@@ -963,97 +972,189 @@ export default function InterBranchTransfer() {
                       </select>
                     </div>
                   </div>
-
-                  {transferForm.source_branch === transferForm.target_branch && (
-                    <p className="text-xs text-red-500 font-semibold mt-1">
-                      ⚠️ Lokasi asal dan lokasi tujuan tidak boleh sama.
-                    </p>
-                  )}
                 </div>
 
-                {/* Step 3: Kuantitas Pengiriman */}
-                <div className="form-group space-y-1">
-                  <div className="flex justify-between items-center">
-                    <label className="form-label font-bold text-xs m-0">
-                      3. Kuantitas Transfer *
-                    </label>
-                    {selectedMaterial && (
-                      <span className="text-[11px] text-[var(--text-secondary)]">
-                        Tersedia di Asal: <strong className="text-[var(--text-primary)]">{availableSourceStock}</strong> | Tujuan: <strong className="text-[var(--text-primary)]">{availableTargetStock}</strong> {selectedMaterial.unit}
-                      </span>
+                {/* Step 2: Debounced Search Bar (Setara Pembelian Harian) */}
+                <div className="space-y-1.5">
+                  <label className="font-bold text-xs text-[var(--text-primary)] block">
+                    2. Cari & Pilih Bahan Baku (Bisa Pilih Banyak Barang) *
+                  </label>
+                  <MaterialAutocomplete
+                    materials={stock || []}
+                    onSelect={handleAddMaterialToCart}
+                    clearOnSelect={true}
+                    sourceLocation={routeHeader.source_branch}
+                    placeholder="Ketik nama bahan atau SKU untuk menambah ke keranjang mutasi..."
+                  />
+                </div>
+
+                {/* Step 3: Daftar Keranjang Mutasi */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-[var(--text-primary)]">
+                      3. Daftar Barang yang Dipindahkan ({transferCart.length} item)
+                    </span>
+                    {transferCart.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setTransferCart([])}
+                        className="text-xs text-rose-500 hover:underline font-semibold"
+                      >
+                        Kosongkan Keranjang
+                      </button>
                     )}
                   </div>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      min="0.01"
-                      step="any"
-                      required
-                      placeholder="0.00"
-                      className="form-control pr-20 text-base font-bold py-2"
-                      value={transferForm.quantity}
-                      onChange={(e) => setTransferForm({ ...transferForm, quantity: e.target.value })}
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[var(--text-secondary)] uppercase px-2 py-0.5 rounded bg-[var(--bg-secondary)] border">
-                      {selectedMaterial ? selectedMaterial.unit : 'UNIT'}
-                    </span>
-                  </div>
 
-                  {selectedMaterial && parseFloat(transferForm.quantity) > availableSourceStock && (
-                    <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 text-xs flex items-center gap-2 mt-1">
-                      <AlertCircle size={15} className="shrink-0 text-amber-600" />
-                      <span>
-                        Kuantitas transfer ({transferForm.quantity} {selectedMaterial.unit}) melebihi saldo di{' '}
-                        {transferForm.source_branch} ({availableSourceStock} {selectedMaterial.unit}).
-                      </span>
+                  {transferCart.length === 0 ? (
+                    <div className="border border-dashed border-[var(--border)] rounded-xl p-6 text-center text-xs text-[var(--text-secondary)]">
+                      <Package size={28} className="mx-auto mb-2 opacity-40" />
+                      Keranjang mutasi masih kosong. Ketik nama bahan di kotak pencarian di atas untuk memilih barang.
+                    </div>
+                  ) : !isMobile ? (
+                    <div className="border border-[var(--border)] rounded-xl overflow-hidden">
+                      <table className="custom-table w-full text-xs">
+                        <thead>
+                          <tr>
+                            <th>Nama Bahan Baku</th>
+                            <th style={{ textAlign: 'right' }}>Stok Central</th>
+                            <th style={{ textAlign: 'right' }}>Stok Resto</th>
+                            <th style={{ width: '130px', textAlign: 'right' }}>Qty Transfer *</th>
+                            <th style={{ width: '65px' }}>Satuan</th>
+                            <th style={{ width: '50px', textAlign: 'center' }}>Hapus</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {transferCart.map(item => {
+                            const avail = isSourceCentral ? item.qty_central : item.qty_resto;
+                            const isOver = parseFloat(item.qty) > avail && avail > 0;
+                            return (
+                              <tr key={item.cart_id}>
+                                <td>
+                                  <div className="font-semibold text-[var(--text-primary)]">{item.name}</div>
+                                  <div className="text-[10px] text-[var(--text-secondary)]">{item.category}</div>
+                                </td>
+                                <td style={{ textAlign: 'right', fontWeight: isSourceCentral ? 700 : 400 }}>
+                                  {item.qty_central.toLocaleString('id-ID')}
+                                </td>
+                                <td style={{ textAlign: 'right', fontWeight: !isSourceCentral ? 700 : 400 }}>
+                                  {item.qty_resto.toLocaleString('id-ID')}
+                                </td>
+                                <td style={{ textAlign: 'right' }}>
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    min="0.01"
+                                    required
+                                    className="form-control text-right py-1 px-2 text-xs"
+                                    style={{
+                                      borderColor: isOver ? 'var(--danger)' : 'var(--border)'
+                                    }}
+                                    value={item.qty}
+                                    onChange={(e) => updateCartItem(item.cart_id, 'qty', e.target.value)}
+                                  />
+                                </td>
+                                <td>{item.unit}</td>
+                                <td style={{ textAlign: 'center' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeCartItem(item.cart_id)}
+                                    className="p-1 text-rose-500 hover:bg-rose-500/10 rounded"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {transferCart.map(item => {
+                        const avail = isSourceCentral ? item.qty_central : item.qty_resto;
+                        const isOver = parseFloat(item.qty) > avail && avail > 0;
+                        return (
+                          <div
+                            key={item.cart_id}
+                            className="p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)]/30 space-y-2"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <div className="font-bold text-sm text-[var(--text-primary)]">{item.name}</div>
+                                <div className="text-[11px] text-[var(--text-secondary)]">
+                                  Central: <strong>{item.qty_central}</strong> • Resto: <strong>{item.qty_resto}</strong> {item.unit}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeCartItem(item.cart_id)}
+                                className="p-1 text-rose-500"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1">
+                                <label className="text-[10px] text-[var(--text-secondary)] block mb-0.5">
+                                  Kuantitas Transfer ({item.unit}) *
+                                </label>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min="0.01"
+                                  required
+                                  className="form-control py-1.5 px-2.5 text-sm w-full"
+                                  style={{ borderColor: isOver ? 'var(--danger)' : 'var(--border)' }}
+                                  value={item.qty}
+                                  onChange={(e) => updateCartItem(item.cart_id, 'qty', e.target.value)}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
 
-                {/* Step 4: Catatan */}
-                <div className="form-group space-y-1">
-                  <label className="form-label font-bold text-xs">
-                    4. Catatan / Alasan Transfer (Opsional)
+                {/* Step 4: Catatan Umum */}
+                <div className="space-y-1">
+                  <label className="font-bold text-xs text-[var(--text-primary)] block">
+                    4. Catatan Surat Jalan / Alasan Mutasi (Opsional)
                   </label>
-                  <textarea
-                    className="form-control text-xs"
-                    rows="2"
-                    value={transferForm.notes}
-                    onChange={(e) => setTransferForm({ ...transferForm, notes: e.target.value })}
-                    placeholder="Contoh: Restock mingguan Bar, Pinjam darurat kitchen, dll..."
+                  <input
+                    type="text"
+                    className="form-control text-xs py-2 w-full"
+                    placeholder="Contoh: Restock pagi Bar, persiapan weekend, dll..."
+                    value={routeHeader.notes}
+                    onChange={(e) => setRouteHeader({ ...routeHeader, notes: e.target.value })}
                   />
                 </div>
               </div>
 
               {/* Modal Footer */}
-              <div className="p-4 border-t shrink-0 flex items-center justify-end gap-2.5 bg-[var(--bg-secondary)]/30">
+              <div className="p-4 border-t bg-[var(--bg-secondary)]/40 flex items-center justify-end gap-2 shrink-0">
                 <button
                   type="button"
                   className="btn btn-secondary text-xs py-2 px-4"
-                  onClick={() => setShowModal(false)}
+                  onClick={() => !submitting && setShowModal(false)}
                   disabled={submitting}
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="btn btn-primary text-xs py-2 px-5 font-bold flex items-center gap-2 shadow"
-                  disabled={
-                    submitting ||
-                    !transferForm.item_id ||
-                    !transferForm.quantity ||
-                    transferForm.source_branch === transferForm.target_branch
-                  }
+                  className="btn btn-primary text-xs py-2 px-5 font-bold flex items-center gap-1.5"
+                  disabled={submitting || transferCart.length === 0}
                 >
                   {submitting ? (
                     <>
-                      <Loader2 size={16} className="animate-spin" />
-                      <span>Memproses...</span>
+                      <Loader2 size={15} className="animate-spin" /> Memproses...
                     </>
                   ) : (
                     <>
-                      <Check size={16} />
-                      <span>Konfirmasi & Simpan Transfer</span>
+                      <Check size={15} /> Konfirmasi & Simpan ({transferCart.length} Item)
                     </>
                   )}
                 </button>

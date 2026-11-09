@@ -196,6 +196,12 @@ export default function App() {
             </ProtectedRoute>
           } />
 
+          <Route path="transfer" element={
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Central', 'Purchasing', 'Bar', 'Kitchen', 'Staff']}>
+              <RouteErrorBoundary><InterBranchTransfer /></RouteErrorBoundary>
+            </ProtectedRoute>
+          } />
+
           {/* ====== BACKWARD COMPATIBILITY REDIRECTS ====== */}
 
         </Route>

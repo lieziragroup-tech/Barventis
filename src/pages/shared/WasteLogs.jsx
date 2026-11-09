@@ -27,6 +27,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { api } from '../../services/api';
 import Pagination from '../../components/shared/Pagination';
+import MaterialAutocomplete from '../../components/shared/MaterialAutocomplete';
 import { formatIDR, calculateIngredientCost } from '../../services/costUtils';
 import { exportToExcel } from '../../services/export/excelExporter';
 import { getBrokenUnitLabel, getLocalDateISO, isBrokenTrackingEnabled } from '../../services/dailyInventoryMath';
@@ -1152,39 +1153,17 @@ export default function WasteLogs() {
                     )}
                   </label>
 
-                  {/* Material Search & Select */}
-                  <div className="space-y-2">
-                    <div className="relative">
-                      <Search
-                        size={14}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]"
-                      />
-                      <input
-                        type="text"
-                        className="form-control pl-8 text-xs py-1.5 w-full"
-                        placeholder="Ketik untuk memfilter bahan..."
-                        value={materialSearch}
-                        onChange={(e) => setMaterialSearch(e.target.value)}
-                      />
-                    </div>
-
-                    <select
-                      className="form-control text-xs md:text-sm py-2 w-full"
-                      value={wasteForm.item_id}
-                      onChange={(e) => {
-                        setWasteForm({ ...wasteForm, item_id: e.target.value });
-                        setError('');
-                      }}
-                      required
-                    >
-                      <option value="">-- Pilih Bahan Baku ({filteredMaterials.length} tersedia) --</option>
-                      {filteredMaterials.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} ({m.unit}) {m.category ? `• ${m.category}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  {/* Material Search & Select via Debounced Autocomplete */}
+                  <MaterialAutocomplete
+                    materials={materials || []}
+                    value={wasteForm.item_id}
+                    sourceLocation={wasteForm.location}
+                    placeholder="Ketik nama bahan atau SKU yang rusak/tumpah..."
+                    onSelect={(m) => {
+                      setWasteForm({ ...wasteForm, item_id: m ? String(m.id) : '' });
+                      setError('');
+                    }}
+                  />
 
                   {/* Stock Availability Info */}
                   {selectedMaterial && (
