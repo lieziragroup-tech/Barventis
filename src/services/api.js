@@ -5613,13 +5613,16 @@ export const api = {
     source_mat_id,
     source_qty,
     source_unit = null,
-    target_mat_id,
+    target_mat_id = null,
+    target_mat_name = '',
+    processed_into = '',
     target_qty,
     target_unit = null,
     waste_qty = 0,
     waste_unit = null,
     new_target_hpp = null,
     photo_before = null,
+    photo_clean = null,
     photo_waste = null,
     notes = '',
     expiry_date = null
@@ -5634,25 +5637,132 @@ export const api = {
     const batchNumber = `PREP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
     const timestamp = new Date().toISOString();
 
+    // Upload Photo 1: Bahan Mentah (Before)
     let beforePhotoUrl = typeof photo_before === 'string' ? photo_before : null;
     if (photo_before && typeof photo_before !== 'string') {
       try {
         beforePhotoUrl = await api.uploadPhoto(photo_before, 'prep-photos', `before-${Date.now()}.webp`);
       } catch (err) {
         console.warn("Upload photo_before failed, using placeholder:", err);
-        beforePhotoUrl = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="100%" height="100%" fill="%231e293b"/><text x="50%" y="50%" fill="%23e2e8f0" font-family="sans-serif" font-weight="bold" font-size="14" text-anchor="middle">Foto Sebelum Olah</text></svg>`;
+        beforePhotoUrl = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="100%" height="100%" fill="%231e293b"/><text x="50%" y="50%" fill="%23e2e8f0" font-family="sans-serif" font-weight="bold" font-size="14" text-anchor="middle">Foto Bahan Mentah</text></svg>`;
       }
     }
 
-    let afterPhotoUrl = typeof photo_waste === 'string' ? photo_waste : null;
-    if (photo_waste && typeof photo_waste !== 'string') {
+    // Upload Photo 2: Berat Bersih (Clean Output)
+    const effectiveCleanPhoto = photo_clean || photo_waste;
+    let cleanPhotoUrl = typeof effectiveCleanPhoto === 'string' ? effectiveCleanPhoto : null;
+    if (effectiveCleanPhoto && typeof effectiveCleanPhoto !== 'string') {
       try {
-        afterPhotoUrl = await api.uploadPhoto(photo_waste, 'prep-photos', `after-${Date.now()}.webp`);
+        cleanPhotoUrl = await api.uploadPhoto(effectiveCleanPhoto, 'prep-photos', `clean-${Date.now()}.webp`);
       } catch (err) {
-        console.warn("Upload photo_after failed, using placeholder:", err);
-        afterPhotoUrl = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="100%" height="100%" fill="%23064e3b"/><text x="50%" y="50%" fill="%236ee7b7" font-family="sans-serif" font-weight="bold" font-size="14" text-anchor="middle">Foto Hasil & Ampas</text></svg>`;
+        console.warn("Upload photo_clean failed, using placeholder:", err);
+        cleanPhotoUrl = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="100%" height="100%" fill="%23064e3b"/><text x="50%" y="50%" fill="%236ee7b7" font-family="sans-serif" font-weight="bold" font-size="14" text-anchor="middle">Foto Berat Bersih</text></svg>`;
       }
     }
+
+    // Upload Photo 3: Bukti Ampas / Waste
+    const effectiveWastePhoto = photo_waste || photo_clean;
+    let wastePhotoUrl = typeof effectiveWastePhoto === 'string' ? effectiveWastePhoto : null;
+    if (effectiveWastePhoto && typeof effectiveWastePhoto !== 'string') {
+      if (photo_waste && photo_clean && photo_waste === photo_clean && cleanPhotoUrl) {
+        wastePhotoUrl = cleanPhotoUrl;
+      } else {
+        try {
+          wastePhotoUrl = await api.uploadPhoto(effectiveWastePhoto, 'prep-photos', `waste-${Date.now()}.webp`);
+        } catch (err) {
+          console.warn("Upload photo_waste failed, using placeholder:", err);
+          wastePhotoUrl = cleanPhotoUrl || `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="100%" height="100%" fill="%237f1d1d"/><text x="50%" y="50%" fill="%23fca5a5" font-family="sans-serif" font-weight="bold" font-size="14" text-anchor="middle">Foto Bukti Ampas</text></svg>`;
+        }
+      }
+    }
+
+    // Fetch source material first
+    let sourceMat = null;
+    try {
+      const { data: sMat } = await supabase
+        .from('materials')
+        .select('*')
+        .eq('id', parseInt(source_mat_id, 10))
+        .maybeSingle();
+      sourceMat = sMat || null;
+    } catch (sErr) {
+      console.warn("Fetch sourceMat warning:", sErr);
+    }
+
+    // Auto-resolve or auto-create target clean material so user doesn't have to manually register it again
+    let targetMat = null;
+    const resolvedTargetName = (target_mat_name || (sourceMat ? `${sourceMat.name} (${processed_into || 'Bersih'})` : 'Hasil Olahan Bersih')).trim();
+    const resolvedTargetUnit = target_unit || source_unit || sourceMat?.unit || 'gr';
+
+    if (target_mat_id) {
+      try {
+        const { data: tMat } = await supabase
+          .from('materials')
+          .select('*')
+          .eq('id', parseInt(target_mat_id, 10))
+          .maybeSingle();
+        targetMat = tMat || null;
+      } catch (tErr) {
+        console.warn("Fetch targetMat warning:", tErr);
+      }
+    }
+
+    if (!targetMat && resolvedTargetName) {
+      try {
+        const { data: existingTarget } = await supabase
+          .from('materials')
+          .select('*')
+          .eq('tenant_id', tenantId)
+          .ilike('name', resolvedTargetName)
+          .limit(1)
+          .maybeSingle();
+        if (existingTarget) {
+          targetMat = existingTarget;
+        } else {
+          const defaultFullPack =
+            resolvedTargetUnit === 'kg' ? '1000 gr' :
+            resolvedTargetUnit === 'L' ? '1000 ml' :
+            `1 ${resolvedTargetUnit}`;
+          const createdTarget = await api.createMaterial({
+            name: resolvedTargetName,
+            category: sourceMat?.category || 'Bahan Olahan / Prep',
+            unit: resolvedTargetUnit,
+            full_pack: defaultFullPack,
+            price: Math.round(Number(new_target_hpp) || Number(sourceMat?.price) || 0),
+            qty_resto: 0,
+            shelf_life_days: 3,
+            min_stock: Number(sourceMat?.min_stock) || 2,
+            is_preparable: false
+          });
+          targetMat = createdTarget;
+        }
+      } catch (autoCreateErr) {
+        console.warn("Auto-create target clean material fallback:", autoCreateErr);
+      }
+    }
+
+    const finalTargetMatId = targetMat?.id ? parseInt(targetMat.id, 10) : parseInt(source_mat_id, 10);
+
+    // Normalize weights to source_unit scale so PostgreSQL check constraint (clean_weight <= gross_weight) always passes
+    const rawGross = Math.max(0.01, parseFloat(source_qty) || 0);
+    const rawClean = Math.max(0, parseFloat(target_qty) || 0);
+    const rawWaste = Math.max(0, parseFloat(waste_qty) || 0);
+
+    const normalizeToSourceScale = (val, fromUnit, toUnit) => {
+      const f = String(fromUnit || '').toLowerCase();
+      const t = String(toUnit || '').toLowerCase();
+      if (f === t) return val;
+      if ((t === 'kg' && (f === 'gr' || f === 'g' || f === 'ml')) || (t === 'l' && (f === 'ml' || f === 'gr' || f === 'g'))) {
+        return val / 1000;
+      }
+      if (((t === 'gr' || t === 'g' || t === 'ml') && (f === 'kg' || f === 'l'))) {
+        return val * 1000;
+      }
+      return val;
+    };
+
+    const normCleanForDb = Math.min(rawGross, +(normalizeToSourceScale(rawClean, resolvedTargetUnit, source_unit || sourceMat?.unit).toFixed(2)));
+    const normWasteForDb = Math.min(rawGross, +(normalizeToSourceScale(rawWaste, waste_unit || source_unit, source_unit || sourceMat?.unit).toFixed(2)));
 
     // 1. Insert batch to production_trimming_batches
     const payload = {
@@ -5660,15 +5770,15 @@ export const api = {
       branch_id: branchId,
       material_id: parseInt(source_mat_id, 10),
       batch_number: batchNumber,
-      gross_weight: parseFloat(source_qty),
-      clean_weight: parseFloat(target_qty),
-      waste_weight: parseFloat(waste_qty || 0),
+      gross_weight: rawGross,
+      clean_weight: normCleanForDb,
+      waste_weight: normWasteForDb,
       gross_photo_url: beforePhotoUrl,
-      clean_photo_url: afterPhotoUrl,
-      waste_photo_url: afterPhotoUrl,
+      clean_photo_url: cleanPhotoUrl,
+      waste_photo_url: wastePhotoUrl,
       gross_timestamp: timestamp,
       clean_timestamp: timestamp,
-      portion_pack_output: parseFloat(target_qty),
+      portion_pack_output: Math.max(0, Math.round(rawClean)),
       status: 'STEP2_COMPLETED'
     };
 
@@ -5684,16 +5794,41 @@ export const api = {
       console.warn("Save trimming batch table warning:", insertErr);
     }
 
+    // Store rich metadata locally so "Diolah Menjadi Apa" and exact units display immediately in history
+    if (typeof window !== 'undefined') {
+      try {
+        const metaKey = 'barventis_prep_batch_meta_v1';
+        const existingMeta = JSON.parse(localStorage.getItem(metaKey) || '{}');
+        existingMeta[batchNumber] = {
+          target_mat_id: finalTargetMatId,
+          target_mat_name: targetMat?.name || resolvedTargetName,
+          processed_into: processed_into || 'Bersih Siap Pakai',
+          source_qty: rawGross,
+          source_unit: source_unit || sourceMat?.unit || 'kg',
+          target_qty: rawClean,
+          target_unit: resolvedTargetUnit,
+          waste_qty: rawWaste,
+          waste_unit: waste_unit || source_unit || sourceMat?.unit || 'kg',
+          clean_photo_url: cleanPhotoUrl,
+          waste_photo_url: wastePhotoUrl,
+          gross_photo_url: beforePhotoUrl,
+          new_target_hpp: Math.round(Number(new_target_hpp) || 0),
+          notes: notes || ''
+        };
+        localStorage.setItem(metaKey, JSON.stringify(existingMeta));
+      } catch (_) {}
+    }
+
     // 1b. If expiry_date provided, record to material_batches for FEFO tracking
-    if (expiry_date) {
+    if (expiry_date && finalTargetMatId) {
       try {
         await supabase.from('material_batches').insert({
           tenant_id: tenantId,
-          material_id: parseInt(target_mat_id, 10),
+          material_id: finalTargetMatId,
           batch_no: batchNumber,
           expired_date: expiry_date,
-          qty_resto: location === 'RESTO' ? parseFloat(target_qty) : 0,
-          qty_central: location === 'CENTRAL' ? parseFloat(target_qty) : 0,
+          qty_resto: location === 'RESTO' ? rawClean : 0,
+          qty_central: location === 'CENTRAL' ? rawClean : 0,
           status: 'ACTIVE'
         });
       } catch (batchErr) {
@@ -5701,29 +5836,14 @@ export const api = {
       }
     }
 
-
-    // Ambil data master source & target untuk konversi satuan stok dan update HPP hasil trimming
-    let sourceMat = null;
-    let targetMat = null;
-    try {
-      const { data: matPair } = await supabase
-        .from('materials')
-        .select('*')
-        .in('id', [parseInt(source_mat_id, 10), parseInt(target_mat_id, 10)]);
-      sourceMat = (matPair || []).find(m => Number(m.id) === Number(source_mat_id));
-      targetMat = (matPair || []).find(m => Number(m.id) === Number(target_mat_id));
-    } catch (matErr) {
-      console.warn("Fetch material pair for olah bahan warning:", matErr);
-    }
-
     const deductRes = sourceMat
-      ? convertQtyToStockUnit(sourceMat, parseFloat(source_qty), source_unit || sourceMat.unit)
-      : { qty: parseFloat(source_qty) };
+      ? convertQtyToStockUnit(sourceMat, rawGross, source_unit || sourceMat.unit)
+      : { qty: rawGross };
     const addRes = targetMat
-      ? convertQtyToStockUnit(targetMat, parseFloat(target_qty), target_unit || targetMat.unit)
-      : { qty: parseFloat(target_qty) };
+      ? convertQtyToStockUnit(targetMat, rawClean, resolvedTargetUnit || targetMat.unit)
+      : { qty: rawClean };
 
-    // 2. Atomic stock operations: Deduct raw material, Increment processed material
+    // 2. Atomic stock operations: Deduct raw material once (covers clean + waste), Increment processed material
     try {
       await supabase.rpc('deduct_stock_atomic', {
         p_material_id: parseInt(source_mat_id, 10),
@@ -5733,16 +5853,18 @@ export const api = {
       console.warn("Stock deduct error:", stockDeductErr);
     }
 
-    try {
-      await supabase.rpc('deduct_stock_atomic', {
-        p_material_id: parseInt(target_mat_id, 10),
-        p_deduct_qty: -addRes.qty
-      });
-    } catch (stockAddErr) {
-      console.warn("Stock addition error:", stockAddErr);
+    if (finalTargetMatId) {
+      try {
+        await supabase.rpc('deduct_stock_atomic', {
+          p_material_id: finalTargetMatId,
+          p_deduct_qty: -addRes.qty
+        });
+      } catch (stockAddErr) {
+        console.warn("Stock addition error:", stockAddErr);
+      }
     }
 
-    // 2b. Update HPP bahan hasil trimming (target_mat_id) secara proporsional
+    // 2b. Update HPP bahan hasil trimming secara proporsional
     if (targetMat && Number(new_target_hpp) > 0) {
       try {
         const packSize = parsePackSize(targetMat.full_pack) || 1;
@@ -5760,23 +5882,29 @@ export const api = {
         console.warn("Update HPP target material warning:", hppUpdateErr);
       }
     }
-    // 3. Record Waste if waste_qty > 0
-    if (parseFloat(waste_qty) > 0) {
+
+    // 3. Record Waste audit trail in transactions without double-deducting raw stock
+    if (rawWaste > 0) {
       try {
-        await api.recordWaste({
+        await supabase.from('transactions').insert({
+          tenant_id: tenantId,
           material_id: parseInt(source_mat_id, 10),
-          quantity: parseFloat(waste_qty),
-          type: 'TRIMMING_WASTE',
+          type: 'WASTE',
+          quantity: normWasteForDb,
+          date: getLocalDateISO(),
           location: location,
-          reason: `Ampas olah bahan ${batchNumber} (${notes || 'Olah bahan'})`
+          notes: `Ampas olah bahan ${batchNumber} -> ${targetMat?.name || resolvedTargetName} (${rawWaste} ${waste_unit || source_unit || ''}) ${notes ? '- ' + notes : ''}`.trim()
         });
       } catch (wasteErr) {
-        console.warn("Waste record warning:", wasteErr);
+        console.warn("Waste transaction log warning:", wasteErr);
       }
     }
 
-    await logAudit('OLAH_BAHAN', `Olah Bahan ${batchNumber}: Input ${source_qty} (ID ${source_mat_id}) -> Hasil ${target_qty} (ID ${target_mat_id}), Ampas ${waste_qty}`);
-    return savedRecord || { batch_number: batchNumber, success: true };
+    await logAudit(
+      'OLAH_BAHAN',
+      `Olah Bahan ${batchNumber}: ${sourceMat?.name || 'ID ' + source_mat_id} (${rawGross} ${source_unit || ''}) -> ${targetMat?.name || resolvedTargetName} (${rawClean} ${resolvedTargetUnit}), Ampas ${rawWaste} ${waste_unit || source_unit || ''}`
+    );
+    return savedRecord || { batch_number: batchNumber, success: true, target_material: targetMat };
   },
 
   getOlahBahanHistory: async () => {
@@ -5793,7 +5921,27 @@ export const api = {
         console.warn("Error fetching olah bahan history:", error);
         return [];
       }
-      return data || [];
+      let localMeta = {};
+      if (typeof window !== 'undefined') {
+        try {
+          localMeta = JSON.parse(localStorage.getItem('barventis_prep_batch_meta_v1') || '{}');
+        } catch (_) {}
+      }
+      return (data || []).map((row) => {
+        const meta = localMeta[row.batch_number] || {};
+        return {
+          ...row,
+          target_mat_name: meta.target_mat_name || (row.materials?.name ? `${row.materials.name} (Bersih)` : 'Hasil Bersih'),
+          processed_into: meta.processed_into || 'Kupas / Potong Bersih',
+          display_source_qty: meta.source_qty ?? row.gross_weight,
+          display_source_unit: meta.source_unit || row.materials?.unit || 'kg',
+          display_target_qty: meta.target_qty ?? row.clean_weight,
+          display_target_unit: meta.target_unit || row.materials?.unit || 'kg',
+          display_waste_qty: meta.waste_qty ?? row.waste_weight,
+          display_waste_unit: meta.waste_unit || row.materials?.unit || 'kg',
+          new_target_hpp: meta.new_target_hpp || null
+        };
+      });
     } catch (err) {
       console.warn("Error fetching olah bahan history:", err);
       return [];
