@@ -27,7 +27,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
   const [photoModal, setPhotoModal] = useState({ isOpen: false, bucket: '', contextName: '' });
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [showClosingPreview, setShowClosingPreview] = useState(false);
   const [closingPreview, setClosingPreview] = useState(null);
@@ -122,12 +122,26 @@ export default function DailyInventory({ category: _category, initialTab }) {
     return items.filter(item => [item.name, item.sku, item.item_code, item.category]
       .some(value => String(value || '').toLowerCase().includes(debouncedSearch)));
   }, [items, debouncedSearch]);
-  const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
+
+  const filteredRecords = useMemo(() => {
+    if (!debouncedSearch) return records;
+    return records.filter(row => [row.materials?.name, row.materials?.sku, row.materials?.category]
+      .some(value => String(value || '').toLowerCase().includes(debouncedSearch)));
+  }, [records, debouncedSearch]);
+
+  const activeTotalCount = activeTab === 'REKAP' ? filteredRecords.length : filteredItems.length;
+  const totalPages = Math.max(1, Math.ceil(activeTotalCount / pageSize));
   const visiblePage = Math.min(currentPage, totalPages);
+
   const paginatedItems = useMemo(() => {
     const start = (visiblePage - 1) * pageSize;
     return filteredItems.slice(start, start + pageSize);
   }, [filteredItems, visiblePage, pageSize]);
+
+  const paginatedRecords = useMemo(() => {
+    const start = (visiblePage - 1) * pageSize;
+    return filteredRecords.slice(start, start + pageSize);
+  }, [filteredRecords, visiblePage, pageSize]);
 
   const fetchRecords = useCallback(async () => {
     setLoading(true);
@@ -1116,55 +1130,122 @@ export default function DailyInventory({ category: _category, initialTab }) {
           </div>
         )}
 
-        {activeTab === 'EOD' && (
-          <div className="no-print mb-3 rounded-xl border p-3" style={{ borderColor: 'var(--border)', background: 'var(--bg-secondary)' }}>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-1 flex-wrap items-center gap-2" style={{ minWidth: 260 }}>
-                <div className="relative flex-1" style={{ minWidth: 220, maxWidth: 460 }}>
-                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }} />
-                  <input
-                    type="search"
-                    className="form-control w-full pl-9"
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    placeholder="Cari nama, SKU, atau kode barang..."
-                    aria-label="Cari material Daily Inventory"
-                    disabled={loading}
-                  />
-                </div>
-                <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                  Per halaman
-                  <select className="form-control" value={pageSize} onChange={e => setPageSize(Number(e.target.value))} style={{ width: 86 }}>
-                    <option value={25}>25</option><option value={50}>50</option><option value={100}>100</option>
-                  </select>
-                </label>
-              </div>
-              <button type="button" className="btn btn-secondary" onClick={confirmZeroActivityForUntouched} disabled={isLocked || loading || saving}>
-                <CheckCheck size={15} style={{ marginRight: 6 }} /> Konfirmasi OUT = 0 untuk baris kosong
-              </button>
+        {/* Minimalist Search, Filter & Quick Pagination Toolbar */}
+        <div className="no-print mb-3 flex flex-wrap items-center justify-between gap-2.5 py-2 px-3 rounded-xl border" style={{ borderColor: 'var(--border)', background: '#f8fafc' }}>
+          <div className="flex flex-1 flex-wrap items-center gap-2" style={{ minWidth: 240 }}>
+            <div className="relative flex-1" style={{ minWidth: 200, maxWidth: 360 }}>
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }} />
+              <input
+                type="search"
+                className="form-control w-full pl-8 py-1.5 text-xs"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                placeholder="Cari barang..."
+                aria-label="Cari material Daily Inventory"
+                disabled={loading}
+              />
             </div>
+            <label className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
+              <span>Tampil:</span>
+              <select
+                className="form-control py-1 px-2 text-xs font-semibold"
+                value={pageSize}
+                onChange={e => setPageSize(Number(e.target.value))}
+                style={{ width: '78px' }}
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+              </select>
+            </label>
           </div>
-        )}
 
-        <div className="table-container relative" style={{ background: 'var(--bg-secondary)', borderRadius: '8px' }}>
+          <div className="flex items-center gap-2 flex-wrap">
+            {activeTab === 'EOD' && !isLocked && (
+              <button
+                type="button"
+                className="btn btn-secondary text-xs py-1.5 px-2.5"
+                onClick={confirmZeroActivityForUntouched}
+                disabled={isLocked || loading || saving}
+              >
+                <CheckCheck size={13} style={{ marginRight: 5 }} /> Isi OUT = 0 (Baris Kosong)
+              </button>
+            )}
+
+            {activeTotalCount > 0 && (
+              <div className="flex items-center gap-1 bg-white border rounded-lg px-2 py-1 text-xs" style={{ borderColor: 'var(--border)' }}>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={visiblePage <= 1}
+                  className="p-0.5 text-gray-500 hover:text-gray-900 disabled:opacity-30 cursor-pointer"
+                  title="Halaman sebelumnya"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <span className="font-mono font-semibold text-[11px] px-1.5">
+                  {visiblePage}/{totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={visiblePage >= totalPages}
+                  className="p-0.5 text-gray-500 hover:text-gray-900 disabled:opacity-30 cursor-pointer"
+                  title="Halaman berikutnya"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Minimalist Table Container with Frozen Top Header & Frozen Left Column ("Barang") */}
+        <div
+          className="table-container relative"
+          style={{
+            background: '#ffffff',
+            borderRadius: '10px',
+            border: '1px solid var(--border)',
+            maxHeight: '560px',
+            overflow: 'auto'
+          }}
+        >
           <TableLoadingOverlay
             loading={loading && (activeTab === 'REKAP' ? records.length > 0 : items.length > 0)}
             message="Menyinkronkan data inventaris harian..."
           />
           {activeTab === 'REKAP' ? (
-            <table className="custom-table" style={{ width: '100%', minWidth: '1240px' }}>
+            <table className="custom-table" style={{ width: '100%', minWidth: '1020px', borderCollapse: 'separate', borderSpacing: 0 }}>
               <thead>
                 <tr>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', minWidth: '220px' }} className="whitespace-nowrap">Barang</th>
-                  <th style={{ padding: '12px 10px', textAlign: 'center', minWidth: '95px' }} className="whitespace-nowrap">Stok Awal</th>
-                  <th style={{ padding: '12px 10px', textAlign: 'center', minWidth: '95px' }} className="whitespace-nowrap">IN</th>
-                  <th style={{ padding: '12px 10px', textAlign: 'center', minWidth: '95px' }} className="whitespace-nowrap">OUT Manual</th>
-                  <th style={{ padding: '12px 10px', textAlign: 'center', minWidth: '95px' }} className="whitespace-nowrap">WASTE</th>
-                  <th style={{ padding: '12px 10px', textAlign: 'center', minWidth: '95px' }} className="whitespace-nowrap">FULL</th>
-                  <th style={{ padding: '12px 10px', textAlign: 'center', minWidth: '95px' }} className="whitespace-nowrap">BROKEN</th>
-                  <th style={{ padding: '12px 10px', textAlign: 'center', minWidth: '100px' }} className="whitespace-nowrap">Stok Akhir</th>
-                  <th style={{ padding: '12px 10px', textAlign: 'center', minWidth: '100px' }} className="whitespace-nowrap">Terpakai</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'right', minWidth: '130px' }} className="whitespace-nowrap">Nilai (Rp)</th>
+                  <th
+                    style={{
+                      position: 'sticky',
+                      top: 0,
+                      left: 0,
+                      zIndex: 40,
+                      background: '#f8fafc',
+                      padding: '10px 14px',
+                      textAlign: 'left',
+                      minWidth: '210px',
+                      width: '210px',
+                      borderBottom: '1px solid #e2e8f0',
+                      borderRight: '1px solid #e2e8f0'
+                    }}
+                    className="whitespace-nowrap"
+                  >
+                    Barang
+                  </th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '90px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Stok Awal</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '85px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Masuk (IN)</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '90px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Pakai (OUT)</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '85px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Limbah</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '85px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Sisa Utuh</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '85px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Terbuka</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '95px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Stok Akhir</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '90px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Terpakai</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 14px', textAlign: 'right', minWidth: '120px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Biaya HPP</th>
                 </tr>
               </thead>
               <tbody>
@@ -1172,94 +1253,109 @@ export default function DailyInventory({ category: _category, initialTab }) {
                   <TableSkeletonRows
                     rows={6}
                     columns={[
-                      { width: '220px', type: 'dual-text' },
+                      { width: '210px', type: 'dual-text' },
+                      { width: '90px', type: 'text', align: 'center' },
+                      { width: '85px', type: 'text', align: 'center' },
+                      { width: '90px', type: 'text', align: 'center' },
+                      { width: '85px', type: 'text', align: 'center' },
+                      { width: '85px', type: 'text', align: 'center' },
+                      { width: '85px', type: 'text', align: 'center' },
                       { width: '95px', type: 'text', align: 'center' },
-                      { width: '95px', type: 'text', align: 'center' },
-                      { width: '95px', type: 'text', align: 'center' },
-                      { width: '95px', type: 'text', align: 'center' },
-                      { width: '95px', type: 'text', align: 'center' },
-                      { width: '95px', type: 'text', align: 'center' },
-                      { width: '100px', type: 'text', align: 'center' },
-                      { width: '100px', type: 'text', align: 'center' },
-                      { width: '130px', type: 'text', align: 'right' }
+                      { width: '90px', type: 'text', align: 'center' },
+                      { width: '120px', type: 'text', align: 'right' }
                     ]}
                   />
                 ) : (
-                  records.map(row => (
-                    <tr key={row.id}>
-                      <td style={{ padding: '12px 16px' }}>
-                        <div className="font-semibold text-sm text-[var(--text-primary)]">{row.materials?.name || 'Item Terhapus'}</div>
-                        <div className="text-xs text-[var(--text-muted)] whitespace-nowrap mt-0.5">
-                          Harga: Rp {(Number(row.materials?.price) || 0).toLocaleString('id-ID')} / {row.materials?.unit || 'unit'}
+                  paginatedRecords.map(row => (
+                    <tr key={row.id} style={{ background: '#ffffff' }}>
+                      <td
+                        style={{
+                          position: 'sticky',
+                          left: 0,
+                          zIndex: 15,
+                          background: '#ffffff',
+                          padding: '9px 14px',
+                          borderBottom: '1px solid #f1f5f9',
+                          borderRight: '1px solid #e2e8f0'
+                        }}
+                      >
+                        <div className="font-semibold text-xs text-[var(--text-primary)] truncate" style={{ maxWidth: '185px' }} title={row.materials?.name || 'Item Terhapus'}>
+                          {row.materials?.name || 'Item Terhapus'}
+                        </div>
+                        <div className="text-[11px] text-[var(--text-muted)] whitespace-nowrap">
+                          Rp {(Number(row.materials?.price) || 0).toLocaleString('id-ID')} / {row.materials?.unit || 'unit'}
                         </div>
                       </td>
-                      <td className="text-center font-mono tabular-nums whitespace-nowrap" style={{ padding: '12px 10px' }}>{row.stok_awal}</td>
-                      <td className="text-center font-mono tabular-nums whitespace-nowrap" style={{ padding: '12px 10px' }}>{row.qty_in}</td>
-                      <td className="text-center font-mono tabular-nums whitespace-nowrap" style={{ padding: '12px 10px' }}>
-                        <div>{row.qty_out}</div>
-                      </td>
-                      <td className="text-center font-mono tabular-nums whitespace-nowrap" style={{ padding: '12px 10px', color: Number(row.waste) > 0 ? '#dc2626' : 'inherit' }}>{row.waste}</td>
-                      <td className="text-center font-mono tabular-nums whitespace-nowrap" style={{ padding: '12px 10px' }}>{row.full_qty}</td>
-                      <td className="text-center font-mono tabular-nums whitespace-nowrap" style={{ padding: '12px 10px' }}>{row.broken}</td>
-                      <td className="text-center font-mono tabular-nums whitespace-nowrap font-bold" style={{ padding: '12px 10px' }}>{row.stok_akhir}</td>
-                      <td className="text-center font-mono tabular-nums whitespace-nowrap font-bold" style={{ padding: '12px 10px', color: row.qty_terpakai < 0 ? '#ef4444' : 'inherit' }}>
+                      <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.stok_awal}</td>
+                      <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.qty_in}</td>
+                      <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.qty_out}</td>
+                      <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9', color: Number(row.waste) > 0 ? '#dc2626' : 'inherit' }}>{row.waste}</td>
+                      <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.full_qty}</td>
+                      <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.broken}</td>
+                      <td className="text-center font-mono tabular-nums whitespace-nowrap font-bold text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.stok_akhir}</td>
+                      <td className="text-center font-mono tabular-nums whitespace-nowrap font-bold text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9', color: row.qty_terpakai < 0 ? '#ef4444' : 'inherit' }}>
                         {row.qty_terpakai}
                       </td>
-                      <td className="text-right font-mono tabular-nums whitespace-nowrap font-semibold" style={{ padding: '12px 16px' }}>
+                      <td className="text-right font-mono tabular-nums whitespace-nowrap font-semibold text-xs" style={{ padding: '9px 14px', borderBottom: '1px solid #f1f5f9' }}>
                         Rp {Number(row.nilai_rupiah).toLocaleString('id-ID')}
                       </td>
                     </tr>
                   ))
                 )}
-                {!loading && records.length === 0 && (
+                {!loading && filteredRecords.length === 0 && (
                   <tr>
-                    <td colSpan="10" style={{ textAlign: 'center', padding: '48px', color: '#6b7280' }}>
-                      <Calendar size={48} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
-                      <p style={{ fontWeight: 500, margin: 0 }}>Tidak ada data rekap untuk tanggal ini</p>
+                    <td colSpan="10" style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
+                      <p style={{ fontWeight: 500, margin: 0, fontSize: '0.85rem' }}>Tidak ada data rekap untuk tanggal ini.</p>
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
           ) : (
-            <table className="custom-table" style={{ width: '100%', minWidth: '1120px' }}>
-              <thead className="sticky top-0 z-20 bg-[var(--bg-primary)]">
+            <table className="custom-table" style={{ width: '100%', minWidth: '980px', borderCollapse: 'separate', borderSpacing: 0 }}>
+              <thead>
                 <tr>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', minWidth: '220px' }} className="whitespace-nowrap sticky left-0 z-30 bg-[var(--bg-primary)] shadow-[2px_0_5px_rgba(0,0,0,0.04)]">
-                    Bahan Baku
-                    <div className="text-[10px] font-normal text-[var(--text-muted)]">Nama & Satuan</div>
+                  <th
+                    style={{
+                      position: 'sticky',
+                      top: 0,
+                      left: 0,
+                      zIndex: 40,
+                      background: '#f8fafc',
+                      padding: '10px 14px',
+                      textAlign: 'left',
+                      minWidth: '210px',
+                      width: '210px',
+                      borderBottom: '1px solid #e2e8f0',
+                      borderRight: '1px solid #e2e8f0'
+                    }}
+                    className="whitespace-nowrap"
+                  >
+                    Barang
                   </th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '110px', width: '110px' }} className="whitespace-nowrap">
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '92px', width: '92px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
                     Stok Awal
-                    <div className="text-[10px] font-normal text-[var(--text-muted)]">Kemasan Utuh (Full)</div>
                   </th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '125px', width: '125px' }} className="whitespace-nowrap">
-                    Barang Masuk
-                    <div className="text-[10px] font-normal text-[var(--text-muted)]">Total IN (PO/Beli)</div>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '104px', width: '104px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                    Masuk (IN)
                   </th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '110px', width: '110px' }} className="whitespace-nowrap">
-                    Pemakaian
-                    <div className="text-[10px] font-normal text-[var(--text-muted)]">OUT Barista/Dapur</div>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '104px', width: '104px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                    Pakai (OUT)
                   </th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '135px', width: '135px', background: 'rgba(239,68,68,0.06)' }} className="whitespace-nowrap">
-                    Limbah / Rusak
-                    <div className="text-[10px] font-normal text-red-600">Catatan Waste</div>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '132px', width: '132px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                    Limbah
                   </th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '105px', width: '105px', background: 'rgba(245,158,11,0.06)' }} className="whitespace-nowrap">
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '88px', width: '88px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
                     Sisa Utuh
-                    <div className="text-[10px] font-normal text-amber-700">Kemasan (Full)</div>
                   </th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '110px', width: '110px', background: 'rgba(16,185,129,0.06)' }} className="whitespace-nowrap">
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '96px', width: '96px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
                     Stok Akhir
-                    <div className="text-[10px] font-normal text-emerald-700">Estimasi Sistem</div>
                   </th>
-                  <th style={{ padding: '12px 8px', textAlign: 'center', minWidth: '105px', width: '105px', background: 'rgba(139,92,246,0.06)' }} className="whitespace-nowrap">
-                    Total Terpakai
-                    <div className="text-[10px] font-normal text-purple-700">Hari Ini</div>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '88px', width: '88px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                    Terpakai
                   </th>
-                  <th style={{ padding: '12px 16px', textAlign: 'right', minWidth: '140px', width: '140px' }} className="whitespace-nowrap">
-                    Biaya HPP (Rp)
-                    <div className="text-[10px] font-normal text-[var(--text-muted)]">Nilai Pemakaian</div>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 14px', textAlign: 'right', minWidth: '120px', width: '120px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                    Biaya HPP
                   </th>
                 </tr>
               </thead>
@@ -1268,15 +1364,15 @@ export default function DailyInventory({ category: _category, initialTab }) {
                   <TableSkeletonRows
                     rows={8}
                     columns={[
-                      { width: '220px', type: 'dual-text' },
-                      { width: '100px', type: 'text', align: 'center' },
-                      { width: '125px', type: 'text', align: 'center' },
-                      { width: '100px', type: 'text', align: 'center' },
-                      { width: '130px', type: 'text', align: 'center' },
-                      { width: '100px', type: 'text', align: 'center' },
-                      { width: '100px', type: 'text', align: 'center' },
-                      { width: '105px', type: 'text', align: 'center' },
-                      { width: '135px', type: 'text', align: 'right' }
+                      { width: '210px', type: 'dual-text' },
+                      { width: '92px', type: 'text', align: 'center' },
+                      { width: '104px', type: 'text', align: 'center' },
+                      { width: '104px', type: 'text', align: 'center' },
+                      { width: '132px', type: 'text', align: 'center' },
+                      { width: '88px', type: 'text', align: 'center' },
+                      { width: '96px', type: 'text', align: 'center' },
+                      { width: '88px', type: 'text', align: 'center' },
+                      { width: '120px', type: 'text', align: 'right' }
                     ]}
                   />
                 ) : (
@@ -1285,8 +1381,6 @@ export default function DailyInventory({ category: _category, initialTab }) {
                     const fallbackOpening = location === 'CENTRAL' ? item.qty_central : (item.qty_resto ?? item.stock);
                     const stokAwal = row.stok_awal !== undefined && row.stok_awal !== '' ? Number(row.stok_awal) : (Number(fallbackOpening) || 0);
                     const qtyOut = Number(row.qty_out) || 0;
-                    // Keep this value in the row-render scope; it is used by the OUT input placeholder.
-                    // A zero value is only considered confirmed when the explicit zero-confirmation flag is set.
                     const outConfirmed = Boolean(row.out_confirmed)
                       || row.zero_activity_confirmed === true
                       || (row.qty_out !== '' && row.qty_out !== null && row.qty_out !== undefined);
@@ -1297,61 +1391,64 @@ export default function DailyInventory({ category: _category, initialTab }) {
                     const inferredOpening = calculateInferredFullFromBroken(item, stokAwal, openingBroken);
                     const savedOpeningFull = row.opening_full_qty === null || row.opening_full_qty === undefined || row.opening_full_qty === ''
                       ? null : Number(row.opening_full_qty);
-                    // Both opening FULL and current FULL use package-count units. Never
-                    // fall back to raw ml/g stock balance, which made the two columns
-                    // show incomparable values such as 1450 versus 1.
                     const displayOpeningFull = inferredOpening?.fullQty ?? (Number.isFinite(savedOpeningFull) ? savedOpeningFull : 0);
                     const unitPrice = metrics.unitCost;
                     const nilaiRupiah = metrics.usageValue;
 
-                    // FEFO Expiry (H-3)
                     const expDate = item.next_expiry_date || '';
                     const fefo = getExpiryColor(expDate);
-                    const isExpiringSoon = fefo?.color === 'red';
+                    const rowBg = fefo?.color === 'red' ? '#fef2f2' : fefo?.color === 'yellow' ? '#fffbeb' : '#ffffff';
+                    const hasWaste = Number(row.waste) > 0;
 
                     return (
-                      <tr key={item.id} style={{ background: fefo?.color === 'red' ? 'rgba(239,68,68,0.1)' : fefo?.color === 'yellow' ? 'rgba(245,158,11,0.1)' : fefo?.color === 'green' ? 'rgba(16,185,129,0.05)' : 'transparent' }}>
-                        <td style={{ padding: '12px 16px' }} className="sticky left-0 z-10 bg-[var(--bg-primary)] shadow-[2px_0_5px_rgba(0,0,0,0.04)]">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold text-sm text-[var(--text-primary)]">{item.name}</span>
+                      <tr key={item.id} style={{ background: rowBg }}>
+                        {/* Frozen Left Column: Barang */}
+                        <td
+                          style={{
+                            position: 'sticky',
+                            left: 0,
+                            zIndex: 15,
+                            background: rowBg,
+                            padding: '8px 14px',
+                            borderBottom: '1px solid #f1f5f9',
+                            borderRight: '1px solid #e2e8f0',
+                            minWidth: '210px',
+                            maxWidth: '210px'
+                          }}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-xs text-[var(--text-primary)] truncate" title={item.name}>
+                              {item.name}
+                            </span>
                             {fefo && (
-                              <span style={{ fontWeight: 700, fontSize: '10px', padding: '2px 8px', borderRadius: 4, whiteSpace: 'nowrap', background: fefo.color === 'red' ? '#fee2e2' : fefo.color === 'yellow' ? '#fef08a' : '#bbf7d0', color: fefo.color === 'red' ? '#b91c1c' : fefo.color === 'yellow' ? '#854d0e' : '#166534' }}>
-                                {fefo.label} {fefo.days} hari
+                              <span style={{ fontWeight: 700, fontSize: '9px', padding: '1px 5px', borderRadius: 4, whiteSpace: 'nowrap', background: fefo.color === 'red' ? '#fee2e2' : fefo.color === 'yellow' ? '#fef08a' : '#bbf7d0', color: fefo.color === 'red' ? '#b91c1c' : fefo.color === 'yellow' ? '#854d0e' : '#166534' }}>
+                                {fefo.days}h
                               </span>
                             )}
                           </div>
-                          <div className="text-xs text-[var(--text-muted)] whitespace-nowrap mt-0.5">
+                          <div className="text-[11px] text-[var(--text-muted)] whitespace-nowrap mt-0.5">
                             Rp {unitPrice.toLocaleString('id-ID')} / {item.unit || 'unit'}
                           </div>
                         </td>
-                        <td style={{ padding: '8px' }}>
-                          <input
-                            type="number"
-                            min="0"
-                            step="any"
-                            disabled
-                            className="form-control text-center font-mono tabular-nums text-sm py-1.5 px-2"
-                            style={{ width: '100%', minWidth: '75px' }}
-                            value={displayOpeningFull}
-                            readOnly
-                            aria-label={`Stok awal dalam FULL untuk ${item.name}`}
-                            title="Jumlah kemasan utuh dari saldo awal; dihitung berdasarkan ukuran kemasan master."
-                            onFocus={e => e.target.select()}
-                            onKeyDown={e => handleKeyDown(e, idx, 1, 'stok_awal')}
-                            data-row={idx}
-                            data-col={1}
-                          />
+
+                        {/* Stok Awal */}
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', textAlign: 'center' }}>
+                          <span className="font-mono tabular-nums text-xs font-semibold text-gray-600">
+                            {displayOpeningFull}
+                          </span>
                         </td>
-                        <td style={{ padding: '8px' }}>
+
+                        {/* Barang Masuk (IN) */}
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9' }}>
                           <input
                             type="number"
                             inputMode="decimal"
                             min={0}
                             step="any"
                             disabled={isLocked}
-                            className="form-control text-center font-mono tabular-nums text-sm py-2 px-2 min-h-[40px]"
-                            style={{ width: '100%', minWidth: '75px' }}
-                            title="Masukkan total IN hari ini. Penerimaan Purchasing/transfer sudah termasuk; sistem hanya menyimpan selisih manualnya."
+                            className="form-control text-center font-mono tabular-nums text-xs py-1.5 px-2"
+                            style={{ width: '100%', minWidth: '72px', height: '34px' }}
+                            title="Masukkan total IN hari ini."
                             value={row.manual_in_total_input ?? String(Number(((Number(row.qty_in) || 0) + (Number(row.manual_in_qty) || 0)).toFixed(4)))}
                             onChange={e => handleChange(item.id, 'in_total_input', e.target.value)}
                             onFocus={e => e.target.select()}
@@ -1362,75 +1459,119 @@ export default function DailyInventory({ category: _category, initialTab }) {
                             aria-label={`Total IN ${item.name}`}
                           />
                           {item.expiry_tracking_enabled && (
-                            <details className="text-left mt-1" style={{ fontSize: '11px' }}>
-                              <summary className="cursor-pointer font-semibold text-amber-700 select-none">Kelola lot IN ({(row.manual_in_lots || []).length})</summary>
-                              <div className="mt-2 rounded-md border p-2 flex flex-col gap-2" style={{ minWidth: '250px', background: 'var(--surface-card, white)' }}>
+                            <details className="text-left mt-1" style={{ fontSize: '10px' }}>
+                              <summary className="cursor-pointer font-semibold text-amber-700 select-none">Lot ({(row.manual_in_lots || []).length})</summary>
+                              <div className="mt-1.5 rounded-md border p-2 flex flex-col gap-1.5" style={{ minWidth: '220px', background: '#ffffff' }}>
                                 {(row.manual_in_lots || []).map((lot, lotIdx) => (
-                                  <div key={lot.lot_key || lotIdx} className="rounded border p-2 flex flex-col gap-1.5">
+                                  <div key={lot.lot_key || lotIdx} className="rounded border p-1.5 flex flex-col gap-1">
                                     <div className="flex items-center justify-between gap-2">
                                       <span className="font-semibold">Lot {lotIdx + 1}</span>
-                                      <button type="button" disabled={isLocked} className="text-red-600" onClick={() => removeManualInLot(item.id, lot.lot_key)} aria-label={`Hapus lot ${lotIdx + 1}`}><X size={14}/></button>
+                                      <button type="button" disabled={isLocked} className="text-red-600" onClick={() => removeManualInLot(item.id, lot.lot_key)} aria-label={`Hapus lot ${lotIdx + 1}`}><X size={12}/></button>
                                     </div>
-                                    <input type="text" className="form-control text-xs py-1 px-2" placeholder="Nomor batch (opsional)" value={lot.batch_no || ''} disabled={isLocked} onChange={e => changeManualInLot(item.id, lot.lot_key, 'batch_no', e.target.value)} aria-label={`Nomor batch ${lotIdx + 1}`}/>
-                                    <input type="date" className="form-control text-xs py-1 px-2" value={lot.expiry_date || ''} disabled={isLocked} onChange={e => changeManualInLot(item.id, lot.lot_key, 'expiry_date', e.target.value)} aria-label={`Expired date lot ${lotIdx + 1}`} />
-                                    <input type="number" min="0" step="any" className="form-control text-xs py-1 px-2 text-right" placeholder={`Qty (${item.unit || 'unit'})`} value={lot.qty ?? ''} disabled={isLocked} onChange={e => changeManualInLot(item.id, lot.lot_key, 'qty', e.target.value)} aria-label={`Kuantitas lot ${lotIdx + 1}`} />
+                                    <input type="text" className="form-control text-xs py-1 px-2" placeholder="No batch" value={lot.batch_no || ''} disabled={isLocked} onChange={e => changeManualInLot(item.id, lot.lot_key, 'batch_no', e.target.value)} />
+                                    <input type="date" className="form-control text-xs py-1 px-2" value={lot.expiry_date || ''} disabled={isLocked} onChange={e => changeManualInLot(item.id, lot.lot_key, 'expiry_date', e.target.value)} />
+                                    <input type="number" min="0" step="any" className="form-control text-xs py-1 px-2 text-right" placeholder={`Qty (${item.unit || 'unit'})`} value={lot.qty ?? ''} disabled={isLocked} onChange={e => changeManualInLot(item.id, lot.lot_key, 'qty', e.target.value)} />
                                   </div>
                                 ))}
-                                <button type="button" className="btn btn-secondary text-xs py-1.5" disabled={isLocked} onClick={() => addManualInLot(item.id)}>+ Tambah lot</button>
-                                <div className="text-right text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Total lot: {(row.manual_in_lots || []).reduce((sum, lot) => sum + (Number(lot.qty) > 0 ? Number(lot.qty) : 0), 0).toLocaleString('id-ID')} {item.unit || ''}</div>
-                                <button type="button" className="btn btn-secondary text-xs py-1.5" disabled={isLocked} onClick={() => setManualInToLotTotal(item.id)}>Gunakan total lot</button>
+                                <button type="button" className="btn btn-secondary text-xs py-1" disabled={isLocked} onClick={() => addManualInLot(item.id)}>+ Tambah lot</button>
+                                <button type="button" className="btn btn-secondary text-xs py-1" disabled={isLocked} onClick={() => setManualInToLotTotal(item.id)}>Pakai total lot</button>
                               </div>
                             </details>
                           )}
                         </td>
-                        <td style={{ padding: '8px' }}>
+
+                        {/* Pemakaian (OUT) */}
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9' }}>
                           <input
                             type="number"
                             inputMode="decimal"
                             min="0"
                             step="any"
                             disabled={isLocked}
-                            className="form-control text-center font-mono tabular-nums text-sm py-2 px-2 min-h-[40px]"
-                            style={{ width: '100%', minWidth: '75px' }}
+                            className="form-control text-center font-mono tabular-nums text-xs py-1.5 px-2"
+                            style={{ width: '100%', minWidth: '72px', height: '34px' }}
                             value={row.qty_out ?? ''}
                             onChange={e => handleChange(item.id, 'qty_out', e.target.value)}
                             onFocus={e => e.target.select()}
                             onKeyDown={e => handleKeyDown(e, idx, 3, 'qty_out')}
                             data-row={idx}
                             data-col={3}
-                            placeholder={outConfirmed ? 'Terkonfirmasi' : '0'}
+                            placeholder={outConfirmed ? '0 (OK)' : '0'}
                           />
                         </td>
-                        <td style={{ padding: '8px', background: 'rgba(239,68,68,0.05)' }}>
-                          <div className="flex items-center justify-center gap-1.5 w-full flex-wrap">
-                            <span className="font-mono tabular-nums text-sm font-bold text-red-600">
+
+                        {/* Limbah / Rusak: Minimalist & 100% Consistent Single-Line Layout */}
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          <div
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: '6px',
+                              width: '116px',
+                              padding: '3px 4px 3px 8px',
+                              borderRadius: '8px',
+                              border: hasWaste ? '1px solid #fecaca' : '1px solid #e2e8f0',
+                              background: hasWaste ? '#fef2f2' : '#f8fafc',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            <span
+                              className="font-mono tabular-nums text-xs font-bold truncate"
+                              style={{ color: hasWaste ? '#dc2626' : '#64748b', maxWidth: '46px' }}
+                              title={`${row.waste ? Number(row.waste).toLocaleString('id-ID') : '0'} ${item.unit || ''}`}
+                            >
                               {row.waste ? Number(row.waste).toLocaleString('id-ID') : '0'}
                             </span>
-                            <span className="text-[10px] text-[var(--text-muted)]">{item.unit || ''}</span>
                             {!isLocked && (
                               <button
                                 type="button"
                                 onClick={() => openWasteModal(item)}
-                                title={`Catat limbah / waste untuk ${item.name}`}
-                                className="px-2.5 py-1.5 rounded-md text-[11px] font-bold text-red-700 bg-red-100 hover:bg-red-200 transition-colors shadow-xs ml-1 inline-flex items-center gap-1 shrink-0 cursor-pointer min-h-[36px]"
+                                title={`Catat limbah untuk ${item.name} (${item.unit || ''})`}
+                                style={{
+                                  height: '26px',
+                                  minHeight: '26px',
+                                  minWidth: '58px',
+                                  padding: '0 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  background: '#ffffff',
+                                  color: '#dc2626',
+                                  border: '1px solid #fca5a5',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '2px',
+                                  cursor: 'pointer',
+                                  flexShrink: 0
+                                }}
                               >
-                                <Plus size={13} /> Catat
+                                + Catat
                               </button>
                             )}
                           </div>
                         </td>
-                        <td style={{ padding: '8px', background: 'rgba(245,158,11,0.05)' }}>
-                          <div className="text-center font-mono tabular-nums text-sm py-2 font-bold text-amber-800">
-                            {metrics.fullQty === null ? '—' : metrics.fullQty.toLocaleString('id-ID')}
-                          </div>
+
+                        {/* Sisa Utuh */}
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', textAlign: 'center' }}>
+                          <span className="font-mono tabular-nums text-xs font-semibold text-gray-800">
+                            {metrics.fullQty === null ? '-' : metrics.fullQty.toLocaleString('id-ID')}
+                          </span>
                         </td>
-                        <td className="text-center font-mono tabular-nums font-bold whitespace-nowrap" style={{ padding: '12px 10px', background: 'rgba(16,185,129,0.05)', color: metrics.reconciliationRequired ? '#b45309' : '#047857' }}>
-                          {stokAkhir === null ? 'Perlu tinjau' : Number(stokAkhir).toLocaleString('id-ID')}
+
+                        {/* Stok Akhir */}
+                        <td className="text-center font-mono tabular-nums font-semibold whitespace-nowrap text-xs" style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', color: metrics.reconciliationRequired ? '#d97706' : '#059669' }}>
+                          {stokAkhir === null ? 'Tinjau' : Number(stokAkhir).toLocaleString('id-ID')}
                         </td>
-                        <td className="text-center font-mono tabular-nums font-bold whitespace-nowrap" style={{ padding: '12px 10px', background: 'rgba(139,92,246,0.05)', color: qtyTerpakai < 0 ? '#ef4444' : '#6d28d9' }}>
-                          <div>{qtyTerpakai}</div>
+
+                        {/* Total Terpakai */}
+                        <td className="text-center font-mono tabular-nums font-semibold whitespace-nowrap text-xs" style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', color: qtyTerpakai < 0 ? '#ef4444' : '#334155' }}>
+                          {qtyTerpakai}
                         </td>
-                        <td className="text-right font-mono tabular-nums font-semibold whitespace-nowrap" style={{ padding: '12px 16px' }}>
+
+                        {/* Biaya HPP */}
+                        <td className="text-right font-mono tabular-nums font-semibold whitespace-nowrap text-xs" style={{ padding: '6px 14px', borderBottom: '1px solid #f1f5f9' }}>
                           Rp {nilaiRupiah.toLocaleString('id-ID')}
                         </td>
                       </tr>
@@ -1438,20 +1579,17 @@ export default function DailyInventory({ category: _category, initialTab }) {
                   })
                 )}
                 {!loading && items.length > 0 && filteredItems.length === 0 && (
-                  <tr><td colSpan="9" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>Tidak ada material yang cocok dengan pencarian “{searchTerm}”.</td></tr>
+                  <tr><td colSpan="9" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>Tidak ada barang yang cocok dengan pencarian "{searchTerm}".</td></tr>
                 )}
                 {!loading && items.length === 0 && (
                   <tr>
-                    <td colSpan="9" style={{ textAlign: 'center', padding: '48px 24px', color: '#6b7280' }}>
-                      <div style={{ maxWidth: '420px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                        <Package size={36} style={{ marginBottom: '12px', opacity: 0.4 }} />
-                        <p style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '6px', color: 'var(--text-primary)' }}>
-                          Belum Ada Master Bahan Baku
-                        </p>
-                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-                          Daftar material dimuat dari Master Bahan Baku. Penerimaan yang sudah tercatat di Purchasing atau transfer ikut terhitung otomatis.
-                        </p>
-                      </div>
+                    <td colSpan="9" style={{ textAlign: 'center', padding: '40px 24px', color: '#6b7280' }}>
+                      <p style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '4px', color: 'var(--text-primary)' }}>
+                        Belum Ada Data Barang
+                      </p>
+                      <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0 }}>
+                        Daftar barang dimuat otomatis dari Master Bahan Baku.
+                      </p>
                     </td>
                   </tr>
                 )}
@@ -1460,33 +1598,64 @@ export default function DailyInventory({ category: _category, initialTab }) {
           )}
         </div>
 
-        {/* Pagination di Bawah Tabel */}
-        {activeTab === 'EOD' && filteredItems.length > 0 && (
-          <div className="no-print mt-3 flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 rounded-xl border" style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+        {/* Minimalist Pagination Bar di Bawah Tabel (10 Barang per Halaman) */}
+        {activeTotalCount > 0 && (
+          <div className="no-print mt-3 flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl border" style={{ background: '#f8fafc', borderColor: 'var(--border)' }}>
             <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-              Menampilkan <strong>{(visiblePage - 1) * pageSize + 1}–{Math.min(visiblePage * pageSize, filteredItems.length)}</strong> dari <strong>{filteredItems.length}</strong> bahan baku
+              Menampilkan <strong>{(visiblePage - 1) * pageSize + 1} sampai {Math.min(visiblePage * pageSize, activeTotalCount)}</strong> dari <strong>{activeTotalCount}</strong> barang
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <button
                 type="button"
                 className="btn btn-secondary text-xs"
-                style={{ padding: '5px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                style={{ padding: '4px 10px', minHeight: '30px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={visiblePage <= 1}
-                aria-label="Halaman sebelumnya"
               >
-                <ChevronLeft size={14} /> Sebelumnya
+                <ChevronLeft size={13} /> Sebelumnya
               </button>
-              <span className="text-xs font-semibold px-2">Halaman {visiblePage} / {totalPages}</span>
+
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(p => p === 1 || p === totalPages || Math.abs(p - visiblePage) <= 1)
+                .reduce((acc, p, i, arr) => {
+                  if (i > 0 && p - arr[i - 1] > 1) acc.push('...');
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((item, idx) =>
+                  item === '...' ? (
+                    <span key={`dots-${idx}`} className="px-1 text-xs text-gray-400">...</span>
+                  ) : (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => setCurrentPage(item)}
+                      style={{
+                        minWidth: '30px',
+                        height: '30px',
+                        padding: '0 8px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: visiblePage === item ? 700 : 500,
+                        background: visiblePage === item ? 'var(--accent)' : '#ffffff',
+                        color: visiblePage === item ? '#ffffff' : 'var(--text-primary)',
+                        border: visiblePage === item ? '1px solid var(--accent)' : '1px solid var(--border)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {item}
+                    </button>
+                  )
+                )}
+
               <button
                 type="button"
                 className="btn btn-secondary text-xs"
-                style={{ padding: '5px 12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                style={{ padding: '4px 10px', minHeight: '30px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={visiblePage >= totalPages}
-                aria-label="Halaman berikutnya"
               >
-                Selanjutnya <ChevronRight size={14} />
+                Selanjutnya <ChevronRight size={13} />
               </button>
             </div>
           </div>
