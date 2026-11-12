@@ -256,7 +256,9 @@ describe('WB-03.2 — total IN < source IN is rejected', () => {
         tenantId: TENANT_A, date: DATE, location: 'RESTO',
         materialId: 5, totalInInput: 1, sourceInQty: 10, openingQty: 20,
       });
-    } catch (_) {}
+    } catch (_) {
+      // Expected rejection for invalid input
+    }
     const rows = db.public.many(`SELECT * FROM daily_inventory_items WHERE material_id=5`);
     expect(rows.length).toBe(0);
   });

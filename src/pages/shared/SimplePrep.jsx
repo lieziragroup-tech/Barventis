@@ -92,24 +92,6 @@ export default function SimplePrep() {
     min_stock: '5'
   });
 
-  // Daftar Bahan Mentah dari Stok Raw untuk 1-Klik Pilih Cepat
-  const rawMaterialsQuickList = useMemo(() => {
-    const rawKeywords = ['mentah', 'raw', 'fresh', 'buah', 'sayur', 'daging', 'ayam', 'ikan', 'lemon', 'jeruk', 'apel', 'semangka', 'nanas', 'pisang', 'jahe', 'serai', 'daun'];
-    const candidates = materials.filter((m) => {
-      const cat = String(m.category || '').toLowerCase();
-      const name = String(m.name || '').toLowerCase();
-      const isAlreadyTrimmed = name.includes('(bersih') || name.includes('siap pakai') || name.includes('sari / jus');
-      if (isAlreadyTrimmed) return false;
-      return (
-        m.is_preparable === true ||
-        Number(m.qty_resto) > 0 ||
-        rawKeywords.some((kw) => cat.includes(kw) || name.includes(kw))
-      );
-    });
-    return candidates
-      .sort((a, b) => (Number(b.qty_resto) || 0) - (Number(a.qty_resto) || 0))
-      .slice(0, 10);
-  }, [materials]);
 
   // Nama Hasil Olahan Otomatis berdasarkan Bahan Mentah + Diolah Menjadi Apa
   const autoTargetMaterialName = useMemo(() => {
@@ -498,36 +480,6 @@ export default function SimplePrep() {
                 </span>
               </div>
 
-              {/* 1-Klik Pilih Cepat dari Data Barang Raw yang Tersedia */}
-              {rawMaterialsQuickList.length > 0 && (
-                <div className="space-y-1.5">
-                  <div className="text-[11px] font-semibold text-gray-500">
-                    Pilih Cepat dari Data Barang Raw (Klik untuk langsung muat):
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {rawMaterialsQuickList.map((mat) => {
-                      const isActive = selectedSourceMat?.id === mat.id;
-                      return (
-                        <button
-                          key={mat.id}
-                          type="button"
-                          onClick={() => handleSelectSource(mat)}
-                          className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
-                            isActive
-                              ? 'bg-blue-600 text-white border-blue-600 font-bold shadow-xs'
-                              : 'bg-gray-50 hover:bg-blue-50 text-gray-700 border-gray-200 font-medium'
-                          }`}
-                        >
-                          <span>{mat.name}</span>
-                          <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${isActive ? 'bg-blue-700 text-blue-100' : 'bg-white text-gray-500 border border-gray-200'}`}>
-                            {mat.qty_resto || 0} {mat.unit}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
 
               {/* Pencarian Bahan Mentah */}
               <div className="relative">

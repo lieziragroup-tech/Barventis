@@ -45,7 +45,9 @@ function saveDraftToLocalStorage(tenantId, location, date, inventoryState) {
 function clearLocalDraft(tenantId, location, date) {
   try {
     localStorage.removeItem(getLocalDraftKey(tenantId, location, date));
-  } catch (_e) {}
+  } catch (_e) {
+    // Ignore storage clear errors
+  }
 }
 
 /**

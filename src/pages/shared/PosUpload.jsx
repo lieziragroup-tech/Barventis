@@ -469,6 +469,7 @@ export default function PosUpload() {
       if (typeof refreshData === 'function') {
         await refreshData();
       }
+    } catch (err) {
       setUploadStatus({ type: 'error', message: err.message || 'Gagal memproses data.' });
     } finally {
       setLoading(false);

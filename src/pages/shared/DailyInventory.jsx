@@ -1208,7 +1208,10 @@ export default function DailyInventory({ category: _category, initialTab }) {
             borderRadius: '10px',
             border: '1px solid var(--border)',
             maxHeight: '560px',
-            overflow: 'auto'
+            overflow: 'auto',
+            padding: 0,
+            margin: 0,
+            width: '100%'
           }}
         >
           <TableLoadingOverlay
@@ -1216,7 +1219,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
             message="Menyinkronkan data inventaris harian..."
           />
           {activeTab === 'REKAP' ? (
-            <table className="custom-table" style={{ width: '100%', minWidth: '1020px', borderCollapse: 'separate', borderSpacing: 0 }}>
+            <table className="custom-table" style={{ width: '100%', minWidth: '920px', borderCollapse: 'separate', borderSpacing: 0 }}>
               <thead>
                 <tr>
                   <th
@@ -1226,12 +1229,14 @@ export default function DailyInventory({ category: _category, initialTab }) {
                       left: 0,
                       zIndex: 40,
                       background: '#f8fafc',
-                      padding: '10px 14px',
+                      padding: '8px 10px',
                       textAlign: 'left',
-                      minWidth: '210px',
-                      width: '210px',
+                      minWidth: '115px',
+                      width: '125px',
+                      maxWidth: '140px',
                       borderBottom: '1px solid #e2e8f0',
-                      borderRight: '1px solid #e2e8f0'
+                      borderRight: '1px solid #e2e8f0',
+                      boxShadow: '2px 0 6px -2px rgba(0, 0, 0, 0.08)'
                     }}
                     className="whitespace-nowrap"
                   >
@@ -1253,7 +1258,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
                   <TableSkeletonRows
                     rows={6}
                     columns={[
-                      { width: '210px', type: 'dual-text' },
+                      { width: '125px', type: 'dual-text' },
                       { width: '90px', type: 'text', align: 'center' },
                       { width: '85px', type: 'text', align: 'center' },
                       { width: '90px', type: 'text', align: 'center' },
@@ -1274,15 +1279,21 @@ export default function DailyInventory({ category: _category, initialTab }) {
                           left: 0,
                           zIndex: 15,
                           background: '#ffffff',
-                          padding: '9px 14px',
+                          padding: '8px 10px',
+                          minWidth: '115px',
+                          width: '125px',
+                          maxWidth: '140px',
+                          whiteSpace: 'normal',
+                          wordBreak: 'break-word',
                           borderBottom: '1px solid #f1f5f9',
-                          borderRight: '1px solid #e2e8f0'
+                          borderRight: '1px solid #e2e8f0',
+                          boxShadow: '2px 0 6px -2px rgba(0, 0, 0, 0.08)'
                         }}
                       >
-                        <div className="font-semibold text-xs text-[var(--text-primary)] truncate" style={{ maxWidth: '185px' }} title={row.materials?.name || 'Item Terhapus'}>
+                        <div className="font-semibold text-xs text-[var(--text-primary)] leading-snug break-words" style={{ whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.3 }} title={row.materials?.name || 'Item Terhapus'}>
                           {row.materials?.name || 'Item Terhapus'}
                         </div>
-                        <div className="text-[11px] text-[var(--text-muted)] whitespace-nowrap">
+                        <div className="text-[10px] text-[var(--text-muted)] leading-tight mt-0.5" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
                           Rp {(Number(row.materials?.price) || 0).toLocaleString('id-ID')} / {row.materials?.unit || 'unit'}
                         </div>
                       </td>
@@ -1312,7 +1323,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
               </tbody>
             </table>
           ) : (
-            <table className="custom-table" style={{ width: '100%', minWidth: '980px', borderCollapse: 'separate', borderSpacing: 0 }}>
+            <table className="custom-table" style={{ width: '100%', minWidth: '880px', borderCollapse: 'separate', borderSpacing: 0 }}>
               <thead>
                 <tr>
                   <th
@@ -1322,12 +1333,14 @@ export default function DailyInventory({ category: _category, initialTab }) {
                       left: 0,
                       zIndex: 40,
                       background: '#f8fafc',
-                      padding: '10px 14px',
+                      padding: '8px 10px',
                       textAlign: 'left',
-                      minWidth: '210px',
-                      width: '210px',
+                      minWidth: '115px',
+                      width: '125px',
+                      maxWidth: '140px',
                       borderBottom: '1px solid #e2e8f0',
-                      borderRight: '1px solid #e2e8f0'
+                      borderRight: '1px solid #e2e8f0',
+                      boxShadow: '2px 0 6px -2px rgba(0, 0, 0, 0.08)'
                     }}
                     className="whitespace-nowrap"
                   >
@@ -1364,7 +1377,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
                   <TableSkeletonRows
                     rows={8}
                     columns={[
-                      { width: '210px', type: 'dual-text' },
+                      { width: '125px', type: 'dual-text' },
                       { width: '92px', type: 'text', align: 'center' },
                       { width: '104px', type: 'text', align: 'center' },
                       { width: '104px', type: 'text', align: 'center' },
@@ -1409,24 +1422,32 @@ export default function DailyInventory({ category: _category, initialTab }) {
                             left: 0,
                             zIndex: 15,
                             background: rowBg,
-                            padding: '8px 14px',
+                            padding: '8px 10px',
                             borderBottom: '1px solid #f1f5f9',
                             borderRight: '1px solid #e2e8f0',
-                            minWidth: '210px',
-                            maxWidth: '210px'
+                            minWidth: '115px',
+                            width: '125px',
+                            maxWidth: '140px',
+                            whiteSpace: 'normal',
+                            wordBreak: 'break-word',
+                            boxShadow: '2px 0 6px -2px rgba(0, 0, 0, 0.08)'
                           }}
                         >
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-semibold text-xs text-[var(--text-primary)] truncate" title={item.name}>
+                          <div className="flex items-start justify-between gap-1">
+                            <span
+                              className="font-semibold text-xs text-[var(--text-primary)] leading-snug break-words"
+                              style={{ whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.3 }}
+                              title={item.name}
+                            >
                               {item.name}
                             </span>
                             {fefo && (
-                              <span style={{ fontWeight: 700, fontSize: '9px', padding: '1px 5px', borderRadius: 4, whiteSpace: 'nowrap', background: fefo.color === 'red' ? '#fee2e2' : fefo.color === 'yellow' ? '#fef08a' : '#bbf7d0', color: fefo.color === 'red' ? '#b91c1c' : fefo.color === 'yellow' ? '#854d0e' : '#166534' }}>
+                              <span style={{ fontWeight: 700, fontSize: '9px', padding: '1px 5px', borderRadius: 4, whiteSpace: 'nowrap', flexShrink: 0, background: fefo.color === 'red' ? '#fee2e2' : fefo.color === 'yellow' ? '#fef08a' : '#bbf7d0', color: fefo.color === 'red' ? '#b91c1c' : fefo.color === 'yellow' ? '#854d0e' : '#166534' }}>
                                 {fefo.days}h
                               </span>
                             )}
                           </div>
-                          <div className="text-[11px] text-[var(--text-muted)] whitespace-nowrap mt-0.5">
+                          <div className="text-[10px] text-[var(--text-muted)] leading-tight mt-0.5" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
                             Rp {unitPrice.toLocaleString('id-ID')} / {item.unit || 'unit'}
                           </div>
                         </td>
