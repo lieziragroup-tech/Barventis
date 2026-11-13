@@ -16,32 +16,33 @@ import GuidebookModal from './GuidebookModal';
 import WidgetErrorBoundary from './WidgetErrorBoundary';
 import barventisIcon from '../assets/barventis-icon.png';
 
-const NavItem = ({ to, exact, label, icon: Icon, isHovered, onClick }) => {
+const NavItem = ({ to, exact, label, subtitle, icon: Icon, isHovered, onClick }) => {
+  const tooltipText = subtitle ? `${label} — ${subtitle}` : label;
   return (
-    <div style={{ display: 'block', width: '100%', marginBottom: '2px' }}>
+    <div className="block w-full mb-0.5">
       <NavLink
         to={to}
         end={exact}
         onClick={onClick}
-        className={({ isActive }) => 
-          `flex items-center px-4 py-2.5 rounded-lg transition-colors duration-200 ${
-            isActive 
-              ? 'bg-[var(--accent-glow)] text-[var(--accent)] font-semibold' 
-              : 'hover:bg-[var(--accent-glow)] text-[var(--text-secondary)] hover:text-[var(--accent)]'
+        className={({ isActive }) =>
+          `group flex items-center px-3 py-2 rounded-lg transition-colors duration-150 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40 ${
+            isActive
+              ? 'bg-[var(--accent-glow)] text-[var(--accent)] font-semibold'
+              : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] font-medium'
           }`
         }
         style={{ textDecoration: 'none' }}
-        title={!isHovered ? label : undefined}
+        title={tooltipText}
       >
-        <div className="min-w-[24px] flex items-center justify-center flex-shrink-0">
-          {Icon && <Icon size={18} />}
+        <div className="min-w-[22px] flex items-center justify-center flex-shrink-0">
+          {Icon && <Icon size={17} strokeWidth={1.9} />}
         </div>
-        <span 
-          className="whitespace-nowrap ml-3 text-[0.85rem]"
-          style={{ 
-            opacity: isHovered ? 1 : 0, 
-            transform: isHovered ? 'translateX(0)' : 'translateX(-8px)',
-            transition: 'opacity 0.3s ease, transform 0.3s ease',
+        <span
+          className="whitespace-nowrap ml-3 text-[13px] leading-tight truncate"
+          style={{
+            opacity: isHovered ? 1 : 0,
+            transform: isHovered ? 'translateX(0)' : 'translateX(-6px)',
+            transition: 'opacity 0.2s ease, transform 0.2s ease',
             pointerEvents: isHovered ? 'auto' : 'none'
           }}
         >
@@ -52,12 +53,26 @@ const NavItem = ({ to, exact, label, icon: Icon, isHovered, onClick }) => {
   );
 };
 
-const NavGroup = ({ children, isFirst }) => {
+const NavGroup = ({ title, children, isFirst, isHovered }) => {
   return (
     <div className="nav-group mb-1">
       {!isFirst && (
-        <div className="px-4 my-2">
-          <div className="border-t border-[var(--border)] opacity-50"></div>
+        <div className="px-3 my-1.5">
+          <div className="border-t border-[var(--border)] opacity-60"></div>
+        </div>
+      )}
+      {title && (
+        <div
+          className="px-3 pt-1 pb-1 overflow-hidden whitespace-nowrap"
+          style={{
+            height: isHovered ? '22px' : '0px',
+            opacity: isHovered ? 1 : 0,
+            transition: 'height 0.2s ease, opacity 0.18s ease'
+          }}
+        >
+          <span className="text-[10px] font-semibold tracking-wider text-[var(--text-muted)] uppercase">
+            {title}
+          </span>
         </div>
       )}
       <div className="flex flex-col px-2">
@@ -273,7 +288,7 @@ export default function DashboardLayout() {
       {/* Desktop Sidebar Container (Transparent Spacer) */}
       <div 
         className="hidden lg:block relative z-50 flex-shrink-0"
-        style={{ width: '80px' }}
+        style={{ width: '72px' }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
@@ -281,22 +296,22 @@ export default function DashboardLayout() {
         <motion.div 
           initial={false}
           animate={{ 
-            width: isHovered ? 280 : 80,
-            boxShadow: isHovered ? "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)" : "none"
+            width: isHovered ? 244 : 72,
+            boxShadow: isHovered ? "0 16px 24px -6px rgba(0, 0, 0, 0.08), 0 6px 10px -4px rgba(0, 0, 0, 0.03)" : "none"
           }}
-          transition={{ type: "spring", bounce: 0, duration: 0.4 }}
+          transition={{ type: "spring", bounce: 0, duration: 0.32 }}
           className="absolute top-0 left-0 h-screen bg-[var(--bg-secondary)] border-r border-[var(--border)] overflow-hidden z-50"
         >
           {/* Static Content Container */}
-          <div className="flex flex-col h-full w-[280px]">
-            <div className="flex items-center justify-between py-5 pl-6 pr-5 mb-2">
-              <div className="flex items-center gap-3 overflow-hidden">
-                <img src={barventisIcon} alt="Barventis" className="w-8 h-8 flex-shrink-0" />
+          <div className="flex flex-col h-full w-[244px]">
+            <div className="flex items-center justify-between py-4 pl-5 pr-4 mb-1">
+              <div className="flex items-center gap-2.5 overflow-hidden">
+                <img src={barventisIcon} alt="Barventis" className="w-7 h-7 flex-shrink-0" />
                 <span 
-                  className="font-bold text-lg tracking-wide whitespace-nowrap overflow-hidden"
+                  className="font-bold text-[15px] tracking-wide whitespace-nowrap overflow-hidden"
                   style={{ 
                     opacity: isHovered ? 1 : 0,
-                    transition: 'opacity 0.3s ease',
+                    transition: 'opacity 0.2s ease',
                     width: '120px'
                   }}
                 >
@@ -304,77 +319,75 @@ export default function DashboardLayout() {
                 </span>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 scrollbar-hide">
-              <div className="flex flex-col gap-1">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden px-2 scrollbar-hide">
+              <div className="flex flex-col gap-0.5">
                 {isSuperAdmin && (
                   <NavGroup title="Platform" isHovered={isHovered} isFirst={true}>
-                    <NavItem to="/superadmin" exact label="Kelola Tenant" icon={Building2}  isHovered={isHovered} index={1} />
-                    <NavItem to="/superadmin/templates" label="POS Templates" icon={Layout}  isHovered={isHovered} index={2} />
-                    
-                    
+                    <NavItem to="/superadmin" exact label="Kelola Tenant" subtitle="Manajemen database & lisensi klien" icon={Building2} isHovered={isHovered} index={1} />
+                    <NavItem to="/superadmin/templates" label="Template POS" subtitle="Pemetaan format Excel POS" icon={Layout} isHovered={isHovered} index={2} />
                   </NavGroup>
                 )}
 
                 {/* ROLE: BARISTA / BAR */}
                 {isTenant && role === 'Bar' && (
                   <NavGroup title="Operasional Bar" isHovered={isHovered} isFirst={!isSuperAdmin}>
-                    <NavItem to={basePath} exact label="Dashboard Bar" icon={LayoutDashboard} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/daily-inventory`} label="Daily EOD Minuman" icon={ClipboardList} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/olah-bahan`} label="Olah Buah & Sirup" icon={Scissors} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/transfer`} label="Mutasi & Ambil Barang" icon={ArrowRightLeft} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah Bar" icon={Trash2} isHovered={isHovered} />
+                    <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan operasional bar" icon={LayoutDashboard} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Input EOD & stok minuman" icon={ClipboardList} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Produksi prep buah & sirup" icon={Scissors} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Ambil & transfer barang" icon={ArrowRightLeft} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat bahan rusak atau tumpah" icon={Trash2} isHovered={isHovered} />
                   </NavGroup>
                 )}
 
                 {/* ROLE: KITCHEN */}
                 {isTenant && role === 'Kitchen' && (
                   <NavGroup title="Operasional Dapur" isHovered={isHovered} isFirst={!isSuperAdmin}>
-                    <NavItem to={basePath} exact label="Dashboard Dapur" icon={LayoutDashboard} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/daily-inventory`} label="Daily EOD Dapur" icon={ClipboardList} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/olah-bahan`} label="Olah Daging & Sayur" icon={Scissors} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah Dapur" icon={Trash2} isHovered={isHovered} />
+                    <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan operasional dapur" icon={LayoutDashboard} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Input EOD & stok dapur" icon={ClipboardList} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Produksi prep daging & sayur" icon={Scissors} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat limbah dapur" icon={Trash2} isHovered={isHovered} />
                   </NavGroup>
                 )}
 
                 {/* ROLE: SERVICE / KASIR */}
                 {isTenant && (role === 'Service' || role === 'Kasir') && (
-                  <NavGroup title="Pelayanan & POS" isHovered={isHovered} isFirst={!isSuperAdmin}>
-                    <NavItem to={basePath} exact label="Dashboard Service" icon={LayoutDashboard} isHovered={isHovered} />
+                  <NavGroup title="Kasir & POS" isHovered={isHovered} isFirst={!isSuperAdmin}>
+                    <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan pelayanan & kasir" icon={LayoutDashboard} isHovered={isHovered} />
                     {currentTenant?.is_pos_enabled && (
-                      <NavItem to={`${basePath}/pos-terminal`} label="Terminal Kasir (POS)" icon={MonitorSmartphone} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir langsung" icon={MonitorSmartphone} isHovered={isHovered} />
                     )}
-                    <NavItem to={`${basePath}/penjualan`} label="Input Penjualan POS" icon={UploadCloud} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Barang Pecah" icon={Trash2} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Upload & rekap penjualan ESB" icon={UploadCloud} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat barang pecah atau rusak" icon={Trash2} isHovered={isHovered} />
                   </NavGroup>
                 )}
 
                 {/* ROLE: ADMIN / OWNER / SUPERVISOR / CENTRAL / PURCHASING */}
                 {isTenant && role !== 'Bar' && role !== 'Kitchen' && role !== 'Service' && role !== 'Kasir' && (
                   <>
-                    <NavGroup title="Ringkasan & Monitoring" isHovered={isHovered} isFirst={!isSuperAdmin}>
-                      <NavItem to={basePath} exact label="Dashboard Konsolidasi" icon={LayoutDashboard} isHovered={isHovered} />
+                    <NavGroup isHovered={isHovered} isFirst={!isSuperAdmin}>
+                      <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan & analitik konsolidasi" icon={LayoutDashboard} isHovered={isHovered} />
                     </NavGroup>
 
-                    <NavGroup title="Operasional Harian" isHovered={isHovered}>
+                    <NavGroup title="Operasional" isHovered={isHovered}>
                       {currentTenant?.is_pos_enabled && (
-                        <NavItem to={`${basePath}/pos-terminal`} label="Kasir (POS)" icon={MonitorSmartphone} isHovered={isHovered} />
+                        <NavItem to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir langsung" icon={MonitorSmartphone} isHovered={isHovered} />
                       )}
-                      <NavItem to={`${basePath}/penjualan`} label="Penjualan Beverage (POS)" icon={UploadCloud} isHovered={isHovered} />
-                      <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory (Semua)" icon={ClipboardList} isHovered={isHovered} />
-                      <NavItem to={`${basePath}/olah-bahan`} label="Olah Bahan Mentah" icon={Scissors} isHovered={isHovered} />
-                      <NavItem to={`${basePath}/procurement`} label="Marketlist & Pembelian" icon={ShoppingCart} isHovered={isHovered} />
-                      <NavItem to={`${basePath}/transfer`} label="Mutasi Antar Gudang" icon={ArrowRightLeft} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Upload & rekap penjualan beverage ESB" icon={UploadCloud} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Stok harian, pemakaian (OUT) & limbah" icon={ClipboardList} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Produksi prep & bahan setengah jadi" icon={Scissors} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/procurement`} label="Marketlist" subtitle="Katalog bahan, pembelian harian & kuota" icon={ShoppingCart} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Transfer stok Central & Resto" icon={ArrowRightLeft} isHovered={isHovered} />
                     </NavGroup>
 
-                    <NavGroup title="Resep & Finansial" isHovered={isHovered}>
-                      <NavItem to={`${basePath}/pricing-cogs`} label="Menu Pricing & COGS" icon={Tag} isHovered={isHovered} />
-                      <NavItem to={`${basePath}/opname-assets`} label="Stock Opname & Aset" icon={Boxes} isHovered={isHovered} />
-                      <NavItem to={`${basePath}/cost-report`} label="Cost Control" icon={Calculator} isHovered={isHovered} />
+                    <NavGroup title="Analitik & Audit" isHovered={isHovered}>
+                      <NavItem to={`${basePath}/pricing-cogs`} label="Menu & COGS" subtitle="Kalkulasi resep, HPP & harga jual" icon={Tag} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/opname-assets`} label="Stock Opname" subtitle="Audit fisik stok & aset peralatan" icon={Boxes} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/cost-report`} label="Cost Control" subtitle="Laporan variansi & rasio biaya" icon={Calculator} isHovered={isHovered} />
                     </NavGroup>
 
                     {hasAccess(['Admin / Owner', 'Owner']) && (
-                      <NavGroup title="Pengaturan & Sistem" isHovered={isHovered}>
-                        <NavItem to={`${basePath}/sistem`} label="Pengaturan & Sistem (Adm)" icon={Settings} isHovered={isHovered} />
+                      <NavGroup title="Sistem" isHovered={isHovered}>
+                        <NavItem to={`${basePath}/sistem`} label="Pengaturan" subtitle="Buku stok, kelola staf, RBAC & sistem" icon={Settings} isHovered={isHovered} />
                       </NavGroup>
                     )}
                   </>
@@ -474,77 +487,75 @@ export default function DashboardLayout() {
           </button>
         </div>
         
-        <div className="flex-1 overflow-y-auto px-3">
-          <div className="flex flex-col gap-1">
+        <div className="flex-1 overflow-y-auto px-2">
+          <div className="flex flex-col gap-0.5">
             {isSuperAdmin && (
               <NavGroup title="Platform" isHovered={true} isFirst={true}>
-                <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin" exact label="Kelola Tenant" icon={Building2}  isHovered={true} index={6} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin/templates" label="POS Templates" icon={Layout}  isHovered={true} index={7} />
-                
-                
+                <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin" exact label="Kelola Tenant" subtitle="Manajemen database & lisensi klien" icon={Building2} isHovered={true} index={6} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin/templates" label="Template POS" subtitle="Pemetaan format Excel POS" icon={Layout} isHovered={true} index={7} />
               </NavGroup>
             )}
 
             {/* ROLE: BARISTA / BAR */}
             {isTenant && role === 'Bar' && (
               <NavGroup title="Operasional Bar" isHovered={true} isFirst={!isSuperAdmin}>
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard Bar" icon={LayoutDashboard} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily EOD Minuman" icon={ClipboardList} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/olah-bahan`} label="Olah Buah & Sirup" icon={Scissors} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/transfer`} label="Mutasi & Ambil Barang" icon={ArrowRightLeft} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah Bar" icon={Trash2} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan operasional bar" icon={LayoutDashboard} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Input EOD & stok minuman" icon={ClipboardList} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Produksi prep buah & sirup" icon={Scissors} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Ambil & transfer barang" icon={ArrowRightLeft} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat bahan rusak atau tumpah" icon={Trash2} isHovered={true} />
               </NavGroup>
             )}
 
             {/* ROLE: KITCHEN */}
             {isTenant && role === 'Kitchen' && (
               <NavGroup title="Operasional Dapur" isHovered={true} isFirst={!isSuperAdmin}>
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard Dapur" icon={LayoutDashboard} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily EOD Dapur" icon={ClipboardList} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/olah-bahan`} label="Olah Daging & Sayur" icon={Scissors} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah Dapur" icon={Trash2} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan operasional dapur" icon={LayoutDashboard} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Input EOD & stok dapur" icon={ClipboardList} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Produksi prep daging & sayur" icon={Scissors} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat limbah dapur" icon={Trash2} isHovered={true} />
               </NavGroup>
             )}
 
             {/* ROLE: SERVICE / KASIR */}
             {isTenant && (role === 'Service' || role === 'Kasir') && (
-              <NavGroup title="Pelayanan & POS" isHovered={true} isFirst={!isSuperAdmin}>
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard Service" icon={LayoutDashboard} isHovered={true} />
+              <NavGroup title="Kasir & POS" isHovered={true} isFirst={!isSuperAdmin}>
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan pelayanan & kasir" icon={LayoutDashboard} isHovered={true} />
                 {currentTenant?.is_pos_enabled && (
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos-terminal`} label="Terminal Kasir (POS)" icon={MonitorSmartphone} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir langsung" icon={MonitorSmartphone} isHovered={true} />
                 )}
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/penjualan`} label="Input Penjualan POS" icon={UploadCloud} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Barang Pecah" icon={Trash2} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Upload & rekap penjualan ESB" icon={UploadCloud} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat barang pecah atau rusak" icon={Trash2} isHovered={true} />
               </NavGroup>
             )}
 
             {/* ROLE: ADMIN / OWNER / SUPERVISOR / CENTRAL / PURCHASING */}
             {isTenant && role !== 'Bar' && role !== 'Kitchen' && role !== 'Service' && role !== 'Kasir' && (
               <>
-                <NavGroup title="Ringkasan & Monitoring" isHovered={true} isFirst={!isSuperAdmin}>
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard Konsolidasi" icon={LayoutDashboard} isHovered={true} />
+                <NavGroup isHovered={true} isFirst={!isSuperAdmin}>
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan & analitik konsolidasi" icon={LayoutDashboard} isHovered={true} />
                 </NavGroup>
 
-                <NavGroup title="Operasional Harian" isHovered={true}>
+                <NavGroup title="Operasional" isHovered={true}>
                   {currentTenant?.is_pos_enabled && (
-                    <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos-terminal`} label="Kasir (POS)" icon={MonitorSmartphone} isHovered={true} />
+                    <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir langsung" icon={MonitorSmartphone} isHovered={true} />
                   )}
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/penjualan`} label="Penjualan Beverage (POS)" icon={UploadCloud} isHovered={true} />
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory (Semua)" icon={ClipboardList} isHovered={true} />
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/olah-bahan`} label="Olah Bahan Mentah" icon={Scissors} isHovered={true} />
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/procurement`} label="Marketlist & Pembelian" icon={ShoppingCart} isHovered={true} />
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/transfer`} label="Mutasi Antar Gudang" icon={ArrowRightLeft} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Upload & rekap penjualan beverage ESB" icon={UploadCloud} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Stok harian, pemakaian (OUT) & limbah" icon={ClipboardList} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Produksi prep & bahan setengah jadi" icon={Scissors} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/procurement`} label="Marketlist" subtitle="Katalog bahan, pembelian harian & kuota" icon={ShoppingCart} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Transfer stok Central & Resto" icon={ArrowRightLeft} isHovered={true} />
                 </NavGroup>
 
-                <NavGroup title="Resep & Finansial" isHovered={true}>
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pricing-cogs`} label="Menu Pricing & COGS" icon={Tag} isHovered={true} />
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/opname-assets`} label="Stock Opname & Aset" icon={Boxes} isHovered={true} />
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/cost-report`} label="Cost Control" icon={Calculator} isHovered={true} />
+                <NavGroup title="Analitik & Audit" isHovered={true}>
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pricing-cogs`} label="Menu & COGS" subtitle="Kalkulasi resep, HPP & harga jual" icon={Tag} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/opname-assets`} label="Stock Opname" subtitle="Audit fisik stok & aset peralatan" icon={Boxes} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/cost-report`} label="Cost Control" subtitle="Laporan variansi & rasio biaya" icon={Calculator} isHovered={true} />
                 </NavGroup>
 
                 {hasAccess(['Admin / Owner', 'Owner']) && (
-                  <NavGroup title="Pengaturan & Sistem" isHovered={true}>
-                    <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/sistem`} label="Pengaturan & Sistem (Adm)" icon={Settings} isHovered={true} />
+                  <NavGroup title="Sistem" isHovered={true}>
+                    <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/sistem`} label="Pengaturan" subtitle="Buku stok, kelola staf, RBAC & sistem" icon={Settings} isHovered={true} />
                   </NavGroup>
                 )}
               </>

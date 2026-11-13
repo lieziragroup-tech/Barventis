@@ -1155,7 +1155,7 @@ export default function WasteLogs() {
 
                   {/* Material Search & Select via Debounced Autocomplete */}
                   <MaterialAutocomplete
-                    materials={materials || []}
+                    materials={stock || []}
                     value={wasteForm.item_id}
                     sourceLocation={wasteForm.location}
                     placeholder="Ketik nama bahan atau SKU yang rusak/tumpah..."

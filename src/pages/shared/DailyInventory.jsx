@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { getExpiryColor } from '../../utils/expiryColor';
-import { Calendar, FileText, PlusCircle, Save, Loader2, Lock, Unlock, Info, Package, Camera, HelpCircle, ChevronDown, X, AlertCircle, Search, ChevronLeft, ChevronRight, CheckCheck, Eye, AlertTriangle, Plus, Check, Clock, Trash2 } from 'lucide-react';
+import { Calendar, FileText, PlusCircle, Save, Loader2, Lock, Unlock, Info, Package, Camera, HelpCircle, ChevronDown, X, AlertCircle, Search, ChevronLeft, ChevronRight, CheckCheck, Eye, AlertTriangle, Plus, Check, Clock, Trash2, ArrowLeftRight, FlaskConical } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
 import ExportButton from '../../components/shared/ExportButton';
@@ -9,6 +9,237 @@ import { exportWithAudit } from '../../services/export/exportAudit';
 import { TableSkeletonRows, TableLoadingOverlay } from '../../components/shared/TableSkeleton';
 import PhotoUploaderModal from '../../components/shared/PhotoUploaderModal';
 import { calculateDailyInventoryMetrics, calculateInferredFullFromBroken, convertQtyToStockUnit, getBrokenUnitLabel, isBrokenTrackingEnabled, getLocalDateISO, manualInDeltaFromTotal } from '../../services/dailyInventoryMath';
+import { parseTwoTierConfig } from '../../components/shared/TwoTierConversionEditor';
+
+export function isPrepOutputMaterial(item) {
+  if (!item) return false;
+  if (item.is_prep_output === true) return true;
+  const cat = String(item.category || '').toLowerCase();
+  if (cat.includes('olahan') || cat.includes('prep') || cat.includes('batching')) return true;
+  return false;
+}
+
+const normalizeUnitFamilyKey = (u) => {
+  const s = String(u || '').trim().toLowerCase();
+  if (['g', 'gr', 'grm', 'gram', 'grams'].includes(s)) return 'gr';
+  if (['l', 'ltr', 'liter', 'litre', 'liters', 'litres'].includes(s)) return 'l';
+  if (['ml', 'milliliter', 'millilitre', 'milliliters', 'millilitres'].includes(s)) return 'ml';
+  if (['pc', 'pcs', 'piece', 'pieces', 'unit', 'units'].includes(s)) return 'pcs';
+  return s;
+};
+
+export function resolveOutUnitCapabilities(item) {
+  const packUnit = String(item?.unit || 'unit').trim() || 'unit';
+  const twoTier = parseTwoTierConfig(packUnit, item?.full_pack);
+  const candidateContentUnit = getBrokenUnitLabel(item) || twoTier.contentUnit || packUnit;
+  const sameUnit = normalizeUnitFamilyKey(packUnit) === normalizeUnitFamilyKey(candidateContentUnit);
+  let hasTwoUnits = false;
+  if (twoTier.hasTwoTier && candidateContentUnit && !sameUnit) {
+    try {
+      const converted = convertQtyToStockUnit(item, Number(twoTier.contentQty) || 1, candidateContentUnit);
+      hasTwoUnits = Number.isFinite(converted) && converted > 0;
+    } catch {
+      hasTwoUnits = false;
+    }
+  }
+  const contentUnit = hasTwoUnits ? candidateContentUnit : packUnit;
+  const defaultOutUnit = hasTwoUnits && isBrokenTrackingEnabled(item) ? contentUnit : packUnit;
+  return {
+    packUnit,
+    contentUnit,
+    contentQty: twoTier.contentQty,
+    hasTwoUnits,
+    defaultOutUnit,
+  };
+}
+
+export function evaluatePosComparison(item, actualOutStockQty, posEntry) {
+  const posStockQty = Number(posEntry?.theoretical_stock_qty) || 0;
+  const posRecipeQty = Number(posEntry?.theoretical_recipe_qty) || 0;
+  const recipeUnit = posEntry?.recipe_unit || getBrokenUnitLabel(item) || item?.unit || 'unit';
+  const stockUnit = item?.unit || 'unit';
+  const actualStock = Number.isFinite(Number(actualOutStockQty)) ? Number(actualOutStockQty) : 0;
+
+  if (posStockQty <= 0.0001) {
+    return {
+      hasPosSales: false,
+      status: 'NO_POS',
+      diffStockQty: 0,
+      posStockQty: 0,
+      posRecipeQty: 0,
+      recipeUnit,
+      stockUnit,
+      label: 'POS: 0',
+      menuBreakdown: [],
+    };
+  }
+
+  if (actualStock <= 0.0001) {
+    return {
+      hasPosSales: true,
+      status: 'MISSING_OUT',
+      diffStockQty: Number((-posStockQty).toFixed(4)),
+      posStockQty: Number(posStockQty.toFixed(4)),
+      posRecipeQty: Number(posRecipeQty.toFixed(2)),
+      recipeUnit,
+      stockUnit,
+      label: 'Terjual di POS, Belum Input OUT',
+      menuBreakdown: posEntry?.menu_breakdown || [],
+    };
+  }
+
+  const diffStockQty = Number((actualStock - posStockQty).toFixed(4));
+  const tolerance = Math.max(0.02, posStockQty * 0.03);
+  if (Math.abs(diffStockQty) <= tolerance) {
+    return {
+      hasPosSales: true,
+      status: 'MATCH',
+      diffStockQty,
+      posStockQty: Number(posStockQty.toFixed(4)),
+      posRecipeQty: Number(posRecipeQty.toFixed(2)),
+      recipeUnit,
+      stockUnit,
+      label: 'Cocok POS',
+      menuBreakdown: posEntry?.menu_breakdown || [],
+    };
+  }
+
+  const sign = diffStockQty > 0 ? '+' : '';
+  return {
+    hasPosSales: true,
+    status: 'DIFF',
+    diffStockQty,
+    posStockQty: Number(posStockQty.toFixed(4)),
+    posRecipeQty: Number(posRecipeQty.toFixed(2)),
+    recipeUnit,
+    stockUnit,
+    label: `Selisih ${sign}${Number(diffStockQty.toFixed(2))} ${stockUnit}`,
+    menuBreakdown: posEntry?.menu_breakdown || [],
+  };
+}
+
+export function computeVirtualWindow({
+  totalCount,
+  scrollTop = 0,
+  viewportHeight = 560,
+  rowHeight = 64,
+  overscan = 6,
+  enabled = true,
+}) {
+  const safeTotal = Math.max(0, Number(totalCount) || 0);
+  if (!enabled || safeTotal <= 15) {
+    return {
+      isVirtualized: false,
+      startIndex: 0,
+      endIndex: safeTotal,
+      topSpacerHeight: 0,
+      bottomSpacerHeight: 0,
+    };
+  }
+  const safeRowHeight = Math.max(24, Number(rowHeight) || 64);
+  const safeScrollTop = Math.max(0, Number(scrollTop) || 0);
+  const safeViewport = Math.max(200, Number(viewportHeight) || 560);
+  const safeOverscan = Math.max(1, Number(overscan) || 6);
+
+  const visibleCount = Math.ceil(safeViewport / safeRowHeight);
+  const rawStart = Math.floor(safeScrollTop / safeRowHeight);
+  const startIndex = Math.max(0, rawStart - safeOverscan);
+  const endIndex = Math.min(safeTotal, rawStart + visibleCount + safeOverscan);
+  const topSpacerHeight = startIndex * safeRowHeight;
+  const bottomSpacerHeight = Math.max(0, (safeTotal - endIndex) * safeRowHeight);
+
+  return {
+    isVirtualized: true,
+    startIndex,
+    endIndex,
+    topSpacerHeight,
+    bottomSpacerHeight,
+  };
+}
+
+export function getInventoryRowMetrics(item, row = {}, strict = false) {
+  const opening = Number(row.stok_awal) || 0;
+  const incoming = Number(row.qty_in) || 0; // IN sourced automatically from Purchasing/transfers
+  const manualInInput = row.manual_in_qty === '' || row.manual_in_qty == null ? 0 : Number(row.manual_in_qty);
+  const manualIn = Number.isFinite(manualInInput) ? manualInInput : Number.NaN;
+  const brokenTracking = isBrokenTrackingEnabled(item);
+  const inputOut = row.qty_out === '' || row.qty_out == null ? 0 : Number(row.qty_out) || 0;
+  const { packUnit, hasTwoUnits, defaultOutUnit } = resolveOutUnitCapabilities(item);
+  const outUnit = (hasTwoUnits && row.out_unit) ? row.out_unit : defaultOutUnit;
+  let out = 0;
+  try {
+    out = row.qty_out === '' || row.qty_out == null ? 0 : convertQtyToStockUnit(item, inputOut, outUnit);
+  } catch {
+    try {
+      out = row.qty_out === '' || row.qty_out == null ? 0 : convertQtyToStockUnit(item, inputOut, packUnit);
+    } catch {
+      out = Number.NaN;
+    }
+  }
+  const productionUsage = Number(row.production_usage_qty) || 0; // retained for legacy transactions only
+  const waste = Number(row.waste) || 0;
+  let manualInStockQty = 0;
+  try {
+    manualInStockQty = Number.isFinite(manualIn) ? convertQtyToStockUnit(item, manualIn, item?.unit) : Number.NaN;
+  } catch {
+    manualInStockQty = Number.NaN;
+  }
+  const baseMovement = row.net_stock_movement;
+  const effectiveNetMovement = baseMovement !== null && baseMovement !== undefined
+    ? Number(baseMovement) + (Number.isFinite(manualInStockQty) ? manualInStockQty : 0)
+    : null;
+  const baseMetrics = calculateDailyInventoryMetrics({
+    opening,
+    incoming: incoming + (Number.isFinite(manualInStockQty) ? manualInStockQty : 0),
+    netMovement: effectiveNetMovement,
+    out: Number.isFinite(out) ? out : 0,
+    productionUsage,
+    waste,
+    closing: 0,
+  });
+  const bookClosing = baseMetrics.expectedClosing;
+  const brokenInput = row.broken === '' || row.broken === undefined || row.broken === null ? null : Number(row.broken);
+  const brokenConfirmed = !brokenTracking || Boolean(row.broken_confirmed ?? row.is_counted);
+  const brokenForValidation = brokenInput !== null && Number.isFinite(brokenInput) ? brokenInput : 0;
+  const inferred = calculateInferredFullFromBroken(item, bookClosing, brokenForValidation);
+  const reconciliationRequired = !Number.isFinite(out) || !Number.isFinite(manualInStockQty) || manualIn < 0 || bookClosing < -0.0001 || (brokenTracking && brokenConfirmed && inferred && !inferred.valid);
+  const closingValid = !reconciliationRequired && Number.isFinite(out) && Number.isFinite(bookClosing) && bookClosing >= -0.0001;
+  const metrics = calculateDailyInventoryMetrics({
+    opening,
+    incoming: incoming + (Number.isFinite(manualInStockQty) ? manualInStockQty : 0),
+    netMovement: effectiveNetMovement,
+    out,
+    productionUsage,
+    waste,
+    closing: bookClosing,
+  });
+  const unitCost = Number(row.cost_per_unit ?? row.unit_cost_snapshot ?? item?.avg_cost ?? item?.price) || 0;
+  if (strict && reconciliationRequired) {
+    throw new Error(inferred?.reason || (Number.isFinite(out) ? `Saldo akhir buku untuk ${item?.name || 'material'} negatif. Periksa mutasi sebelum closing.` : `Satuan OUT untuk ${item?.name || 'material'} tidak dapat dikonversi.`));
+  }
+  return {
+    ...metrics,
+    stockBasedUsage: metrics.stockBasedUsage,
+    usageVariance: metrics.usageVariance,
+    outInput: inputOut,
+    outUnit,
+    closing: closingValid ? Number(Math.max(0, bookClosing).toFixed(4)) : null,
+    bookClosing,
+    fullQty: inferred?.fullQty ?? null,
+    rawFullQty: inferred?.rawFullQty ?? null,
+    brokenStockQty: inferred?.brokenStockQty ?? null,
+    inferredPhysicalQty: inferred?.physicalEquivalentQty ?? null,
+    brokenUnit: getBrokenUnitLabel(item),
+    brokenTracking,
+    brokenConfirmed,
+    reconciliationRequired,
+    reconciliationReason: inferred?.reason || (bookClosing < -0.0001 ? 'Saldo buku akhir negatif.' : null),
+    unitCost,
+    usageValue: (Number.isFinite(out) ? out : 0) * unitCost,
+    outStockQty: Number.isFinite(out) ? out : null,
+    counted: brokenConfirmed,
+  };
+}
 
 export default function DailyInventory({ category: _category, initialTab }) {
   const { activeUser } = useAuth();
@@ -27,11 +258,19 @@ export default function DailyInventory({ category: _category, initialTab }) {
   const [photoModal, setPhotoModal] = useState({ isOpen: false, bucket: '', contextName: '' });
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [quickFilter, setQuickFilter] = useState('ALL'); // 'ALL' | 'POS_DIFF' | 'PREP_ONLY'
+  const [posUsageMap, setPosUsageMap] = useState({});
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [showClosingPreview, setShowClosingPreview] = useState(false);
   const [closingPreview, setClosingPreview] = useState(null);
   const [lotOverrideReason, setLotOverrideReason] = useState('');
+
+  // Virtual Scrolling / Windowing State for Large Datasets
+  const tableContainerRef = useRef(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(560);
+  const [isPrinting, setIsPrinting] = useState(false);
 
   // Auto-save State (5 seconds debounce + Instant LocalStorage Mirror)
   const [autoSaveStatus, setAutoSaveStatus] = useState('idle'); // 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
@@ -106,7 +345,9 @@ export default function DailyInventory({ category: _category, initialTab }) {
   const clearLocalDraft = useCallback((d = date, loc = location) => {
     try {
       localStorage.removeItem(getLocalDraftKey(d, loc));
-    } catch (_e) {}
+    } catch (_e) {
+      /* ignore localStorage removal errors */
+    }
   }, [getLocalDraftKey, date, location]);
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchTerm.trim().toLowerCase()), 300);
@@ -115,19 +356,100 @@ export default function DailyInventory({ category: _category, initialTab }) {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, pageSize, date, location]);
+  }, [debouncedSearch, quickFilter, pageSize, date, location]);
+
+  useEffect(() => {
+    setScrollTop(0);
+    if (tableContainerRef.current) {
+      tableContainerRef.current.scrollTop = 0;
+    }
+  }, [currentPage, debouncedSearch, quickFilter, pageSize, date, location, activeTab]);
+
+  useEffect(() => {
+    const handleBeforePrint = () => setIsPrinting(true);
+    const handleAfterPrint = () => setIsPrinting(false);
+    window.addEventListener('beforeprint', handleBeforePrint);
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => {
+      window.removeEventListener('beforeprint', handleBeforePrint);
+      window.removeEventListener('afterprint', handleAfterPrint);
+    };
+  }, []);
+
+  const getItemOutStockQty = useCallback((item) => {
+    const row = inventory[item.id] || {};
+    if (row.qty_out === '' || row.qty_out == null) return 0;
+    const inputOut = Number(row.qty_out) || 0;
+    const { packUnit, hasTwoUnits, defaultOutUnit } = resolveOutUnitCapabilities(item);
+    const outUnit = (hasTwoUnits && row.out_unit) ? row.out_unit : defaultOutUnit;
+    try {
+      return convertQtyToStockUnit(item, inputOut, outUnit);
+    } catch {
+      try {
+        return convertQtyToStockUnit(item, inputOut, packUnit);
+      } catch {
+        return inputOut;
+      }
+    }
+  }, [inventory]);
+
+  const posDiffCount = useMemo(() => {
+    if (activeTab === 'REKAP') {
+      return records.filter(row => {
+        const mat = row.materials || {};
+        const comp = evaluatePosComparison(mat, Number(row.qty_out) || 0, posUsageMap[row.material_id || mat.id]);
+        return comp.status === 'MISSING_OUT' || comp.status === 'DIFF';
+      }).length;
+    }
+    return items.filter(item => {
+      const comp = evaluatePosComparison(item, getItemOutStockQty(item), posUsageMap[item.id]);
+      return comp.status === 'MISSING_OUT' || comp.status === 'DIFF';
+    }).length;
+  }, [activeTab, records, items, posUsageMap, getItemOutStockQty]);
+
+  const prepCount = useMemo(() => {
+    if (activeTab === 'REKAP') {
+      return records.filter(row => isPrepOutputMaterial(row.materials)).length;
+    }
+    return items.filter(item => isPrepOutputMaterial(item)).length;
+  }, [activeTab, records, items]);
 
   const filteredItems = useMemo(() => {
-    if (!debouncedSearch) return items;
-    return items.filter(item => [item.name, item.sku, item.item_code, item.category]
-      .some(value => String(value || '').toLowerCase().includes(debouncedSearch)));
-  }, [items, debouncedSearch]);
+    return items.filter(item => {
+      if (debouncedSearch) {
+        const matchesSearch = [item.name, item.sku, item.item_code, item.category]
+          .some(value => String(value || '').toLowerCase().includes(debouncedSearch));
+        if (!matchesSearch) return false;
+      }
+      if (quickFilter === 'PREP_ONLY') {
+        return isPrepOutputMaterial(item);
+      }
+      if (quickFilter === 'POS_DIFF') {
+        const comp = evaluatePosComparison(item, getItemOutStockQty(item), posUsageMap[item.id]);
+        return comp.status === 'MISSING_OUT' || comp.status === 'DIFF';
+      }
+      return true;
+    });
+  }, [items, debouncedSearch, quickFilter, getItemOutStockQty, posUsageMap]);
 
   const filteredRecords = useMemo(() => {
-    if (!debouncedSearch) return records;
-    return records.filter(row => [row.materials?.name, row.materials?.sku, row.materials?.category]
-      .some(value => String(value || '').toLowerCase().includes(debouncedSearch)));
-  }, [records, debouncedSearch]);
+    return records.filter(row => {
+      if (debouncedSearch) {
+        const matchesSearch = [row.materials?.name, row.materials?.sku, row.materials?.category]
+          .some(value => String(value || '').toLowerCase().includes(debouncedSearch));
+        if (!matchesSearch) return false;
+      }
+      if (quickFilter === 'PREP_ONLY') {
+        return isPrepOutputMaterial(row.materials);
+      }
+      if (quickFilter === 'POS_DIFF') {
+        const mat = row.materials || {};
+        const comp = evaluatePosComparison(mat, Number(row.qty_out) || 0, posUsageMap[row.material_id || mat.id]);
+        return comp.status === 'MISSING_OUT' || comp.status === 'DIFF';
+      }
+      return true;
+    });
+  }, [records, debouncedSearch, quickFilter, posUsageMap]);
 
   const activeTotalCount = activeTab === 'REKAP' ? filteredRecords.length : filteredItems.length;
   const totalPages = Math.max(1, Math.ceil(activeTotalCount / pageSize));
@@ -143,12 +465,52 @@ export default function DailyInventory({ category: _category, initialTab }) {
     return filteredRecords.slice(start, start + pageSize);
   }, [filteredRecords, visiblePage, pageSize]);
 
+  const eodVirtualWindow = useMemo(() => computeVirtualWindow({
+    totalCount: paginatedItems.length,
+    scrollTop,
+    viewportHeight,
+    rowHeight: 64,
+    overscan: 6,
+    enabled: !isPrinting,
+  }), [paginatedItems.length, scrollTop, viewportHeight, isPrinting]);
+
+  const rekapVirtualWindow = useMemo(() => computeVirtualWindow({
+    totalCount: paginatedRecords.length,
+    scrollTop,
+    viewportHeight,
+    rowHeight: 52,
+    overscan: 6,
+    enabled: !isPrinting,
+  }), [paginatedRecords.length, scrollTop, viewportHeight, isPrinting]);
+
+  const visibleEodItems = useMemo(
+    () => paginatedItems.slice(eodVirtualWindow.startIndex, eodVirtualWindow.endIndex),
+    [paginatedItems, eodVirtualWindow.startIndex, eodVirtualWindow.endIndex]
+  );
+
+  const visibleRekapRecords = useMemo(
+    () => paginatedRecords.slice(rekapVirtualWindow.startIndex, rekapVirtualWindow.endIndex),
+    [paginatedRecords, rekapVirtualWindow.startIndex, rekapVirtualWindow.endIndex]
+  );
+
+  const handleTableScroll = useCallback((e) => {
+    const target = e.currentTarget;
+    if (!target) return;
+    setScrollTop(target.scrollTop);
+    if (target.clientHeight && target.clientHeight !== viewportHeight) {
+      setViewportHeight(target.clientHeight);
+    }
+  }, [viewportHeight]);
+
   const fetchRecords = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      // REFACTOR: endpoint baru
-      const data = await api.getDailyInventoryRecords(date, location);
+      const [data, posMap] = await Promise.all([
+        api.getDailyInventoryRecords(date, location),
+        api.getDailyPosTheoreticalUsage ? api.getDailyPosTheoreticalUsage(date) : Promise.resolve({})
+      ]);
+      setPosUsageMap(posMap || {});
       if (!data || !data.length) {
         setRecords([]);
         setIsLocked(false);
@@ -170,8 +532,11 @@ export default function DailyInventory({ category: _category, initialTab }) {
     setError('');
     setSuccess('');
     try {
-      // REFACTOR: endpoint baru
-      const { items: materialsList, inventory: invMap, isLocked: lockFlag } = await api.getDailyInventoryEodData(date, location);
+      const [{ items: materialsList, inventory: invMap, isLocked: lockFlag }, posMap] = await Promise.all([
+        api.getDailyInventoryEodData(date, location),
+        api.getDailyPosTheoreticalUsage ? api.getDailyPosTheoreticalUsage(date) : Promise.resolve({})
+      ]);
+      setPosUsageMap(posMap || {});
       setItems(materialsList);
       setIsLocked(!!lockFlag);
       
@@ -196,6 +561,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
                     ...(locRow.manual_in_qty !== undefined ? { manual_in_qty: locRow.manual_in_qty } : {}),
                     ...(locRow.manual_in_lots !== undefined ? { manual_in_lots: locRow.manual_in_lots } : {}),
                     ...(locRow.qty_out !== undefined ? { qty_out: locRow.qty_out } : {}),
+                    ...(locRow.out_unit !== undefined ? { out_unit: locRow.out_unit } : {}),
                     ...(locRow.out_confirmed !== undefined ? { out_confirmed: locRow.out_confirmed } : {}),
                     ...(locRow.zero_activity_confirmed !== undefined ? { zero_activity_confirmed: locRow.zero_activity_confirmed } : {}),
                     ...(locRow.broken !== undefined ? { broken: locRow.broken } : {}),
@@ -208,7 +574,9 @@ export default function DailyInventory({ category: _category, initialTab }) {
               mergedInventory = hydrated;
             }
           }
-        } catch (_parseErr) {}
+        } catch (_parseErr) {
+          /* ignore malformed localStorage draft */
+        }
       }
       
       setInventory(mergedInventory);
@@ -250,13 +618,8 @@ export default function DailyInventory({ category: _category, initialTab }) {
       };
       const nextRow = { ...existing, [field]: parsedValue };
       if (field === 'in_total_input') {
-        // The visible IN field is the complete daily total. The database stores
-        // only its manual delta because Purchasing/transfers already contribute
-        // source-derived IN transactions; this prevents double-counting receipts.
         const sourceInQty = Number(existing.qty_in ?? initialItem?.qty_in) || 0;
         nextRow.manual_in_total_input = parsedValue;
-        // Clearing the visible total must not silently erase source receipts.
-        // A negative delta keeps the row invalid until the user restores a valid total.
         nextRow.manual_in_qty = parsedValue === ''
           ? -sourceInQty
           : manualInDeltaFromTotal(parsedValue, sourceInQty);
@@ -264,8 +627,6 @@ export default function DailyInventory({ category: _category, initialTab }) {
       if (field === 'qty_out') {
         nextRow.out_confirmed = parsedValue !== '';
         nextRow.zero_activity_confirmed = parsedValue !== '' && Number(parsedValue) === 0;
-        // For package-tracked materials, OUT is entered in the same content unit
-        // as BROKEN (e.g. ml or g). Legacy rows keep their persisted unit.
         nextRow.out_unit = existing.out_unit || (isBrokenTrackingEnabled(initialItem) ? getBrokenUnitLabel(initialItem) : initialItem?.unit);
       }
       if (field === 'broken') {
@@ -274,6 +635,20 @@ export default function DailyInventory({ category: _category, initialTab }) {
       }
       saveDraftToLocalStorage({ ...prev, [itemId]: nextRow });
       return { ...prev, [itemId]: nextRow };
+    });
+    triggerAutoSaveDebounce();
+  };
+
+  const handleToggleOutUnit = (item, targetUnit) => {
+    if (isLocked || !item) return;
+    setInventory(prev => {
+      const existing = prev[item.id] || {};
+      const nextRow = {
+        ...existing,
+        out_unit: targetUnit,
+      };
+      saveDraftToLocalStorage({ ...prev, [item.id]: nextRow });
+      return { ...prev, [item.id]: nextRow };
     });
     triggerAutoSaveDebounce();
   };
@@ -348,88 +723,6 @@ export default function DailyInventory({ category: _category, initialTab }) {
     setError('');
   };
 
-  const getInventoryRowMetrics = (item, row = {}, strict = false) => {
-    const opening = Number(row.stok_awal) || 0;
-    const incoming = Number(row.qty_in) || 0; // IN sourced automatically from Purchasing/transfers
-    const manualInInput = row.manual_in_qty === '' || row.manual_in_qty == null ? 0 : Number(row.manual_in_qty);
-    const manualIn = Number.isFinite(manualInInput) ? manualInInput : Number.NaN;
-    const brokenTracking = isBrokenTrackingEnabled(item);
-    const inputOut = row.qty_out === '' || row.qty_out == null ? 0 : Number(row.qty_out) || 0;
-    const outUnit = row.out_unit || (brokenTracking ? getBrokenUnitLabel(item) : item.unit);
-    let out = 0;
-    try {
-      out = row.qty_out === '' || row.qty_out == null ? 0 : convertQtyToStockUnit(item, inputOut, outUnit);
-    } catch (conversionError) {
-      out = Number.NaN;
-    }
-    const productionUsage = Number(row.production_usage_qty) || 0; // retained for legacy transactions only
-    const waste = Number(row.waste) || 0;
-    let manualInStockQty = 0;
-    try {
-      manualInStockQty = Number.isFinite(manualIn) ? convertQtyToStockUnit(item, manualIn, item.unit) : Number.NaN;
-    } catch { manualInStockQty = Number.NaN; }
-    const baseMovement = row.net_stock_movement;
-    const effectiveNetMovement = baseMovement !== null && baseMovement !== undefined
-      ? Number(baseMovement) + (Number.isFinite(manualInStockQty) ? manualInStockQty : 0)
-      : null;
-    // FULL is inferred from book closing (opening + valid IN/movements - OUT/WASTE).
-    // With no IN/WASTE/other movement this reduces to opening stock minus OUT.
-    // FULL is not reduced by BROKEN; BROKEN is only checked against the book balance.
-    const baseMetrics = calculateDailyInventoryMetrics({
-      opening,
-      incoming: incoming + (Number.isFinite(manualInStockQty) ? manualInStockQty : 0),
-      netMovement: effectiveNetMovement,
-      out: Number.isFinite(out) ? out : 0,
-      productionUsage,
-      waste,
-      closing: 0,
-    });
-    const bookClosing = baseMetrics.expectedClosing;
-    const brokenInput = row.broken === '' || row.broken === undefined || row.broken === null ? null : Number(row.broken);
-    const brokenConfirmed = !brokenTracking || Boolean(row.broken_confirmed ?? row.is_counted);
-    // FULL displays immediately from book closing. BROKEN is an independent
-    // physical measurement and is only used to validate that candidate during closing.
-    const brokenForValidation = brokenInput !== null && Number.isFinite(brokenInput) ? brokenInput : 0;
-    const inferred = calculateInferredFullFromBroken(item, bookClosing, brokenForValidation);
-    const closingValid = (!brokenTracking || (brokenConfirmed && inferred?.valid)) && Number.isFinite(out);
-    const metrics = calculateDailyInventoryMetrics({
-      opening,
-      incoming: incoming + (Number.isFinite(manualInStockQty) ? manualInStockQty : 0),
-      netMovement: effectiveNetMovement,
-      out,
-      productionUsage,
-      waste,
-      closing: bookClosing,
-    });
-    const unitCost = Number(row.cost_per_unit ?? row.unit_cost_snapshot ?? item.avg_cost ?? item.price) || 0;
-    const reconciliationRequired = !Number.isFinite(out) || !Number.isFinite(manualInStockQty) || manualIn < 0 || bookClosing < -0.0001 || (brokenTracking && brokenConfirmed && inferred && !inferred.valid);
-    if (strict && reconciliationRequired) {
-      throw new Error(inferred?.reason || (Number.isFinite(out) ? `Saldo akhir buku untuk ${item?.name || 'material'} negatif. Periksa mutasi sebelum closing.` : `Satuan OUT untuk ${item?.name || 'material'} tidak dapat dikonversi.`));
-    }
-    return {
-      ...metrics,
-      stockBasedUsage: metrics.stockBasedUsage,
-      usageVariance: metrics.usageVariance,
-      outInput: inputOut,
-      outUnit,
-      closing: closingValid && bookClosing >= -0.0001 ? Math.max(0, bookClosing) : null,
-      bookClosing,
-      fullQty: inferred?.fullQty ?? null,
-      rawFullQty: inferred?.rawFullQty ?? null,
-      brokenStockQty: inferred?.brokenStockQty ?? null,
-      inferredPhysicalQty: inferred?.physicalEquivalentQty ?? null,
-      brokenUnit: getBrokenUnitLabel(item),
-      brokenTracking,
-      brokenConfirmed,
-      reconciliationRequired,
-      reconciliationReason: inferred?.reason || (bookClosing < -0.0001 ? 'Saldo buku akhir negatif.' : null),
-      unitCost,
-      usageValue: (Number.isFinite(out) ? out : 0) * unitCost, // production input is an internal conversion, not final consumption
-      outStockQty: Number.isFinite(out) ? out : null,
-      counted: brokenConfirmed,
-    };
-  };
-
   const canApproveLotOverride = ['admin / owner', 'owner', 'supervisor', 'super admin', 'superadmin'].includes(String(activeUser?.role || '').trim().toLowerCase());
 
   const buildClosingPreview = (overrideReason = lotOverrideReason) => {
@@ -490,10 +783,24 @@ export default function DailyInventory({ category: _category, initialTab }) {
     if (e.key === 'Enter' || e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       const nextRow = rowIndex + (e.key === 'ArrowUp' ? -1 : 1);
-      const nextInput = document.querySelector(`input[data-row="${nextRow}"][data-col="${colIndex}"]`);
-      if (nextInput) {
-        nextInput.focus();
-        nextInput.select();
+      if (nextRow < 0 || nextRow >= paginatedItems.length) return;
+      const focusTargetInput = () => {
+        const nextInput = document.querySelector(`input[data-row="${nextRow}"][data-col="${colIndex}"]`);
+        if (nextInput) {
+          nextInput.focus();
+          nextInput.select();
+          return true;
+        }
+        return false;
+      };
+      if (focusTargetInput()) return;
+      if (tableContainerRef.current) {
+        const targetScrollTop = Math.max(0, nextRow * 64 - 160);
+        tableContainerRef.current.scrollTop = targetScrollTop;
+        setScrollTop(targetScrollTop);
+        requestAnimationFrame(() => {
+          focusTargetInput();
+        });
       }
     }
   };
@@ -1133,7 +1440,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
         {/* Minimalist Search, Filter & Quick Pagination Toolbar */}
         <div className="no-print mb-3 flex flex-wrap items-center justify-between gap-2.5 py-2 px-3 rounded-xl border" style={{ borderColor: 'var(--border)', background: '#f8fafc' }}>
           <div className="flex flex-1 flex-wrap items-center gap-2" style={{ minWidth: 240 }}>
-            <div className="relative flex-1" style={{ minWidth: 200, maxWidth: 360 }}>
+            <div className="relative flex-1" style={{ minWidth: 190, maxWidth: 320 }}>
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }} />
               <input
                 type="search"
@@ -1145,17 +1452,78 @@ export default function DailyInventory({ category: _category, initialTab }) {
                 disabled={loading}
               />
             </div>
+
+            {/* Quick Filter Pills: Semua | Selisih vs POS ESB | Hasil Olahan / Prep */}
+            <div className="inline-flex items-center gap-1 rounded-lg border bg-white p-0.5" style={{ borderColor: 'var(--border)' }}>
+              <button
+                type="button"
+                onClick={() => setQuickFilter('ALL')}
+                className="px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer"
+                style={{
+                  background: quickFilter === 'ALL' ? '#0f172a' : 'transparent',
+                  color: quickFilter === 'ALL' ? '#ffffff' : '#475569'
+                }}
+              >
+                Semua
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickFilter(prev => prev === 'POS_DIFF' ? 'ALL' : 'POS_DIFF')}
+                className="px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                style={{
+                  background: quickFilter === 'POS_DIFF' ? '#dc2626' : 'transparent',
+                  color: quickFilter === 'POS_DIFF' ? '#ffffff' : '#b91c1c'
+                }}
+                title="Filter barang yang memiliki selisih antara Input Manual Barista vs Penjualan POS ESB"
+              >
+                <span>Selisih vs POS ESB</span>
+                <span
+                  className="px-1.5 py-0.2 rounded-full text-[10px] font-bold"
+                  style={{
+                    background: quickFilter === 'POS_DIFF' ? 'rgba(255,255,255,0.22)' : '#fee2e2',
+                    color: quickFilter === 'POS_DIFF' ? '#ffffff' : '#991b1b'
+                  }}
+                >
+                  {posDiffCount}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickFilter(prev => prev === 'PREP_ONLY' ? 'ALL' : 'PREP_ONLY')}
+                className="px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                style={{
+                  background: quickFilter === 'PREP_ONLY' ? '#2563eb' : 'transparent',
+                  color: quickFilter === 'PREP_ONLY' ? '#ffffff' : '#1d4ed8'
+                }}
+                title="Tampilkan hanya bahan hasil olahan / SimplePrep (Batching Jus, Sirup, Base)"
+              >
+                <FlaskConical size={11} />
+                <span>Hasil Olahan / Prep</span>
+                <span
+                  className="px-1.5 py-0.2 rounded-full text-[10px] font-bold"
+                  style={{
+                    background: quickFilter === 'PREP_ONLY' ? 'rgba(255,255,255,0.22)' : '#dbeafe',
+                    color: quickFilter === 'PREP_ONLY' ? '#ffffff' : '#1e40af'
+                  }}
+                >
+                  {prepCount}
+                </span>
+              </button>
+            </div>
+
             <label className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
               <span>Tampil:</span>
               <select
                 className="form-control py-1 px-2 text-xs font-semibold"
                 value={pageSize}
                 onChange={e => setPageSize(Number(e.target.value))}
-                style={{ width: '78px' }}
+                style={{ width: '132px' }}
               >
                 <option value={10}>10</option>
                 <option value={20}>20</option>
                 <option value={50}>50</option>
+                <option value={100}>100 (Virtual)</option>
+                <option value={9999}>Semua (Virtual)</option>
               </select>
             </label>
           </div>
@@ -1202,6 +1570,8 @@ export default function DailyInventory({ category: _category, initialTab }) {
 
         {/* Minimalist Table Container with Frozen Top Header & Frozen Left Column ("Barang") */}
         <div
+          ref={tableContainerRef}
+          onScroll={handleTableScroll}
           className="table-container relative"
           style={{
             background: '#ffffff',
@@ -1219,7 +1589,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
             message="Menyinkronkan data inventaris harian..."
           />
           {activeTab === 'REKAP' ? (
-            <table className="custom-table" style={{ width: '100%', minWidth: '920px', borderCollapse: 'separate', borderSpacing: 0 }}>
+            <table className="custom-table" style={{ width: '100%', minWidth: '1020px', borderCollapse: 'separate', borderSpacing: 0 }}>
               <thead>
                 <tr>
                   <th
@@ -1245,6 +1615,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
                   <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '90px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Stok Awal</th>
                   <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '85px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Masuk (IN)</th>
                   <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '90px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Pakai (OUT)</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '125px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Compare POS ESB</th>
                   <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '85px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Limbah</th>
                   <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '85px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Sisa Utuh</th>
                   <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '85px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Terbuka</th>
@@ -1262,6 +1633,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
                       { width: '90px', type: 'text', align: 'center' },
                       { width: '85px', type: 'text', align: 'center' },
                       { width: '90px', type: 'text', align: 'center' },
+                      { width: '125px', type: 'text', align: 'center' },
                       { width: '85px', type: 'text', align: 'center' },
                       { width: '85px', type: 'text', align: 'center' },
                       { width: '85px', type: 'text', align: 'center' },
@@ -1271,51 +1643,93 @@ export default function DailyInventory({ category: _category, initialTab }) {
                     ]}
                   />
                 ) : (
-                  paginatedRecords.map(row => (
-                    <tr key={row.id} style={{ background: '#ffffff' }}>
-                      <td
-                        style={{
-                          position: 'sticky',
-                          left: 0,
-                          zIndex: 15,
-                          background: '#ffffff',
-                          padding: '8px 10px',
-                          minWidth: '115px',
-                          width: '125px',
-                          maxWidth: '140px',
-                          whiteSpace: 'normal',
-                          wordBreak: 'break-word',
-                          borderBottom: '1px solid #f1f5f9',
-                          borderRight: '1px solid #e2e8f0',
-                          boxShadow: '2px 0 6px -2px rgba(0, 0, 0, 0.08)'
-                        }}
-                      >
-                        <div className="font-semibold text-xs text-[var(--text-primary)] leading-snug break-words" style={{ whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.3 }} title={row.materials?.name || 'Item Terhapus'}>
-                          {row.materials?.name || 'Item Terhapus'}
-                        </div>
-                        <div className="text-[10px] text-[var(--text-muted)] leading-tight mt-0.5" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                          Rp {(Number(row.materials?.price) || 0).toLocaleString('id-ID')} / {row.materials?.unit || 'unit'}
-                        </div>
-                      </td>
-                      <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.stok_awal}</td>
-                      <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.qty_in}</td>
-                      <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.qty_out}</td>
-                      <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9', color: Number(row.waste) > 0 ? '#dc2626' : 'inherit' }}>{row.waste}</td>
-                      <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.full_qty}</td>
-                      <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.broken}</td>
-                      <td className="text-center font-mono tabular-nums whitespace-nowrap font-bold text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.stok_akhir}</td>
-                      <td className="text-center font-mono tabular-nums whitespace-nowrap font-bold text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9', color: row.qty_terpakai < 0 ? '#ef4444' : 'inherit' }}>
-                        {row.qty_terpakai}
-                      </td>
-                      <td className="text-right font-mono tabular-nums whitespace-nowrap font-semibold text-xs" style={{ padding: '9px 14px', borderBottom: '1px solid #f1f5f9' }}>
-                        Rp {Number(row.nilai_rupiah).toLocaleString('id-ID')}
-                      </td>
+                  <>
+                    {rekapVirtualWindow.topSpacerHeight > 0 && (
+                      <tr aria-hidden="true" style={{ height: `${rekapVirtualWindow.topSpacerHeight}px` }}>
+                        <td colSpan={11} style={{ padding: 0, border: 'none' }} />
+                      </tr>
+                    )}
+                    {visibleRekapRecords.map(row => {
+                      const mat = row.materials || {};
+                      const isPrep = isPrepOutputMaterial(mat);
+                      const posComp = evaluatePosComparison(mat, Number(row.qty_out) || 0, posUsageMap[row.material_id || mat.id]);
+                      return (
+                        <tr key={row.id} style={{ background: '#ffffff' }}>
+                        <td
+                          style={{
+                            position: 'sticky',
+                            left: 0,
+                            zIndex: 15,
+                            background: '#ffffff',
+                            padding: '8px 10px',
+                            minWidth: '115px',
+                            width: '125px',
+                            maxWidth: '140px',
+                            whiteSpace: 'normal',
+                            wordBreak: 'break-word',
+                            borderBottom: '1px solid #f1f5f9',
+                            borderRight: '1px solid #e2e8f0',
+                            boxShadow: '2px 0 6px -2px rgba(0, 0, 0, 0.08)'
+                          }}
+                        >
+                          <div className="font-semibold text-xs text-[var(--text-primary)] leading-snug break-words" style={{ whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.3 }} title={mat.name || 'Item Terhapus'}>
+                            {mat.name || 'Item Terhapus'}
+                          </div>
+                          {isPrep && (
+                            <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                              Hasil Olah / Prep
+                            </span>
+                          )}
+                          <div className="text-[10px] text-[var(--text-muted)] leading-tight mt-0.5" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                            Rp {(Number(mat.price) || 0).toLocaleString('id-ID')} / {mat.unit || 'unit'}
+                          </div>
+                        </td>
+                        <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.stok_awal}</td>
+                        <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.qty_in}</td>
+                        <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.qty_out}</td>
+                        <td className="text-center whitespace-nowrap text-xs" style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9' }}>
+                          {posComp.status === 'NO_POS' ? (
+                            <span className="text-[10px] text-gray-400 font-mono">POS: 0</span>
+                          ) : (
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="font-mono text-[10px] text-slate-600">
+                                POS: {posComp.posStockQty} {posComp.stockUnit}
+                              </span>
+                              <span
+                                className="px-1.5 py-0.5 rounded text-[9px] font-bold"
+                                style={{
+                                  background: posComp.status === 'MATCH' ? '#dcfce7' : posComp.status === 'MISSING_OUT' ? '#fee2e2' : '#fef3c7',
+                                  color: posComp.status === 'MATCH' ? '#166534' : posComp.status === 'MISSING_OUT' ? '#991b1b' : '#92400e',
+                                }}
+                              >
+                                {posComp.label}
+                              </span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9', color: Number(row.waste) > 0 ? '#dc2626' : 'inherit' }}>{row.waste}</td>
+                        <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.full_qty}</td>
+                        <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.broken}</td>
+                        <td className="text-center font-mono tabular-nums whitespace-nowrap font-bold text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.stok_akhir}</td>
+                        <td className="text-center font-mono tabular-nums whitespace-nowrap font-bold text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9', color: row.qty_terpakai < 0 ? '#ef4444' : 'inherit' }}>
+                          {row.qty_terpakai}
+                        </td>
+                        <td className="text-right font-mono tabular-nums whitespace-nowrap font-semibold text-xs" style={{ padding: '9px 14px', borderBottom: '1px solid #f1f5f9' }}>
+                          Rp {Number(row.nilai_rupiah).toLocaleString('id-ID')}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {rekapVirtualWindow.bottomSpacerHeight > 0 && (
+                    <tr aria-hidden="true" style={{ height: `${rekapVirtualWindow.bottomSpacerHeight}px` }}>
+                      <td colSpan={11} style={{ padding: 0, border: 'none' }} />
                     </tr>
-                  ))
+                  )}
+                  </>
                 )}
                 {!loading && filteredRecords.length === 0 && (
                   <tr>
-                    <td colSpan="10" style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
+                    <td colSpan="11" style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
                       <p style={{ fontWeight: 500, margin: 0, fontSize: '0.85rem' }}>Tidak ada data rekap untuk tanggal ini.</p>
                     </td>
                   </tr>
@@ -1323,7 +1737,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
               </tbody>
             </table>
           ) : (
-            <table className="custom-table" style={{ width: '100%', minWidth: '880px', borderCollapse: 'separate', borderSpacing: 0 }}>
+            <table className="custom-table" style={{ width: '100%', minWidth: '1010px', borderCollapse: 'separate', borderSpacing: 0 }}>
               <thead>
                 <tr>
                   <th
@@ -1346,28 +1760,31 @@ export default function DailyInventory({ category: _category, initialTab }) {
                   >
                     Barang
                   </th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '92px', width: '92px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '88px', width: '88px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
                     Stok Awal
                   </th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '104px', width: '104px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '102px', width: '102px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
                     Masuk (IN)
                   </th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '104px', width: '104px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '142px', width: '142px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
                     Pakai (OUT)
                   </th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '132px', width: '132px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '130px', width: '130px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                    Compare POS ESB
+                  </th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '128px', width: '128px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
                     Limbah
                   </th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '88px', width: '88px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '86px', width: '86px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
                     Sisa Utuh
                   </th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '96px', width: '96px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '94px', width: '94px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
                     Stok Akhir
                   </th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '88px', width: '88px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '86px', width: '86px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
                     Terpakai
                   </th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 14px', textAlign: 'right', minWidth: '120px', width: '120px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 14px', textAlign: 'right', minWidth: '118px', width: '118px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
                     Biaya HPP
                   </th>
                 </tr>
@@ -1378,28 +1795,36 @@ export default function DailyInventory({ category: _category, initialTab }) {
                     rows={8}
                     columns={[
                       { width: '125px', type: 'dual-text' },
-                      { width: '92px', type: 'text', align: 'center' },
-                      { width: '104px', type: 'text', align: 'center' },
-                      { width: '104px', type: 'text', align: 'center' },
-                      { width: '132px', type: 'text', align: 'center' },
                       { width: '88px', type: 'text', align: 'center' },
-                      { width: '96px', type: 'text', align: 'center' },
-                      { width: '88px', type: 'text', align: 'center' },
-                      { width: '120px', type: 'text', align: 'right' }
+                      { width: '102px', type: 'text', align: 'center' },
+                      { width: '118px', type: 'text', align: 'center' },
+                      { width: '130px', type: 'text', align: 'center' },
+                      { width: '128px', type: 'text', align: 'center' },
+                      { width: '86px', type: 'text', align: 'center' },
+                      { width: '94px', type: 'text', align: 'center' },
+                      { width: '86px', type: 'text', align: 'center' },
+                      { width: '118px', type: 'text', align: 'right' }
                     ]}
                   />
                 ) : (
-                  paginatedItems.map((item, idx) => {
-                    const row = inventory[item.id] || {};
-                    const fallbackOpening = location === 'CENTRAL' ? item.qty_central : (item.qty_resto ?? item.stock);
-                    const stokAwal = row.stok_awal !== undefined && row.stok_awal !== '' ? Number(row.stok_awal) : (Number(fallbackOpening) || 0);
-                    const qtyOut = Number(row.qty_out) || 0;
-                    const outConfirmed = Boolean(row.out_confirmed)
-                      || row.zero_activity_confirmed === true
-                      || (row.qty_out !== '' && row.qty_out !== null && row.qty_out !== undefined);
-                    const metrics = getInventoryRowMetrics(item, { ...row, stok_awal: stokAwal });
+                  <>
+                    {eodVirtualWindow.topSpacerHeight > 0 && (
+                      <tr aria-hidden="true" style={{ height: `${eodVirtualWindow.topSpacerHeight}px` }}>
+                        <td colSpan={10} style={{ padding: 0, border: 'none' }} />
+                      </tr>
+                    )}
+                    {visibleEodItems.map((item, visibleIdx) => {
+                      const actualIdx = eodVirtualWindow.startIndex + visibleIdx;
+                      const row = inventory[item.id] || {};
+                      const fallbackOpening = location === 'CENTRAL' ? item.qty_central : (item.qty_resto ?? item.stock);
+                      const stokAwal = row.stok_awal !== undefined && row.stok_awal !== '' ? Number(row.stok_awal) : (Number(fallbackOpening) || 0);
+                      const qtyOut = Number(row.qty_out) || 0;
+                      const outConfirmed = Boolean(row.out_confirmed)
+                        || row.zero_activity_confirmed === true
+                        || (row.qty_out !== '' && row.qty_out !== null && row.qty_out !== undefined);
+                      const metrics = getInventoryRowMetrics(item, { ...row, stok_awal: stokAwal });
                     const stokAkhir = metrics.closing;
-                    const qtyTerpakai = qtyOut;
+                    const qtyTerpakai = Number.isFinite(metrics.outStockQty) ? Number(metrics.outStockQty.toFixed(4)) : qtyOut;
                     const openingBroken = row.opening_broken_qty == null ? 0 : Number(row.opening_broken_qty) || 0;
                     const inferredOpening = calculateInferredFullFromBroken(item, stokAwal, openingBroken);
                     const savedOpeningFull = row.opening_full_qty === null || row.opening_full_qty === undefined || row.opening_full_qty === ''
@@ -1412,6 +1837,17 @@ export default function DailyInventory({ category: _category, initialTab }) {
                     const fefo = getExpiryColor(expDate);
                     const rowBg = fefo?.color === 'red' ? '#fef2f2' : fefo?.color === 'yellow' ? '#fffbeb' : '#ffffff';
                     const hasWaste = Number(row.waste) > 0;
+
+                    // Pillar 1: 2-Tier Conversion Info (validated against actual mathematical convertibility)
+                    const { packUnit, contentUnit, contentQty: twoTierContentQty, hasTwoUnits, defaultOutUnit } = resolveOutUnitCapabilities(item);
+                    const activeOutUnit = (hasTwoUnits && row.out_unit) ? row.out_unit : defaultOutUnit;
+
+                    // Pillar 2: Compare POS ESB
+                    const posComp = evaluatePosComparison(item, metrics.outStockQty, posUsageMap[item.id]);
+
+                    // Pillar 4: Visibilitas Bahan Hasil Olahan / Prep
+                    const isPrep = isPrepOutputMaterial(item);
+                    const prodUsageQty = Number(row.production_usage_qty) || 0;
 
                     return (
                       <tr key={item.id} style={{ background: rowBg }}>
@@ -1447,9 +1883,28 @@ export default function DailyInventory({ category: _category, initialTab }) {
                               </span>
                             )}
                           </div>
+                          {isPrep && (
+                            <div className="mt-0.5">
+                              <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                Hasil Olah / Prep
+                              </span>
+                            </div>
+                          )}
+                          {prodUsageQty > 0 && (
+                            <div className="mt-0.5">
+                              <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200" title="Bahan mentah ini dipakai di Proses Produksi Bahan (SimplePrep) hari ini">
+                                Diolah Prep: {Number(prodUsageQty.toFixed(2))} {packUnit}
+                              </span>
+                            </div>
+                          )}
                           <div className="text-[10px] text-[var(--text-muted)] leading-tight mt-0.5" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                            Rp {unitPrice.toLocaleString('id-ID')} / {item.unit || 'unit'}
+                            Rp {unitPrice.toLocaleString('id-ID')} / {packUnit}
                           </div>
+                          {hasTwoUnits && (
+                            <div className="text-[9px] text-emerald-700 font-semibold leading-tight mt-0.5" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                              1 {packUnit} = {Number(twoTierContentQty).toLocaleString('id-ID')} {contentUnit}
+                            </div>
+                          )}
                         </td>
 
                         {/* Stok Awal */}
@@ -1473,12 +1928,19 @@ export default function DailyInventory({ category: _category, initialTab }) {
                             value={row.manual_in_total_input ?? String(Number(((Number(row.qty_in) || 0) + (Number(row.manual_in_qty) || 0)).toFixed(4)))}
                             onChange={e => handleChange(item.id, 'in_total_input', e.target.value)}
                             onFocus={e => e.target.select()}
-                            onKeyDown={e => handleKeyDown(e, idx, 2, 'manual_in_qty')}
-                            data-row={idx}
+                            onKeyDown={e => handleKeyDown(e, actualIdx, 2, 'manual_in_qty')}
+                            data-row={actualIdx}
                             data-col={2}
                             placeholder="0"
                             aria-label={`Total IN ${item.name}`}
                           />
+                          {isPrep && Number(row.qty_in) > 0 && (
+                            <div className="mt-0.5 text-center">
+                              <span className="inline-block px-1 py-0.2 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200" title="Stok masuk otomatis dari Proses Produksi Bahan (SimplePrep)">
+                                +Prep: {Number(Number(row.qty_in).toFixed(2))} {packUnit}
+                              </span>
+                            </div>
+                          )}
                           {item.expiry_tracking_enabled && (
                             <details className="text-left mt-1" style={{ fontSize: '10px' }}>
                               <summary className="cursor-pointer font-semibold text-amber-700 select-none">Lot ({(row.manual_in_lots || []).length})</summary>
@@ -1501,24 +1963,149 @@ export default function DailyInventory({ category: _category, initialTab }) {
                           )}
                         </td>
 
-                        {/* Pemakaian (OUT) */}
-                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9' }}>
-                          <input
-                            type="number"
-                            inputMode="decimal"
-                            min="0"
-                            step="any"
-                            disabled={isLocked}
-                            className="form-control text-center font-mono tabular-nums text-xs py-1.5 px-2"
-                            style={{ width: '100%', minWidth: '72px', height: '34px' }}
-                            value={row.qty_out ?? ''}
-                            onChange={e => handleChange(item.id, 'qty_out', e.target.value)}
-                            onFocus={e => e.target.select()}
-                            onKeyDown={e => handleKeyDown(e, idx, 3, 'qty_out')}
-                            data-row={idx}
-                            data-col={3}
-                            placeholder={outConfirmed ? '0 (OK)' : '0'}
-                          />
+                        {/* Pemakaian (OUT): Unified Single-Line Input + Inline Unit Badge/Toggle */}
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', textAlign: 'center' }}>
+                          <div className="inline-flex flex-col items-center">
+                            <div
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                height: '34px',
+                                width: '132px',
+                                borderRadius: '8px',
+                                border: outConfirmed && Number(row.qty_out) > 0 ? '1px solid #10b981' : '1px solid #cbd5e1',
+                                background: isLocked ? '#f8fafc' : '#ffffff',
+                                overflow: 'hidden',
+                              }}
+                            >
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                min="0"
+                                step="any"
+                                disabled={isLocked}
+                                className="text-center font-mono tabular-nums text-xs font-semibold focus:outline-none"
+                                style={{
+                                  width: '100%',
+                                  minWidth: '48px',
+                                  height: '100%',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  padding: '0 6px',
+                                  color: 'var(--text-primary)',
+                                }}
+                                value={row.qty_out ?? ''}
+                                onChange={e => handleChange(item.id, 'qty_out', e.target.value)}
+                                onFocus={e => e.target.select()}
+                                onKeyDown={e => handleKeyDown(e, actualIdx, 3, 'qty_out')}
+                                data-row={actualIdx}
+                                data-col={3}
+                                placeholder={outConfirmed ? '0 (OK)' : '0'}
+                                aria-label={`Pakai OUT ${item.name} (${activeOutUnit})`}
+                              />
+                              <div
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  height: '100%',
+                                  borderLeft: '1px solid #e2e8f0',
+                                  background: '#f8fafc',
+                                  padding: '0 3px',
+                                  flexShrink: 0,
+                                  gap: '2px',
+                                }}
+                                title={hasTwoUnits ? `Klik satuan untuk ubah input OUT (${packUnit} vs ${contentUnit})` : `Satuan pemakaian: ${packUnit}`}
+                              >
+                                {hasTwoUnits ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={isLocked}
+                                      onClick={() => handleToggleOutUnit(item, packUnit)}
+                                      style={{
+                                        height: '24px',
+                                        padding: '0 5px',
+                                        borderRadius: '5px',
+                                        fontSize: '10px',
+                                        fontWeight: 700,
+                                        border: 'none',
+                                        cursor: isLocked ? 'default' : 'pointer',
+                                        background: String(activeOutUnit).toLowerCase() === String(packUnit).toLowerCase() ? '#0f172a' : 'transparent',
+                                        color: String(activeOutUnit).toLowerCase() === String(packUnit).toLowerCase() ? '#ffffff' : '#64748b',
+                                      }}
+                                    >
+                                      {packUnit}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={isLocked}
+                                      onClick={() => handleToggleOutUnit(item, contentUnit)}
+                                      style={{
+                                        height: '24px',
+                                        padding: '0 5px',
+                                        borderRadius: '5px',
+                                        fontSize: '10px',
+                                        fontWeight: 700,
+                                        border: 'none',
+                                        cursor: isLocked ? 'default' : 'pointer',
+                                        background: String(activeOutUnit).toLowerCase() === String(contentUnit).toLowerCase() ? '#059669' : 'transparent',
+                                        color: String(activeOutUnit).toLowerCase() === String(contentUnit).toLowerCase() ? '#ffffff' : '#64748b',
+                                      }}
+                                    >
+                                      {contentUnit}
+                                    </button>
+                                  </>
+                                ) : (
+                                  <span
+                                    className="font-mono"
+                                    style={{
+                                      padding: '0 6px',
+                                      fontSize: '10px',
+                                      fontWeight: 600,
+                                      color: '#64748b',
+                                    }}
+                                  >
+                                    {packUnit}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {hasTwoUnits && qtyOut > 0 && Number.isFinite(metrics.outStockQty) && String(activeOutUnit).toLowerCase() !== String(packUnit).toLowerCase() && (
+                              <span className="text-[9px] font-mono text-emerald-700 mt-0.5 leading-none">
+                                ≈ {Number(metrics.outStockQty.toFixed(3))} {packUnit}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Compare POS ESB */}
+                        <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          {posComp.status === 'NO_POS' ? (
+                            <span className="text-[10px] text-gray-400 font-mono">POS: 0</span>
+                          ) : (
+                            <div
+                              className="flex flex-col items-center gap-0.5"
+                              title={(posComp.menuBreakdown || []).map(b => `${b.menu_name} (${b.qty_sold}x)`).join(', ')}
+                            >
+                              <span className="font-mono text-[10px] font-semibold text-slate-700">
+                                POS: {posComp.posStockQty} {posComp.stockUnit}
+                              </span>
+                              {posComp.recipeUnit && String(posComp.recipeUnit).toLowerCase() !== String(posComp.stockUnit).toLowerCase() && (
+                                <span className="font-mono text-[9px] text-slate-400">
+                                  ({posComp.posRecipeQty} {posComp.recipeUnit})
+                                </span>
+                              )}
+                              <span
+                                className="px-1.5 py-0.5 rounded text-[9px] font-bold"
+                                style={{
+                                  background: posComp.status === 'MATCH' ? '#dcfce7' : posComp.status === 'MISSING_OUT' ? '#fee2e2' : '#fef3c7',
+                                  color: posComp.status === 'MATCH' ? '#166534' : posComp.status === 'MISSING_OUT' ? '#991b1b' : '#92400e',
+                                }}
+                              >
+                                {posComp.label}
+                              </span>
+                            </div>
+                          )}
                         </td>
 
                         {/* Limbah / Rusak: Minimalist & 100% Consistent Single-Line Layout */}
@@ -1582,8 +2169,18 @@ export default function DailyInventory({ category: _category, initialTab }) {
                         </td>
 
                         {/* Stok Akhir */}
-                        <td className="text-center font-mono tabular-nums font-semibold whitespace-nowrap text-xs" style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', color: metrics.reconciliationRequired ? '#d97706' : '#059669' }}>
-                          {stokAkhir === null ? 'Tinjau' : Number(stokAkhir).toLocaleString('id-ID')}
+                        <td
+                          className="text-center font-mono tabular-nums font-semibold whitespace-nowrap text-xs"
+                          style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', color: metrics.reconciliationRequired ? '#d97706' : '#059669' }}
+                          title={metrics.reconciliationRequired ? (metrics.reconciliationReason || 'Perlu tinjauan rekonsiliasi stok akhir') : `Stok Akhir: ${Number(metrics.bookClosing || 0).toLocaleString('id-ID')} ${packUnit}`}
+                        >
+                          {stokAkhir === null ? (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold">
+                              Tinjau
+                            </span>
+                          ) : (
+                            Number(stokAkhir).toLocaleString('id-ID')
+                          )}
                         </td>
 
                         {/* Total Terpakai */}
@@ -1597,14 +2194,20 @@ export default function DailyInventory({ category: _category, initialTab }) {
                         </td>
                       </tr>
                     );
-                  })
+                  })}
+                  {eodVirtualWindow.bottomSpacerHeight > 0 && (
+                    <tr aria-hidden="true" style={{ height: `${eodVirtualWindow.bottomSpacerHeight}px` }}>
+                      <td colSpan={10} style={{ padding: 0, border: 'none' }} />
+                    </tr>
+                  )}
+                  </>
                 )}
                 {!loading && items.length > 0 && filteredItems.length === 0 && (
-                  <tr><td colSpan="9" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>Tidak ada barang yang cocok dengan pencarian "{searchTerm}".</td></tr>
+                  <tr><td colSpan="10" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>Tidak ada barang yang cocok dengan filter / pencarian.</td></tr>
                 )}
                 {!loading && items.length === 0 && (
                   <tr>
-                    <td colSpan="9" style={{ textAlign: 'center', padding: '40px 24px', color: '#6b7280' }}>
+                    <td colSpan="10" style={{ textAlign: 'center', padding: '40px 24px', color: '#6b7280' }}>
                       <p style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '4px', color: 'var(--text-primary)' }}>
                         Belum Ada Data Barang
                       </p>

@@ -5,6 +5,8 @@ import { api } from '../../services/api';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import Pagination from '../../components/shared/Pagination';
+import TwoTierConversionEditor from '../../components/shared/TwoTierConversionEditor';
+import { resolvePackInfo, getUnitPrice } from '../../services/costUtils';
 
 export const OFFICIAL_CATEGORIES = [
   'Coffee & Tea',
@@ -25,10 +27,10 @@ export const OFFICIAL_CATEGORIES = [
 
 export default function Marketlist() {
   const { showToast, refreshData } = useData();
-  const { activeUser } = useAuth();
+  const { activeUser: _activeUser } = useAuth();
   
   const [materials, setMaterials] = useState([]);
-  const [suppliers, setSuppliers] = useState([]);
+  const [_suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
@@ -59,7 +61,8 @@ export default function Marketlist() {
   const [newMaterial, setNewMaterial] = useState({
     name: '',
     category: OFFICIAL_CATEGORIES[0],
-    unit: 'pcs',
+    unit: 'pck',
+    full_pack: '1000 grm',
     price: 0,
     supplier: '',
     min_stock: 15,
@@ -112,12 +115,14 @@ export default function Marketlist() {
   }, [filteredMaterials, currentPage, itemsPerPage]);
 
   const startEdit = (mat) => {
+    const activePrice = Number(mat.new_price) > 0 ? Number(mat.new_price) : (Number(mat.price) || 0);
     setEditingId(mat.id);
     setEditForm({
       name: mat.name,
       category: mat.category || OFFICIAL_CATEGORIES[0],
-      unit: mat.unit,
-      price: mat.price || mat.new_price || 0,
+      unit: mat.unit || 'pck',
+      full_pack: mat.full_pack || '',
+      price: activePrice,
       supplier: mat.supplier || '',
       shelf_life_days: mat.shelf_life_days ?? ''
     });
@@ -135,11 +140,13 @@ export default function Marketlist() {
         name: editForm.name,
         category: editForm.category,
         unit: editForm.unit,
+        full_pack: editForm.full_pack,
         price: parseFloat(editForm.price) || 0,
+        new_price: parseFloat(editForm.price) || 0,
         supplier: editForm.supplier,
         shelf_life_days: editForm.shelf_life_days ? parseInt(editForm.shelf_life_days, 10) : null
       });
-      showToast('Bahan berhasil diupdate', 'success');
+      showToast('Bahan & konversi satuan berhasil diupdate (selaras dengan Stock Ledger)', 'success');
       setEditingId(null);
       fetchData();
       refreshData();
@@ -172,11 +179,21 @@ export default function Marketlist() {
       await api.createMaterial({
         ...newMaterial,
         price: parseFloat(newMaterial.price) || 0,
+        new_price: parseFloat(newMaterial.price) || 0,
         shelf_life_days: newMaterial.shelf_life_days ? parseInt(newMaterial.shelf_life_days, 10) : null
       });
       showToast('Bahan baku baru berhasil ditambahkan', 'success');
       setShowModal(false);
-      setNewMaterial({ name: '', category: OFFICIAL_CATEGORIES[0], unit: 'pcs', price: 0, supplier: '', min_stock: 15, shelf_life_days: '' });
+      setNewMaterial({
+        name: '',
+        category: OFFICIAL_CATEGORIES[0],
+        unit: 'pck',
+        full_pack: '1000 grm',
+        price: 0,
+        supplier: '',
+        min_stock: 15,
+        shelf_life_days: ''
+      });
       fetchData();
       refreshData();
     } catch (err) {
@@ -192,7 +209,7 @@ export default function Marketlist() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-extrabold text-[var(--text-primary)]">Big Master DB (Katalog Bahan)</h2>
-          <p className="text-sm text-[var(--text-secondary)]">Kelola 128 bahan baku & 9 kategori resmi SO Barista. (Fast-Input CRUD)</p>
+          <p className="text-sm text-[var(--text-secondary)]">Kelola bahan baku, kategori resmi SO Barista, serta Satuan & Konversi yang terintegrasi penuh dengan Stock Ledger.</p>
         </div>
         <div className="flex gap-2">
           <button className="btn btn-secondary" onClick={() => setShowAddSupplier(true)}>
@@ -227,12 +244,12 @@ export default function Marketlist() {
             <thead>
               <tr>
                 <th className="w-12 text-center">No</th>
-                <th className="w-60">Nama Bahan</th>
-                <th className="w-44">Kategori</th>
-                <th className="w-24">Satuan</th>
-                <th className="w-32 text-center">Masa Simpan</th>
-                <th className="w-44">Supplier (Inline Edit)</th>
-                <th className="w-44 text-right">Harga (Inline Edit)</th>
+                <th className="w-56">Nama Bahan</th>
+                <th className="w-40">Kategori</th>
+                <th className="w-60">Satuan & Konversi (Stock Ledger)</th>
+                <th className="w-28 text-center">Masa Simpan</th>
+                <th className="w-40">Supplier (Inline Edit)</th>
+                <th className="w-44 text-right">Harga / Pack</th>
                 <th className="w-28 text-center">Aksi</th>
               </tr>
             </thead>
@@ -244,6 +261,13 @@ export default function Marketlist() {
               ) : (
                 paginatedMaterials.map((mat, idx) => {
                   const isEditing = editingId === mat.id;
+                  const activePrice = Number(mat.new_price) > 0 ? Number(mat.new_price) : (Number(mat.price) || 0);
+                  const pack = resolvePackInfo(mat.full_pack, mat.unit);
+                  const unitPriceInfo = getUnitPrice({ ...mat, price: activePrice });
+                  const totalStock = (Number(mat.qty_resto) || 0) + (Number(mat.qty_central) || 0);
+                  const convertedTotal = totalStock * (pack.size || 0);
+                  const convertedUnit = (pack.unit || mat.unit || '').toUpperCase();
+
                   return (
                     <tr key={mat.id} className="hover:bg-[var(--bg-secondary)]/50">
                       <td className="text-center text-[var(--text-muted)] font-mono text-xs">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
@@ -252,7 +276,19 @@ export default function Marketlist() {
                         {isEditing ? (
                           <input type="text" className="form-control w-full py-1 text-sm" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
                         ) : (
-                          <div className="font-semibold">{mat.name}</div>
+                          <div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-semibold">{mat.name}</span>
+                              {mat.is_prep_output && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                                  Hasil Olah / Prep
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                              {mat.full_pack || mat.unit} / {mat.unit}
+                            </div>
+                          </div>
                         )}
                       </td>
 
@@ -268,9 +304,36 @@ export default function Marketlist() {
 
                       <td>
                         {isEditing ? (
-                          <input type="text" className="form-control w-full py-1 text-sm" value={editForm.unit} onChange={e => setEditForm({...editForm, unit: e.target.value})} />
+                          <TwoTierConversionEditor
+                            compact
+                            instanceId={`row-${mat.id}`}
+                            unit={editForm.unit}
+                            fullPack={editForm.full_pack}
+                            price={editForm.price}
+                            onChange={({ unit, full_pack }) => setEditForm({ ...editForm, unit, full_pack })}
+                          />
                         ) : (
-                          <span>{mat.unit}</span>
+                          <div className="space-y-0.5">
+                            {pack.size > 0 ? (
+                              <div className="text-xs font-mono font-semibold text-slate-800">
+                                1 <span className="text-blue-700 font-bold">{mat.unit}</span> = {Number(pack.size).toLocaleString('id-ID')}{' '}
+                                <span className="text-emerald-700 font-bold">{convertedUnit}</span>
+                              </div>
+                            ) : (
+                              <div className="text-xs font-mono font-semibold text-slate-700">
+                                Satuan: <span className="text-blue-700 font-bold">{mat.unit || '-'}</span> ({mat.full_pack || '-'})
+                              </div>
+                            )}
+                            <div className="text-[10px] font-mono text-slate-500">
+                              Stok: {totalStock.toFixed(1)} {mat.unit}
+                              {pack.size > 0 ? ` (${convertedTotal.toFixed(0)} ${convertedUnit})` : ''}
+                            </div>
+                            {unitPriceInfo.resolved && (
+                              <div className="text-[10px] font-mono text-emerald-700 font-medium">
+                                HPP Isi: Rp {unitPriceInfo.unitPrice.toLocaleString('id-ID', { maximumFractionDigits: 2 })} / {pack.unit}
+                              </div>
+                            )}
+                          </div>
                         )}
                       </td>
 
@@ -309,7 +372,10 @@ export default function Marketlist() {
                           <input type="number" min="0" className="form-control w-full py-1 text-sm text-right border-[var(--accent)]" value={editForm.price} onChange={e => setEditForm({...editForm, price: e.target.value})} />
                         ) : (
                           <div className="flex items-center justify-end gap-1">
-                            <span>Rp {mat.price?.toLocaleString('id-ID') || 0}</span>
+                            <div>
+                              <div>Rp {activePrice.toLocaleString('id-ID')}</div>
+                              <div className="text-[10px] text-[var(--text-muted)]">/ {mat.unit || 'pck'}</div>
+                            </div>
                             <button type="button" className="p-1 text-[var(--accent)] hover:bg-[var(--bg-tertiary)] rounded" onClick={() => setCompareModalItem(mat)}>
                               <TrendingDown size={14} />
                             </button>
@@ -354,32 +420,36 @@ export default function Marketlist() {
 
       {showModal && (
         <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <form onSubmit={handleCreate} className="bg-[var(--bg-primary)] rounded-xl w-full max-w-md overflow-hidden shadow-2xl">
+          <form onSubmit={handleCreate} className="bg-[var(--bg-primary)] rounded-xl w-full max-w-lg overflow-hidden shadow-2xl">
             <div className="p-4 border-b border-[var(--border)] flex justify-between items-center">
               <h3 className="font-bold text-lg">Tambah Bahan Baku Baru</h3>
               <button type="button" onClick={() => setShowModal(false)}><X size={20}/></button>
             </div>
-            <div className="p-4 space-y-4">
+            <div className="p-4 space-y-4 max-h-[80vh] overflow-y-auto">
               <div>
                 <label className="form-label">Nama Bahan</label>
                 <input required type="text" className="form-control w-full" value={newMaterial.name} onChange={e => setNewMaterial({...newMaterial, name: e.target.value})} />
               </div>
-              <div>
-                <label className="form-label">Kategori Baku</label>
-                <select className="form-control w-full" value={newMaterial.category} onChange={e => setNewMaterial({...newMaterial, category: e.target.value})}>
-                  {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="form-label">Satuan</label>
-                  <input required type="text" className="form-control w-full" value={newMaterial.unit} onChange={e => setNewMaterial({...newMaterial, unit: e.target.value})} />
+                  <label className="form-label">Kategori Baku</label>
+                  <select className="form-control w-full" value={newMaterial.category} onChange={e => setNewMaterial({...newMaterial, category: e.target.value})}>
+                    {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
                 </div>
                 <div>
-                  <label className="form-label">Harga Beli (Rp)</label>
+                  <label className="form-label">Harga Beli per Kemasan (Rp)</label>
                   <input required type="number" min="0" className="form-control w-full" value={newMaterial.price} onChange={e => setNewMaterial({...newMaterial, price: e.target.value})} />
                 </div>
               </div>
+
+              <TwoTierConversionEditor
+                unit={newMaterial.unit}
+                fullPack={newMaterial.full_pack}
+                price={newMaterial.price}
+                onChange={({ unit, full_pack }) => setNewMaterial({ ...newMaterial, unit, full_pack })}
+              />
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="form-label">Nama Supplier</label>

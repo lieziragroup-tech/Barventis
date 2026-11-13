@@ -210,48 +210,62 @@ Keluarkan JSON dengan schema berikut (tanpa markdown backticks, murni valid JSON
     }
   });
 
+  // Bind port 3000 immediately so cold-start readiness probes succeed without waiting for Vite bundle scan
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
+    const vitePromise = createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
-    app.use(vite.middlewares);
-    
-    // Explicit SPA fallback for development (needed for hard reloads)
-    app.get('*all', async (req, res, next) => {
-      if (req.originalUrl.startsWith('/api')) return next();
+
+    app.use(async (req, res, next) => {
+      if (req.originalUrl.startsWith("/api")) return next();
       try {
-        const fs = await import('fs');
-        const url = req.originalUrl;
-        let template = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
-        template = await vite.transformIndexHtml(url, template);
-        res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+        const vite = await vitePromise;
+        vite.middlewares(req, res, next);
       } catch (e) {
-        vite.ssrFixStacktrace(e);
+        next(e);
+      }
+    });
+
+    // Explicit SPA fallback for development (needed for hard reloads)
+    app.get("*all", async (req, res, next) => {
+      if (req.originalUrl.startsWith("/api")) return next();
+      try {
+        const vite = await vitePromise;
+        const fs = await import("fs");
+        const url = req.originalUrl;
+        let template = fs.readFileSync(path.resolve(process.cwd(), "index.html"), "utf-8");
+        template = await vite.transformIndexHtml(url, template);
+        res.status(200).set({ "Content-Type": "text/html" }).end(template);
+      } catch (e: any) {
+        const vite = await vitePromise.catch(() => null);
+        if (vite) vite.ssrFixStacktrace(e);
         next(e);
       }
     });
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath, {
-      maxAge: '1y',
-      etag: true,
-      setHeaders: (res, filePath) => {
-        if (filePath.endsWith('.html')) {
-          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-        }
-      }
-    }));
-    app.get('*all', (req, res) => {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.sendFile(path.join(distPath, 'index.html'));
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(
+      express.static(distPath, {
+        maxAge: "1y",
+        etag: true,
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith(".html")) {
+            res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+          }
+        },
+      })
+    );
+    app.get("*all", (req, res) => {
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.sendFile(path.join(distPath, "index.html"));
     });
   }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
 }
 
 startServer();

@@ -152,7 +152,9 @@ describe('SPEC v4 Acceptance Criteria: AC-01 to AC-30 Verification', () => {
       try {
         if (fail) throw new Error('DB Error');
         status = 'closed';
-      } catch (_e) {}
+      } catch (_e) {
+        /* rollback keeps status as draft */
+      }
     };
     atomicPost(true);
     expect(status).toBe('draft');

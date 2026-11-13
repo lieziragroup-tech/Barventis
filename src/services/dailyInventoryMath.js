@@ -134,7 +134,7 @@ const canonicalUnit = (value) => {
   return null;
 };
 
-const isPackageUnit = (value) => ['pack', 'pck', 'pck', 'bottle', 'btl', 'botol', 'carton', 'karton', 'dus', 'box', 'case', 'sachet', 'jar', 'can', 'cup', 'bag', '袋'].includes(normalizeUnitForBroken(value));
+const isPackageUnit = (value) => ['pack', 'pck', 'bottle', 'btl', 'botol', 'carton', 'karton', 'dus', 'box', 'case', 'sachet', 'jar', 'can', 'kaleng', 'galon', 'drigen', 'jerigen', 'cup', 'bag', '袋'].includes(normalizeUnitForBroken(value));
 
 /**
  * Convert a quantity entered in `fromUnit` into the material's tracked stock unit.
@@ -184,7 +184,14 @@ export function convertQtyToStockUnit(material, quantity, fromUnit) {
 /** Unit shown beside the manually weighed BROKEN quantity (the pack content unit). */
 export function getBrokenUnitLabel(material) {
   const details = getPackDetails(material);
-  if (details?.contentUnit) return details.contentUnit;
+  if (details?.contentUnit) {
+    try {
+      convertQtyToStockUnit(material, details.contentQty, details.contentUnit);
+      return details.contentUnit;
+    } catch {
+      return material?.unit || '';
+    }
+  }
   return material?.unit || '';
 }
 
@@ -193,7 +200,17 @@ export function isBrokenTrackingEnabled(material) {
   if (typeof material?.broken_tracking_enabled === 'boolean') return material.broken_tracking_enabled;
   const details = getPackDetails(material);
   const contentDef = canonicalUnit(details?.contentUnit);
-  return Boolean(details && contentDef && ['MASS', 'VOLUME', 'COUNT'].includes(contentDef.family));
+  if (!details || !contentDef || !['MASS', 'VOLUME', 'COUNT'].includes(contentDef.family)) return false;
+  const stockDef = canonicalUnit(material?.unit);
+  if (stockDef && stockDef.family === contentDef.family && stockDef.scale === contentDef.scale && Number(details.contentQty) <= 1) {
+    return false;
+  }
+  try {
+    convertQtyToStockUnit(material, details.contentQty, details.contentUnit);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Number of tracked stock units represented by one full package. */
