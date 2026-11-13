@@ -10,10 +10,10 @@ const AuditLogs = lazyWithRetry(() => import('./AuditLogs'));
 const BackupCenter = lazyWithRetry(() => import('./BackupCenter'));
 
 const TABS = [
-  { key: 'stock-ledger', label: 'Buku Stok (Stock Ledger)', icon: BookOpen },
-  { key: 'transfer', label: 'Mutasi Antar Cabang', icon: ArrowRightLeft },
-  { key: 'config', label: 'Konfigurasi Toko & Role RBAC', icon: Settings },
-  { key: 'audit-backup', label: 'Audit Trail & Backup Data', icon: History },
+  { key: 'stock-ledger', label: 'Buku Stok', icon: BookOpen },
+  { key: 'transfer', label: 'Mutasi Cabang', icon: ArrowRightLeft },
+  { key: 'config', label: 'Akses & Toko', icon: Settings },
+  { key: 'audit-backup', label: 'Audit & Backup', icon: History },
 ];
 
 const Loading = () => (

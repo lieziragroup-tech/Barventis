@@ -186,9 +186,9 @@ export default function SimplePrep() {
         handleSelectSource(created);
       }
       setShowCreateRawModal(false);
-      toast.showSuccess(`Bahan "${created.name}" berhasil didaftarkan dan dipilih.`);
+      toast.showSuccess(`Bahan "${created.name}" berhasil ditambahkan.`);
     } catch (err) {
-      toast.showError(err.message || 'Gagal mendaftarkan bahan baru.');
+      toast.showError(err.message || 'Gagal menambah bahan.');
     } finally {
       setCreatingRawMat(false);
     }
@@ -425,9 +425,9 @@ export default function SimplePrep() {
       <div className="glass-card p-5 md:p-6 rounded-2xl border border-[var(--border)] bg-gradient-to-r from-emerald-50/40 via-teal-50/20 to-blue-50/30">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-extrabold text-[var(--text-primary)]">Olah Bahan Mentah (Trimming & Prep)</h2>
+            <h2 className="text-xl font-extrabold text-[var(--text-primary)]">Olah Bahan</h2>
             <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-              Pilih bahan dari stok raw, masukkan berat bersih yang didapat, maka hasil olahan beserta ampas (waste) dan HPP baru langsung terhitung otomatis.
+              Catat olahan bahan mentah dan ampas.
             </p>
           </div>
 
@@ -439,7 +439,7 @@ export default function SimplePrep() {
               className="btn btn-secondary text-xs px-3 py-2 flex items-center gap-1.5"
             >
               <RefreshCw size={13} className={historyLoading ? 'animate-spin' : ''} />
-              <span>Perbarui Riwayat</span>
+              <span>Refresh</span>
             </button>
           </div>
         </div>
@@ -447,17 +447,17 @@ export default function SimplePrep() {
         {/* Top 3 Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
           <div className="p-3.5 bg-white/80 border border-emerald-100 rounded-xl shadow-xs">
-            <div className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Batch Olahan Hari Ini</div>
+            <div className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Batch Hari Ini</div>
             <div className="text-lg font-extrabold text-[var(--text-primary)] mt-1">{summary.totalBatches} Batch</div>
           </div>
 
           <div className="p-3.5 bg-white/80 border border-teal-100 rounded-xl shadow-xs">
-            <div className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Rata-rata Hasil Bersih</div>
+            <div className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Rata-rata Hasil</div>
             <div className="text-lg font-extrabold text-teal-700 mt-1">{summary.avgYield}%</div>
           </div>
 
           <div className="p-3.5 bg-white/80 border border-amber-100 rounded-xl shadow-xs">
-            <div className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Total Ampas Terbuang</div>
+            <div className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">Total Ampas</div>
             <div className="text-lg font-extrabold text-amber-700 mt-1">{summary.totalWasteKg} Unit</div>
           </div>
         </div>
@@ -473,10 +473,10 @@ export default function SimplePrep() {
               <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
                 <span className="text-xs font-extrabold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[11px] font-bold">1</span>
-                  Bahan Mentah Asal (Dari Data Barang Raw)
+                  Bahan Mentah
                 </span>
                 <span className="text-[11px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                  Stok Raw Dipotong
+                  Stok Raw
                 </span>
               </div>
 
@@ -498,7 +498,7 @@ export default function SimplePrep() {
                   <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
                   <input
                     type="text"
-                    placeholder="Ketik nama bahan mentah (cth: Lemon, Jeruk, Ayam, Daging)..."
+                    placeholder="Cari nama bahan mentah..."
                     className="form-control pl-9 w-full text-sm py-2.5"
                     value={sourceSearch}
                     onChange={(e) => {
@@ -563,7 +563,7 @@ export default function SimplePrep() {
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
                 <div className="sm:col-span-7 space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-gray-700">Berat Kotor / Banyaknya Diambil *</label>
+                    <label className="text-xs font-bold text-gray-700">Berat Kotor *</label>
                     {selectedSourceMat && Number(selectedSourceMat.qty_resto) > 0 && (
                       <button
                         type="button"
@@ -573,7 +573,7 @@ export default function SimplePrep() {
                         }}
                         className="text-[11px] font-semibold text-blue-600 hover:underline"
                       >
-                        Pakai Semua Stok ({selectedSourceMat.qty_resto} {selectedSourceMat.unit})
+                        Pakai Semua ({selectedSourceMat.qty_resto} {selectedSourceMat.unit})
                       </button>
                     )}
                   </div>
@@ -605,12 +605,12 @@ export default function SimplePrep() {
 
                 {/* Foto 1: Bahan Mentah di Timbangan */}
                 <div className="sm:col-span-5">
-                  <label className="text-xs font-bold text-gray-700 block mb-1.5">Foto 1: Berat Kotor di Timbangan *</label>
+                  <label className="text-xs font-bold text-gray-700 block mb-1.5">Foto Berat Kotor *</label>
                   <div className="relative border-2 border-dashed border-[var(--border)] rounded-xl h-[42px] flex items-center justify-center overflow-hidden bg-gray-50 hover:bg-gray-100 transition-colors">
                     {photoBeforePreview ? (
                       <div className="relative w-full h-full flex items-center justify-between px-3 bg-blue-50/50">
                         <span className="text-xs font-semibold text-blue-700 flex items-center gap-1.5 truncate">
-                          <Check size={14} className="text-blue-600 shrink-0" /> Foto Mentah Siap
+                          <Check size={14} className="text-blue-600 shrink-0" /> Foto Siap
                         </span>
                         <button
                           type="button"
@@ -625,7 +625,7 @@ export default function SimplePrep() {
                       </div>
                     ) : (
                       <span className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1.5 cursor-pointer">
-                        <Camera size={14} className="text-blue-600" /> Ambil Foto Mentah
+                        <Camera size={14} className="text-blue-600" /> Ambil Foto
                       </span>
                     )}
                     <input
@@ -659,23 +659,23 @@ export default function SimplePrep() {
               <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
                 <span className="text-xs font-extrabold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[11px] font-bold">2</span>
-                  Hasil Bersih & Diolah Menjadi Apa (Output)
+                  Hasil Olahan
                 </span>
                 <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full">
-                  Terhubung Otomatis dari Bahan Mentah
+                  Otomatis
                 </span>
               </div>
 
-              {/* Pilihan Diolah Menjadi Apa (Tanpa Perlu Input Ulang Bahan Baru) */}
+              {/* Pilihan Diolah Menjadi Apa */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-gray-700">Diolah Menjadi Apa? *</label>
+                  <label className="text-xs font-bold text-gray-700">Jenis Olahan *</label>
                   <button
                     type="button"
                     onClick={() => setManualTargetOverride((prev) => !prev)}
                     className="text-[11px] font-semibold text-emerald-700 hover:underline"
                   >
-                    {manualTargetOverride ? 'Gunakan Nama Otomatis dari Bahan Raw' : 'Pilih Manual dari Daftar Bahan Lain'}
+                    {manualTargetOverride ? 'Pakai Nama Otomatis' : 'Pilih dari Daftar Bahan'}
                   </button>
                 </div>
 
@@ -699,23 +699,23 @@ export default function SimplePrep() {
                   })}
                 </div>
 
-                {/* Preview Hasil Olahan Otomatis (Bisa Diedit Langsung Jika Perlu) */}
+                {/* Preview Hasil Olahan Otomatis */}
                 {!manualTargetOverride ? (
                   <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <div className="text-[11px] text-emerald-800 font-semibold">
-                        Item Hasil Bersih yang Akan Masuk Stok (Otomatis):
+                        Item Hasil Bersih:
                       </div>
                       <div className="text-sm font-extrabold text-emerald-950 mt-0.5">
                         {selectedSourceMat
                           ? autoTargetMaterialName
-                          : 'Pilih bahan mentah di Langkah 1 terlebih dahulu...'}
+                          : 'Pilih bahan mentah terlebih dahulu...'}
                       </div>
                     </div>
                     {selectedSourceMat && (
                       <input
                         type="text"
-                        placeholder="Ubah nama hasil olahan (opsional)..."
+                        placeholder="Ubah nama (opsional)..."
                         className="form-control text-xs py-1.5 px-2.5 bg-white sm:w-56"
                         value={customProcessedName}
                         onChange={(e) => setCustomProcessedName(e.target.value)}
@@ -726,7 +726,7 @@ export default function SimplePrep() {
                   <div className="relative">
                     <input
                       type="text"
-                      placeholder="Cari bahan hasil olahan dari master data..."
+                      placeholder="Cari bahan hasil olahan..."
                       className="form-control text-xs py-2 w-full"
                       value={targetSearch}
                       onChange={(e) => {
@@ -752,11 +752,11 @@ export default function SimplePrep() {
                 )}
               </div>
 
-              {/* Input Berat Bersih + Foto 2: Berat Bersih di Timbangan */}
+              {/* Input Berat Bersih + Foto 2 */}
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
                 <div className="sm:col-span-7">
                   <label className="text-xs font-bold text-gray-700 block mb-1.5">
-                    Dapat Berapa Banyak Hasil Bersih? *
+                    Berat Bersih *
                   </label>
                   <div className="flex gap-2 items-center">
                     <input
@@ -764,7 +764,7 @@ export default function SimplePrep() {
                       step="any"
                       min="0.01"
                       required
-                      placeholder="Ketik berat bersih (ampas otomatis dihitung)..."
+                      placeholder="0.00"
                       className="form-control flex-1 text-sm py-2 font-bold font-mono text-emerald-700"
                       style={{ flex: '1 1 0%', minWidth: '120px', width: 'auto' }}
                       value={targetQty}
@@ -787,16 +787,16 @@ export default function SimplePrep() {
                   </div>
                 </div>
 
-                {/* Foto 2: Berat Bersih di Timbangan */}
+                {/* Foto 2 */}
                 <div className="sm:col-span-5">
                   <label className="text-xs font-bold text-emerald-800 block mb-1.5">
-                    Foto 2: Berat Bersih di Timbangan *
+                    Foto Berat Bersih *
                   </label>
                   <div className="relative border-2 border-dashed border-emerald-300 rounded-xl h-[42px] flex items-center justify-center overflow-hidden bg-emerald-50/30 hover:bg-emerald-50/70 transition-colors">
                     {photoCleanPreview ? (
                       <div className="relative w-full h-full flex items-center justify-between px-3 bg-emerald-50">
                         <span className="text-xs font-semibold text-emerald-800 flex items-center gap-1.5 truncate">
-                          <Check size={14} className="text-emerald-600 shrink-0" /> Foto Bersih Siap
+                          <Check size={14} className="text-emerald-600 shrink-0" /> Foto Siap
                         </span>
                         <button
                           type="button"
@@ -811,7 +811,7 @@ export default function SimplePrep() {
                       </div>
                     ) : (
                       <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5 cursor-pointer">
-                        <Camera size={14} /> Ambil Foto Bersih
+                        <Camera size={14} /> Ambil Foto
                       </span>
                     )}
                     <input
@@ -908,24 +908,24 @@ export default function SimplePrep() {
               <div className="flex items-center justify-between border-b border-red-200/40 pb-3">
                 <span className="text-xs font-extrabold text-red-700 uppercase tracking-wider flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-[11px] font-bold">3</span>
-                  Ampas, Kulit & Sisa Potongan (Otomatis Terhitung)
+                  Ampas & Susut
                 </span>
                 <span className="text-[11px] font-medium text-red-600 bg-red-100/60 px-2 py-0.5 rounded-full">
-                  {isWasteManual ? 'Diedit Manual' : 'Otomatis: Mentah dikurangi Bersih'}
+                  {isWasteManual ? 'Manual' : 'Otomatis'}
                 </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
                 <div className="sm:col-span-7">
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-bold text-gray-700">Berat Ampas Terbuang (Otomatis)</label>
+                    <label className="text-xs font-bold text-gray-700">Berat Ampas</label>
                     {isWasteManual && (
                       <button
                         type="button"
                         onClick={() => setIsWasteManual(false)}
                         className="text-[11px] font-semibold text-red-600 hover:underline"
                       >
-                        Kembalikan ke Hitung Otomatis
+                        Hitung Otomatis
                       </button>
                     )}
                   </div>
@@ -934,7 +934,7 @@ export default function SimplePrep() {
                       type="number"
                       step="any"
                       min="0"
-                      placeholder="Terisi otomatis..."
+                      placeholder="Otomatis..."
                       className="form-control flex-1 text-sm py-2 font-bold font-mono text-red-600 bg-white"
                       style={{ flex: '1 1 0%', minWidth: '120px', width: 'auto' }}
                       value={wasteQty}
@@ -960,7 +960,7 @@ export default function SimplePrep() {
                 {/* Foto 3: Bukti Ampas */}
                 <div className="sm:col-span-5">
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-bold text-red-700">Foto 3: Bukti Ampas *</label>
+                    <label className="text-xs font-bold text-red-700">Foto Ampas *</label>
                     {photoClean && !photoWaste && (
                       <button
                         type="button"
@@ -978,7 +978,7 @@ export default function SimplePrep() {
                     {photoWastePreview ? (
                       <div className="relative w-full h-full flex items-center justify-between px-3 bg-red-50/50">
                         <span className="text-xs font-semibold text-red-700 flex items-center gap-1.5 truncate">
-                          <Check size={14} className="text-red-600 shrink-0" /> Foto Ampas Siap
+                          <Check size={14} className="text-red-600 shrink-0" /> Foto Siap
                         </span>
                         <button
                           type="button"
@@ -993,7 +993,7 @@ export default function SimplePrep() {
                       </div>
                     ) : (
                       <span className="text-xs font-semibold text-red-600 flex items-center gap-1.5 cursor-pointer">
-                        <Camera size={14} /> Ambil Foto Ampas
+                        <Camera size={14} /> Ambil Foto
                       </span>
                     )}
                     <input
@@ -1013,10 +1013,10 @@ export default function SimplePrep() {
               </div>
 
               <div>
-                <label className="text-xs font-bold text-gray-700 block mb-1.5">Catatan Tambahan (Opsional)</label>
+                <label className="text-xs font-bold text-gray-700 block mb-1.5">Catatan (Opsional)</label>
                 <input
                   type="text"
-                  placeholder="cth: Kualitas jeruk manis, kulit tipis..."
+                  placeholder="Catatan tambahan..."
                   className="form-control w-full text-xs py-2"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
@@ -1032,10 +1032,10 @@ export default function SimplePrep() {
             >
               {loading ? (
                 <span className="flex items-center gap-2">
-                  <RefreshCw size={16} className="animate-spin" /> Menyimpan Hasil Bersih, Ampas & HPP...
+                  <RefreshCw size={16} className="animate-spin" /> Menyimpan...
                 </span>
               ) : (
-                <span>Simpan Hasil Olahan & Perbarui Stok Otomatis</span>
+                <span>Simpan Hasil Olahan</span>
               )}
             </button>
           </form>
@@ -1046,7 +1046,7 @@ export default function SimplePrep() {
           <div className="glass-card p-5 rounded-2xl border border-[var(--border)] bg-white shadow-xs space-y-5 sticky top-20">
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
               <h3 className="font-extrabold text-sm text-[var(--text-primary)]">
-                Ringkasan Hasil Bersih, Ampas & HPP
+                Ringkasan Hasil & HPP
               </h3>
               <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
                 Otomatis
@@ -1055,7 +1055,7 @@ export default function SimplePrep() {
 
             {/* Yield Percentage Display */}
             <div className="p-4 rounded-xl bg-gray-50 border border-gray-200/80 text-center space-y-2">
-              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Persentase Hasil Bersih (Rendemen)</div>
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Rendemen</div>
               <div className="flex items-baseline justify-center gap-1">
                 <span className={`text-4xl font-black font-mono ${
                   analytics.yieldStatus === 'EXCELLENT' ? 'text-emerald-600' :
@@ -1089,35 +1089,35 @@ export default function SimplePrep() {
             <div className="space-y-3 pt-1">
               <div className="p-3.5 rounded-xl border border-blue-100 bg-blue-50/40">
                 <div className="text-[11px] font-bold text-blue-900 uppercase tracking-wider mb-1">
-                  1. Modal Bahan Mentah Diambil
+                  1. Modal Bahan Mentah
                 </div>
                 <div className="text-base font-extrabold text-blue-800">
                   {formatIDR(analytics.totalSourceCost)}
                 </div>
                 <div className="text-[11px] text-blue-700 mt-0.5">
-                  {selectedSourceMat ? `${selectedSourceMat.name}: ${sourceQty || 0} ${sourceUnit}` : 'Belum memilih bahan mentah'}
+                  {selectedSourceMat ? `${selectedSourceMat.name}: ${sourceQty || 0} ${sourceUnit}` : 'Belum dipilih'}
                 </div>
               </div>
 
               <div className="p-3.5 rounded-xl border border-emerald-100 bg-emerald-50/50">
                 <div className="text-[11px] font-bold text-emerald-900 uppercase tracking-wider mb-1">
-                  2. Diolah Menjadi & HPP Bersih Baru
+                  2. HPP Hasil Olahan
                 </div>
                 <div className="text-xs font-bold text-emerald-900 mb-1">
-                  {autoTargetMaterialName || 'Hasil Bersih Siap Pakai'} ({processedInto})
+                  {autoTargetMaterialName || 'Hasil Bersih'} ({processedInto})
                 </div>
                 <div className="text-lg font-black text-emerald-800">
                   {formatIDR(Math.round(analytics.newTargetHppPerUnit))} <span className="text-xs font-semibold text-emerald-600">/ {targetUnit}</span>
                 </div>
                 <div className="text-[10px] text-emerald-700 mt-0.5">
-                  Modal bahan mentah otomatis dibebankan ke berat bersih yang didapat
+                  HPP dihitung otomatis dari modal
                 </div>
               </div>
 
               {parseFloat(wasteQty) > 0 && (
                 <div className="p-3 rounded-xl border border-red-200 bg-red-50/40 flex justify-between items-center">
                   <div>
-                    <div className="text-[11px] font-bold text-red-800">3. Ampas Terhitung Otomatis</div>
+                    <div className="text-[11px] font-bold text-red-800">3. Nilai Ampas</div>
                     <div className="text-xs text-red-600 font-mono mt-0.5">{wasteQty} {wasteUnit} terbuang</div>
                   </div>
                   <div className="text-sm font-extrabold text-red-700">
@@ -1129,7 +1129,7 @@ export default function SimplePrep() {
 
             {/* Status 3 Bukti Foto */}
             <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-200/80 space-y-2">
-              <div className="text-xs font-bold text-gray-800">Kelengkapan 3 Foto Bukti Timbangan:</div>
+              <div className="text-xs font-bold text-gray-800">Bukti Foto Timbangan:</div>
               <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
                 <div className={`p-2 rounded-lg border ${photoBefore ? 'bg-blue-50 border-blue-200 text-blue-800 font-bold' : 'bg-white border-gray-200 text-gray-400'}`}>
                   1. Mentah {photoBefore ? '✓' : 'Belum'}
@@ -1138,7 +1138,7 @@ export default function SimplePrep() {
                   2. Bersih {photoClean ? '✓' : 'Belum'}
                 </div>
                 <div className={`p-2 rounded-lg border ${(photoWaste || photoClean) ? 'bg-red-50 border-red-200 text-red-800 font-bold' : 'bg-white border-gray-200 text-gray-400'}`}>
-                  3. Ampas {photoWaste ? '✓' : photoClean ? 'Auto Foto 2' : 'Belum'}
+                  3. Ampas {photoWaste ? '✓' : photoClean ? 'Auto' : 'Belum'}
                 </div>
               </div>
             </div>
@@ -1151,14 +1151,14 @@ export default function SimplePrep() {
         <div className="p-4 md:p-5 border-b border-[var(--border)] bg-gray-50/60 flex items-center justify-between flex-wrap gap-2">
           <div>
             <h3 className="font-extrabold text-base text-[var(--text-primary)]">
-              Riwayat Olah Bahan & Bukti Foto
+              Riwayat Olah Bahan
             </h3>
             <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-              Catatan lengkap bahan mentah, diolah menjadi apa, berat bersih, ampas otomatis, dan 3 bukti foto.
+              Catatan olahan, ampas, dan foto.
             </p>
           </div>
           <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full">
-            {history.length} Batch Tercatat
+            {history.length} Batch
           </span>
         </div>
 
@@ -1303,9 +1303,9 @@ export default function SimplePrep() {
           <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-[var(--border)]">
             <div className="p-4 md:p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
               <div>
-                <h4 className="font-bold text-base text-gray-900">Tambah Bahan Mentah Baru</h4>
+                <h4 className="font-bold text-base text-gray-900">Tambah Bahan Mentah</h4>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Daftarkan bahan mentah baru jika belum pernah diinput di Pembelian atau Master Data.
+                  Daftarkan bahan mentah baru.
                 </p>
               </div>
               <button
@@ -1319,11 +1319,11 @@ export default function SimplePrep() {
 
             <form onSubmit={handleCreateRawMaterial} className="p-5 space-y-4">
               <div>
-                <label className="text-xs font-bold text-gray-700 block mb-1">Nama Bahan Mentah *</label>
+                <label className="text-xs font-bold text-gray-700 block mb-1">Nama Bahan *</label>
                 <input
                   type="text"
                   required
-                  placeholder="Contoh: Jeruk Peras Segar, Daging Sapi Brisket..."
+                  placeholder="Contoh: Jeruk Peras..."
                   className="form-control w-full text-sm py-2"
                   value={newRawMat.name}
                   onChange={(e) => setNewRawMat({ ...newRawMat, name: e.target.value })}
@@ -1345,7 +1345,7 @@ export default function SimplePrep() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-gray-700 block mb-1">Satuan Dasar *</label>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">Satuan *</label>
                   <select
                     className="form-control w-full text-xs py-2 font-bold"
                     value={newRawMat.unit}
@@ -1360,19 +1360,19 @@ export default function SimplePrep() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-bold text-gray-700 block mb-1">Harga Beli / Modal (Rp) *</label>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">Harga Modal (Rp) *</label>
                   <input
                     type="number"
                     step="any"
                     min="0"
-                    placeholder="Contoh: 25000"
+                    placeholder="25000"
                     className="form-control w-full text-xs py-2 font-mono"
                     value={newRawMat.price}
                     onChange={(e) => setNewRawMat({ ...newRawMat, price: e.target.value })}
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-gray-700 block mb-1">Stok Awal di Resto</label>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">Stok Awal Resto</label>
                   <input
                     type="number"
                     step="any"
@@ -1399,7 +1399,7 @@ export default function SimplePrep() {
                   disabled={creatingRawMat}
                   className="btn btn-primary text-xs px-4 py-2 font-bold"
                 >
-                  {creatingRawMat ? 'Menyimpan...' : 'Simpan & Pilih'}
+                  {creatingRawMat ? 'Menyimpan...' : 'Simpan'}
                 </button>
               </div>
             </form>

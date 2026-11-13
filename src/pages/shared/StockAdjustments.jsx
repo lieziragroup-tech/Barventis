@@ -66,9 +66,9 @@ export default function StockAdjustments() {
               <FileText size={22} style={{ color: '#f59e0b' }} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Audit Selisih Stok & Berita Acara</h3>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Audit Selisih Stok</h3>
               <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                Investigasi dan persetujuan variansi stok &gt; 2%
+                Tinjau dan setujui selisih stok &gt; 2%.
               </p>
             </div>
           </div>

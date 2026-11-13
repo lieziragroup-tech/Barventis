@@ -376,10 +376,10 @@ export default function InterBranchTransfer() {
             </div>
             <div>
               <h1 className="text-xl md:text-2xl font-black m-0" style={{ color: 'var(--text-primary)' }}>
-                Mutasi & Ambil Barang (Central ➔ Resto)
+                Mutasi Gudang
               </h1>
               <p className="text-xs md:text-sm mt-0.5 m-0" style={{ color: 'var(--text-secondary)' }}>
-                Cari bahan baku dengan cepat dan pindahkan banyak barang sekaligus dalam satu surat jalan
+                Transfer stok antar gudang dan cabang.
               </p>
             </div>
           </div>
@@ -418,7 +418,7 @@ export default function InterBranchTransfer() {
             }}
           >
             <Plus size={17} />
-            <span>{activeUser?.role === 'Bar' ? 'Minta Barang dari Central' : 'Buat Mutasi Multi-Item'}</span>
+            <span>{activeUser?.role === 'Bar' ? 'Minta Barang' : 'Buat Mutasi'}</span>
           </button>
         </div>
       </div>
@@ -442,10 +442,10 @@ export default function InterBranchTransfer() {
               </div>
               <div className="flex-1 space-y-1">
                 <h4 className="font-bold text-xs m-0 text-indigo-600 dark:text-indigo-400">
-                  Panduan Mutasi Multi-Item (Central Warehouse ke Resto Bar)
+                  Panduan Mutasi
                 </h4>
                 <p className="text-xs leading-relaxed m-0" style={{ color: 'var(--text-secondary)' }}>
-                  Ketik nama bahan baku di kotak pencarian (debounce 250ms), pilih semua barang yang akan diangkut ke keranjang mutasi, isi kuantitas per baris, lalu simpan sekaligus dalam satu klik.
+                  Pilih rute asal/tujuan, cari bahan, isi jumlah, lalu simpan.
                 </p>
               </div>
             </div>
@@ -886,10 +886,10 @@ export default function InterBranchTransfer() {
                 </div>
                 <div>
                   <h3 className="text-base md:text-lg font-bold m-0 text-[var(--text-primary)]">
-                    {activeUser?.role === 'Bar' ? 'Keranjang Permintaan Barang Central' : 'Keranjang Mutasi Stok Multi-Item'}
+                    {activeUser?.role === 'Bar' ? 'Permintaan Barang' : 'Buat Mutasi Stok'}
                   </h3>
                   <p className="text-xs text-[var(--text-secondary)] m-0">
-                    Cari bahan baku dengan cepat dan pilih semua barang yang akan dipindahkan sekaligus
+                    Pilih rute dan daftar bahan transfer.
                   </p>
                 </div>
               </div>
@@ -917,7 +917,7 @@ export default function InterBranchTransfer() {
                 <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)]/40 space-y-3">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <label className="font-bold text-xs text-[var(--text-primary)]">
-                      1. Rute Perpindahan Gudang *
+                      1. Rute Gudang *
                     </label>
                     {isSourceCentral && (
                       <button
@@ -925,7 +925,7 @@ export default function InterBranchTransfer() {
                         onClick={handleAutoFillLowRestoStock}
                         className="btn btn-secondary py-1 px-2.5 text-[11px] flex items-center gap-1.5 text-indigo-600 border-indigo-500/30"
                       >
-                        <Sparkles size={13} /> + Isi Otomatis Stok Tipis Resto
+                        <Sparkles size={13} /> Isi Stok Tipis
                       </button>
                     )}
                   </div>
@@ -977,14 +977,14 @@ export default function InterBranchTransfer() {
                 {/* Step 2: Debounced Search Bar (Setara Pembelian Harian) */}
                 <div className="space-y-1.5">
                   <label className="font-bold text-xs text-[var(--text-primary)] block">
-                    2. Cari & Pilih Bahan Baku (Bisa Pilih Banyak Barang) *
+                    2. Pilih Bahan *
                   </label>
                   <MaterialAutocomplete
                     materials={stock || []}
                     onSelect={handleAddMaterialToCart}
                     clearOnSelect={true}
                     sourceLocation={routeHeader.source_branch}
-                    placeholder="Ketik nama bahan atau SKU untuk menambah ke keranjang mutasi..."
+                    placeholder="Cari bahan atau SKU..."
                   />
                 </div>
 
@@ -992,7 +992,7 @@ export default function InterBranchTransfer() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-xs text-[var(--text-primary)]">
-                      3. Daftar Barang yang Dipindahkan ({transferCart.length} item)
+                      3. Daftar Bahan ({transferCart.length} item)
                     </span>
                     {transferCart.length > 0 && (
                       <button
@@ -1000,7 +1000,7 @@ export default function InterBranchTransfer() {
                         onClick={() => setTransferCart([])}
                         className="text-xs text-rose-500 hover:underline font-semibold"
                       >
-                        Kosongkan Keranjang
+                        Kosongkan
                       </button>
                     )}
                   </div>
@@ -1008,7 +1008,7 @@ export default function InterBranchTransfer() {
                   {transferCart.length === 0 ? (
                     <div className="border border-dashed border-[var(--border)] rounded-xl p-6 text-center text-xs text-[var(--text-secondary)]">
                       <Package size={28} className="mx-auto mb-2 opacity-40" />
-                      Keranjang mutasi masih kosong. Ketik nama bahan di kotak pencarian di atas untuk memilih barang.
+                      Keranjang masih kosong.
                     </div>
                   ) : !isMobile ? (
                     <div className="border border-[var(--border)] rounded-xl overflow-hidden">
@@ -1121,12 +1121,12 @@ export default function InterBranchTransfer() {
                 {/* Step 4: Catatan Umum */}
                 <div className="space-y-1">
                   <label className="font-bold text-xs text-[var(--text-primary)] block">
-                    4. Catatan Surat Jalan / Alasan Mutasi (Opsional)
+                    4. Catatan (Opsional)
                   </label>
                   <input
                     type="text"
                     className="form-control text-xs py-2 w-full"
-                    placeholder="Contoh: Restock pagi Bar, persiapan weekend, dll..."
+                    placeholder="Catatan mutasi..."
                     value={routeHeader.notes}
                     onChange={(e) => setRouteHeader({ ...routeHeader, notes: e.target.value })}
                   />
@@ -1154,7 +1154,7 @@ export default function InterBranchTransfer() {
                     </>
                   ) : (
                     <>
-                      <Check size={15} /> Konfirmasi & Simpan ({transferCart.length} Item)
+                      <Check size={15} /> Simpan ({transferCart.length} Item)
                     </>
                   )}
                 </button>

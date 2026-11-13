@@ -65,6 +65,7 @@ export default function Invoicing() {
   const [isReceiving, setIsReceiving] = useState(false);
   const sigCanvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [poActionDialog, setPoActionDialog] = useState(null);
 
   // Load suppliers list
   const loadSuppliers = useCallback(async () => {
@@ -147,49 +148,56 @@ export default function Invoicing() {
     return invItems.length < supplierMaterials.length;
   }, [normalizedActiveSupplier, supplierMaterials.length, invItems.length]);
 
+  const applySupplierSwitch = (nextSupplierName) => {
+    setInvSupplier(nextSupplierName);
+    setInvItems([blankLineItem()]);
+    setItemDropdown(null);
+    setShowAssignPanel(false);
+    setAssignSearch('');
+    setPoActionDialog(null);
+  };
+
   const handleSelectSupplierFocus = (newSupplierName) => {
     const trimmedNext = (newSupplierName || '').trim();
     const trimmedCurrent = (invSupplier || '').trim();
     if (trimmedCurrent && trimmedNext.toLowerCase() !== trimmedCurrent.toLowerCase() && hasFilledLineItems) {
-      const ok = window.confirm(
-        `Ganti fokus supplier dari "${trimmedCurrent}" ke "${trimmedNext || 'Supplier Lain'}"?\n\nDaftar bahan pada PO saat ini akan di-reset agar tidak tercampur antar supplier.`
-      );
-      if (!ok) return;
+      setPoActionDialog({
+        type: 'SWITCH_SUPPLIER',
+        title: 'Ganti Supplier?',
+        message: `Ganti ke "${trimmedNext || 'Supplier Lain'}"? Daftar bahan pada PO saat ini akan di-reset.`,
+        nextSupplierName: newSupplierName
+      });
+      return;
     }
-    setInvSupplier(newSupplierName);
-    setInvItems([blankLineItem()]);
-    setItemDropdown(null);
-    setShowAssignPanel(false);
-    setAssignSearch('');
+    applySupplierSwitch(newSupplierName);
   };
 
   const handleResetSupplierFocus = () => {
     if (hasFilledLineItems) {
-      const ok = window.confirm(
-        `Ganti supplier saat ini ("${invSupplier}")?\n\nBaris bahan yang sudah dipilih akan dikosongkan agar fokus ke supplier berikutnya.`
-      );
-      if (!ok) return;
+      setPoActionDialog({
+        type: 'SWITCH_SUPPLIER',
+        title: 'Ganti Supplier?',
+        message: `Ganti supplier "${invSupplier}"? Baris bahan yang sudah dipilih akan dikosongkan.`,
+        nextSupplierName: ''
+      });
+      return;
     }
-    setInvSupplier('');
-    setInvItems([blankLineItem()]);
-    setItemDropdown(null);
-    setShowAssignPanel(false);
-    setAssignSearch('');
+    applySupplierSwitch('');
   };
 
   // Add & Manage line items (Bounded by supplierMaterials count)
   const addLineItem = () => {
     if (!normalizedActiveSupplier) {
-      if (toast) toast('Pilih supplier terlebih dahulu sebelum menambah bahan.', 'warning');
+      if (toast) toast('Pilih supplier terlebih dahulu.', 'warning');
       return;
     }
     if (supplierMaterials.length === 0) {
       setShowAssignPanel(true);
-      if (toast) toast(`Belum ada bahan terdaftar untuk supplier "${invSupplier}". Gunakan fitur "+ Masukkan Bahan ke Supplier Ini".`, 'info');
+      if (toast) toast(`Supplier "${invSupplier}" belum memiliki bahan terdaftar.`, 'info');
       return;
     }
     if (invItems.length >= supplierMaterials.length) {
-      if (toast) toast(`Batas maksimum tercapai: Supplier "${invSupplier}" hanya memiliki ${supplierMaterials.length} bahan terdaftar.`, 'info');
+      if (toast) toast(`Maksimal ${supplierMaterials.length} bahan untuk "${invSupplier}".`, 'info');
       return;
     }
     setInvItems([...invItems, blankLineItem()]);
@@ -273,7 +281,7 @@ export default function Invoicing() {
       setItemDropdown(null);
       setAssignSearch('');
       if (toast) {
-        toast(`Bahan "${material.name}" resmi didaftarkan ke supplier "${targetSupplier}" & ditambahkan ke PO.`, 'success');
+        toast(`"${material.name}" ditambahkan ke "${targetSupplier}".`, 'success');
       }
     } catch (err) {
       if (toast) toast(err.message || 'Gagal mengaitkan bahan ke supplier', 'error');
@@ -309,7 +317,7 @@ export default function Invoicing() {
     if (invalidSupplierItem) {
       if (toast) {
         toast(
-          `Bahan "${invalidSupplierItem.item_name}" belum terdaftar pada supplier "${invSupplier.trim()}". Pilih bahan milik supplier ini atau klik trigger "+ Masukkan ke Supplier" terlebih dahulu.`,
+          `"${invalidSupplierItem.item_name}" belum terdaftar di "${invSupplier.trim()}".`,
           'error'
         );
       }
@@ -363,15 +371,12 @@ export default function Invoicing() {
           prev.includes(savedSupplierName) ? prev : [...prev, savedSupplierName]
         );
         if (toast) {
-          toast(
-            `PO untuk "${savedSupplierName}" berhasil disimpan! Silakan pilih supplier berikutnya.`,
-            'success'
-          );
+          toast(`PO "${savedSupplierName}" tersimpan. Pilih supplier berikutnya.`, 'success');
         }
       } else {
         setShowCreateModal(false);
         setCompletedSuppliersSession([]);
-        if (toast) toast('Purchase Order / Invoice berhasil dibuat (Status: DRAFT).', 'success');
+        if (toast) toast('PO baru berhasil dibuat.', 'success');
       }
       await reloadInvoices();
       await refreshData();
@@ -381,30 +386,46 @@ export default function Invoicing() {
   };
 
   // Status Actions: Send PO
-  const handleKirimPO = async (inv) => {
-    if (!window.confirm(`Kirim Purchase Order ${inv.invoice_no} ke supplier "${inv.supplier}"?\n\nStatus PO akan berubah menjadi SENT.`)) return;
+  const handleKirimPO = (inv) => {
+    setPoActionDialog({
+      type: 'SEND_PO',
+      title: 'Kirim PO?',
+      message: `Tandai PO ${inv.invoice_no} (${inv.supplier}) sebagai SENT (Terkirim)?`,
+      invoice: inv
+    });
+  };
+
+  const executeKirimPO = async (inv) => {
     try {
       await api.updateInvoiceStatus(inv.id, 'SENT');
-      if (toast) toast(`PO ${inv.invoice_no} berhasil ditandai SENT (Terkirim).`, 'success');
+      setPoActionDialog(null);
+      if (toast) toast(`PO ${inv.invoice_no} ditandai terkirim.`, 'success');
       await reloadInvoices();
       await refreshData();
     } catch (err) {
       if (toast) toast(err.message || 'Gagal mengirim PO', 'error');
-      else alert('Gagal mengirim PO: ' + err.message);
     }
   };
 
   // Status Actions: Cancel PO
-  const handleCancelPO = async (inv) => {
-    if (!window.confirm(`Batalkan Purchase Order ${inv.invoice_no}?\n\nInvoice/PO ini akan diubah statusnya menjadi CANCELLED dan tidak dapat diubah kembali.`)) return;
+  const handleCancelPO = (inv) => {
+    setPoActionDialog({
+      type: 'CANCEL_PO',
+      title: 'Batalkan PO?',
+      message: `Batalkan PO ${inv.invoice_no} (${inv.supplier})?`,
+      invoice: inv
+    });
+  };
+
+  const executeCancelPO = async (inv) => {
     try {
       await api.updateInvoiceStatus(inv.id, 'CANCELLED');
-      if (toast) toast(`PO ${inv.invoice_no} berhasil dibatalkan.`, 'info');
+      setPoActionDialog(null);
+      if (toast) toast(`PO ${inv.invoice_no} dibatalkan.`, 'info');
       await reloadInvoices();
       await refreshData();
     } catch (err) {
       if (toast) toast(err.message || 'Gagal membatalkan PO', 'error');
-      else alert('Gagal membatalkan PO: ' + err.message);
     }
   };
 
@@ -539,7 +560,7 @@ export default function Invoicing() {
         gps: receiptGps || null
       });
 
-      if (toast) toast(`PO ${showGoodsReceiptModal.invoice_no} berhasil diterima! Stok otomatis bertambah di ${showGoodsReceiptModal.location || 'CENTRAL'}.`, 'success');
+      if (toast) toast(`PO ${showGoodsReceiptModal.invoice_no} diterima ke gudang ${showGoodsReceiptModal.location || 'CENTRAL'}.`, 'success');
       setShowGoodsReceiptModal(null);
       setReceiptPhoto(null);
       setReceiptPhotoPreview(null);
@@ -745,10 +766,10 @@ Catatan: ${inv.notes || '-'}`,
       {/* Page Header */}
       <div style={{ marginBottom: '20px' }}>
         <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-          Purchase Orders & Invoicing
+          Purchase Order & Invoicing
         </h2>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '4px' }}>
-          Siklus lengkap pengadaan bahan baku: Buat PO, kirim ke Supplier, dan verifikasi penerimaan barang (Goods Receipt) langsung ke stok gudang.
+          Buat PO, kirim, dan terima barang.
         </p>
       </div>
 
@@ -759,7 +780,7 @@ Catatan: ${inv.notes || '-'}`,
             <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
             <input
               type="text"
-              placeholder="Cari nomor PO atau nama supplier..."
+              placeholder="Cari nomor PO atau supplier..."
               className="form-control"
               style={{ paddingLeft: '40px' }}
               value={search}
@@ -773,10 +794,10 @@ Catatan: ${inv.notes || '-'}`,
             onChange={e => { setStatusFilter(e.target.value); setInvoicesPage(1); }}
           >
             <option value="ALL">Semua Status</option>
-            <option value="DRAFT">DRAFT (Baru)</option>
-            <option value="SENT">SENT (Terkirim)</option>
-            <option value="RECEIVED">RECEIVED (Diterima)</option>
-            <option value="CANCELLED">CANCELLED (Batal)</option>
+            <option value="DRAFT">DRAFT</option>
+            <option value="SENT">SENT</option>
+            <option value="RECEIVED">RECEIVED</option>
+            <option value="CANCELLED">CANCELLED</option>
           </select>
           <ExportButton
             onExportExcel={handleExportExcel}
@@ -785,13 +806,13 @@ Catatan: ${inv.notes || '-'}`,
           />
           <PrintButton
             currentRole={activeUser?.role}
-            title="Cetak daftar Purchase Order & Invoicing"
+            title="Cetak daftar Purchase Order"
           />
           <button className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '0.85rem' }} onClick={() => setShowBulkImport(true)}>
-            <UploadCloud size={15} style={{ marginRight: '6px' }} /> Bulk Import PO
+            <UploadCloud size={15} style={{ marginRight: '6px' }} /> Import PO
           </button>
           <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem' }} onClick={() => setShowCreateModal(true)}>
-            <Plus size={15} style={{ marginRight: '6px' }} /> Buat PO Baru
+            <Plus size={15} style={{ marginRight: '6px' }} /> Buat PO
           </button>
         </div>
       </div>
@@ -800,28 +821,28 @@ Catatan: ${inv.notes || '-'}`,
       <div className="kpi-grid no-print" style={{ marginBottom: '24px' }}>
         <div className="glass-card kpi-card">
           <div className="kpi-header">
-            <span className="kpi-title">Total PO / Invoices</span>
+            <span className="kpi-title">Total PO</span>
             <div className="kpi-icon-wrap" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}><FileText size={18} /></div>
           </div>
           <div className="kpi-value">{kpis.total}</div>
         </div>
         <div className="glass-card kpi-card">
           <div className="kpi-header">
-            <span className="kpi-title">Pending (Draft / Sent)</span>
+            <span className="kpi-title">Menunggu</span>
             <div className="kpi-icon-wrap" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#d97706' }}><Clock size={18} /></div>
           </div>
           <div className="kpi-value" style={{ color: '#d97706' }}>{kpis.pending}</div>
         </div>
         <div className="glass-card kpi-card">
           <div className="kpi-header">
-            <span className="kpi-title">Received (Stok Masuk)</span>
+            <span className="kpi-title">Diterima</span>
             <div className="kpi-icon-wrap" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#059669' }}><CheckCircle size={18} /></div>
           </div>
           <div className="kpi-value" style={{ color: '#059669' }}>{kpis.received}</div>
         </div>
         <div className="glass-card kpi-card">
           <div className="kpi-header">
-            <span className="kpi-title">Total Nilai Pengadaan</span>
+            <span className="kpi-title">Total Nilai</span>
             <div className="kpi-icon-wrap" style={{ background: 'var(--info-glow)', color: 'var(--info)' }}><Package size={18} /></div>
           </div>
           <div className="kpi-value" style={{ fontSize: '1.25rem' }}>{formatIDR(kpis.totalValue)}</div>
@@ -851,7 +872,7 @@ Catatan: ${inv.notes || '-'}`,
                 <th style={{ textAlign: 'right' }}>Item</th>
                 <th style={{ textAlign: 'right' }}>Total Nilai</th>
                 <th style={{ textAlign: 'center' }}>Status</th>
-                <th style={{ textAlign: 'center', minWidth: '220px' }} className="no-print">Aksi Siklus PO</th>
+                <th style={{ textAlign: 'center', minWidth: '220px' }} className="no-print">Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -1105,9 +1126,9 @@ Catatan: ${inv.notes || '-'}`,
           <div style={{ width: '100%', maxWidth: '780px', background: 'var(--bg-primary)', height: '100vh', padding: '28px 24px', overflowY: 'auto', borderLeft: '1px solid var(--border)', boxShadow: '-10px 0 30px rgba(0,0,0,0.2)', animation: 'slideInRight 0.3s ease' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border)', paddingBottom: '14px' }}>
               <div>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>Buat Purchase Order Baru</h3>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>Buat Purchase Order</h3>
                 <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
-                  Buat PO draft untuk supplier. PO dapat dikirim atau langsung diterima ke stok gudang.
+                  Pilih supplier lalu rincian bahan PO.
                 </p>
               </div>
               <button style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => setShowCreateModal(false)}>
@@ -1120,10 +1141,10 @@ Catatan: ${inv.notes || '-'}`,
               {completedSuppliersSession.length > 0 && (
                 <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
                   <div>
-                    <strong style={{ color: 'var(--success)' }}>✓ PO Selesai di Sesi Ini ({completedSuppliersSession.length} Supplier):</strong>{' '}
+                    <strong style={{ color: 'var(--success)' }}>✓ Selesai ({completedSuppliersSession.length}):</strong>{' '}
                     <span style={{ color: 'var(--text-secondary)' }}>{completedSuppliersSession.join(', ')}</span>
                   </div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Pilih supplier berikutnya di bawah</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Pilih supplier berikutnya</span>
                 </div>
               )}
 
@@ -1131,19 +1152,19 @@ Catatan: ${inv.notes || '-'}`,
               <div style={{ border: '1px solid var(--border)', padding: '14px 16px', borderRadius: 'var(--radius-lg)', background: normalizedActiveSupplier ? 'rgba(5, 150, 105, 0.04)' : 'var(--bg-secondary)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
                   <div style={{ fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: normalizedActiveSupplier ? 'var(--accent)' : 'var(--text-secondary)' }}>
-                    Langkah 1 — Tentukan Fokus Supplier
+                    1. Pilih Supplier
                   </div>
                   {normalizedActiveSupplier && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent)' }}>
-                        {supplierMaterials.length} Bahan Terdaftar pada Supplier Ini
+                        {supplierMaterials.length} Bahan
                       </span>
                       <button
                         type="button"
                         onClick={handleResetSupplierFocus}
                         style={{ fontSize: '0.74rem', padding: '3px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 600 }}
                       >
-                        Ganti Supplier
+                        Ganti
                       </button>
                     </div>
                   )}
@@ -1211,12 +1232,12 @@ Catatan: ${inv.notes || '-'}`,
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
                   <div>
                     <h4 style={{ fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)', margin: 0 }}>
-                      Langkah 2 — Rincian Bahan {normalizedActiveSupplier ? `(${invSupplier})` : ''}
+                      2. Daftar Bahan {normalizedActiveSupplier ? `(${invSupplier})` : ''}
                     </h4>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                       {normalizedActiveSupplier
-                        ? `Menampilkan khusus bahan milik supplier "${invSupplier}" (${invItems.filter(i => i.material_id || i.item_name).length}/${supplierMaterials.length} bahan dipilih).`
-                        : 'Pilih supplier pada Langkah 1 terlebih dahulu untuk membuka daftar bahan.'}
+                        ? `Bahan milik ${invSupplier} (${invItems.filter(i => i.material_id || i.item_name).length}/${supplierMaterials.length}).`
+                        : 'Pilih supplier di atas terlebih dahulu.'}
                     </div>
                   </div>
 
@@ -1228,7 +1249,7 @@ Catatan: ${inv.notes || '-'}`,
                           className="btn btn-secondary"
                           style={{ padding: '6px 10px', fontSize: '0.76rem', background: 'var(--bg-primary)' }}
                           onClick={handleFillAllSupplierMaterials}
-                          title="Masukkan seluruh bahan terdaftar dari supplier ini sekaligus"
+                          title="Masukkan semua bahan supplier ini"
                         >
                           Muat Semua ({supplierMaterials.length})
                         </button>
@@ -1246,10 +1267,10 @@ Catatan: ${inv.notes || '-'}`,
                           fontWeight: 600
                         }}
                         onClick={() => setShowAssignPanel(!showAssignPanel)}
-                        title="Daftarkan bahan baku lain dari Master ke supplier ini"
+                        title="Tambah bahan lain ke supplier ini"
                       >
                         <Plus size={13} style={{ marginRight: '4px' }} />
-                        Masukkan Bahan Baru ke Supplier Ini
+                        + Bahan Supplier
                       </button>
 
                       <button
@@ -1266,13 +1287,13 @@ Catatan: ${inv.notes || '-'}`,
                         onClick={addLineItem}
                         title={
                           supplierMaterials.length === 0
-                            ? 'Supplier ini belum memiliki bahan terdaftar'
+                            ? 'Supplier belum memiliki bahan'
                             : canAddMoreSupplierItems
-                            ? `Tambah baris bahan dari supplier ${invSupplier}`
-                            : `Seluruh ${supplierMaterials.length} bahan dari supplier ${invSupplier} sudah ditampilkan`
+                            ? `Tambah baris bahan`
+                            : `Semua bahan ${invSupplier} sudah dipilih`
                         }
                       >
-                        <Plus size={14} style={{ marginRight: '4px' }} /> Tambah Bahan ({invItems.length}/{supplierMaterials.length})
+                        <Plus size={14} style={{ marginRight: '4px' }} /> Tambah Baris ({invItems.length}/{supplierMaterials.length})
                       </button>
                     </div>
                   )}
@@ -1284,10 +1305,10 @@ Catatan: ${inv.notes || '-'}`,
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                       <div>
                         <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          Daftarkan Material ke Supplier &ldquo;{invSupplier}&rdquo;
+                          Tambah Bahan ke &ldquo;{invSupplier}&rdquo;
                         </div>
                         <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
-                          Pilih bahan dari master di bawah untuk dikaitkan permanen ke supplier <strong>{invSupplier}</strong> sekaligus dimasukkan ke PO ini.
+                          Pilih bahan untuk ditambahkan ke supplier ini.
                         </div>
                       </div>
                       <button
@@ -1303,7 +1324,7 @@ Catatan: ${inv.notes || '-'}`,
                       type="text"
                       className="form-control"
                       style={{ padding: '7px 10px', fontSize: '0.82rem', marginBottom: '8px' }}
-                      placeholder={`Cari nama bahan di luar supplier ${invSupplier}...`}
+                      placeholder="Cari bahan..."
                       value={assignSearch}
                       onChange={e => setAssignSearch(e.target.value)}
                     />
@@ -1320,7 +1341,7 @@ Catatan: ${inv.notes || '-'}`,
                             <div>
                               <span style={{ fontWeight: 600 }}>{mat.name}</span>{' '}
                               <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                                ({mat.unit} · {formatIDR(mat.new_price || mat.price || 0)} · Supplier saat ini: {mat.supplier && mat.supplier !== '-' ? mat.supplier : 'Belum ada'})
+                                ({mat.unit} · {formatIDR(mat.new_price || mat.price || 0)} · {mat.supplier && mat.supplier !== '-' ? mat.supplier : 'Tanpa supplier'})
                               </span>
                             </div>
                             <button
@@ -1330,13 +1351,13 @@ Catatan: ${inv.notes || '-'}`,
                               disabled={assigningMaterialId === mat.id}
                               onClick={() => handleAssignMaterialToSupplier(mat)}
                             >
-                              {assigningMaterialId === mat.id ? 'Menyimpan...' : `+ Masukkan ke ${invSupplier}`}
+                              {assigningMaterialId === mat.id ? 'Menyimpan...' : '+ Tambah'}
                             </button>
                           </div>
                         ))}
                       {otherMaterials.filter(m => (m.name || '').toLowerCase().includes((assignSearch || '').toLowerCase())).length === 0 && (
                         <div style={{ padding: '8px', textAlign: 'center', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                          Tidak ada bahan lain yang cocok dengan pencarian.
+                          Tidak ada bahan yang cocok.
                         </div>
                       )}
                     </div>
@@ -1345,14 +1366,14 @@ Catatan: ${inv.notes || '-'}`,
 
                 {!normalizedActiveSupplier ? (
                   <div style={{ padding: '28px 16px', textAlign: 'center', background: 'var(--bg-primary)', borderRadius: 'var(--radius-md)', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                    Silakan pilih <strong>Supplier</strong> terlebih dahulu pada Langkah 1 di atas untuk menampilkan bahan baku khusus supplier tersebut.
+                    Pilih supplier pada langkah 1.
                   </div>
                 ) : (
                   <>
                     {supplierMaterials.length === 0 && (
                       <div style={{ padding: '14px 16px', marginBottom: '12px', borderRadius: 'var(--radius-md)', background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.3)', fontSize: '0.8rem', color: '#b45309', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                         <span>
-                          Belum ada bahan yang terdaftar pada supplier <strong>{invSupplier}</strong>. Klik tombol <strong>&ldquo;+ Masukkan Bahan Baru ke Supplier Ini&rdquo;</strong> untuk mendaftarkan bahan ke supplier ini.
+                          Belum ada bahan di supplier <strong>{invSupplier}</strong>.
                         </span>
                         {!showAssignPanel && (
                           <button
@@ -1361,7 +1382,7 @@ Catatan: ${inv.notes || '-'}`,
                             style={{ padding: '4px 10px', fontSize: '0.75rem', fontWeight: 600 }}
                             onClick={() => setShowAssignPanel(true)}
                           >
-                            + Daftarkan Bahan Sekarang
+                            + Bahan Supplier
                           </button>
                         )}
                       </div>
@@ -1547,7 +1568,7 @@ Catatan: ${inv.notes || '-'}`,
                   className="btn btn-primary"
                   style={{ flex: 2, padding: '12px', fontWeight: 700, opacity: normalizedActiveSupplier ? 1 : 0.5 }}
                 >
-                  Review & Buat PO ({invSupplier || 'Pilih Supplier'})
+                  Review PO
                 </button>
               </div>
             </form>
@@ -1559,9 +1580,9 @@ Catatan: ${inv.notes || '-'}`,
       {showConfirmModal && invoiceToSubmit && (
         <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }} onClick={() => setShowConfirmModal(false)}>
           <div className="glass-card modal-card" style={{ width: '800px', maxWidth: 'calc(100vw - 32px)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: '24px' }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '6px' }}>Review Final Purchase Order</h3>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '6px' }}>Review Purchase Order</h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '16px' }}>
-              Tinjau rincian pemesanan khusus ke supplier <strong>{invoiceToSubmit.supplier}</strong> sebelum menyimpan PO DRAFT.
+              Tinjau rincian pesanan ke supplier <strong>{invoiceToSubmit.supplier}</strong>.
             </p>
 
             <div className="table-container" style={{ flex: 1, overflowY: 'auto', marginBottom: '16px' }}>
@@ -1631,19 +1652,19 @@ Catatan: ${inv.notes || '-'}`,
               </div>
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowConfirmModal(false)}>
-                  Kembali Edit
+                  Edit
                 </button>
                 <button
                   type="button"
                   className="btn btn-secondary"
                   style={{ borderColor: 'var(--accent)', color: 'var(--accent)', fontWeight: 700 }}
                   onClick={() => handleFinalSubmit(true)}
-                  title="Simpan PO supplier ini dan langsung lanjut memilih supplier berikutnya"
+                  title="Simpan PO dan lanjut supplier berikutnya"
                 >
-                  Simpan & Lanjut Supplier Berikutnya →
+                  Simpan & Lanjut Supplier
                 </button>
                 <button type="button" className="btn btn-primary" onClick={() => handleFinalSubmit(false)}>
-                  Konfirmasi & Selesai
+                  Simpan PO
                 </button>
               </div>
             </div>
@@ -1665,12 +1686,12 @@ Catatan: ${inv.notes || '-'}`,
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div>
-                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>Terima Barang (Goods Receipt)</h3>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>Terima Barang</h3>
                 <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                  PO: <strong style={{ color: 'var(--text-primary)' }}>{showGoodsReceiptModal.invoice_no}</strong> · Supplier: {showGoodsReceiptModal.supplier}
+                  PO: <strong style={{ color: 'var(--text-primary)' }}>{showGoodsReceiptModal.invoice_no}</strong> · {showGoodsReceiptModal.supplier}
                 </p>
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  Lokasi Gudang Masuk: <strong style={{ color: 'var(--accent)' }}>{showGoodsReceiptModal.location || 'CENTRAL'}</strong>
+                  Gudang: <strong style={{ color: 'var(--accent)' }}>{showGoodsReceiptModal.location || 'CENTRAL'}</strong>
                 </p>
               </div>
               <button
@@ -1685,8 +1706,8 @@ Catatan: ${inv.notes || '-'}`,
             <div style={{ background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', padding: '14px 16px', borderRadius: 'var(--radius-md)', marginBottom: '20px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--success)' }}>Penerimaan Cepat (Quick Receive)</div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Terima langsung & tambah stok gudang tanpa foto/TTD.</div>
+                  <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--success)' }}>Terima Cepat</div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Terima langsung tanpa foto dan TTD.</div>
                 </div>
                 <button
                   type="button"
@@ -1703,7 +1724,7 @@ Catatan: ${inv.notes || '-'}`,
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
               <div style={{ flex: 1, height: '1px', background: 'var(--border)' }}></div>
               <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                Atau Lengkapi Bukti Audit Fisik
+                Atau Lengkapi Bukti
               </span>
               <div style={{ flex: 1, height: '1px', background: 'var(--border)' }}></div>
             </div>
@@ -1713,7 +1734,7 @@ Catatan: ${inv.notes || '-'}`,
               {/* 1. Photo */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '6px' }}>
-                  1. Foto Bukti Surat Jalan / Fisik Barang
+                  1. Foto Surat Jalan
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input
@@ -1755,7 +1776,7 @@ Catatan: ${inv.notes || '-'}`,
               {/* 2. GPS Location */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '6px' }}>
-                  2. Rekam Titik GPS (Lokasi Gudang)
+                  2. Koordinat GPS
                 </label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: 'var(--bg-secondary)' }}>
                   <button
@@ -1778,7 +1799,7 @@ Catatan: ${inv.notes || '-'}`,
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                   <label style={{ fontSize: '0.85rem', fontWeight: 700, margin: 0 }}>
-                    3. Tanda Tangan Digital Penerima
+                    3. Tanda Tangan Penerima
                   </label>
                   <button
                     type="button"
@@ -1824,7 +1845,7 @@ Catatan: ${inv.notes || '-'}`,
                 onClick={() => handleConfirmReceipt(false)}
                 disabled={isReceiving}
               >
-                {isReceiving ? 'Menyimpan...' : 'Simpan Penerimaan & Tambah Stok'}
+                {isReceiving ? 'Menyimpan...' : 'Simpan & Tambah Stok'}
               </button>
             </div>
           </div>
@@ -1836,8 +1857,8 @@ Catatan: ${inv.notes || '-'}`,
         isOpen={showBulkImport}
         onClose={() => setShowBulkImport(false)}
         type="invoices"
-        title="Bulk Import Purchase Order"
-        description="Upload baris Purchase Order sekaligus dari file Excel. Baris dengan PO REF yang sama akan digabung jadi satu PO."
+        title="Import Purchase Order"
+        description="Unggah baris Purchase Order dari Excel."
         onCommit={async (rows) => {
           const grouped = {};
           const unmatched = [];
@@ -1902,6 +1923,70 @@ Catatan: ${inv.notes || '-'}`,
           { key: 'notes', label: 'CATATAN', required: false, type: 'string', description: 'Catatan PO', sample: 'Urgent' }
         ]}
       />
+
+      {/* Custom In-App Double-Check Dialog for PO Actions */}
+      {poActionDialog && (
+        <div
+          className="modal-overlay"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1300,
+            padding: '16px'
+          }}
+          onClick={() => setPoActionDialog(null)}
+        >
+          <div
+            className="glass-card modal-card"
+            style={{ width: '440px', maxWidth: 'calc(100vw - 32px)', padding: '24px' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '8px' }}>
+              {poActionDialog.title}
+            </h3>
+            <p style={{ fontSize: '0.86rem', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: 1.5 }}>
+              {poActionDialog.message}
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ flex: 1, justifyContent: 'center' }}
+                onClick={() => setPoActionDialog(null)}
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                className={poActionDialog.type === 'CANCEL_PO' ? 'btn' : 'btn btn-primary'}
+                style={{
+                  flex: 1,
+                  justifyContent: 'center',
+                  ...(poActionDialog.type === 'CANCEL_PO'
+                    ? { background: 'var(--danger)', color: '#fff', fontWeight: 700 }
+                    : { fontWeight: 700 })
+                }}
+                onClick={() => {
+                  if (poActionDialog.type === 'SWITCH_SUPPLIER') {
+                    applySupplierSwitch(poActionDialog.nextSupplierName);
+                  } else if (poActionDialog.type === 'SEND_PO') {
+                    executeKirimPO(poActionDialog.invoice);
+                  } else if (poActionDialog.type === 'CANCEL_PO') {
+                    executeCancelPO(poActionDialog.invoice);
+                  }
+                }}
+              >
+                {poActionDialog.type === 'CANCEL_PO' ? 'Batalkan PO' : 'Lanjutkan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

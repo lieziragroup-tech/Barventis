@@ -157,7 +157,7 @@ export default function AuditLogs() {
           </div>
           <div className="kpi-value">{stats.total}</div>
           <div className="kpi-footer">
-            <span style={{ color: 'var(--text-secondary)' }}>Semua jejak terekam otomatis</span>
+            <span style={{ color: 'var(--text-secondary)' }}>Aktivitas terekam otomatis</span>
           </div>
         </div>
 
@@ -170,7 +170,7 @@ export default function AuditLogs() {
           </div>
           <div className="kpi-value">{stats.uniqueUsers}</div>
           <div className="kpi-footer">
-            <span style={{ color: 'var(--text-secondary)' }}>Admin & Owner pembuat perubahan</span>
+            <span style={{ color: 'var(--text-secondary)' }}>Admin & pengguna aktif</span>
           </div>
         </div>
 
@@ -185,20 +185,20 @@ export default function AuditLogs() {
             {stats.securityAlerts}
           </div>
           <div className="kpi-footer">
-            <span style={{ color: 'var(--text-secondary)' }}>Log Hapus / Pembatalan PO</span>
+            <span style={{ color: 'var(--text-secondary)' }}>Hapus & pembatalan PO</span>
           </div>
         </div>
 
         <div className="glass-card kpi-card">
           <div className="kpi-header">
-            <span className="kpi-title">Singkronisasi POS Kasir</span>
+            <span className="kpi-title">Sinkronisasi POS</span>
             <div className="kpi-icon-wrap" style={{ background: 'rgba(252, 196, 25, 0.1)', color: 'var(--warning)' }}>
               <RefreshCw size={20} />
             </div>
           </div>
           <div className="kpi-value">{stats.syncs}</div>
           <div className="kpi-footer">
-            <span style={{ color: 'var(--text-secondary)' }}>Update data penjualan kasir</span>
+            <span style={{ color: 'var(--text-secondary)' }}>Impor penjualan kasir</span>
           </div>
         </div>
       </div>
@@ -296,7 +296,7 @@ export default function AuditLogs() {
                 onChange={(e) => setHumanOnly(e.target.checked)}
                 style={{ cursor: 'pointer' }}
               />
-              Tindakan Manusia Saja
+              Aksi Pengguna Saja
             </label>
           </div>
 
@@ -308,7 +308,7 @@ export default function AuditLogs() {
             style={{ padding: '10px 14px', height: '42px', display: 'flex', gap: '8px', alignItems: 'center' }}
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-            Segarkan
+            Muat Ulang
           </button>
 
 
@@ -330,10 +330,10 @@ export default function AuditLogs() {
           <Info size={20} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: '2px' }} />
           <div>
             <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '4px' }}>
-              Mode Asisten Terpercaya (Masking Aktif)
+              Masking IP Aktif
             </h4>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
-              Sebagai <strong>Admin (Head Bar)</strong>, Anda memiliki hak akses kolaboratif penuh untuk memantau aktivitas operasional. Demi alasan keamanan jaringan sistem, parameter jaringan teknis (seperti <strong>IP Address</strong> asli pengguna) disembunyikan/di-masking dengan <code>***.***.***.***</code> pada feed Anda.
+              Alamat IP pengguna disembunyikan dengan <code>***.***.***.***</code> untuk keamanan.
             </p>
           </div>
         </div>
@@ -353,21 +353,21 @@ export default function AuditLogs() {
               animation: 'spin 0.8s linear infinite',
               marginBottom: '16px'
             }}></div>
-            <p style={{ color: 'var(--text-secondary)' }}>Memuat jejak audit sistem...</p>
+            <p style={{ color: 'var(--text-secondary)' }}>Memuat log audit...</p>
           </div>
         ) : error ? (
           <div style={{ padding: '60px 40px', textAlign: 'center', color: 'var(--danger)' }}>
             <AlertTriangle size={48} style={{ margin: '0 auto 16px' }} />
-            <h3 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '8px' }}>Terjadi Kesalahan</h3>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '8px' }}>Gagal Memuat Log</h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '20px' }}>{error}</p>
             <button className="btn btn-primary" onClick={() => fetchLogs(page, searchQuery, categoryFilter, humanOnly)}>Coba Lagi</button>
           </div>
         ) : displayedLogs.length === 0 ? (
           <div style={{ padding: '80px 40px', textAlign: 'center' }}>
             <History size={48} style={{ margin: '0 auto 16px', color: 'var(--text-muted)' }} />
-            <h3 style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '8px' }}>Tidak Ada Jejak Audit</h3>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '8px' }}>Belum Ada Log Audit</h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-              Tidak ditemukan data audit log yang sesuai dengan kata kunci pencarian atau filter kategori Anda.
+              Tidak ada aktivitas yang sesuai filter.
             </p>
           </div>
         ) : (
@@ -527,7 +527,7 @@ export default function AuditLogs() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
               <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Tindakan (Event Action)</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Tindakan</div>
                 <span style={{
                   display: 'inline-flex',
                   padding: '4px 10px',
@@ -543,7 +543,7 @@ export default function AuditLogs() {
               </div>
 
               <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Deskripsi Perubahan</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Deskripsi</div>
                 <div style={{
                   background: 'var(--bg-primary)',
                   padding: '12px 16px',
@@ -559,7 +559,7 @@ export default function AuditLogs() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Pelaksana (Executor)</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Pelaksana</div>
                   <div style={{ fontSize: '0.9rem', fontWeight: '600' }}>{selectedLog.username}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                     {selectedLog.role === 'Inventory Manager' ? 'Admin (Head Bar)' : selectedLog.role}
@@ -567,7 +567,7 @@ export default function AuditLogs() {
                 </div>
 
                 <div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Waktu Kejadian</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Waktu</div>
                   <div style={{ fontSize: '0.9rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Clock size={14} style={{ color: 'var(--text-muted)' }} />
                     {formatDateTime(selectedLog.created_at)}
@@ -577,24 +577,24 @@ export default function AuditLogs() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>IP Address Asal</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>IP Address</div>
                   <div style={{ fontSize: '0.9rem', fontFamily: 'monospace', color: 'var(--text-secondary)', fontWeight: '600' }}>
                     {renderIpAddress(selectedLog.ip_address)}
                   </div>
                 </div>
 
                 <div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Status Evaluasi Keamanan</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Tingkat Risiko</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', fontWeight: '600' }}>
                     {(selectedLog.action || '').toUpperCase().includes('DELETE') || (selectedLog.action || '').toUpperCase().includes('CANCEL') ? (
                       <>
                         <ShieldAlert size={14} style={{ color: 'var(--danger)' }} />
-                        <span style={{ color: 'var(--danger)' }}>KRITIS (Modifikasi Sensitif)</span>
+                        <span style={{ color: 'var(--danger)' }}>Kritis</span>
                       </>
                     ) : (
                       <>
                         <CheckCircle size={14} style={{ color: 'var(--success)' }} />
-                        <span style={{ color: 'var(--success)' }}>AMAN (Aktivitas Standar)</span>
+                        <span style={{ color: 'var(--success)' }}>Normal</span>
                       </>
                     )}
                   </div>
@@ -608,7 +608,7 @@ export default function AuditLogs() {
                 onClick={() => setSelectedLog(null)}
                 style={{ padding: '10px 24px', borderRadius: 'var(--radius-md)', fontWeight: '600' }}
               >
-                Tutup Detail
+                Tutup
               </button>
             </div>
           </div>

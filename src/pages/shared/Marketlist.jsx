@@ -146,7 +146,7 @@ export default function Marketlist() {
         supplier: editForm.supplier,
         shelf_life_days: editForm.shelf_life_days ? parseInt(editForm.shelf_life_days, 10) : null
       });
-      showToast('Bahan & konversi satuan berhasil diupdate (selaras dengan Stock Ledger)', 'success');
+      showToast('Bahan dan satuan berhasil diperbarui', 'success');
       setEditingId(null);
       fetchData();
       refreshData();
@@ -208,15 +208,15 @@ export default function Marketlist() {
     <div className="fade-in space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-extrabold text-[var(--text-primary)]">Big Master DB (Katalog Bahan)</h2>
-          <p className="text-sm text-[var(--text-secondary)]">Kelola bahan baku, kategori resmi SO Barista, serta Satuan & Konversi yang terintegrasi penuh dengan Stock Ledger.</p>
+          <h2 className="text-2xl font-extrabold text-[var(--text-primary)]">Katalog Bahan</h2>
+          <p className="text-sm text-[var(--text-secondary)]">Kelola bahan, konversi satuan, dan harga.</p>
         </div>
         <div className="flex gap-2">
           <button className="btn btn-secondary" onClick={() => setShowAddSupplier(true)}>
             <Building2 size={16} className="mr-2" /> Tambah Supplier
           </button>
           <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-            <Plus size={16} className="mr-2" /> Tambah Bahan Baru
+            <Plus size={16} className="mr-2" /> Tambah Bahan
           </button>
         </div>
       </div>
@@ -246,9 +246,9 @@ export default function Marketlist() {
                 <th className="w-12 text-center">No</th>
                 <th className="w-56">Nama Bahan</th>
                 <th className="w-40">Kategori</th>
-                <th className="w-60">Satuan & Konversi (Stock Ledger)</th>
+                <th className="w-60">Satuan & Konversi</th>
                 <th className="w-28 text-center">Masa Simpan</th>
-                <th className="w-40">Supplier (Inline Edit)</th>
+                <th className="w-40">Supplier</th>
                 <th className="w-44 text-right">Harga / Pack</th>
                 <th className="w-28 text-center">Aksi</th>
               </tr>
@@ -422,7 +422,7 @@ export default function Marketlist() {
         <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <form onSubmit={handleCreate} className="bg-[var(--bg-primary)] rounded-xl w-full max-w-lg overflow-hidden shadow-2xl">
             <div className="p-4 border-b border-[var(--border)] flex justify-between items-center">
-              <h3 className="font-bold text-lg">Tambah Bahan Baku Baru</h3>
+              <h3 className="font-bold text-lg">Tambah Bahan Baru</h3>
               <button type="button" onClick={() => setShowModal(false)}><X size={20}/></button>
             </div>
             <div className="p-4 space-y-4 max-h-[80vh] overflow-y-auto">
@@ -432,13 +432,13 @@ export default function Marketlist() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="form-label">Kategori Baku</label>
+                  <label className="form-label">Kategori</label>
                   <select className="form-control w-full" value={newMaterial.category} onChange={e => setNewMaterial({...newMaterial, category: e.target.value})}>
                     {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="form-label">Harga Beli per Kemasan (Rp)</label>
+                  <label className="form-label">Harga Beli / Pack (Rp)</label>
                   <input required type="number" min="0" className="form-control w-full" value={newMaterial.price} onChange={e => setNewMaterial({...newMaterial, price: e.target.value})} />
                 </div>
               </div>
@@ -452,7 +452,7 @@ export default function Marketlist() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="form-label">Nama Supplier</label>
+                  <label className="form-label">Supplier</label>
                   <input type="text" className="form-control w-full" value={newMaterial.supplier} onChange={e => setNewMaterial({...newMaterial, supplier: e.target.value})} />
                 </div>
                 <div>
@@ -471,12 +471,12 @@ export default function Marketlist() {
                 </div>
               </div>
               <p className="text-[11px] text-[var(--text-muted)] -mt-2">
-                * Masa simpan dipakai untuk auto-fill tanggal kedaluwarsa saat produksi olah bahan & penerimaan barang.
+                * Otomatis mengisi tanggal kedaluwarsa.
               </p>
             </div>
             <div className="p-4 border-t border-[var(--border)] flex justify-end gap-2 bg-[var(--bg-secondary)]">
               <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Batal</button>
-              <button type="submit" disabled={saving} className="btn btn-primary">{saving ? 'Menyimpan...' : 'Simpan Bahan'}</button>
+              <button type="submit" disabled={saving} className="btn btn-primary">{saving ? 'Menyimpan...' : 'Simpan'}</button>
             </div>
           </form>
         </div>

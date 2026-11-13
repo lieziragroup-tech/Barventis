@@ -323,18 +323,18 @@ export default function DashboardLayout() {
               <div className="flex flex-col gap-0.5">
                 {isSuperAdmin && (
                   <NavGroup title="Platform" isHovered={isHovered} isFirst={true}>
-                    <NavItem to="/superadmin" exact label="Kelola Tenant" subtitle="Manajemen database & lisensi klien" icon={Building2} isHovered={isHovered} index={1} />
-                    <NavItem to="/superadmin/templates" label="Template POS" subtitle="Pemetaan format Excel POS" icon={Layout} isHovered={isHovered} index={2} />
+                    <NavItem to="/superadmin" exact label="Kelola Tenant" subtitle="Kelola database dan lisensi tenant" icon={Building2} isHovered={isHovered} index={1} />
+                    <NavItem to="/superadmin/templates" label="Template POS" subtitle="Atur pemetaan format Excel POS" icon={Layout} isHovered={isHovered} index={2} />
                   </NavGroup>
                 )}
 
                 {/* ROLE: BARISTA / BAR */}
                 {isTenant && role === 'Bar' && (
                   <NavGroup title="Operasional Bar" isHovered={isHovered} isFirst={!isSuperAdmin}>
-                    <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan operasional bar" icon={LayoutDashboard} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Input EOD & stok minuman" icon={ClipboardList} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Produksi prep buah & sirup" icon={Scissors} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Ambil & transfer barang" icon={ArrowRightLeft} isHovered={isHovered} />
+                    <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan operasional bar harian" icon={LayoutDashboard} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Catat stok dan limbah bar" icon={ClipboardList} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Catat olahan bahan mentah bar" icon={Scissors} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Transfer stok antar gudang" icon={ArrowRightLeft} isHovered={isHovered} />
                     <NavItem to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat bahan rusak atau tumpah" icon={Trash2} isHovered={isHovered} />
                   </NavGroup>
                 )}
@@ -342,21 +342,21 @@ export default function DashboardLayout() {
                 {/* ROLE: KITCHEN */}
                 {isTenant && role === 'Kitchen' && (
                   <NavGroup title="Operasional Dapur" isHovered={isHovered} isFirst={!isSuperAdmin}>
-                    <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan operasional dapur" icon={LayoutDashboard} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Input EOD & stok dapur" icon={ClipboardList} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Produksi prep daging & sayur" icon={Scissors} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat limbah dapur" icon={Trash2} isHovered={isHovered} />
+                    <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan operasional dapur harian" icon={LayoutDashboard} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Catat stok dan limbah dapur" icon={ClipboardList} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Catat olahan bahan mentah dapur" icon={Scissors} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat limbah dan susut dapur" icon={Trash2} isHovered={isHovered} />
                   </NavGroup>
                 )}
 
                 {/* ROLE: SERVICE / KASIR */}
                 {isTenant && (role === 'Service' || role === 'Kasir') && (
                   <NavGroup title="Kasir & POS" isHovered={isHovered} isFirst={!isSuperAdmin}>
-                    <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan pelayanan & kasir" icon={LayoutDashboard} isHovered={isHovered} />
+                    <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan pelayanan dan kasir" icon={LayoutDashboard} isHovered={isHovered} />
                     {currentTenant?.is_pos_enabled && (
-                      <NavItem to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir langsung" icon={MonitorSmartphone} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir operasional langsung" icon={MonitorSmartphone} isHovered={isHovered} />
                     )}
-                    <NavItem to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Upload & rekap penjualan ESB" icon={UploadCloud} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Unggah dan rekap penjualan POS" icon={UploadCloud} isHovered={isHovered} />
                     <NavItem to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat barang pecah atau rusak" icon={Trash2} isHovered={isHovered} />
                   </NavGroup>
                 )}
@@ -365,29 +365,29 @@ export default function DashboardLayout() {
                 {isTenant && role !== 'Bar' && role !== 'Kitchen' && role !== 'Service' && role !== 'Kasir' && (
                   <>
                     <NavGroup isHovered={isHovered} isFirst={!isSuperAdmin}>
-                      <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan & analitik konsolidasi" icon={LayoutDashboard} isHovered={isHovered} />
+                      <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan HPP dan penjualan" icon={LayoutDashboard} isHovered={isHovered} />
                     </NavGroup>
 
                     <NavGroup title="Operasional" isHovered={isHovered}>
                       {currentTenant?.is_pos_enabled && (
-                        <NavItem to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir langsung" icon={MonitorSmartphone} isHovered={isHovered} />
+                        <NavItem to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir operasional langsung" icon={MonitorSmartphone} isHovered={isHovered} />
                       )}
-                      <NavItem to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Upload & rekap penjualan beverage ESB" icon={UploadCloud} isHovered={isHovered} />
-                      <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Stok harian, pemakaian (OUT) & limbah" icon={ClipboardList} isHovered={isHovered} />
-                      <NavItem to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Produksi prep & bahan setengah jadi" icon={Scissors} isHovered={isHovered} />
-                      <NavItem to={`${basePath}/procurement`} label="Marketlist" subtitle="Katalog bahan, pembelian harian & kuota" icon={ShoppingCart} isHovered={isHovered} />
-                      <NavItem to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Transfer stok Central & Resto" icon={ArrowRightLeft} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Unggah penjualan POS dan resep" icon={UploadCloud} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Catat stok harian dan limbah" icon={ClipboardList} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Catat olahan bahan mentah" icon={Scissors} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/procurement`} label="Pengadaan" subtitle="Katalog bahan, belanja, dan PO" icon={ShoppingCart} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Transfer stok Central dan Resto" icon={ArrowRightLeft} isHovered={isHovered} />
                     </NavGroup>
 
                     <NavGroup title="Analitik & Audit" isHovered={isHovered}>
-                      <NavItem to={`${basePath}/pricing-cogs`} label="Menu & COGS" subtitle="Kalkulasi resep, HPP & harga jual" icon={Tag} isHovered={isHovered} />
-                      <NavItem to={`${basePath}/opname-assets`} label="Stock Opname" subtitle="Audit fisik stok & aset peralatan" icon={Boxes} isHovered={isHovered} />
-                      <NavItem to={`${basePath}/cost-report`} label="Cost Control" subtitle="Laporan variansi & rasio biaya" icon={Calculator} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/pricing-cogs`} label="Menu & COGS" subtitle="Resep, HPP, dan harga jual" icon={Tag} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/opname-assets`} label="Stock Opname" subtitle="Audit fisik stok dan aset" icon={Boxes} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/cost-report`} label="Cost Control" subtitle="Laporan variansi dan rasio biaya" icon={Calculator} isHovered={isHovered} />
                     </NavGroup>
 
                     {hasAccess(['Admin / Owner', 'Owner']) && (
                       <NavGroup title="Sistem" isHovered={isHovered}>
-                        <NavItem to={`${basePath}/sistem`} label="Pengaturan" subtitle="Buku stok, kelola staf, RBAC & sistem" icon={Settings} isHovered={isHovered} />
+                        <NavItem to={`${basePath}/sistem`} label="Pengaturan" subtitle="Buku stok, staf, audit, backup" icon={Settings} isHovered={isHovered} />
                       </NavGroup>
                     )}
                   </>
@@ -431,14 +431,14 @@ export default function DashboardLayout() {
                       onClick={openProfileModal}
                     >
                       <Edit size={14} className="text-[var(--text-secondary)]" />
-                      <span className="text-sm font-medium">Edit Profile</span>
+                      <span className="text-sm font-medium">Edit Profil</span>
                     </div>
                     <div 
                       className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-[var(--bg-secondary)] transition-colors text-red-500"
                       onClick={logout}
                     >
                       <LogOut size={14} />
-                      <span className="text-sm font-medium">Log Out</span>
+                      <span className="text-sm font-medium">Keluar</span>
                     </div>
                   </motion.div>
                 )}
@@ -491,18 +491,18 @@ export default function DashboardLayout() {
           <div className="flex flex-col gap-0.5">
             {isSuperAdmin && (
               <NavGroup title="Platform" isHovered={true} isFirst={true}>
-                <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin" exact label="Kelola Tenant" subtitle="Manajemen database & lisensi klien" icon={Building2} isHovered={true} index={6} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin/templates" label="Template POS" subtitle="Pemetaan format Excel POS" icon={Layout} isHovered={true} index={7} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin" exact label="Kelola Tenant" subtitle="Kelola database dan lisensi tenant" icon={Building2} isHovered={true} index={6} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin/templates" label="Template POS" subtitle="Atur pemetaan format Excel POS" icon={Layout} isHovered={true} index={7} />
               </NavGroup>
             )}
 
             {/* ROLE: BARISTA / BAR */}
             {isTenant && role === 'Bar' && (
               <NavGroup title="Operasional Bar" isHovered={true} isFirst={!isSuperAdmin}>
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan operasional bar" icon={LayoutDashboard} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Input EOD & stok minuman" icon={ClipboardList} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Produksi prep buah & sirup" icon={Scissors} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Ambil & transfer barang" icon={ArrowRightLeft} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan operasional bar harian" icon={LayoutDashboard} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Catat stok dan limbah bar" icon={ClipboardList} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Catat olahan bahan mentah bar" icon={Scissors} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Transfer stok antar gudang" icon={ArrowRightLeft} isHovered={true} />
                 <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat bahan rusak atau tumpah" icon={Trash2} isHovered={true} />
               </NavGroup>
             )}
@@ -510,21 +510,21 @@ export default function DashboardLayout() {
             {/* ROLE: KITCHEN */}
             {isTenant && role === 'Kitchen' && (
               <NavGroup title="Operasional Dapur" isHovered={true} isFirst={!isSuperAdmin}>
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan operasional dapur" icon={LayoutDashboard} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Input EOD & stok dapur" icon={ClipboardList} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Produksi prep daging & sayur" icon={Scissors} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat limbah dapur" icon={Trash2} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan operasional dapur harian" icon={LayoutDashboard} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Catat stok dan limbah dapur" icon={ClipboardList} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Catat olahan bahan mentah dapur" icon={Scissors} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat limbah dan susut dapur" icon={Trash2} isHovered={true} />
               </NavGroup>
             )}
 
             {/* ROLE: SERVICE / KASIR */}
             {isTenant && (role === 'Service' || role === 'Kasir') && (
               <NavGroup title="Kasir & POS" isHovered={true} isFirst={!isSuperAdmin}>
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan pelayanan & kasir" icon={LayoutDashboard} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan pelayanan dan kasir" icon={LayoutDashboard} isHovered={true} />
                 {currentTenant?.is_pos_enabled && (
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir langsung" icon={MonitorSmartphone} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir operasional langsung" icon={MonitorSmartphone} isHovered={true} />
                 )}
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Upload & rekap penjualan ESB" icon={UploadCloud} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Unggah dan rekap penjualan POS" icon={UploadCloud} isHovered={true} />
                 <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat barang pecah atau rusak" icon={Trash2} isHovered={true} />
               </NavGroup>
             )}
@@ -533,29 +533,29 @@ export default function DashboardLayout() {
             {isTenant && role !== 'Bar' && role !== 'Kitchen' && role !== 'Service' && role !== 'Kasir' && (
               <>
                 <NavGroup isHovered={true} isFirst={!isSuperAdmin}>
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan & analitik konsolidasi" icon={LayoutDashboard} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan HPP dan penjualan" icon={LayoutDashboard} isHovered={true} />
                 </NavGroup>
 
                 <NavGroup title="Operasional" isHovered={true}>
                   {currentTenant?.is_pos_enabled && (
-                    <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir langsung" icon={MonitorSmartphone} isHovered={true} />
+                    <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir operasional langsung" icon={MonitorSmartphone} isHovered={true} />
                   )}
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Upload & rekap penjualan beverage ESB" icon={UploadCloud} isHovered={true} />
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Stok harian, pemakaian (OUT) & limbah" icon={ClipboardList} isHovered={true} />
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Produksi prep & bahan setengah jadi" icon={Scissors} isHovered={true} />
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/procurement`} label="Marketlist" subtitle="Katalog bahan, pembelian harian & kuota" icon={ShoppingCart} isHovered={true} />
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Transfer stok Central & Resto" icon={ArrowRightLeft} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Unggah penjualan POS dan resep" icon={UploadCloud} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Catat stok harian dan limbah" icon={ClipboardList} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Catat olahan bahan mentah" icon={Scissors} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/procurement`} label="Pengadaan" subtitle="Katalog bahan, belanja, dan PO" icon={ShoppingCart} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Transfer stok Central dan Resto" icon={ArrowRightLeft} isHovered={true} />
                 </NavGroup>
 
                 <NavGroup title="Analitik & Audit" isHovered={true}>
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pricing-cogs`} label="Menu & COGS" subtitle="Kalkulasi resep, HPP & harga jual" icon={Tag} isHovered={true} />
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/opname-assets`} label="Stock Opname" subtitle="Audit fisik stok & aset peralatan" icon={Boxes} isHovered={true} />
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/cost-report`} label="Cost Control" subtitle="Laporan variansi & rasio biaya" icon={Calculator} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pricing-cogs`} label="Menu & COGS" subtitle="Resep, HPP, dan harga jual" icon={Tag} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/opname-assets`} label="Stock Opname" subtitle="Audit fisik stok dan aset" icon={Boxes} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/cost-report`} label="Cost Control" subtitle="Laporan variansi dan rasio biaya" icon={Calculator} isHovered={true} />
                 </NavGroup>
 
                 {hasAccess(['Admin / Owner', 'Owner']) && (
                   <NavGroup title="Sistem" isHovered={true}>
-                    <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/sistem`} label="Pengaturan" subtitle="Buku stok, kelola staf, RBAC & sistem" icon={Settings} isHovered={true} />
+                    <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/sistem`} label="Pengaturan" subtitle="Buku stok, staf, audit, backup" icon={Settings} isHovered={true} />
                   </NavGroup>
                 )}
               </>
@@ -575,7 +575,7 @@ export default function DashboardLayout() {
           </div>
           <button onClick={logout} className="mt-4 w-full flex items-center justify-center gap-2 py-2 rounded-md border border-red-500/20 text-red-400 hover:bg-red-500/10 transition-colors">
             <LogOut size={16} />
-            <span className="text-sm font-semibold">Log Out</span>
+            <span className="text-sm font-semibold">Keluar</span>
           </button>
         </div>
       </motion.div>
@@ -594,40 +594,40 @@ export default function DashboardLayout() {
             </button>
             <div className="min-w-0">
               <h1 className="text-sm md:text-xl font-bold truncate m-0">
-                {isSuperAdmin && location.pathname === '/superadmin' && "Platform Tenants Management"}
-                {isSuperAdmin && location.pathname === '/superadmin/templates' && "Global POS Excel Templates"}
-                {isSuperAdmin && location.pathname === '/superadmin/logs' && "Global System Audit Trail"}
+                {isSuperAdmin && location.pathname === '/superadmin' && "Kelola Tenant"}
+                {isSuperAdmin && location.pathname === '/superadmin/templates' && "Template POS"}
+                {isSuperAdmin && location.pathname === '/superadmin/logs' && "Log Audit Sistem"}
 
                 {isTenant && (
                   <>
-                    {location.pathname === basePath && "Cost Control Dashboard"}
-                    {location.pathname === `${basePath}/penjualan` && "Penjualan Beverage (POS)"}
-                    {location.pathname === `${basePath}/daily-inventory` && "Daily Inventory & Waste"}
-                    {location.pathname === `${basePath}/procurement` && "Marketlist & Pembelian Harian"}
-                    {location.pathname === `${basePath}/pricing-cogs` && "Menu Pricing & COGS"}
+                    {location.pathname === basePath && "Dashboard"}
+                    {location.pathname === `${basePath}/penjualan` && "Penjualan POS"}
+                    {location.pathname === `${basePath}/daily-inventory` && "Daily Inventory"}
+                    {location.pathname === `${basePath}/procurement` && "Pengadaan & Supplier"}
+                    {location.pathname === `${basePath}/pricing-cogs` && "Menu & COGS"}
                     {location.pathname === `${basePath}/opname-assets` && "Stock Opname & Aset"}
                     
-                    {location.pathname === `${basePath}/cost-report` && "Cost Control & Variansi Biaya"}
-                    {location.pathname === `${basePath}/sistem` && "Pengaturan & Sistem"}
+                    {location.pathname === `${basePath}/cost-report` && "Cost Control"}
+                    {location.pathname === `${basePath}/sistem` && "Pengaturan Sistem"}
                   </>
                 )}
               </h1>
               <p className="hidden md:block text-xs md:text-sm text-[var(--text-secondary)] truncate">
-                {isSuperAdmin && location.pathname === '/superadmin' && "Manage client databases, licenses, active/inactive statuses, and seed metrics."}
-                {isSuperAdmin && location.pathname === '/superadmin/templates' && "Define global Excel sheet mappings for Moka, Pawoon, Olsera, and other POS engines."}
-                {isSuperAdmin && location.pathname === '/superadmin/logs' && "Consolidated platform-wide security audit trails and log tracking."}
+                {isSuperAdmin && location.pathname === '/superadmin' && "Kelola database dan lisensi tenant."}
+                {isSuperAdmin && location.pathname === '/superadmin/templates' && "Atur pemetaan format Excel POS."}
+                {isSuperAdmin && location.pathname === '/superadmin/logs' && "Pantau jejak audit keamanan sistem."}
 
                 {isTenant && (
                   <>
-                    {location.pathname === basePath && "Real-time F&B HPP analytics, top variance and metrics."}
-                    {location.pathname === `${basePath}/penjualan` && "Upload file penjualan kasir ESB dan integrasi resep otomatis."}
-                    {location.pathname === `${basePath}/daily-inventory` && "Pencatatan stok harian bahan & bir, pemakaian, dan log limbah."}
-                    {location.pathname === `${basePath}/procurement` && "Rencana belanja (marketlist), purchase order, dan penerimaan barang."}
-                    {location.pathname === `${basePath}/pricing-cogs` && "Simulasi harga jual, resep minuman racikan (COGS Beverage), dan katalog bir."}
-                    {location.pathname === `${basePath}/opname-assets` && "Stock opname inventory harian resto & central."}
+                    {location.pathname === basePath && "Ringkasan HPP, variansi, dan penjualan."}
+                    {location.pathname === `${basePath}/penjualan` && "Unggah penjualan POS dan resep."}
+                    {location.pathname === `${basePath}/daily-inventory` && "Catat stok harian dan limbah."}
+                    {location.pathname === `${basePath}/procurement` && "Katalog bahan, pembelian, dan PO."}
+                    {location.pathname === `${basePath}/pricing-cogs` && "Simulasi harga dan resep minuman."}
+                    {location.pathname === `${basePath}/opname-assets` && "Audit fisik stok resto dan central."}
                     
-                    {location.pathname === `${basePath}/cost-report` && "Audit variansi biaya bulanan, HPP aktual vs kasir, dan rasio biaya minuman."}
-                    {location.pathname === `${basePath}/sistem` && "Buku stok, mutasi antar cabang, konfigurasi toko & RBAC, audit trail & backup."}
+                    {location.pathname === `${basePath}/cost-report` && "Laporan variansi dan rasio biaya."}
+                    {location.pathname === `${basePath}/sistem` && "Buku stok, staf, dan cadangan data."}
                   </>
                 )}
               </p>
@@ -746,7 +746,7 @@ export default function DashboardLayout() {
                         ) : (
                           <div className="px-4 py-8 text-center">
                             <Bell size={32} className="mx-auto text-gray-300 mb-2" />
-                            <p className="text-sm text-gray-500">Tidak ada pending requests</p>
+                            <p className="text-sm text-gray-500">Tidak ada permintaan baru</p>
                           </div>
                         )
                       ) : (
@@ -875,7 +875,7 @@ export default function DashboardLayout() {
           {isTenant && hasAccess(['Owner']) && (
             <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/sistem`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Settings size={20} /> Pengaturan & Sistem</NavLink>
           )}
-          <button onClick={() => { document.getElementById('mobile-more-menu').classList.add('hidden'); logout(); }} className="p-4 rounded-xl bg-red-500/10 text-red-500 mt-4 flex items-center gap-3 text-left"><LogOut size={20} /> Keluar (Logout)</button>
+          <button onClick={() => { document.getElementById('mobile-more-menu').classList.add('hidden'); logout(); }} className="p-4 rounded-xl bg-red-500/10 text-red-500 mt-4 flex items-center gap-3 text-left"><LogOut size={20} /> Keluar</button>
         </div>
       </div>
 
@@ -920,9 +920,9 @@ export default function DashboardLayout() {
             <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
               <MonitorSmartphone size={32} />
             </div>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '12px' }}>POS Terminal Aktif!</h3>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '12px' }}>POS Terminal Aktif</h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: '24px' }}>
-              Modul Point of Sale (Kasir) internal kini telah aktif dan tersedia di sidebar kiri. Anda dapat langsung menggunakannya untuk mencatat transaksi penjualan.
+              Kasir POS tersedia di menu kiri.
             </p>
             <button 
               className="btn premium-btn-primary" 
@@ -932,7 +932,7 @@ export default function DashboardLayout() {
                 navigate(`/${activeUser?.role === 'Super Admin' ? 'superadmin' : 'dashboard'}/pos-terminal`);
               }}
             >
-              Buka POS Terminal
+              Buka Kasir
             </button>
           </div>
         </div>
@@ -982,9 +982,9 @@ export default function DashboardLayout() {
                 border: '1px solid var(--border)'
               }}
             >
-              <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>Setup Awal POS</h3>
+              <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>Pengaturan Awal POS</h3>
               <p style={{ margin: '0 0 20px 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                Tentukan pajak dan service charge untuk sistem kasir Anda. Nilai ini akan diterapkan otomatis pada setiap transaksi.
+                Atur tarif pajak dan layanan kasir.
               </p>
               
               <form onSubmit={handleSavePosSetup}>
@@ -1032,7 +1032,7 @@ export default function DashboardLayout() {
                     className="btn btn-primary"
                     disabled={isSavingPosSetup}
                   >
-                    {isSavingPosSetup ? 'Menyimpan...' : 'Simpan & Lanjutkan'}
+                    {isSavingPosSetup ? 'Menyimpan...' : 'Simpan'}
                   </button>
                 </div>
               </form>
@@ -1073,14 +1073,14 @@ export default function DashboardLayout() {
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>Edit Profile</h4>
+                <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>Edit Profil</h4>
                 <button onClick={() => setShowProfileModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
                   <X size={18} />
                 </button>
               </div>
 
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Role</label>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Peran</label>
                 <div style={{
                   width: '100%',
                   padding: '10px 12px',
@@ -1111,7 +1111,7 @@ export default function DashboardLayout() {
                 </div>
               </div>
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Display Name</label>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Nama Tampilan</label>
                 <input
                   type="text"
                   value={editProfileName}
@@ -1125,7 +1125,7 @@ export default function DashboardLayout() {
                     color: 'var(--text-primary)',
                     fontSize: '0.9rem'
                   }}
-                  placeholder="Enter your name"
+                  placeholder="Masukkan nama..."
                 />
               </div>
 
@@ -1143,7 +1143,7 @@ export default function DashboardLayout() {
                     fontWeight: 500
                   }}
                 >
-                  Cancel
+                  Batal
                 </button>
                 <button
                   onClick={handleUpdateProfile}
@@ -1160,7 +1160,7 @@ export default function DashboardLayout() {
                     opacity: (isUpdatingProfile || !editProfileName.trim()) ? 0.7 : 1
                   }}
                 >
-                  {isUpdatingProfile ? 'Saving...' : 'Save Changes'}
+                  {isUpdatingProfile ? 'Menyimpan...' : 'Simpan'}
                 </button>
               </div>
             </motion.div>

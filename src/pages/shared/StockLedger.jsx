@@ -74,7 +74,7 @@ function KonversiSatuanFields({ packUnit, fullPack, price, onChangeFullPack, ins
         </datalist>
       </div>
       <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-        Isi kalau 1 {label} berisi beberapa satuan kecil (mis. 1 Carton = 24 pcs) — supaya resep bisa pakai "pcs" langsung dan HPP-nya tetap benar.
+        Opsional: jika 1 {label} berisi satuan kecil (mis. 24 pcs).
         {pricePerContent != null && (
           <> &nbsp;→ {formatIDR(pricePerContent)} / {satuanIsi || 'unit'}.</>
         )}
@@ -275,10 +275,10 @@ function StockLedgerInner() {
     e.preventDefault();
     if (!adjustItem || !adjustQty || isNaN(adjustQty)) return;
     if (!adjustNotes.trim()) {
-      alert('Catatan/alasan penyesuaian wajib diisi. Untuk pembelian gunakan modul Purchasing; untuk OUT gunakan Daily Inventory; untuk waste gunakan Catatan Limbah; dan untuk transfer gunakan modul Transfer.');
+      alert('Alasan penyesuaian wajib diisi.');
       return;
     }
-    if (!window.confirm(`Konfirmasi penyesuaian stok untuk ${adjustItem.name}?`)) return;
+    if (!window.confirm(`Simpan penyesuaian stok ${adjustItem.name}?`)) return;
     try {
       await onAdjustStock(adjustItem.name, adjustLoc, adjustType, parseFloat(adjustQty), adjustNotes);
       setAdjustItem(null); setAdjustQty(''); setAdjustNotes('');
@@ -291,7 +291,7 @@ function StockLedgerInner() {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     if (!editItem) return;
-    if (!window.confirm(`Simpan perubahan konfigurasi untuk ${editItem.name}?`)) return;
+    if (!window.confirm(`Simpan perubahan bahan "${editItem.name}"?`)) return;
     
     try {
       // First, handle stock adjustments if they changed the physical stock fields
@@ -336,11 +336,11 @@ function StockLedgerInner() {
       item => item.name.trim().toLowerCase() === newItem.name.trim().toLowerCase()
     );
     if (isDuplicate) {
-      alert(`Bahan dengan nama "${newItem.name}" sudah ada di inventory. Gunakan nama yang berbeda atau edit bahan yang sudah ada.`);
+      alert(`Bahan "${newItem.name}" sudah ada.`);
       return;
     }
 
-    if (!window.confirm(`Konfirmasi penambahan bahan baku baru: ${newItem.name}?`)) return;
+    if (!window.confirm(`Simpan bahan baru "${newItem.name}"?`)) return;
     try {
       const payload = { ...newItem, new_price: newItem.price };
       delete payload.initial_qty_resto;
@@ -500,28 +500,28 @@ function StockLedgerInner() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, background: 'var(--bg-secondary)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 'var(--radius-md)' }}>
                 <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{selectedItems.length} Item Terpilih</span>
                 <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem', color: 'var(--danger)', borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.05)' }} onClick={handleBulkDelete}>
-                  <Trash2 size={14} style={{ marginRight: '6px' }}/> Hapus Terpilih
+                  <Trash2 size={14} style={{ marginRight: '6px' }}/> Hapus
                 </button>
-                <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => setSelectedItems([])}>Batal (Unselect)</button>
+                <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => setSelectedItems([])}>Batal</button>
               </div>
             ) : (
               <>
                 <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
                   <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                  <input type="text" placeholder="Search materials or suppliers..." className="form-control" style={{ paddingLeft: '44px' }} value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} />
+                  <input type="text" placeholder="Cari bahan atau supplier..." className="form-control" style={{ paddingLeft: '44px' }} value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} />
                 </div>
                 <select className="form-control" style={{ width: '170px' }} value={catFilter} onChange={e => { setCatFilter(e.target.value); setCurrentPage(1); }}>
-                  {categories.map(cat => <option key={cat} value={cat}>{cat === 'ALL' ? 'All Categories' : cat}</option>)}
+                  {categories.map(cat => <option key={cat} value={cat}>{cat === 'ALL' ? 'Semua Kategori' : cat}</option>)}
                   {!categories.includes('BEER') && <option value="BEER">BEER</option>}
                 </select>
                 <select className="form-control" style={{ width: '170px' }} value={supFilter} onChange={e => { setSupFilter(e.target.value); setCurrentPage(1); }}>
-                  {uniqueSuppliersInStock.map(sup => <option key={sup} value={sup}>{sup === 'ALL' ? 'All Suppliers' : sup}</option>)}
+                  {uniqueSuppliersInStock.map(sup => <option key={sup} value={sup}>{sup === 'ALL' ? 'Semua Supplier' : sup}</option>)}
                 </select>
                 <select className="form-control" style={{ width: '150px' }} value={alertFilter} onChange={e => { setAlertFilter(e.target.value); setCurrentPage(1); }}>
-                  <option value="ALL">All Status</option>
-                  <option value="SAFE">Safe</option>
-                  <option value="WARNING">Low Stock</option>
-                  <option value="CRITICAL">Out of Stock</option>
+                  <option value="ALL">Semua Status</option>
+                  <option value="SAFE">Aman</option>
+                  <option value="WARNING">Stok Menipis</option>
+                  <option value="CRITICAL">Habis</option>
                 </select>
                 <select 
                   className="form-control" 
@@ -531,7 +531,7 @@ function StockLedgerInner() {
                 >
                   {locations.map(loc => (
                     <option key={loc.code} value={loc.code}>
-                      {loc.code === 'ALL' ? 'All Locations' : loc.name}
+                      {loc.code === 'ALL' ? 'Semua Lokasi' : loc.name}
                     </option>
                   ))}
                 </select>
@@ -539,7 +539,7 @@ function StockLedgerInner() {
                   <Plus size={14} style={{ marginRight: '4px' }}/> Tambah Bahan
                 </button>
                 <button className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '0.8rem' }} onClick={() => setShowBulkImport(true)}>
-                  <UploadCloud size={14} style={{ marginRight: '4px' }}/> Bulk Import
+                  <UploadCloud size={14} style={{ marginRight: '4px' }}/> Import
                 </button>
                 <ExportButton 
                   onExportExcel={handleExportExcel} 
@@ -548,7 +548,7 @@ function StockLedgerInner() {
                 />
                 <PrintButton
                   currentRole={profile?.role || 'SuperAdmin'}
-                  title="Cetak kartu stok bahan (Stock Ledger)"
+                  title="Cetak kartu stok"
                 />
               </>
             )}
@@ -558,7 +558,7 @@ function StockLedgerInner() {
         {/* Print-only Document Header */}
         <div className="print-only print-header">
           <div className="print-header-brand">BARVENTIS — SISTEM MANAJEMEN GUDANG</div>
-          <div style={{ fontSize: '13pt', fontWeight: 700, margin: '2px 0' }}>Laporan Kartu Stok Bahan Baku (Stock Ledger)</div>
+          <div style={{ fontSize: '13pt', fontWeight: 700, margin: '2px 0' }}>Laporan Kartu Stok Bahan Baku</div>
           <div className="print-header-meta">
             Lokasi: {activeLoc} | Kategori: {catFilter} | Pencarian: {search || 'Semua'} | Tanggal Cetak: {new Date().toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' })}
           </div>
@@ -567,7 +567,7 @@ function StockLedgerInner() {
         {/* Stock Table */}
         <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
           <div className="table-container relative">
-            <TableLoadingOverlay loading={loadingData && stock.length > 0} message="Menyinkronkan stok bahan..." />
+            <TableLoadingOverlay loading={loadingData && stock.length > 0} message="Menyinkronkan stok..." />
             {/* STOCK TABLE */}
             <table className="custom-table">
               <thead>
@@ -575,14 +575,14 @@ function StockLedgerInner() {
                   <th className="no-print" style={{ width: '40px', textAlign: 'center', padding: '14px 10px' }}>
                     <input type="checkbox" checked={filteredStock.length > 0 && selectedItems.length === filteredStock.length} onChange={toggleSelectAll} style={{ cursor: 'pointer' }} />
                   </th>
-                  <th>Material Name</th>
-                  <th>Category</th>
+                  <th>Nama Bahan</th>
+                  <th>Kategori</th>
                   <th>Supplier</th>
-                  <th style={{ textAlign: 'right' }}>{activeLoc === 'ALL' ? 'Stock (Pack)' : `Stok (${activeLoc})`}</th>
-                  <th style={{ textAlign: 'right' }}>Stock (Converted)</th>
-                  <th style={{ textAlign: 'right' }}>Price/Pack</th>
-                  <th style={{ textAlign: 'center' }}>Expiry / Status</th>
-                  <th className="no-print" style={{ textAlign: 'center' }}>Actions</th>
+                  <th style={{ textAlign: 'right' }}>{activeLoc === 'ALL' ? 'Stok (Pack)' : `Stok (${activeLoc})`}</th>
+                  <th style={{ textAlign: 'right' }}>Konversi</th>
+                  <th style={{ textAlign: 'right' }}>Harga/Pack</th>
+                  <th style={{ textAlign: 'center' }}>Status</th>
+                  <th className="no-print" style={{ textAlign: 'center' }}>Aksi</th>
                 </tr>
               </thead>
               <tbody>
@@ -736,7 +736,7 @@ function StockLedgerInner() {
       {selectedItem && (
         <div className="glass-card stock-ledger-detail-panel no-print" style={{ width: '360px', flexShrink: 0, position: 'sticky', top: 0, height: 'calc(100vh - 150px)', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>Stock Audit</h3>
+            <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>Riwayat Stok</h3>
             <button className="btn btn-secondary" style={{ padding: '4px', borderRadius: '50%' }} onClick={() => setSelectedItem(null)}><X size={16} /></button>
           </div>
           <div style={{ padding: '12px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', marginBottom: '16px' }}>
@@ -788,7 +788,7 @@ function StockLedgerInner() {
                 {tx.notes && <div style={{ fontSize: '0.65rem', marginTop: '4px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>"{tx.notes}"</div>}
               </div>
             ))}
-            {historyTab === 'LEDGER' && itemHistory.length === 0 && <div style={{ textAlign: 'center', padding: '16px', color: 'var(--text-muted)', fontSize: '0.75rem' }}>No history.</div>}
+            {historyTab === 'LEDGER' && itemHistory.length === 0 && <div style={{ textAlign: 'center', padding: '16px', color: 'var(--text-muted)', fontSize: '0.75rem' }}>Belum ada riwayat.</div>}
             
             {historyTab === 'PURCHASES' && purchaseHistory.map(p => (
               <div key={p.id} style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', padding: '8px 10px', borderRadius: 'var(--radius-md)', fontSize: '0.75rem' }}>
@@ -808,7 +808,7 @@ function StockLedgerInner() {
                 {p.notes && <div style={{ fontSize: '0.65rem', marginTop: '4px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>"{p.notes}"</div>}
               </div>
             ))}
-            {historyTab === 'PURCHASES' && purchaseHistory.length === 0 && <div style={{ textAlign: 'center', padding: '16px', color: 'var(--text-muted)', fontSize: '0.75rem' }}>Belum ada riwayat pembelian dari supplier.</div>}
+            {historyTab === 'PURCHASES' && purchaseHistory.length === 0 && <div style={{ textAlign: 'center', padding: '16px', color: 'var(--text-muted)', fontSize: '0.75rem' }}>Belum ada riwayat pembelian.</div>}
           </div>
         </div>
       )}
@@ -818,16 +818,16 @@ function StockLedgerInner() {
         <div onClick={() => { setAdjustItem(null); setAdjustQty(''); setAdjustNotes(''); }} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.2s ease' }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: '400px', background: 'var(--bg-primary)', height: '100vh', padding: '32px 24px', overflowY: 'auto', borderLeft: '1px solid var(--border)', boxShadow: '-10px 0 30px rgba(0,0,0,0.1)', animation: 'slideInRight 0.3s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Adjust Stock</h3>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Koreksi Stok</h3>
               <button style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => setAdjustItem(null)}><X size={16} /></button>
             </div>
             <div style={{ marginBottom: '20px', padding: '12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Material</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Bahan</span>
               <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '1rem' }}>{adjustItem.name}</div>
             </div>
             <form onSubmit={handleAdjustSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="form-group">
-                <label className="form-label">Location</label>
+                <label className="form-label">Lokasi</label>
                 <select className="form-control" value={adjustLoc} onChange={e => setAdjustLoc(e.target.value)}>
                   {locations.filter(l => l.code !== 'ALL').map(l => (
                     <option key={l.code} value={l.code}>{l.name} ({l.code})</option>
@@ -836,24 +836,24 @@ function StockLedgerInner() {
               </div>
               <div className="form-group">
                 <label className="form-label">Jenis Koreksi</label>
-                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "6px" }}>Form ini hanya untuk koreksi/saldo awal; bukan pembelian, pemakaian OUT, waste, atau transfer.</div>
+                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "6px" }}>Khusus koreksi stok atau saldo awal.</div>
                 <select className="form-control" value={adjustType} onChange={e => setAdjustType(e.target.value)}>
                   <optgroup label="Stok Masuk">
-                    <option value="IN">Koreksi IN / saldo awal (bukan pembelian)</option>
+                    <option value="IN">Koreksi IN / Saldo Awal</option>
                   </optgroup>
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Qty ({adjustItem.unit})</label>
-                <input type="number" step="any" className="form-control" placeholder="Enter quantity..." required value={adjustQty} onChange={e => setAdjustQty(e.target.value)} />
+                <label className="form-label">Jumlah ({adjustItem.unit})</label>
+                <input type="number" step="any" className="form-control" placeholder="Isi jumlah..." required value={adjustQty} onChange={e => setAdjustQty(e.target.value)} />
               </div>
               <div className="form-group">
-                <label className="form-label">Notes</label>
-                <textarea className="form-control" rows="3" placeholder="Reason..." value={adjustNotes} onChange={e => setAdjustNotes(e.target.value)} />
+                <label className="form-label">Catatan *</label>
+                <textarea className="form-control" rows="3" placeholder="Alasan koreksi..." value={adjustNotes} onChange={e => setAdjustNotes(e.target.value)} />
               </div>
               <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
                 <button type="button" className="btn btn-secondary" style={{ flex: 1, padding: '12px' }} onClick={() => setAdjustItem(null)}>Batal</button>
-                <button type="submit" className="btn btn-primary" style={{ flex: 2, padding: '12px', fontWeight: 700 }}>Process Adjustment</button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 2, padding: '12px', fontWeight: 700 }}>Simpan</button>
               </div>
             </form>
           </div>
@@ -865,22 +865,22 @@ function StockLedgerInner() {
         <div onClick={() => setEditItem(null)} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.2s ease' }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: '450px', background: 'var(--bg-primary)', height: '100vh', padding: '32px 24px', overflowY: 'auto', borderLeft: '1px solid var(--border)', boxShadow: '-10px 0 30px rgba(0,0,0,0.1)', animation: 'slideInRight 0.3s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Edit Material</h3>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Edit Bahan</h3>
               <button style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => setEditItem(null)}><X size={16} /></button>
             </div>
             <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="form-group">
-                <label className="form-label">Material Name</label>
+                <label className="form-label">Nama Bahan</label>
                 <input type="text" className="form-control" value={editItem.name} onChange={e => setEditItem({ ...editItem, name: e.target.value })} />
               </div>
               <div className="form-group">
-                <label className="form-label">Category</label>
+                <label className="form-label">Kategori</label>
                 <select className="form-control" value={editItem.category} onChange={e => setEditItem({ ...editItem, category: e.target.value })}>
                   {[...new Set(stock.map(s => s.category))].map(cat => <option key={cat} value={cat}>{cat}</option>)}
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Supplier (Master Data)</label>
+                <label className="form-label">Supplier</label>
                 <input type="text" list="supplier-list-edit" className="form-control" placeholder="Pilih atau ketik supplier..." value={editItem.supplier} onChange={e => setEditItem({ ...editItem, supplier: e.target.value })} />
                 <datalist id="supplier-list-edit">
                   {suppliers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
@@ -888,7 +888,7 @@ function StockLedgerInner() {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div className="form-group">
-                  <label className="form-label">Pack Unit</label>
+                  <label className="form-label">Satuan Pack</label>
                   <input
                     type="text" list="pack-unit-list-edit" className="form-control"
                     placeholder="mis. Carton, pck, kaleng"
@@ -909,8 +909,8 @@ function StockLedgerInner() {
                   </datalist>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Full Pack Size</label>
-                  <input type="text" className="form-control" placeholder="e.g. 1000 grm" value={editItem.full_pack || ''} onChange={e => setEditItem({ ...editItem, full_pack: e.target.value })} />
+                  <label className="form-label">Isi Kemasan</label>
+                  <input type="text" className="form-control" placeholder="contoh: 1000 gr" value={editItem.full_pack || ''} onChange={e => setEditItem({ ...editItem, full_pack: e.target.value })} />
                 </div>
               </div>
               <KonversiSatuanFields
@@ -923,22 +923,22 @@ function StockLedgerInner() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-3">
                 <label className="flex items-start gap-2 rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
                   <input type="checkbox" checked={Boolean(editItem.broken_tracking_enabled)} onChange={e => setEditItem({ ...editItem, broken_tracking_enabled: e.target.checked })} />
-                  <span><strong className="block text-sm">Wajib timbang BROKEN saat closing</strong><small style={{ color: 'var(--text-muted)' }}>Sisa isi kemasan terbuka diinput manual pada Daily Inventory.</small></span>
+                  <span><strong className="block text-sm">Wajib timbang BROKEN</strong><small style={{ color: 'var(--text-muted)' }}>Input sisa kemasan terbuka saat closing.</small></span>
                 </label>
                 <label className="flex items-start gap-2 rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
                   <input type="checkbox" checked={Boolean(editItem.expiry_tracking_enabled)} onChange={e => setEditItem({ ...editItem, expiry_tracking_enabled: e.target.checked })} />
-                  <span><strong className="block text-sm">Lacak lot / expired date</strong><small style={{ color: 'var(--text-muted)' }}>Penerimaan ditelusuri per lot dan dikeluarkan mengikuti FEFO.</small></span>
+                  <span><strong className="block text-sm">Lacak kedaluwarsa (FEFO)</strong><small style={{ color: 'var(--text-muted)' }}>Lacak batch dan tanggal kedaluwarsa.</small></span>
                 </label>
               </div>
               <div className="form-group">
-                <label className="form-label">Min Stock</label>
+                <label className="form-label">Stok Minimum</label>
                 <input type="number" className="form-control" value={editItem.min_stock || 15} onChange={e => setEditItem({ ...editItem, min_stock: parseInt(e.target.value) || 15 })} />
               </div>
               
               <div style={{ padding: '16px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '12px', color: 'var(--text-primary)' }}>Set Stok Fisik Aktual (Opsional)</h4>
+                <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '12px', color: 'var(--text-primary)' }}>Stok Fisik (Opsional)</h4>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-                  Jika angka diubah, sistem otomatis membuat log penyesuaian (Adjustment) ke master.
+                  Mengubah angka ini mencatat koreksi stok.
                 </p>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div className="form-group mb-0">
@@ -968,7 +968,7 @@ function StockLedgerInner() {
               </div>
               <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
                 <button type="button" className="btn btn-secondary" style={{ flex: 1, padding: '12px' }} onClick={() => setEditItem(null)}>Batal</button>
-                <button type="submit" className="btn btn-primary" style={{ flex: 2, padding: '12px', fontWeight: 700 }}>Simpan Perubahan</button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 2, padding: '12px', fontWeight: 700 }}>Simpan</button>
               </div>
             </form>
           </div>
@@ -980,30 +980,30 @@ function StockLedgerInner() {
         <div onClick={() => { setShowAddModal(false); setNewItem({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15, initial_qty_resto: 0, initial_qty_central: 0, broken_tracking_enabled: true, expiry_tracking_enabled: false }); }} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.2s ease' }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: '450px', background: 'var(--bg-primary)', height: '100vh', padding: '32px 24px', overflowY: 'auto', borderLeft: '1px solid var(--border)', boxShadow: '-10px 0 30px rgba(0,0,0,0.1)', animation: 'slideInRight 0.3s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Tambah Bahan Baru</h3>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Tambah Bahan</h3>
               <button style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => setShowAddModal(false)}><X size={16} /></button>
             </div>
             <form onSubmit={handleAddSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="form-group">
-                <label className="form-label">Nama Material</label>
-                <input type="text" className="form-control" required placeholder="e.g. Vanilla Extract" value={newItem.name} onChange={e => setNewItem({ ...newItem, name: e.target.value })} />
+                <label className="form-label">Nama Bahan</label>
+                <input type="text" className="form-control" required placeholder="Contoh: Vanilla Extract" value={newItem.name} onChange={e => setNewItem({ ...newItem, name: e.target.value })} />
               </div>
               <div className="form-group">
-                <label className="form-label">Category</label>
+                <label className="form-label">Kategori</label>
                 <select className="form-control" value={newItem.category} onChange={e => setNewItem({ ...newItem, category: e.target.value })}>
                   {[...new Set(stock.map(s => s.category))].map(cat => <option key={cat} value={cat}>{cat}</option>)}
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Supplier (Master Data)</label>
-                <input type="text" list="supplier-list-add" className="form-control" placeholder="Pilih atau ketik nama supplier" value={newItem.supplier} onChange={e => setNewItem({ ...newItem, supplier: e.target.value })} />
+                <label className="form-label">Supplier</label>
+                <input type="text" list="supplier-list-add" className="form-control" placeholder="Pilih atau ketik supplier..." value={newItem.supplier} onChange={e => setNewItem({ ...newItem, supplier: e.target.value })} />
                 <datalist id="supplier-list-add">
                   {suppliers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                 </datalist>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div className="form-group">
-                  <label className="form-label">Pack Unit</label>
+                  <label className="form-label">Satuan Pack</label>
                   <input
                     type="text" list="pack-unit-list-add" className="form-control"
                     placeholder="mis. Carton, pck, kaleng"
@@ -1022,8 +1022,8 @@ function StockLedgerInner() {
                   </datalist>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Full Pack Size</label>
-                  <input type="text" className="form-control" placeholder="e.g. 1000 grm" value={newItem.full_pack} onChange={e => setNewItem({ ...newItem, full_pack: e.target.value })} />
+                  <label className="form-label">Isi Kemasan</label>
+                  <input type="text" className="form-control" placeholder="contoh: 1000 gr" value={newItem.full_pack} onChange={e => setNewItem({ ...newItem, full_pack: e.target.value })} />
                 </div>
               </div>
               <KonversiSatuanFields
@@ -1036,16 +1036,16 @@ function StockLedgerInner() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-3">
                 <label className="flex items-start gap-2 rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
                   <input type="checkbox" checked={Boolean(newItem.broken_tracking_enabled)} onChange={e => setNewItem({ ...newItem, broken_tracking_enabled: e.target.checked })} />
-                  <span><strong className="block text-sm">Wajib timbang BROKEN saat closing</strong><small style={{ color: 'var(--text-muted)' }}>Sisa isi kemasan terbuka diinput manual pada Daily Inventory.</small></span>
+                  <span><strong className="block text-sm">Wajib timbang BROKEN</strong><small style={{ color: 'var(--text-muted)' }}>Input sisa kemasan terbuka saat closing.</small></span>
                 </label>
                 <label className="flex items-start gap-2 rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
                   <input type="checkbox" checked={Boolean(newItem.expiry_tracking_enabled)} onChange={e => setNewItem({ ...newItem, expiry_tracking_enabled: e.target.checked })} />
-                  <span><strong className="block text-sm">Lacak lot / expired date</strong><small style={{ color: 'var(--text-muted)' }}>Penerimaan ditelusuri per lot dan dikeluarkan mengikuti FEFO.</small></span>
+                  <span><strong className="block text-sm">Lacak kedaluwarsa (FEFO)</strong><small style={{ color: 'var(--text-muted)' }}>Lacak batch dan tanggal kedaluwarsa.</small></span>
                 </label>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div className="form-group">
-                  <label className="form-label">Min Stock</label>
+                  <label className="form-label">Stok Minimum</label>
                   <input type="number" className="form-control" value={newItem.min_stock} onChange={e => setNewItem({ ...newItem, min_stock: parseInt(e.target.value) || 15 })} />
                 </div>
                 <div className="form-group">
@@ -1055,7 +1055,7 @@ function StockLedgerInner() {
               </div>
 
               <div style={{ padding: '16px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '12px', color: 'var(--text-primary)' }}>Set Stok Awal (Opsional)</h4>
+                <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '12px', color: 'var(--text-primary)' }}>Stok Awal (Opsional)</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div className="form-group mb-0">
                     <label className="form-label" style={{fontSize: '0.75rem'}}>Stok Resto Bar</label>
@@ -1074,7 +1074,7 @@ function StockLedgerInner() {
 
               <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
                 <button type="button" className="btn btn-secondary" style={{ flex: 1, padding: '12px' }} onClick={() => setShowAddModal(false)}>Batal</button>
-                <button type="submit" className="btn btn-primary" style={{ flex: 2, padding: '12px', fontWeight: 700 }}>Tambah ke Inventory</button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 2, padding: '12px', fontWeight: 700 }}>Simpan</button>
               </div>
             </form>
           </div>
@@ -1085,8 +1085,8 @@ function StockLedgerInner() {
         isOpen={showBulkImport}
         onClose={() => setShowBulkImport(false)}
         type="materials"
-        title="Bulk Import / Sync Bahan Baku"
-        description="Upload master data bahan baku sekaligus dari file Excel. Anda juga dapat menambahkan kolom 'qty_resto' di Excel untuk langsung mengatur stok awal (opsional)."
+        title="Import Bahan Baku"
+        description="Unggah master bahan dari Excel."
         currentData={stock}
         onCommit={async (rows) => {
           const res = await api.bulkImportMaterials(rows);
@@ -1116,17 +1116,15 @@ function StockLedgerInner() {
                 <Trash2 size={24} style={{ color: 'var(--danger)' }} />
               </div>
               <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: '0 0 8px 0', color: 'var(--danger)' }}>Hapus Paksa Bahan Baku?</h3>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: '0 0 8px 0', color: 'var(--danger)' }}>Hapus Bahan Baku?</h3>
                 <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-                  Bahan baku <strong>"{dependencyDeleteModal.name}"</strong> saat ini masih digunakan di <strong>{dependencyDeleteModal.count} resep aktif</strong>.
-                  <br /><br />
-                  Jika Anda melanjutkan, bahan ini akan <strong>dihapus dari semua resep</strong> tersebut secara otomatis. Tindakan ini tidak bisa dibatalkan!
+                  Bahan <strong>"{dependencyDeleteModal.name}"</strong> masih dipakai di <strong>{dependencyDeleteModal.count} resep</strong>. Lanjut hapus dari semua resep tersebut?
                 </p>
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setDependencyDeleteModal(null)}>Batal</button>
-              <button type="button" className="btn btn-danger" style={{ background: 'var(--danger)', color: 'white' }} onClick={confirmForceDelete}>Ya, Hapus Paksa</button>
+              <button type="button" className="btn btn-danger" style={{ background: 'var(--danger)', color: 'white' }} onClick={confirmForceDelete}>Hapus</button>
             </div>
           </div>
         </div>

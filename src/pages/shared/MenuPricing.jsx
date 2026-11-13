@@ -157,11 +157,11 @@ export default function MenuPricing() {
     <div className="fade-in">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ minWidth: 0 }}>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Menu Pricing Simulator</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Simulasi dan optimasi harga jual berdasarkan HPP berjalan.</p>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Simulasi Harga Menu</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Simulasi harga jual berdasarkan HPP.</p>
         </div>
         <button className="btn btn-secondary" onClick={fetchRecipes} disabled={loading}>
-          <RefreshCw size={16} className={loading ? 'spin' : ''} /> Refresh
+          <RefreshCw size={16} className={loading ? 'spin' : ''} /> Muat Ulang
         </button>
       </div>
 
@@ -201,14 +201,14 @@ export default function MenuPricing() {
           <table className="custom-table">
             <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
               <tr>
-                <th>Menu Name</th>
-                <th style={{ width: '100px' }}>Category</th>
-                <th style={{ textAlign: 'right' }}>Basic Cost (HPP)</th>
-                <th style={{ textAlign: 'right', width: '120px' }}>Current Price</th>
+                <th>Nama Menu</th>
+                <th style={{ width: '100px' }}>Kategori</th>
+                <th style={{ textAlign: 'right' }}>HPP</th>
+                <th style={{ textAlign: 'right', width: '120px' }}>Harga Saat Ini</th>
                 <th style={{ textAlign: 'right', width: '120px' }}>Saran Harga</th>
                 <th style={{ textAlign: 'center', width: '60px' }}></th>
-                <th style={{ textAlign: 'center', width: '140px' }}>New Selling Price</th>
-                <th style={{ textAlign: 'center', width: '100px' }}>Current FC %</th>
+                <th style={{ textAlign: 'center', width: '140px' }}>Harga Baru</th>
+                <th style={{ textAlign: 'center', width: '100px' }}>FC %</th>
                 <th style={{ textAlign: 'center', width: '100px' }}>Aksi</th>
               </tr>
             </thead>
@@ -242,7 +242,7 @@ export default function MenuPricing() {
                     <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}><ArrowRight size={16} /></td>
                     <td style={{ textAlign: 'center' }}>
                       <input type="number" step="any" className="form-control" style={{ textAlign: 'center', padding: '6px', fontWeight: isChanged ? 700 : 400, color: isChanged ? 'var(--accent)' : 'var(--text-primary)' }} value={simPrice} onChange={e => handlePriceChange(r.id, e.target.value)} />
-                      {isChanged && <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '4px' }}>Old: Rp {parseFloat(r.selling_price).toLocaleString('id-ID')}</div>}
+                      {isChanged && <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '4px' }}>Lama: Rp {parseFloat(r.selling_price).toLocaleString('id-ID')}</div>}
                     </td>
                     <td style={{ textAlign: 'center', fontWeight: 700, color: isDanger ? 'var(--danger)' : 'var(--success)' }}>
                       {simFc.toFixed(1)}%
@@ -251,7 +251,7 @@ export default function MenuPricing() {
                     <td style={{ textAlign: 'center' }}>
                       {isChanged ? (
                         <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.75rem', width: '100%', justifyContent: 'center' }} onClick={() => handleSavePrice(r)}>
-                          <Save size={14} style={{ marginRight: '4px' }}/> Save
+                          <Save size={14} style={{ marginRight: '4px' }}/> Simpan
                         </button>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>

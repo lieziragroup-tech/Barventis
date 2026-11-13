@@ -1204,7 +1204,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
             )}
           </div>
           <p className="hidden md:block" style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', margin: '2px 0 0 0' }}>
-            Rekapitulasi stok akhir hari dan nilai terpakai
+            Catat stok akhir hari dan pemakaian.
           </p>
         </div>
 
@@ -1245,7 +1245,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
               onClick={() => setActiveTab('EOD')}
             >
               <PlusCircle size={14} style={{ marginRight: '5px' }} />
-              Form Input EOD
+              Input EOD
             </button>
           </div>
 
@@ -1288,12 +1288,12 @@ export default function DailyInventory({ category: _category, initialTab }) {
               <Info size={16} className={activeTab === 'REKAP' ? 'text-blue-500 shrink-0 mt-0.5' : 'text-amber-500 shrink-0 mt-0.5'} />
               <div className="space-y-1">
                 <div className="font-bold" style={{ color: activeTab === 'REKAP' ? '#2563eb' : '#d97706' }}>
-                  {activeTab === 'REKAP' ? '📊 Panduan: Rekap Harian (Audit & Tinjauan)' : '📝 Panduan: Form Input EOD (Closing Shift)'}
+                  {activeTab === 'REKAP' ? 'Rekap Harian' : 'Input EOD'}
                 </div>
                 <p className="m-0 leading-relaxed text-[var(--text-secondary)]">
                   {activeTab === 'REKAP' 
-                    ? 'Rekap Harian meninjau stok awal, IN, OUT aktual staf, waste, stok fisik, pemakaian harian, dan selisih rekonsiliasi untuk kebutuhan audit manajerial.'
-                    : 'Form EOD diisi staf setiap hari. IN menampilkan total harian, OUT dikonfirmasi staf, WASTE berasal dari Catatan Limbah, BROKEN diinput dari hasil timbang melalui Catatan Limbah, dan FULL dihitung otomatis dari saldo awal serta mutasi hari ini. Stok akhir closing menjadi stok awal hari berikutnya.'
+                    ? 'Tinjau stok awal, IN, OUT aktual, limbah, stok akhir, dan selisih.'
+                    : 'Isi OUT harian, konfirmasi nol jika tidak terpakai, lalu kunci EOD saat closing.'
                   }
                 </p>
               </div>
@@ -1368,7 +1368,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
                 title="Buka kunci formulir EOD untuk revisi"
               >
                 {saving ? <Loader2 size={16} className="animate-spin" /> : <Unlock size={16} />}
-                Buka Kunci (Revisi EOD)
+                Buka Kunci
               </button>
             )}
 
@@ -1381,7 +1381,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
                   disabled={saving || loading}
                 >
                   {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                  Simpan Progress (Draf)
+                  Simpan Draf
                 </button>
                 <button
                   className="btn"
@@ -1398,7 +1398,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
                   disabled={saving || loading}
                 >
                   {saving ? <Loader2 size={16} className="animate-spin" /> : <Lock size={16} />}
-                  Kunci Closing EOD
+                  Kunci EOD
                 </button>
               </>
             )}
@@ -1410,7 +1410,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
             <div className="flex items-center gap-2.5">
               <Lock size={16} className="text-amber-600 shrink-0" />
               <div>
-                <span className="font-bold">Formulir Terkunci (EOD Closed / Verified).</span> Kolom input dinonaktifkan untuk melindungi data closing akhir hari.
+                <span className="font-bold">EOD Terkunci.</span> Buka kunci untuk melakukan revisi.
               </div>
             </div>
             <button
@@ -1420,7 +1420,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
               className="ml-3 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold transition-colors flex items-center gap-1.5 shrink-0 shadow-sm"
             >
               <Unlock size={13} />
-              Buka Kunci untuk Edit
+              Buka Kunci
             </button>
           </div>
         )}
@@ -1536,7 +1536,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
                 onClick={confirmZeroActivityForUntouched}
                 disabled={isLocked || loading || saving}
               >
-                <CheckCheck size={13} style={{ marginRight: 5 }} /> Isi OUT = 0 (Baris Kosong)
+                <CheckCheck size={13} style={{ marginRight: 5 }} /> Isi OUT = 0
               </button>
             )}
 
@@ -2319,7 +2319,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
                 disabled={saving || loading}
               >
                 {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-                Simpan Draft
+                Simpan Draf
               </button>
               <button
                 type="button"
@@ -2329,7 +2329,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
                 disabled={saving || loading}
               >
                 {saving ? <Loader2 size={15} className="animate-spin" /> : <Lock size={15} />}
-                Closing Harian (EOD)
+                Kunci EOD
               </button>
             </div>
           </div>
@@ -2383,9 +2383,9 @@ export default function DailyInventory({ category: _category, initialTab }) {
                 </div>
               )}
               <div className="px-4 pb-4">
-                <div className="mb-2 flex items-center gap-2 text-sm font-semibold"><AlertTriangle size={16} /> Item yang harus ditangani</div>
+                <div className="mb-2 flex items-center gap-2 text-sm font-semibold"><AlertTriangle size={16} /> Pemeriksaan Wajib</div>
                 {closingPreview.blockers.length === 0 ? (
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">Semua konfirmasi wajib terisi dan perhitungan FULL/BROKEN lolos validasi. Kamu dapat melanjutkan closing.</div>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">Semua data valid. Siap mengunci EOD.</div>
                 ) : (
                   <div className="max-h-64 space-y-2 overflow-y-auto">
                     {closingPreview.blockers.slice(0, 50).map(row => (
@@ -2399,9 +2399,9 @@ export default function DailyInventory({ category: _category, initialTab }) {
                 )}
               </div>
               <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t p-4" style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowClosingPreview(false)} disabled={saving}>Kembali ke input</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowClosingPreview(false)} disabled={saving}>Batal</button>
                 <button type="button" className="btn" style={{ background: closingPreview.blockers.length ? '#9ca3af' : '#059669', color: '#fff' }} onClick={confirmClosingFromPreview} disabled={saving || loading || closingPreview.blockers.length > 0}>
-                  {saving ? <Loader2 size={15} className="mr-2 animate-spin" /> : <Lock size={15} className="mr-2" />} Sahkan & Kunci EOD
+                  {saving ? <Loader2 size={15} className="mr-2 animate-spin" /> : <Lock size={15} className="mr-2" />} Kunci EOD
                 </button>
               </div>
             </div>
@@ -2533,7 +2533,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
                     style={{ background: '#dc2626', color: '#fff' }}
                   >
                     {wasteModal.submitting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                    {wasteModal.submitting ? 'Menyimpan...' : 'Simpan ke Catatan Limbah'}
+                    {wasteModal.submitting ? 'Menyimpan...' : 'Simpan'}
                   </button>
                 </div>
               </form>

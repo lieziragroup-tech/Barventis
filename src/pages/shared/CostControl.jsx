@@ -313,7 +313,7 @@ export default function CostControl() {
       <div className="glass-card" style={{ marginBottom: '24px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <Calendar size={18} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-          <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Period:</span>
+          <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Periode:</span>
           <select
             className="form-control"
             style={{ width: '160px', padding: '6px 12px', fontSize: '0.875rem' }}
@@ -326,8 +326,6 @@ export default function CostControl() {
           </select>
         </div>
 
-        {/* Removed Tab Buttons */}
-
         <div style={{ position: 'relative' }}>
           <button
             className="btn btn-primary" 
@@ -335,27 +333,27 @@ export default function CostControl() {
             onClick={() => setShowExportMenu(!showExportMenu)}
             disabled={loading || !reportData}
           >
-            Export & Cetak Laporan <ChevronDown size={14} />
+            Ekspor Laporan <ChevronDown size={14} />
           </button>
           
           {showExportMenu && (
-            <div className="glass-card" style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', minWidth: '280px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', zIndex: 10, boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', paddingLeft: '8px' }}>All-In-One (Lengkap)</div>
+            <div className="glass-card" style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', minWidth: '250px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', zIndex: 10, boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', paddingLeft: '8px' }}>Lengkap</div>
               <button className="btn btn-secondary" style={{ textAlign: 'left', justifyContent: 'flex-start', border: 'none', background: 'transparent' }} onClick={() => handlePrintPDF('ALL')}>
-                <FileText size={14} style={{ color: 'var(--danger)' }} /> Cetak PDF Lengkap (COGS + Opname Fisik)
+                <FileText size={14} style={{ color: 'var(--danger)' }} /> PDF Lengkap (COGS + Opname)
               </button>
               <button className="btn btn-secondary" style={{ textAlign: 'left', justifyContent: 'flex-start', border: 'none', background: 'transparent' }} onClick={() => handleExportExcel('ALL')}>
-                <FileSpreadsheet size={14} style={{ color: '#2ecc71' }} /> Export Excel Lengkap (2 Sheets)
+                <FileSpreadsheet size={14} style={{ color: '#2ecc71' }} /> Excel Lengkap (2 Sheet)
               </button>
               
               <div style={{ height: '1px', background: 'var(--border)', margin: '4px 0' }}></div>
-              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', paddingLeft: '8px' }}>Eksport Terpisah</div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', paddingLeft: '8px' }}>Terpisah</div>
               
               <button className="btn btn-secondary" style={{ textAlign: 'left', justifyContent: 'flex-start', border: 'none', background: 'transparent', fontSize: '0.8rem' }} onClick={() => handlePrintPDF('SUMMARY')}>
-                <FileText size={14} /> Hanya PDF Ringkasan COGS
+                <FileText size={14} /> PDF Ringkasan COGS
               </button>
               <button className="btn btn-secondary" style={{ textAlign: 'left', justifyContent: 'flex-start', border: 'none', background: 'transparent', fontSize: '0.8rem' }} onClick={() => handleExportExcel('SO')}>
-                <FileSpreadsheet size={14} /> Hanya Excel Stock Opname
+                <FileSpreadsheet size={14} /> Excel Stock Opname
               </button>
             </div>
           )}
@@ -386,10 +384,7 @@ export default function CostControl() {
               <div>
                 <strong style={{ color: 'var(--warning)' }}>Data tidak wajar terdeteksi.</strong>{' '}
                 <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                  Beverage Cost {beverageCostPct.toFixed(2)}% berarti biaya bahan melebihi seluruh omzet periode ini —
-                  ini nyaris selalu tanda ada duplikasi data (upload POS berulang, stock opname ganda, atau transaksi
-                  historis lama) dan bukan kondisi bisnis riil. Periksa jumlah baris di modul Purchasing/POS Upload
-                  untuk periode ini sebelum mengambil keputusan berdasarkan angka ini.
+                  Beverage Cost {beverageCostPct.toFixed(2)}% melebihi omzet. Periksa kemungkinan duplikasi upload POS atau stock opname pada periode ini.
                 </span>
               </div>
             </div>
@@ -398,25 +393,25 @@ export default function CostControl() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-4">
             <div className="glass-card p-4 flex flex-col justify-between">
               <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '6px' }}>
-                Total Penjualan Beverage (POS)
+                Penjualan POS
               </div>
               <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                 {formatIDR(totalSalesBeverage)}
               </div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                Target Maks HPP (27%): <strong>{formatIDR(totalSalesBeverage * 0.27)}</strong>
+                Batas HPP (27%): <strong>{formatIDR(totalSalesBeverage * 0.27)}</strong>
               </div>
             </div>
 
             <div className="glass-card p-4 flex flex-col justify-between" style={{ borderLeft: '3px solid var(--accent)' }}>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '6px' }}>
-                HPP Aktual (Rekonsiliasi Stok)
+                HPP Aktual
               </div>
               <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--accent)' }}>
                 {formatIDR(pemakaianBulan)}
               </div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                Theoretical (ESB x Resep): <strong>{formatIDR(theoreticalCogsCost)}</strong>
+                Teoritis (Resep): <strong>{formatIDR(theoreticalCogsCost)}</strong>
               </div>
             </div>
 
@@ -428,7 +423,7 @@ export default function CostControl() {
               }}
             >
               <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '6px' }}>
-                Rasio Beverage Cost %
+                Rasio Biaya %
               </div>
               <div style={{ fontSize: '1.45rem', fontWeight: 800, color: beverageCostPct <= 27 ? 'var(--success)' : 'var(--danger)' }}>
                 {beverageCostPct.toFixed(2)}%
@@ -441,13 +436,13 @@ export default function CostControl() {
 
             <div className="glass-card p-4 flex flex-col justify-between">
               <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '6px' }}>
-                Pemakaian EOD & Selisih
+                Pemakaian EOD
               </div>
               <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                 {formatIDR(actualDailyUsageCost)}
               </div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                Selisih Rekonsiliasi: <strong style={{ color: Math.abs(reconciliationDifference) > 0.01 ? 'var(--warning)' : 'var(--success)' }}>{formatIDR(reconciliationDifference)}</strong> • EOD Lock: <strong>{closedEodSessions}</strong>
+                Selisih: <strong style={{ color: Math.abs(reconciliationDifference) > 0.01 ? 'var(--warning)' : 'var(--success)' }}>{formatIDR(reconciliationDifference)}</strong> • EOD: <strong>{closedEodSessions}</strong>
               </div>
             </div>
           </div>
@@ -456,12 +451,12 @@ export default function CostControl() {
           <div className="glass-card p-3.5 mb-5" style={{ background: 'var(--bg-secondary)' }}>
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 text-xs">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="font-bold text-[var(--text-secondary)] uppercase">Formula HPP:</span>
+                <span className="font-bold text-[var(--text-secondary)] uppercase">Rumus HPP:</span>
                 <span>Stok Awal <strong>{formatIDR(openingStock)}</strong></span>
                 <span>+ Belanja <strong>{formatIDR(totalPembelian)}</strong></span>
                 <span>- Stok Akhir <strong>{formatIDR(closingStock)}</strong></span>
                 <span>= HPP <strong style={{ color: 'var(--accent)' }}>{formatIDR(pemakaianBulan)}</strong></span>
-                <span className="text-rose-500">• Waste/Loss: <strong>{formatIDR(wasteValuation)}</strong></span>
+                <span className="text-rose-500">• Limbah: <strong>{formatIDR(wasteValuation)}</strong></span>
               </div>
               <button
                 type="button"
@@ -469,7 +464,7 @@ export default function CostControl() {
                 className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--accent)] hover:underline shrink-0 self-start md:self-auto"
               >
                 <Info size={13} />
-                <span>{showMethodNote ? 'Sembunyikan Catatan Metodologi' : 'Catatan Metodologi Pengukuran'}</span>
+                <span>{showMethodNote ? 'Tutup Metodologi' : 'Info Metodologi'}</span>
               </button>
             </div>
             {showMethodNote && (
@@ -477,7 +472,7 @@ export default function CostControl() {
                 role="note"
                 className="mt-2.5 pt-2.5 border-t border-[var(--border)] text-[11px] text-[var(--text-secondary)] leading-relaxed"
               >
-                Catatan pengukuran: FULL dihitung dari saldo buku dan BROKEN yang ditimbang, bukan hitung fisik independen atas kemasan utuh. Estimasi depletion harian dari ledger digunakan untuk pemantauan operasional harian, sedangkan rekonsiliasi HPP resmi mengacu pada Stock Opname yang disahkan.
+                Pemakaian harian adalah estimasi ledger (saldo buku + broken). Rekonsiliasi HPP resmi mengacu pada Stock Opname yang disahkan.
               </div>
             )}
           </div>
@@ -486,7 +481,7 @@ export default function CostControl() {
           <div className="glass-card" style={{ padding: '18px 20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
               <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Info size={16} style={{ color: 'var(--accent)' }} /> Daily Purchase vs Sales
+                <Info size={16} style={{ color: 'var(--accent)' }} /> Pembelian vs Penjualan Harian
               </h3>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', width: '100%', maxWidth: '420px' }}>
@@ -526,17 +521,17 @@ export default function CostControl() {
 
             {dailyColumns.length === 0 ? (
               <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                Tidak ada data transaksi harian tercatat untuk periode {period}.
+                Belum ada transaksi harian periode {period}.
               </div>
             ) : (
               <div className="table-container">
                 <table className="custom-table">
                   <thead>
                       <tr>
-                        <th>Date</th>
-                        <th style={{ textAlign: 'right' }}>Purchases</th>
-                        <th style={{ textAlign: 'right' }}>Sales Revenue</th>
-                        <th style={{ textAlign: 'right' }} title="Rasio pembelian terhadap penjualan harian">Beli/Jual %</th>
+                        <th>Tanggal</th>
+                        <th style={{ textAlign: 'right' }}>Pembelian</th>
+                        <th style={{ textAlign: 'right' }}>Penjualan</th>
+                        <th style={{ textAlign: 'right' }} title="Rasio pembelian terhadap penjualan">Beli/Jual %</th>
                         <th>Status</th>
                       </tr>
                   </thead>
@@ -549,7 +544,7 @@ export default function CostControl() {
                           <td style={{ textAlign: 'right', fontWeight: 500 }}>{formatIDR(row.purchase)}</td>
                           <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatIDR(row.sales)}</td>
                           <td style={{ textAlign: 'right', fontWeight: 700, color: ratio > 50 ? 'var(--warning)' : 'var(--text-primary)' }}>{ratio.toFixed(1)}%</td>
-                          <td>{ratio > 50 ? <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>High</span> : <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>OK</span>}</td>
+                          <td>{ratio > 50 ? <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>Tinggi</span> : <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>OK</span>}</td>
                         </tr>
                       );
                     })}
@@ -558,7 +553,7 @@ export default function CostControl() {
                       <td style={{ textAlign: 'right', fontWeight: 800 }}>{formatIDR(totalPembelian)}</td>
                       <td style={{ textAlign: 'right', fontWeight: 800 }}>{formatIDR(totalSalesBeverage)}</td>
                       <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--accent)' }}>{totalSalesBeverage > 0 ? ((totalPembelian / totalSalesBeverage) * 100).toFixed(1) : '0.0'}%</td>
-                      <td><span className="badge badge-info" style={{ fontSize: '0.65rem' }}>Complete</span></td>
+                      <td><span className="badge badge-info" style={{ fontSize: '0.65rem' }}>Selesai</span></td>
                     </tr>
                   </tbody>
                 </table>

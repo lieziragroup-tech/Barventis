@@ -256,16 +256,16 @@ export default function StockOpname({ defaultLocation } = {}) {
             </div>
             <div>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '8px' }}>
-                Stock Opname Process & Audit Wizard
+                Stock Opname
               </h3>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                Initialize stocktaking records. This locks system book inventory levels for variance reconciliation.
+                Catat fisik stok untuk rekonsiliasi saldo.
               </p>
             </div>
           </div>
 
           <div className="form-group">
-            <label className="form-label">Audit Warehouse Location</label>
+            <label className="form-label">Lokasi Gudang</label>
             <select className="form-control" value={location} onChange={e => setLocation(e.target.value)}>
               {locations.filter(l => l.code !== 'ALL').map(l => (
                 <option key={l.code} value={l.code}>{l.name} ({l.code})</option>
@@ -305,7 +305,7 @@ export default function StockOpname({ defaultLocation } = {}) {
           </div>
 
           <button className="btn btn-primary" style={{ width: '100%', marginTop: '16px', display: 'flex', justifyContent: 'center' }} onClick={handleStartOpname} disabled={isInitializing}>
-            {isInitializing ? 'Memuat Snapshot...' : 'Start Stocktaking Wizard'} <ArrowRight size={16} />
+            {isInitializing ? 'Memuat...' : 'Mulai Opname'} <ArrowRight size={16} />
           </button>
         </div>
       )}
@@ -315,8 +315,8 @@ export default function StockOpname({ defaultLocation } = {}) {
         <div className="glass-card" style={{ padding: '28px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
             <div style={{ minWidth: 0 }}>
-              <span className="badge badge-info" style={{ marginBottom: '6px' }}>Step 2: Counting</span>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>Audit Inventory: {location} Location</h3>
+              <span className="badge badge-info" style={{ marginBottom: '6px' }}>Langkah 2: Hitung Fisik</span>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>Opname Stok ({location})</h3>
             </div>
             
             {/* Category tabs */}
@@ -346,13 +346,13 @@ export default function StockOpname({ defaultLocation } = {}) {
             <table className="custom-table">
               <thead>
                 <tr>
-                  <th style={{ width: '30%' }}>Raw Material Name</th>
-                  <th style={{ width: '12%', textAlign: 'right' }}>Book Qty</th>
-                  <th style={{ width: '8%' }}>Unit</th>
-                  <th style={{ width: '15%', textAlign: 'right' }}>Full (Utuh)</th>
-                  <th style={{ width: '15%', textAlign: 'right' }}>Broken (Terbuka)</th>
-                  <th style={{ width: '10%', textAlign: 'right' }}>Physical Qty</th>
-                  <th style={{ width: '10%', textAlign: 'right' }}>Live Variance</th>
+                  <th style={{ width: '30%' }}>Nama Bahan</th>
+                  <th style={{ width: '12%', textAlign: 'right' }}>Stok Sistem</th>
+                  <th style={{ width: '8%' }}>Satuan</th>
+                  <th style={{ width: '15%', textAlign: 'right' }}>Utuh (Full)</th>
+                  <th style={{ width: '15%', textAlign: 'right' }}>Terbuka (Broken)</th>
+                  <th style={{ width: '10%', textAlign: 'right' }}>Total Fisik</th>
+                  <th style={{ width: '10%', textAlign: 'right' }}>Selisih</th>
                 </tr>
               </thead>
               <tbody>
@@ -416,9 +416,9 @@ export default function StockOpname({ defaultLocation } = {}) {
 
           {/* Action Row */}
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <button className="btn btn-secondary" onClick={() => setStep(1)}>Cancel Opname</button>
+            <button className="btn btn-secondary" onClick={() => setStep(1)}>Batal</button>
             <button className="btn btn-primary" onClick={() => setStep(3)}>
-              Reconciliation Review <ArrowRight size={16} />
+              Tinjau Selisih <ArrowRight size={16} />
             </button>
           </div>
         </div>
@@ -428,10 +428,10 @@ export default function StockOpname({ defaultLocation } = {}) {
       {step === 3 && (
         <div className="glass-card" style={{ padding: '28px' }}>
           <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '24px' }}>
-            <span className="badge badge-warning" style={{ marginBottom: '6px' }}>Step 3: Reconciliation</span>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>Audit Reconciliation Discrepancy Sheet</h3>
+            <span className="badge badge-warning" style={{ marginBottom: '6px' }}>Langkah 3: Rekonsiliasi</span>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>Daftar Selisih Stok</h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '4px' }}>
-              The items listed below have discrepancies between physical count and system records. Add audit notes if required.
+              Tambahkan catatan untuk bahan yang berselisih.
             </p>
           </div>
 
@@ -440,12 +440,12 @@ export default function StockOpname({ defaultLocation } = {}) {
             <table className="custom-table">
               <thead>
                 <tr>
-                  <th style={{ width: '35%' }}>Discrepant Item</th>
-                  <th style={{ width: '12%', textAlign: 'right' }}>Book Stock</th>
-                  <th style={{ width: '12%', textAlign: 'right' }}>Physical Count</th>
-                  <th style={{ width: '12%', textAlign: 'right' }}>Variance</th>
-                  <th style={{ width: '14%', textAlign: 'right' }}>Valuation Adjust</th>
-                  <th style={{ width: '25%' }}>Audit Explanation / Action Notes</th>
+                  <th style={{ width: '35%' }}>Nama Bahan</th>
+                  <th style={{ width: '12%', textAlign: 'right' }}>Stok Sistem</th>
+                  <th style={{ width: '12%', textAlign: 'right' }}>Hitung Fisik</th>
+                  <th style={{ width: '12%', textAlign: 'right' }}>Selisih</th>
+                  <th style={{ width: '14%', textAlign: 'right' }}>Nilai Selisih</th>
+                  <th style={{ width: '25%' }}>Catatan Audit</th>
                 </tr>
               </thead>
               <tbody>
@@ -478,7 +478,7 @@ export default function StockOpname({ defaultLocation } = {}) {
                         <input 
                           type="text" 
                           className="form-control" 
-                          placeholder="e.g. Broken packaging, waste..." 
+                          placeholder="Contoh: Kemasan rusak, tumpah..."
                           style={{ padding: '6px 12px', fontSize: '0.825rem' }}
                           value={item.notes}
                           onChange={e => handleNotesChange(item.name, e.target.value)}
@@ -490,7 +490,7 @@ export default function StockOpname({ defaultLocation } = {}) {
                 {itemsWithVariance.length === 0 && (
                   <tr>
                     <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: 'var(--success)', fontWeight: 600 }}>
-                      🎉 Zero discrepancies found! Perfect stock matches all round.
+                      Tidak ada selisih. Semua stok sesuai.
                     </td>
                   </tr>
                 )}
@@ -500,9 +500,9 @@ export default function StockOpname({ defaultLocation } = {}) {
 
           {/* Action Row */}
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <button className="btn btn-secondary" onClick={() => setStep(2)}>Back to Counting</button>
+            <button className="btn btn-secondary" onClick={() => setStep(2)}>Kembali</button>
             <button className="btn btn-primary" onClick={() => setStep(4)}>
-              Approve & Signature <ArrowRight size={16} />
+              Tanda Tangan <ArrowRight size={16} />
             </button>
           </div>
         </div>
@@ -512,12 +512,12 @@ export default function StockOpname({ defaultLocation } = {}) {
       {step === 4 && (
         <div className="glass-card" style={{ maxWidth: '520px', margin: '40px auto', padding: '32px' }}>
           <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-            <span className="badge badge-success" style={{ marginBottom: '8px' }}>Step 4: Approval</span>
+            <span className="badge badge-success" style={{ marginBottom: '8px' }}>Langkah 4: Persetujuan</span>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>
-              Approve Stocktaking Audit
+              Setujui Stock Opname
             </h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-              Sign with your mouse/touchscreen inside the box below to authorize these adjustments.
+              Tanda tangan di bawah untuk mengesahkan opname.
             </p>
           </div>
 
@@ -541,18 +541,18 @@ export default function StockOpname({ defaultLocation } = {}) {
 
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
             <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={clearSignature}>
-              Clear Signature
+              Hapus TTD
             </button>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Palette size={12} /> Canvas Active
+              <Palette size={12} /> Kanvas Siap
             </span>
           </div>
 
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: '12px' }}>
-            <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setStep(3)}>Back</button>
+            <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setStep(3)}>Kembali</button>
             <button className="btn btn-success" style={{ flex: 2, display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }} onClick={handleCommitOpname} disabled={isSubmitting}>
-              <ShieldCheck size={18} /> {isSubmitting ? 'Menyimpan...' : 'Approve & Reconcile Stock'}
+              <ShieldCheck size={18} /> {isSubmitting ? 'Menyimpan...' : 'Setujui & Simpan'}
             </button>
           </div>
         </div>
@@ -563,8 +563,8 @@ export default function StockOpname({ defaultLocation } = {}) {
         isOpen={showBulkImport}
         onClose={() => setShowBulkImport(false)}
         type="opname"
-        title="Bulk Import Hasil Opname"
-        description="Upload data perhitungan fisik dari Excel. Data akan langsung mengisi grid di bawah."
+        title="Import Hasil Opname"
+        description="Unggah hasil hitung fisik dari Excel."
         currentData={opnameItems.map((item, idx) => ({
           'NO': idx + 1,
           'NAMA ITEM': item.name,

@@ -8,9 +8,9 @@ const Purchasing = lazyWithRetry(() => import('./Purchasing'));
 const Invoicing = lazyWithRetry(() => import('./Invoicing'));
 
 const TABS = [
-  { key: 'marketlist', label: 'Marketlist (Daftar Belanja)', icon: ClipboardList },
+  { key: 'marketlist', label: 'Katalog Bahan', icon: ClipboardList },
   { key: 'pembelian', label: 'Pembelian Harian', icon: ShoppingCart },
-  { key: 'invoicing', label: 'Penerimaan Barang & Invoicing', icon: FileText },
+  { key: 'invoicing', label: 'PO & Invoicing', icon: FileText },
 ];
 
 const Loading = () => (

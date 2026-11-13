@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Plus, Edit2, Search, Trash2, Calendar, ShoppingCart, User, UploadCloud } from 'lucide-react';
+import { Plus, Edit2, Search, Trash2, Calendar, ShoppingCart, User, UploadCloud, Package, CheckCircle2, AlertTriangle, RotateCcw, Save } from 'lucide-react';
 import { api } from '../../services/api';
 import ExportButton from '../../components/shared/ExportButton';
 import PrintButton from '../../components/shared/PrintButton';
@@ -9,6 +9,7 @@ import BulkImport from '../../components/BulkImport';
 import SwipeableItem from '../../components/shared/SwipeableItem';
 import { TableSkeletonRows, TableLoadingOverlay } from '../../components/shared/TableSkeleton';
 import { useAuth } from '../../contexts/AuthContext';
+import { useData } from '../../contexts/DataContext';
 import useIsMobile from '../../hooks/useIsMobile';
 
 const formatIDR = (val) => 'Rp ' + Number(val || 0).toLocaleString('id-ID');
@@ -17,14 +18,26 @@ const PAGE_SIZE = 15;
 
 export default function Purchasing() {
   const { activeUser } = useAuth();
+  const { refreshData } = useData();
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('PURCHASES'); // 'PURCHASES', 'SUPPLIERS'
 
   // Supplier State
   const [suppliers, setSuppliers] = useState([]);
+  const [supplierSearch, setSupplierSearch] = useState('');
   const [editingSupplier, setEditSupplier] = useState(null);
+  const [selectedSupplierMaterialIds, setSelectedSupplierMaterialIds] = useState([]);
+  const [modalMaterialSearch, setModalMaterialSearch] = useState('');
+  const [modalMaterialFilter, setModalMaterialFilter] = useState('ALL'); // 'ALL' | 'SELECTED' | 'UNASSIGNED'
+  const [savingSupplier, setSavingSupplier] = useState(false);
   const [supplierDrawer, setSupplierDrawer] = useState(null);
+  const [drawerDraftMaterialIds, setDrawerDraftMaterialIds] = useState([]);
   const [drawerPOs, setDrawerPOs] = useState([]);
+  const [drawerMaterialSearch, setDrawerMaterialSearch] = useState('');
+  const [savingDrawerMapping, setSavingDrawerMapping] = useState(false);
+
+  // Double-Check Confirmation Popup Modal State (replaces blocked window.confirm)
+  const [doubleCheckModal, setDoubleCheckModal] = useState(null);
 
   // Materials Master
   const [materials, setMaterials] = useState([]);
@@ -104,7 +117,7 @@ export default function Purchasing() {
   const [showNewMaterialModal, setShowNewMaterialModal] = useState(false);
   const isMobile = useIsMobile(768);
   const [editingPurchase, setEditingPurchase] = useState(null);
-  const [newMaterialData, setNewMaterialData] = useState({ name: '', category: 'Bahan Baku Dasar', unit: 'pcs', price: '', min_stock: 15 });
+  const [newMaterialData, setNewMaterialData] = useState({ name: '', category: 'Bahan Baku Dasar', unit: 'pcs', price: '', min_stock: 15, supplier: '' });
 
   const fetchHistory = useCallback(async (targetPage, targetSearch, targetPeriod) => {
     setHistoryLoading(true);
@@ -129,7 +142,17 @@ export default function Purchasing() {
         api.getMaterials()
       ]);
       setSuppliers(supData || []);
-      setMaterials((matData || []).map(m => ({ id: m.id, name: m.name, unit: m.unit, price: m.new_price || 0, supplier: m.supplier })));
+      setMaterials((matData || []).map(m => {
+        const rawSup = String(m.supplier || '').trim();
+        return {
+          id: m.id,
+          name: m.name,
+          category: m.category || 'Bahan Baku Dasar',
+          unit: m.unit,
+          price: m.new_price || m.price || 0,
+          supplier: rawSup === '-' ? '' : rawSup
+        };
+      }));
     } catch (err) {
       setNotification({ type: 'error', text: err.message });
     } finally {
@@ -167,17 +190,266 @@ export default function Purchasing() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // --- Handlers ---
-  const handleSaveSupplier = async (e) => {
+  const normalizeSupplierName = useCallback((val) => {
+    const s = String(val || '').trim();
+    return s === '-' ? '' : s;
+  }, []);
+
+  // Helper: check if material belongs to supplier name (case-insensitive, trimmed — identical to PO boundary logic)
+  const isMaterialInSupplier = useCallback((materialSupplier, targetSupplierName) => {
+    const a = normalizeSupplierName(materialSupplier).toLowerCase();
+    const b = normalizeSupplierName(targetSupplierName).toLowerCase();
+    return Boolean(a && b && a === b);
+  }, [normalizeSupplierName]);
+
+  const openSupplierDrawer = useCallback((supplierObj) => {
+    if (!supplierObj) return;
+    setDrawerMaterialSearch('');
+    setSupplierDrawer(supplierObj);
+    const initialIds = materials
+      .filter(m => isMaterialInSupplier(m.supplier, supplierObj.name))
+      .map(m => m.id);
+    setDrawerDraftMaterialIds(initialIds);
+  }, [materials, isMaterialInSupplier]);
+
+  const openSupplierModal = (supplierObj = null) => {
+    const base = supplierObj
+      ? { ...supplierObj }
+      : { name: '', phone: '', address: '', contact_person: '' };
+    setEditSupplier(base);
+    setModalMaterialSearch('');
+    setModalMaterialFilter('ALL');
+    if (supplierObj?.name) {
+      const preselected = materials
+        .filter(m => isMaterialInSupplier(m.supplier, supplierObj.name))
+        .map(m => m.id);
+      setSelectedSupplierMaterialIds(preselected);
+    } else {
+      setSelectedSupplierMaterialIds([]);
+    }
+  };
+
+  const toggleMaterialInSupplierModal = (materialId) => {
+    setSelectedSupplierMaterialIds(prev =>
+      prev.includes(materialId) ? prev.filter(id => id !== materialId) : [...prev, materialId]
+    );
+  };
+
+  // --- Handlers: Modal Supplier Save (Step 1: Prepare Double-Check -> Step 2: Execute) ---
+  const handleSaveSupplier = (e) => {
     e.preventDefault();
-    if (!window.confirm(`Konfirmasi simpan data supplier ${editingSupplier.name}?`)) return;
+    const cleanName = String(editingSupplier?.name || '').trim();
+    if (!cleanName) {
+      setNotification({ type: 'error', text: 'Nama supplier wajib diisi.' });
+      return;
+    }
+
+    const originalSupplier = editingSupplier.id
+      ? suppliers.find(s => s.id === editingSupplier.id)
+      : null;
+    const oldName = originalSupplier?.name || editingSupplier.name || '';
+    const selectedSet = new Set(selectedSupplierMaterialIds);
+
+    const addedMats = materials.filter(
+      m =>
+        selectedSet.has(m.id) &&
+        !isMaterialInSupplier(m.supplier, cleanName) &&
+        !(oldName && isMaterialInSupplier(m.supplier, oldName))
+    );
+    const removedMats = materials.filter(
+      m =>
+        !selectedSet.has(m.id) &&
+        (isMaterialInSupplier(m.supplier, cleanName) ||
+          (oldName && isMaterialInSupplier(m.supplier, oldName)))
+    );
+
+    setDoubleCheckModal({
+      type: 'SAVE_SUPPLIER_MODAL',
+      title: editingSupplier.id ? 'Simpan Perubahan Supplier?' : 'Simpan Supplier Baru?',
+      subtitle: '',
+      supplierName: cleanName,
+      isEdit: Boolean(editingSupplier.id),
+      oldName: oldName && oldName !== cleanName ? oldName : null,
+      totalSelected: selectedSupplierMaterialIds.length,
+      addedMats,
+      removedMats
+    });
+  };
+
+  const executeSaveSupplier = async () => {
+    if (!editingSupplier) return;
+    const cleanName = String(editingSupplier?.name || '').trim();
+    setSavingSupplier(true);
     try {
-      await api.saveSupplier(editingSupplier);
+      const originalSupplier = editingSupplier.id
+        ? suppliers.find(s => s.id === editingSupplier.id)
+        : null;
+      const oldName = originalSupplier?.name || editingSupplier.name || '';
+
+      const saved = await api.saveSupplier({
+        ...editingSupplier,
+        name: cleanName
+      });
+
+      const finalSupplierName = saved?.name || cleanName;
+      const selectedSet = new Set(selectedSupplierMaterialIds);
+
+      const toAssign = materials.filter(
+        m => selectedSet.has(m.id) && !isMaterialInSupplier(m.supplier, finalSupplierName)
+      );
+      const toUnassign = materials.filter(
+        m =>
+          !selectedSet.has(m.id) &&
+          (isMaterialInSupplier(m.supplier, finalSupplierName) ||
+            (oldName && isMaterialInSupplier(m.supplier, oldName)))
+      );
+
+      await Promise.all([
+        ...toAssign.map(m => api.updateMaterial(m.id, { supplier: finalSupplierName }, activeUser?.id)),
+        ...toUnassign.map(m => api.updateMaterial(m.id, { supplier: '' }, activeUser?.id))
+      ]);
+
+      setDoubleCheckModal(null);
       setEditSupplier(null);
-      setNotification({ type: 'success', text: 'Supplier tersimpan.' });
-      fetchMasterData();
+      setNotification({
+        type: 'success',
+        text: `Supplier "${finalSupplierName}" berhasil disimpan (${selectedSupplierMaterialIds.length} bahan).`
+      });
+
+      await fetchMasterData();
+      if (typeof refreshData === 'function') await refreshData();
+
+      if (supplierDrawer && (supplierDrawer.id === saved?.id || isMaterialInSupplier(supplierDrawer.name, oldName))) {
+        setSupplierDrawer(saved);
+        setDrawerDraftMaterialIds(Array.from(selectedSet));
+      }
     } catch (err) {
       setNotification({ type: 'error', text: err.message });
+    } finally {
+      setSavingSupplier(false);
+    }
+  };
+
+  // --- Handlers: Delete Supplier (Step 1: Prepare Double-Check -> Step 2: Execute) ---
+  const handleDeleteSupplier = (supplier) => {
+    if (!supplier?.id) return;
+    const linkedMats = materials.filter(m => isMaterialInSupplier(m.supplier, supplier.name));
+    setDoubleCheckModal({
+      type: 'DELETE_SUPPLIER',
+      title: `Hapus Supplier "${supplier.name}"?`,
+      subtitle: '',
+      supplier,
+      removedMats: linkedMats
+    });
+  };
+
+  const executeDeleteSupplier = async (supplier) => {
+    if (!supplier?.id) return;
+    setSavingSupplier(true);
+    setLoading(true);
+    try {
+      await api.deleteSupplier(supplier.id);
+      setDoubleCheckModal(null);
+      if (supplierDrawer?.id === supplier.id) {
+        setSupplierDrawer(null);
+      }
+      setNotification({
+        type: 'success',
+        text: `Supplier "${supplier.name}" berhasil dihapus.`
+      });
+      await fetchMasterData();
+      if (typeof refreshData === 'function') await refreshData();
+    } catch (err) {
+      setNotification({ type: 'error', text: err.message });
+    } finally {
+      setSavingSupplier(false);
+      setLoading(false);
+    }
+  };
+
+  // --- Handlers: Interactive Staged Material Mapping in Supplier Drawer ---
+  const handleStageAssignInDrawer = (material) => {
+    if (!material?.id) return;
+    setDrawerDraftMaterialIds(prev => (prev.includes(material.id) ? prev : [...prev, material.id]));
+    setDrawerMaterialSearch('');
+  };
+
+  const handleStageUnassignInDrawer = (materialId) => {
+    if (!materialId) return;
+    setDrawerDraftMaterialIds(prev => prev.filter(id => id !== materialId));
+  };
+
+  const handleUndoUnassignInDrawer = (materialId) => {
+    if (!materialId) return;
+    setDrawerDraftMaterialIds(prev => (prev.includes(materialId) ? prev : [...prev, materialId]));
+  };
+
+  const handleResetDrawerDraft = () => {
+    if (!supplierDrawer) return;
+    const originalIds = materials
+      .filter(m => isMaterialInSupplier(m.supplier, supplierDrawer.name))
+      .map(m => m.id);
+    setDrawerDraftMaterialIds(originalIds);
+  };
+
+  const handlePrepareSaveDrawerMapping = () => {
+    if (!supplierDrawer) return;
+    const originalIds = materials
+      .filter(m => isMaterialInSupplier(m.supplier, supplierDrawer.name))
+      .map(m => m.id);
+    const draftSet = new Set(drawerDraftMaterialIds);
+    const origSet = new Set(originalIds);
+
+    const addedMats = materials.filter(m => draftSet.has(m.id) && !origSet.has(m.id));
+    const removedMats = materials.filter(m => origSet.has(m.id) && !draftSet.has(m.id));
+
+    if (addedMats.length === 0 && removedMats.length === 0) {
+      setNotification({ type: 'success', text: 'Belum ada perubahan.' });
+      return;
+    }
+
+    setDoubleCheckModal({
+      type: 'SAVE_DRAWER_MAPPING',
+      title: 'Simpan Perubahan?',
+      subtitle: '',
+      supplierName: supplierDrawer.name,
+      totalSelected: drawerDraftMaterialIds.length,
+      addedMats,
+      removedMats
+    });
+  };
+
+  const executeSaveDrawerMapping = async () => {
+    if (!supplierDrawer) return;
+    const targetSupplierName = supplierDrawer.name.trim();
+    const originalIds = materials
+      .filter(m => isMaterialInSupplier(m.supplier, targetSupplierName))
+      .map(m => m.id);
+    const draftSet = new Set(drawerDraftMaterialIds);
+    const origSet = new Set(originalIds);
+
+    const addedMats = materials.filter(m => draftSet.has(m.id) && !origSet.has(m.id));
+    const removedMats = materials.filter(m => origSet.has(m.id) && !draftSet.has(m.id));
+
+    setSavingDrawerMapping(true);
+    try {
+      await Promise.all([
+        ...addedMats.map(m => api.updateMaterial(m.id, { supplier: targetSupplierName }, activeUser?.id)),
+        ...removedMats.map(m => api.updateMaterial(m.id, { supplier: '' }, activeUser?.id))
+      ]);
+
+      setDoubleCheckModal(null);
+      setNotification({
+        type: 'success',
+        text: `Katalog "${targetSupplierName}" tersimpan (+${addedMats.length} / -${removedMats.length}).`
+      });
+
+      await fetchMasterData();
+      if (typeof refreshData === 'function') await refreshData();
+    } catch (err) {
+      setNotification({ type: 'error', text: err.message });
+    } finally {
+      setSavingDrawerMapping(false);
     }
   };
 
@@ -243,7 +515,7 @@ export default function Purchasing() {
 
       setCart([]);
       setShowConfirmModal(false);
-      setNotification({ type: 'success', text: `${cart.length} item berhasil disimpan ke gudang.` });
+      setNotification({ type: 'success', text: `${cart.length} item pembelian tersimpan.` });
       setPage(1);
       fetchHistory(1, search);
     } catch (err) {
@@ -253,11 +525,21 @@ export default function Purchasing() {
     }
   };
 
-  const handleDeleteHistory = async (purchaseId, itemName) => {
-    if (!window.confirm(`Hapus dan batalkan data pembelian harian "${itemName}"? Stok akan ditarik kembali secara otomatis.`)) return;
+  const handleDeleteHistory = (purchaseId, itemName) => {
+    setDoubleCheckModal({
+      type: 'DELETE_HISTORY',
+      title: 'Hapus Pembelian?',
+      subtitle: `Stok "${itemName}" akan dikembalikan otomatis.`,
+      purchaseId,
+      itemName
+    });
+  };
+
+  const executeDeleteHistory = async (purchaseId, itemName) => {
     setLoading(true);
     try {
       await api.deletePurchaseEntry(purchaseId);
+      setDoubleCheckModal(null);
       setNotification({ type: 'success', text: `Pembelian "${itemName}" berhasil dibatalkan.` });
       fetchHistory(page, search);
       fetchMasterData(); // Refresh current stock levels globally
@@ -268,14 +550,21 @@ export default function Purchasing() {
     }
   };
 
-  const handleBulkDeleteHistory = async () => {
+  const handleBulkDeleteHistory = () => {
     if (selectedPurchases.length === 0) return;
-    if (!window.confirm(`Hapus dan batalkan ${selectedPurchases.length} data pembelian harian terpilih? Stok akan ditarik kembali secara otomatis.`)) return;
+    setDoubleCheckModal({
+      type: 'BULK_DELETE_HISTORY',
+      title: `Hapus ${selectedPurchases.length} Pembelian?`,
+      subtitle: `Stok ${selectedPurchases.length} item terpilih akan dikembalikan.`,
+      count: selectedPurchases.length
+    });
+  };
 
+  const executeBulkDeleteHistory = async () => {
     setLoading(true);
     try {
-      // Gunakan API yang telah dioptimasi
       const { successCount, failedItems } = await api.bulkDeletePurchaseEntries(selectedPurchases);
+      setDoubleCheckModal(null);
 
       if (failedItems.length === 0) {
         setNotification({ type: 'success', text: `${successCount} data pembelian berhasil dibatalkan.` });
@@ -304,9 +593,7 @@ export default function Purchasing() {
   };
 
   const handleSelectAllMatchedHistory = () => {
-    if (window.confirm(`Pilih semua ${allMatchingIds.length} data pembelian yang cocok dengan filter saat ini (termasuk yang tidak tampil di halaman ini)?`)) {
-      setSelectedPurchases(allMatchingIds);
-    }
+    setSelectedPurchases(allMatchingIds);
   };
 
   const handleSelectHistory = (id) => {
@@ -350,7 +637,7 @@ export default function Purchasing() {
         notes: editingPurchase.notes,
         date: editingPurchase.date
       });
-      setNotification({ type: 'success', text: `Data pembelian "${editingPurchase.name}" berhasil diperbarui.` });
+      setNotification({ type: 'success', text: `Pembelian "${editingPurchase.name}" diperbarui.` });
       setEditingPurchase(null);
       fetchHistory(page, search, period);
       fetchMasterData();
@@ -365,27 +652,41 @@ export default function Purchasing() {
     e.preventDefault();
     setLoading(true);
     try {
+      const assignedSupplier = normalizeSupplierName(newMaterialData.supplier);
       const payload = {
         name: newMaterialData.name,
         category: newMaterialData.category,
         unit: newMaterialData.unit,
         price: parseFloat(newMaterialData.price) || 0,
-        min_stock: parseFloat(newMaterialData.min_stock) || 15
+        min_stock: parseFloat(newMaterialData.min_stock) || 15,
+        supplier: assignedSupplier
       };
       const created = await api.createMaterial(payload);
 
-      // Auto add to cart
-      addToCart({
-        id: created.id,
-        name: created.name,
-        unit: created.unit,
-        price: created.price,
-        supplier: created.supplier
-      });
+      // Auto add to cart only when user is on Daily Purchases tab
+      if (tab === 'PURCHASES') {
+        addToCart({
+          id: created.id,
+          name: created.name,
+          unit: created.unit,
+          price: created.price,
+          supplier: created.supplier
+        });
+      }
+
+      if (supplierDrawer && isMaterialInSupplier(assignedSupplier, supplierDrawer.name)) {
+        setDrawerDraftMaterialIds(prev => (prev.includes(created.id) ? prev : [...prev, created.id]));
+      }
 
       setShowNewMaterialModal(false);
-      setNotification({ type: 'success', text: `Bahan ${created.name} berhasil dibuat & dimasukkan ke keranjang.` });
-      fetchMasterData(); // Refresh the list in the background
+      setNotification({
+        type: 'success',
+        text: assignedSupplier
+          ? `Bahan "${created.name}" ditambahkan ke "${assignedSupplier}".`
+          : `Bahan "${created.name}" ditambahkan.`
+      });
+      await fetchMasterData();
+      if (typeof refreshData === 'function') await refreshData();
     } catch (err) {
       setNotification({ type: 'error', text: err.message });
       setLoading(false); // Reset loading if error, otherwise it resets when fetching
@@ -489,8 +790,8 @@ export default function Purchasing() {
     <div className="fade-in">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Purchasing & Suppliers</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Catat pembelian harian dan kelola master data supplier.</p>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Pembelian & Supplier</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Catat pembelian dan kelola supplier.</p>
         </div>
       </div>
 
@@ -502,41 +803,185 @@ export default function Purchasing() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-tertiary)', padding: '4px', borderRadius: 'var(--radius-md)', width: 'fit-content', marginBottom: '20px' }}>
-        <button className={`btn ${tab === 'PURCHASES' ? 'btn-primary' : ''}`} style={{ background: tab === 'PURCHASES' ? '' : 'transparent', color: tab === 'PURCHASES' ? '' : 'var(--text-secondary)' }} onClick={() => setTab('PURCHASES')}>Daily Purchases</button>
-        <button className={`btn ${tab === 'SUPPLIERS' ? 'btn-primary' : ''}`} style={{ background: tab === 'SUPPLIERS' ? '' : 'transparent', color: tab === 'SUPPLIERS' ? '' : 'var(--text-secondary)' }} onClick={() => setTab('SUPPLIERS')}>Supplier Master</button>
+        <button className={`btn ${tab === 'PURCHASES' ? 'btn-primary' : ''}`} style={{ background: tab === 'PURCHASES' ? '' : 'transparent', color: tab === 'PURCHASES' ? '' : 'var(--text-secondary)' }} onClick={() => setTab('PURCHASES')}>Pembelian Harian</button>
+        <button className={`btn ${tab === 'SUPPLIERS' ? 'btn-primary' : ''}`} style={{ background: tab === 'SUPPLIERS' ? '' : 'transparent', color: tab === 'SUPPLIERS' ? '' : 'var(--text-secondary)' }} onClick={() => setTab('SUPPLIERS')}>Daftar Supplier</button>
       </div>
 
       {tab === 'SUPPLIERS' && (
         <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Daftar Supplier</h3>
-            <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '4px' }}>Daftar Supplier</h3>
+              <p style={{ fontSize: '0.83rem', color: 'var(--text-secondary)', margin: 0 }}>
+                Kelola kontak dan bahan supplier.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               <button className="btn btn-secondary" onClick={() => setShowBulkImport(true)}>
                 <UploadCloud size={16} style={{ marginRight: '8px' }}/> Import Excel
               </button>
-              <button className="btn btn-primary" onClick={() => setEditSupplier({ name: '', phone: '', address: '', contact_person: '' })}>
+              <button className="btn btn-primary" onClick={() => openSupplierModal(null)}>
                 <Plus size={16} style={{ marginRight: '8px' }}/> Tambah Supplier
               </button>
             </div>
           </div>
+
+          {/* Filter & Summary Bar */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: '1 1 280px', maxWidth: '420px' }}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                type="text"
+                className="form-control"
+                style={{ paddingLeft: '36px' }}
+                placeholder="Cari supplier, kontak, atau bahan..."
+                value={supplierSearch}
+                onChange={e => setSupplierSearch(e.target.value)}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '12px', fontSize: '0.82rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
+              <span>Total Supplier: <strong style={{ color: 'var(--text-primary)' }}>{suppliers.length}</strong></span>
+              <span>•</span>
+              <span>
+                Bahan Terdaftar: <strong style={{ color: 'var(--accent)' }}>{materials.filter(m => Boolean(normalizeSupplierName(m.supplier))).length}</strong> / {materials.length} Bahan
+              </span>
+            </div>
+          </div>
+
           <div className="table-container">
             <table className="custom-table">
               <thead>
-                <tr><th>Nama</th><th>Kontak</th><th>No HP</th><th>Alamat</th><th style={{ width: '80px' }}>Aksi</th></tr>
+                <tr>
+                  <th>Nama Supplier</th>
+                  <th>Kontak & Telepon</th>
+                  <th>Alamat</th>
+                  <th>Bahan Terdaftar</th>
+                  <th style={{ width: '190px', textAlign: 'right' }}>Aksi</th>
+                </tr>
               </thead>
               <tbody>
-                {suppliers.map(s => (
-                  <tr key={s.id} onClick={(e) => { if(!e.target.closest('button')) setSupplierDrawer(s); }} style={{ cursor: 'pointer' }}>
-                    <td style={{ fontWeight: 600, color: 'var(--accent)' }}>{s.name}</td>
-                    <td>{s.contact_person || '-'}</td>
-                    <td>{s.phone || '-'}</td>
-                    <td>{s.address || '-'}</td>
-                    <td>
-                      <button className="btn" style={{ padding: '4px', color: 'var(--accent)' }} onClick={() => setEditSupplier(s)}><Edit2 size={16}/></button>
+                {suppliers
+                  .filter(s => {
+                    const q = supplierSearch.trim().toLowerCase();
+                    if (!q) return true;
+                    const linkedMats = materials.filter(m => isMaterialInSupplier(m.supplier, s.name));
+                    return (
+                      (s.name || '').toLowerCase().includes(q) ||
+                      (s.contact_person || '').toLowerCase().includes(q) ||
+                      (s.phone || '').toLowerCase().includes(q) ||
+                      linkedMats.some(m => (m.name || '').toLowerCase().includes(q))
+                    );
+                  })
+                  .map(s => {
+                    const supplierMats = materials.filter(m => isMaterialInSupplier(m.supplier, s.name));
+                    return (
+                      <tr
+                        key={s.id}
+                        onClick={(e) => {
+                          if (!e.target.closest('button')) {
+                            openSupplierDrawer(s);
+                          }
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <td>
+                          <div style={{ fontWeight: 700, color: 'var(--accent)', fontSize: '0.95rem' }}>{s.name}</div>
+                        </td>
+                        <td>
+                          <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{s.contact_person || '-'}</div>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{s.phone || '-'}</div>
+                        </td>
+                        <td style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '220px' }}>
+                          {s.address || '-'}
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                  padding: '3px 10px',
+                                  borderRadius: '6px',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 700,
+                                  background: supplierMats.length > 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                                  color: supplierMats.length > 0 ? 'var(--success)' : 'var(--warning)',
+                                  border: `1px solid ${supplierMats.length > 0 ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.25)'}`
+                                }}
+                              >
+                                <Package size={13} />
+                                {supplierMats.length > 0 ? `${supplierMats.length} Bahan` : 'Belum diatur'}
+                              </span>
+                            </div>
+                            {supplierMats.length > 0 && (
+                              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                                {supplierMats.slice(0, 3).map(m => (
+                                  <span
+                                    key={m.id}
+                                    style={{
+                                      fontSize: '0.72rem',
+                                      padding: '2px 7px',
+                                      borderRadius: '4px',
+                                      background: 'var(--bg-tertiary)',
+                                      color: 'var(--text-secondary)',
+                                      border: '1px solid var(--border)'
+                                    }}
+                                  >
+                                    {m.name}
+                                  </span>
+                                ))}
+                                {supplierMats.length > 3 && (
+                                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', alignSelf: 'center' }}>
+                                    +{supplierMats.length - 3} lainnya
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              style={{ padding: '5px 10px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              title="Cek & Kelola Daftar Bahan Supplier"
+                              onClick={() => openSupplierDrawer(s)}
+                            >
+                              <Package size={14} /> Kelola Bahan
+                            </button>
+                            <button
+                              type="button"
+                              className="btn"
+                              style={{ padding: '6px', color: 'var(--accent)', background: 'var(--bg-tertiary)' }}
+                              title="Edit Supplier & Pemetaan Bahan"
+                              onClick={() => openSupplierModal(s)}
+                            >
+                              <Edit2 size={15} />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn"
+                              style={{ padding: '6px', color: 'var(--danger)', background: 'rgba(239, 68, 68, 0.08)' }}
+                              title="Hapus Supplier"
+                              onClick={() => handleDeleteSupplier(s)}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                {suppliers.length === 0 && (
+                  <tr>
+                    <td colSpan="5" style={{ textAlign: 'center', padding: '28px', color: 'var(--text-secondary)' }}>
+                      Belum ada data supplier. Klik <strong>+ Tambah Supplier</strong> untuk menambahkan.
                     </td>
                   </tr>
-                ))}
-                {suppliers.length === 0 && <tr><td colSpan="5" style={{ textAlign: 'center' }}>Belum ada data supplier.</td></tr>}
+                )}
               </tbody>
             </table>
           </div>
@@ -550,13 +995,13 @@ export default function Purchasing() {
           <div className="glass-card no-print" style={{ padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '20px', marginBottom: '20px' }}>
               <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Keranjang Pembelian Harian</h3>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Cari bahan baku, atur jumlah dan harga, lalu simpan semua dalam satu klik.</p>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Keranjang Pembelian</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Cari bahan, atur jumlah dan harga.</p>
               </div>
               
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button className="btn btn-secondary" onClick={() => setShowBulkImportPurchases(true)}>
-                  <UploadCloud size={16} style={{ marginRight: '8px' }}/> Bulk Import Pembelian
+                  <UploadCloud size={16} style={{ marginRight: '8px' }}/> Import Excel
                 </button>
               </div>
 
@@ -568,7 +1013,7 @@ export default function Purchasing() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-tertiary)', padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
                   <Calendar size={16} style={{ color: 'var(--accent)' }} />
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Tanggal Pembelian Default:</span>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Tanggal:</span>
                   <input
                     type="date"
                     className="form-control"
@@ -589,7 +1034,7 @@ export default function Purchasing() {
                   type="text"
                   className="form-control"
                   style={{ padding: '14px 16px 14px 44px', fontSize: '1rem', background: 'var(--bg-tertiary)', borderColor: showSearchDropdown ? 'var(--accent)' : 'var(--border)' }}
-                  placeholder="Ketik nama bahan baku untuk menambah ke keranjang..."
+                  placeholder="Cari nama bahan baku..."
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
@@ -772,7 +1217,7 @@ export default function Purchasing() {
                 onClick={handlePrepareSavePurchases}
                 disabled={loading || cart.length === 0}
               >
-                <ShoppingCart size={18} /> {loading ? 'Menyimpan...' : `Simpan ${cart.length} Item ke Database`}
+                <ShoppingCart size={18} /> {loading ? 'Menyimpan...' : `Simpan (${cart.length} Item)`}
               </button>
             </div>
           </div>
@@ -780,7 +1225,7 @@ export default function Purchasing() {
           {/* History Panel */}
           <div className="glass-card purchasing-history-panel" style={{ padding: '24px' }}>
             <div className="paged-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Log Riwayat Pembelian</h3>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Riwayat Pembelian</h3>
               <ExportButton 
                 onExportExcel={handleExportExcel} 
                 onExportPDF={handleExportPDF}
@@ -1007,7 +1452,7 @@ export default function Purchasing() {
                   Batal
                 </button>
                 <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={loading}>
-                  {loading ? 'Menyimpan...' : 'Simpan Perubahan'}
+                  {loading ? 'Menyimpan...' : 'Simpan'}
                 </button>
               </div>
             </form>
@@ -1015,19 +1460,247 @@ export default function Purchasing() {
         </div>
       )}
 
-      {/* Supplier Modal */}
+      {/* Supplier Modal (Add / Edit + Material Mapping for PO Validation) */}
       {editingSupplier && (
-        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setEditSupplier(null)}>
-          <div className="glass-card modal-card" style={{ width: '400px', maxWidth: 'calc(100vw - 32px)', maxHeight: '90vh', overflowY: 'auto', padding: '24px' }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '20px' }}>{editingSupplier.id ? 'Edit' : 'Tambah'} Supplier</h3>
+        <div
+          className="modal-overlay"
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}
+          onClick={() => !savingSupplier && setEditSupplier(null)}
+        >
+          <div
+            className="glass-card modal-card"
+            style={{ width: '680px', maxWidth: 'calc(100vw - 32px)', maxHeight: '92vh', overflowY: 'auto', padding: '24px' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+              <div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '4px' }}>
+                  {editingSupplier.id ? 'Edit Supplier' : 'Tambah Supplier'}
+                </h3>
+                <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: 0 }}>
+                  Atur profil dan bahan milik supplier.
+                </p>
+              </div>
+              <button type="button" className="btn" onClick={() => !savingSupplier && setEditSupplier(null)} style={{ padding: '4px 8px' }}>✕</button>
+            </div>
+
             <form onSubmit={handleSaveSupplier} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div className="form-group"><label className="form-label">Nama Supplier</label><input type="text" required className="form-control" value={editingSupplier.name} onChange={e => setEditSupplier({...editingSupplier, name: e.target.value})} /></div>
-              <div className="form-group"><label className="form-label">Contact Person</label><input type="text" className="form-control" value={editingSupplier.contact_person} onChange={e => setEditSupplier({...editingSupplier, contact_person: e.target.value})} /></div>
-              <div className="form-group"><label className="form-label">No. Telepon / WA</label><input type="text" className="form-control" value={editingSupplier.phone} onChange={e => setEditSupplier({...editingSupplier, phone: e.target.value})} /></div>
-              <div className="form-group"><label className="form-label">Alamat</label><textarea className="form-control" rows="2" value={editingSupplier.address} onChange={e => setEditSupplier({...editingSupplier, address: e.target.value})} /></div>
-              <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
-                <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setEditSupplier(null)}>Batal</button>
-                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Simpan</button>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Nama Supplier *</label>
+                  <input
+                    type="text"
+                    required
+                    className="form-control"
+                    placeholder="Contoh: PT. Indofood Sukses"
+                    value={editingSupplier.name}
+                    onChange={e => setEditSupplier({ ...editingSupplier, name: e.target.value })}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Contact Person (PIC)</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Contoh: Budi Santoso"
+                    value={editingSupplier.contact_person || ''}
+                    onChange={e => setEditSupplier({ ...editingSupplier, contact_person: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">No. Telepon / WhatsApp</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Contoh: 08123456789"
+                    value={editingSupplier.phone || ''}
+                    onChange={e => setEditSupplier({ ...editingSupplier, phone: e.target.value })}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Alamat</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Alamat lengkap supplier..."
+                    value={editingSupplier.address || ''}
+                    onChange={e => setEditSupplier({ ...editingSupplier, address: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* Pemetaan Daftar Bahan / Material Spesifik Supplier */}
+              <div
+                style={{
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '16px',
+                  background: 'var(--bg-tertiary)'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Package size={16} style={{ color: 'var(--accent)' }} />
+                      Daftar Bahan Supplier
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                      Pilih bahan yang disediakan supplier ini.
+                    </div>
+                  </div>
+                  <span
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      background: 'rgba(16, 185, 129, 0.14)',
+                      color: 'var(--success)'
+                    }}
+                  >
+                    {selectedSupplierMaterialIds.length} Bahan Terpilih
+                  </span>
+                </div>
+
+                {/* Search & Filter Tabs for Materials */}
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                  <div style={{ position: 'relative', flex: '1 1 200px' }}>
+                    <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input
+                      type="text"
+                      className="form-control"
+                      style={{ paddingLeft: '32px', paddingTop: '6px', paddingBottom: '6px', fontSize: '0.84rem' }}
+                      placeholder="Cari nama bahan baku..."
+                      value={modalMaterialSearch}
+                      onChange={e => setModalMaterialSearch(e.target.value)}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {[
+                      { id: 'ALL', label: `Semua (${materials.length})` },
+                      { id: 'SELECTED', label: `Terpilih (${selectedSupplierMaterialIds.length})` },
+                      { id: 'UNASSIGNED', label: 'Belum Ada Supplier' }
+                    ].map(f => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        className="btn"
+                        style={{
+                          padding: '5px 10px',
+                          fontSize: '0.76rem',
+                          background: modalMaterialFilter === f.id ? 'var(--accent)' : 'var(--bg-primary)',
+                          color: modalMaterialFilter === f.id ? '#fff' : 'var(--text-secondary)',
+                          border: '1px solid var(--border)'
+                        }}
+                        onClick={() => setModalMaterialFilter(f.id)}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Checklist Box */}
+                <div
+                  style={{
+                    maxHeight: '230px',
+                    overflowY: 'auto',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--bg-primary)',
+                     divideY: '1px solid var(--border-light)'
+                  }}
+                >
+                  {(() => {
+                    const q = modalMaterialSearch.trim().toLowerCase();
+                    const filteredMats = materials.filter(m => {
+                      const cleanSup = normalizeSupplierName(m.supplier);
+                      const matchesText = !q || (m.name || '').toLowerCase().includes(q) || cleanSup.toLowerCase().includes(q);
+                      if (!matchesText) return false;
+                      if (modalMaterialFilter === 'SELECTED') return selectedSupplierMaterialIds.includes(m.id);
+                      if (modalMaterialFilter === 'UNASSIGNED') return !cleanSup;
+                      return true;
+                    });
+
+                    if (filteredMats.length === 0) {
+                      return (
+                        <div style={{ padding: '18px', textAlign: 'center', fontSize: '0.84rem', color: 'var(--text-muted)' }}>
+                          Tidak ada bahan baku yang cocok dengan filter pencarian.
+                        </div>
+                      );
+                    }
+
+                    return filteredMats.map(m => {
+                      const isChecked = selectedSupplierMaterialIds.includes(m.id);
+                      const currentSup = normalizeSupplierName(m.supplier);
+                      const belongsToOther =
+                        currentSup &&
+                        !isMaterialInSupplier(currentSup, editingSupplier.name) &&
+                        !(editingSupplier.id && isMaterialInSupplier(currentSup, suppliers.find(s => s.id === editingSupplier.id)?.name));
+
+                      return (
+                        <label
+                          key={m.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '10px',
+                            padding: '8px 12px',
+                            borderBottom: '1px solid var(--border-light)',
+                            cursor: 'pointer',
+                            background: isChecked ? 'rgba(16, 185, 129, 0.07)' : 'transparent'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => toggleMaterialInSupplierModal(m.id)}
+                              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                            />
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--text-primary)' }}>
+                                {m.name} <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>({m.unit})</span>
+                              </div>
+                              {belongsToOther && (
+                                <div style={{ fontSize: '0.73rem', color: 'var(--warning)' }}>
+                                  Saat ini terdaftar di: <strong>{currentSup}</strong> {isChecked ? '→ Akan dipindahkan ke supplier ini' : ''}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                            Rp {Number(m.price || 0).toLocaleString('id-ID')} / {m.unit}
+                          </div>
+                        </label>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                  onClick={() => setEditSupplier(null)}
+                  disabled={savingSupplier}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ flex: 1 }}
+                  disabled={savingSupplier}
+                >
+                  {savingSupplier ? 'Menyimpan...' : 'Simpan'}
+                </button>
               </div>
             </form>
           </div>
@@ -1036,13 +1709,26 @@ export default function Purchasing() {
 
       {/* New Material Modal */}
       {showNewMaterialModal && (
-        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowNewMaterialModal(false)}>
-          <div className="glass-card modal-card" style={{ width: '400px', maxWidth: 'calc(100vw - 32px)', maxHeight: '90vh', overflowY: 'auto', padding: '24px' }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '20px' }}>Tambah Material Baru</h3>
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }} onClick={() => setShowNewMaterialModal(false)}>
+          <div className="glass-card modal-card" style={{ width: '420px', maxWidth: 'calc(100vw - 32px)', maxHeight: '90vh', overflowY: 'auto', padding: '24px' }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '20px' }}>Tambah Bahan Baru</h3>
             <form onSubmit={handleCreateMaterial} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="form-group">
-                <label className="form-label">Nama Material</label>
+                <label className="form-label">Nama Bahan</label>
                 <input type="text" required className="form-control" value={newMaterialData.name} onChange={e => setNewMaterialData({...newMaterialData, name: e.target.value})} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Supplier (Opsional)</label>
+                <select
+                  className="form-control"
+                  value={newMaterialData.supplier || ''}
+                  onChange={e => setNewMaterialData({ ...newMaterialData, supplier: e.target.value })}
+                >
+                  <option value="">-- Tanpa Supplier --</option>
+                  {suppliers.map(s => (
+                    <option key={s.id} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
               </div>
               <div className="form-group">
                 <label className="form-label">Kategori</label>
@@ -1072,7 +1758,7 @@ export default function Purchasing() {
               <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
                 <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setShowNewMaterialModal(false)}>Batal</button>
                 <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={loading}>
-                  {loading ? 'Menyimpan...' : 'Simpan & Tambah'}
+                  {loading ? 'Menyimpan...' : 'Simpan'}
                 </button>
               </div>
             </form>
@@ -1084,8 +1770,8 @@ export default function Purchasing() {
         isOpen={showBulkImport}
         onClose={() => setShowBulkImport(false)}
         type="suppliers"
-        title="Bulk Import Data Supplier"
-        description="Upload data supplier dari file Excel. Kolom nama wajib diisi."
+        title="Import Data Supplier"
+        description="Unggah data supplier dari file Excel."
         currentData={[]}
         expectedColumns={[
           { key: 'name', label: 'NAMA SUPPLIER', required: true, type: 'string', sample: 'PT. Supplier Abadi', description: 'Nama supplier (wajib)' },
@@ -1130,8 +1816,8 @@ export default function Purchasing() {
         isOpen={showBulkImportPurchases}
         onClose={() => setShowBulkImportPurchases(false)}
         type="materials"
-        title="Bulk Import Data Pembelian Harian"
-        description="Upload data pembelian dari file Excel. Pastikan nama bahan sesuai."
+        title="Import Pembelian Harian"
+        description="Unggah data pembelian dari file Excel."
         currentData={[]}
         onRegisterMissing={async (missingItems) => {
           // Layer 2: Daftarkan semua missing items ke master data secara batch.
@@ -1325,9 +2011,9 @@ export default function Purchasing() {
       {showConfirmModal && (
         <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div className="glass-card modal-card" style={{ width: '800px', maxWidth: 'calc(100vw - 32px)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: '24px' }}>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '8px' }}>Review Finalisasi Pembelian Harian</h3>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '8px' }}>Konfirmasi Pembelian</h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '20px' }}>
-              Tinjau kembali daftar pembelian yang akan disimpan ke database gudang. Anda dapat menyesuaikan harga dan qty di sini.
+              Tinjau rincian pembelian sebelum disimpan.
             </p>
             
             <div className="table-container" style={{ flex: 1, overflowY: 'auto', marginBottom: '20px' }}>
@@ -1385,64 +2071,486 @@ export default function Purchasing() {
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowConfirmModal(false)} disabled={loading}>Batal</button>
                 <button type="button" className="btn btn-primary" onClick={handleFinalSavePurchases} disabled={loading}>
-                  {loading ? 'Memproses...' : 'Finalisasi Sekarang'}
+                  {loading ? 'Menyimpan...' : 'Simpan'}
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
-      {/* Supplier Drawer */}
-      {supplierDrawer && (
-        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end' }} onClick={(e) => { if (e.target === e.currentTarget) setSupplierDrawer(null); }}>
-          <div style={{ width: '450px', background: 'var(--bg-primary)', height: '100%', overflowY: 'auto', padding: '24px', boxShadow: '-5px 0 25px rgba(0,0,0,0.1)', animation: 'slideInRight 0.2s ease-out' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>{supplierDrawer.name}</h2>
-              <button className="btn" onClick={() => setSupplierDrawer(null)}>✕</button>
-            </div>
-            
-            <div style={{ marginBottom: '24px' }}>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Kontak: {supplierDrawer.contact_person || '-'}</p>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Phone: {supplierDrawer.phone || '-'}</p>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Alamat: {supplierDrawer.address || '-'}</p>
-            </div>
+      {/* Supplier Drawer (Detail Supplier, Staged Material Mapping with Save + Double-Check & PO History) */}
+      {supplierDrawer && (() => {
+        const originalIds = materials
+          .filter(m => isMaterialInSupplier(m.supplier, supplierDrawer.name))
+          .map(m => m.id);
+        const origSet = new Set(originalIds);
+        const draftSet = new Set(drawerDraftMaterialIds);
 
-            <div style={{ marginBottom: '24px' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '8px' }}>Katalog Bahan Baku</h3>
-              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {materials.filter(m => m.supplier === supplierDrawer.name).length > 0 ? (
-                  materials.filter(m => m.supplier === supplierDrawer.name).map(m => (
-                    <li key={m.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border-light)' }}>
-                      <span>{m.name}</span>
-                      <span style={{ fontWeight: 600 }}>Rp {m.price.toLocaleString('id-ID')} / {m.unit}</span>
-                    </li>
-                  ))
-                ) : (
-                  <li style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Tidak ada bahan baku terkait supplier ini.</li>
-                )}
-              </ul>
-            </div>
+        const activeDraftMaterials = materials.filter(m => draftSet.has(m.id));
+        const stagedRemovedMaterials = materials.filter(m => origSet.has(m.id) && !draftSet.has(m.id));
+        const stagedAddedCount = activeDraftMaterials.filter(m => !origSet.has(m.id)).length;
+        const stagedRemovedCount = stagedRemovedMaterials.length;
+        const hasUnsavedDrawerChanges = stagedAddedCount > 0 || stagedRemovedCount > 0;
 
-            <div>
-              <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '8px' }}>Riwayat PO (Limit 5)</h3>
-              {drawerPOs.length > 0 ? (
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                  {drawerPOs.map(po => (
-                    <li key={po.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--border-light)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span style={{ fontWeight: 600 }}>{po.invoice_no}</span>
-                        <span style={{ fontSize: '0.8rem', padding: '2px 6px', borderRadius: '4px', background: po.status === 'RECEIVED' ? 'var(--success)' : (po.status === 'SENT' ? 'var(--primary)' : 'var(--warning)'), color: po.status === 'DRAFT' ? 'black' : 'white' }}>{po.status}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                        <span>{po.date}</span>
-                        <span style={{ fontWeight: 600, color: 'var(--accent)' }}>Rp {po.total.toLocaleString('id-ID')}</span>
-                      </div>
+        return (
+          <div
+            className="modal-overlay"
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end' }}
+            onClick={(e) => { if (e.target === e.currentTarget) setSupplierDrawer(null); }}
+          >
+            <div style={{ width: '520px', maxWidth: '100vw', background: 'var(--bg-primary)', height: '100%', overflowY: 'auto', padding: '24px', boxShadow: '-5px 0 25px rgba(0,0,0,0.15)', animation: 'slideInRight 0.2s ease-out', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                <div>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--accent)', marginBottom: '2px' }}>
+                    Katalog Supplier
+                  </div>
+                  <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>{supplierDrawer.name}</h2>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 10px', fontSize: '0.78rem' }}
+                    onClick={() => openSupplierModal(supplierDrawer)}
+                  >
+                    <Edit2 size={14} style={{ marginRight: '4px' }} /> Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ padding: '6px 10px', fontSize: '0.78rem', color: 'var(--danger)', background: 'rgba(239,68,68,0.08)' }}
+                    onClick={() => handleDeleteSupplier(supplierDrawer)}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                  <button type="button" className="btn" onClick={() => setSupplierDrawer(null)}>✕</button>
+                </div>
+              </div>
+
+              <div style={{ background: 'var(--bg-tertiary)', padding: '12px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.84rem' }}>
+                <div>
+                  <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.74rem' }}>Contact Person</span>
+                  <strong>{supplierDrawer.contact_person || '-'}</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.74rem' }}>Telepon / WA</span>
+                  <strong>{supplierDrawer.phone || '-'}</strong>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.74rem' }}>Alamat</span>
+                  <span>{supplierDrawer.address || '-'}</span>
+                </div>
+              </div>
+
+              {/* Interactive Material Mapping Section with Draft + Save + Double-Check */}
+              <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  <div>
+                    <h3 style={{ fontSize: '0.96rem', fontWeight: 700, margin: 0 }}>
+                      Daftar Bahan ({activeDraftMaterials.length})
+                    </h3>
+                    <span style={{ fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
+                      Tambah atau lepas bahan, lalu simpan.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ padding: '5px 10px', fontSize: '0.76rem' }}
+                    onClick={() => {
+                      setNewMaterialData({ name: '', category: 'Bahan Baku Dasar', unit: 'pcs', price: '', min_stock: 15, supplier: supplierDrawer.name });
+                      setShowNewMaterialModal(true);
+                    }}
+                  >
+                    <Plus size={13} style={{ marginRight: '4px' }} /> Bahan Baru
+                  </button>
+                </div>
+
+                {/* Quick Search to Stage Existing Material to This Supplier */}
+                <div>
+                  <div style={{ position: 'relative' }}>
+                    <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input
+                      type="text"
+                      className="form-control"
+                      style={{ paddingLeft: '32px', fontSize: '0.84rem' }}
+                      placeholder={`Cari nama bahan untuk ditambahkan ke ${supplierDrawer.name}...`}
+                      value={drawerMaterialSearch}
+                      onChange={e => setDrawerMaterialSearch(e.target.value)}
+                    />
+                  </div>
+                  {drawerMaterialSearch.trim() !== '' && (
+                    <div
+                      style={{
+                        marginTop: '6px',
+                        maxHeight: '180px',
+                        overflowY: 'auto',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)',
+                        background: 'var(--bg-secondary)'
+                      }}
+                    >
+                      {(() => {
+                        const q = drawerMaterialSearch.trim().toLowerCase();
+                        const candidates = materials
+                          .filter(m => !draftSet.has(m.id) && (m.name || '').toLowerCase().includes(q))
+                          .slice(0, 12);
+
+                        if (candidates.length === 0) {
+                          return (
+                            <div style={{ padding: '10px 12px', fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                              <span>Tidak ada bahan lain dengan nama "{drawerMaterialSearch}".</span>
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                style={{ padding: '4px 8px', fontSize: '0.74rem', whiteSpace: 'nowrap' }}
+                                onClick={() => {
+                                  setNewMaterialData({ name: drawerMaterialSearch.trim(), category: 'Bahan Baku Dasar', unit: 'pcs', price: '', min_stock: 15, supplier: supplierDrawer.name });
+                                  setDrawerMaterialSearch('');
+                                  setShowNewMaterialModal(true);
+                                }}
+                              >
+                                + Buat Baru
+                              </button>
+                            </div>
+                          );
+                        }
+
+                        return candidates.map(m => {
+                          const currentSup = normalizeSupplierName(m.supplier);
+                          return (
+                            <div
+                              key={m.id}
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                padding: '8px 12px',
+                                borderBottom: '1px solid var(--border-light)',
+                                fontSize: '0.83rem'
+                              }}
+                            >
+                              <div>
+                                <div style={{ fontWeight: 600 }}>{m.name} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({m.unit})</span></div>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                                  {currentSup ? `Supplier saat ini: ${currentSup}` : 'Belum punya supplier'} • Rp {Number(m.price || 0).toLocaleString('id-ID')}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                style={{ padding: '4px 10px', fontSize: '0.76rem' }}
+                                onClick={() => handleStageAssignInDrawer(m)}
+                              >
+                                + Tautkan
+                              </button>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  )}
+                </div>
+
+                {/* Current Active Draft Materials List */}
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, maxHeight: '260px', overflowY: 'auto' }}>
+                  {activeDraftMaterials.length > 0 ? (
+                    activeDraftMaterials.map(m => {
+                      const isNewlyAdded = !origSet.has(m.id);
+                      return (
+                        <li
+                          key={m.id}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '9px 10px',
+                            borderBottom: '1px solid var(--border-light)',
+                            fontSize: '0.86rem',
+                            background: isNewlyAdded ? 'rgba(16, 185, 129, 0.08)' : 'transparent',
+                            borderRadius: '4px'
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                              <span>{m.name}</span>
+                              {isNewlyAdded && (
+                                <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '4px', background: 'var(--success)', color: '#fff', fontWeight: 700 }}>
+                                  Baru
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                              Rp {Number(m.price || 0).toLocaleString('id-ID')} / {m.unit}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{
+                              padding: '5px 10px',
+                              fontSize: '0.76rem',
+                              fontWeight: 600,
+                              color: 'var(--danger)',
+                              background: 'rgba(239, 68, 68, 0.1)',
+                              border: '1px solid rgba(239, 68, 68, 0.2)'
+                            }}
+                            title="Tandai bahan ini untuk dilepas dari supplier"
+                            onClick={() => handleStageUnassignInDrawer(m.id)}
+                          >
+                            Lepas ✕
+                          </button>
+                        </li>
+                      );
+                    })
+                  ) : (
+                    <li style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', padding: '18px 8px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)' }}>
+                      Belum ada bahan pada supplier ini.
                     </li>
-                  ))}
+                  )}
                 </ul>
+
+                {/* Staged Removed Materials (Akan Dilepas) with Undo */}
+                {stagedRemovedMaterials.length > 0 && (
+                  <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'rgba(239, 68, 68, 0.06)', border: '1px dashed rgba(239, 68, 68, 0.35)' }}>
+                    <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--danger)', marginBottom: '6px' }}>
+                      Akan Dilepas ({stagedRemovedMaterials.length}) — klik Simpan:
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {stagedRemovedMaterials.map(m => (
+                        <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem' }}>
+                          <span style={{ textDecoration: 'line-through', color: 'var(--text-secondary)' }}>
+                            {m.name} ({m.unit})
+                          </span>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            style={{ padding: '3px 8px', fontSize: '0.73rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            onClick={() => handleUndoUnassignInDrawer(m.id)}
+                          >
+                            <RotateCcw size={12} /> Urungkan
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Save & Reset Bar for Supplier Drawer */}
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '10px',
+                    paddingTop: '10px',
+                    borderTop: '1px solid var(--border)',
+                    flexWrap: 'wrap'
+                  }}
+                >
+                  <div style={{ fontSize: '0.78rem', color: hasUnsavedDrawerChanges ? 'var(--warning)' : 'var(--text-muted)', fontWeight: hasUnsavedDrawerChanges ? 600 : 400 }}>
+                    {hasUnsavedDrawerChanges
+                      ? `Perubahan belum disimpan (+${stagedAddedCount} / -${stagedRemovedCount})`
+                      : 'Tersimpan'}
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {hasUnsavedDrawerChanges && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ padding: '7px 12px', fontSize: '0.8rem' }}
+                        onClick={handleResetDrawerDraft}
+                        disabled={savingDrawerMapping}
+                      >
+                        Reset
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ padding: '7px 14px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                      disabled={!hasUnsavedDrawerChanges || savingDrawerMapping}
+                      onClick={handlePrepareSaveDrawerMapping}
+                    >
+                      <Save size={14} />
+                      {savingDrawerMapping
+                        ? 'Menyimpan...'
+                        : hasUnsavedDrawerChanges
+                          ? `Simpan (${stagedAddedCount + stagedRemovedCount})`
+                          : 'Simpan'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 style={{ fontSize: '0.96rem', fontWeight: 700, marginBottom: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '8px' }}>5 PO Terakhir</h3>
+                {drawerPOs.length > 0 ? (
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                    {drawerPOs.map(po => (
+                      <li key={po.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--border-light)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <span style={{ fontWeight: 600 }}>{po.invoice_no}</span>
+                          <span style={{ fontSize: '0.8rem', padding: '2px 6px', borderRadius: '4px', background: po.status === 'RECEIVED' ? 'var(--success)' : (po.status === 'SENT' ? 'var(--primary)' : 'var(--warning)'), color: po.status === 'DRAFT' ? 'black' : 'white' }}>{po.status}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                          <span>{po.date}</span>
+                          <span style={{ fontWeight: 600, color: 'var(--accent)' }}>Rp {Number(po.total || 0).toLocaleString('id-ID')}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Belum ada histori PO.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Custom In-App Confirmation Popup Modal */}
+      {doubleCheckModal && (
+        <div
+          className="modal-overlay"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1300,
+            padding: '16px'
+          }}
+          onClick={() => {
+            if (!savingSupplier && !savingDrawerMapping && !loading) {
+              setDoubleCheckModal(null);
+            }
+          }}
+        >
+          <div
+            className="glass-card modal-card"
+            style={{ width: '440px', maxWidth: 'calc(100vw - 32px)', maxHeight: '88vh', overflowY: 'auto', padding: '22px' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+              {doubleCheckModal.type.includes('DELETE') ? (
+                <AlertTriangle size={20} style={{ color: 'var(--danger)', flexShrink: 0 }} />
               ) : (
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Belum ada histori PO.</p>
+                <CheckCircle2 size={20} style={{ color: 'var(--accent)', flexShrink: 0 }} />
               )}
+              <h3 style={{ fontSize: '1.08rem', fontWeight: 800, margin: 0 }}>
+                {doubleCheckModal.title}
+              </h3>
+            </div>
+
+            {doubleCheckModal.subtitle && (
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: 1.45 }}>
+                {doubleCheckModal.subtitle}
+              </p>
+            )}
+
+            {/* Summary Box for Supplier & Material Mapping Changes */}
+            {(doubleCheckModal.type === 'SAVE_SUPPLIER_MODAL' || doubleCheckModal.type === 'SAVE_DRAWER_MAPPING') && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '18px' }}>
+                <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', fontSize: '0.84rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                  <span>Supplier: <strong>{doubleCheckModal.supplierName}</strong></span>
+                  <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{doubleCheckModal.totalSelected} Bahan</span>
+                </div>
+
+                {doubleCheckModal. addedMats?.length > 0 && (
+                  <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--success)', marginBottom: '6px' }}>
+                      + Ditambah ({doubleCheckModal.addedMats.length}):
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {doubleCheckModal.addedMats.map(m => (
+                        <span key={m.id} style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '4px', background: 'var(--bg-primary)', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                          {m.name} ({m.unit})
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {doubleCheckModal.removedMats?.length > 0 && (
+                  <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--danger)', marginBottom: '6px' }}>
+                      - Dilepas ({doubleCheckModal.removedMats.length}):
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {doubleCheckModal.removedMats.map(m => (
+                        <span key={m.id} style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '4px', background: 'var(--bg-primary)', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                          {m.name} ({m.unit})
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Summary Box for Delete Supplier */}
+            {doubleCheckModal.type === 'DELETE_SUPPLIER' && (
+              <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', marginBottom: '18px', fontSize: '0.84rem' }}>
+                {doubleCheckModal.removedMats?.length > 0 ? (
+                  <>
+                    <div style={{ marginBottom: '6px', color: 'var(--text-secondary)' }}>
+                      <strong>{doubleCheckModal.removedMats.length} bahan</strong> akan dilepas dari supplier ini:
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {doubleCheckModal.removedMats.map(m => (
+                        <span key={m.id} style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '4px', background: 'var(--bg-primary)', border: '1px solid var(--border)' }}>
+                          {m.name}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ color: 'var(--text-secondary)' }}>
+                    Tidak ada bahan yang terhubung ke supplier ini.
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ flex: 1, justifyContent: 'center' }}
+                disabled={savingSupplier || savingDrawerMapping || loading}
+                onClick={() => setDoubleCheckModal(null)}
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                className={doubleCheckModal.type.includes('DELETE') ? 'btn' : 'btn btn-primary'}
+                style={{
+                  flex: 1,
+                  justifyContent: 'center',
+                  ...(doubleCheckModal.type.includes('DELETE')
+                    ? { background: 'var(--danger)', color: '#fff', fontWeight: 700 }
+                    : { fontWeight: 700 })
+                }}
+                disabled={savingSupplier || savingDrawerMapping || loading}
+                onClick={() => {
+                  if (doubleCheckModal.type === 'SAVE_SUPPLIER_MODAL') executeSaveSupplier();
+                  else if (doubleCheckModal.type === 'SAVE_DRAWER_MAPPING') executeSaveDrawerMapping();
+                  else if (doubleCheckModal.type === 'DELETE_SUPPLIER') executeDeleteSupplier(doubleCheckModal.supplier);
+                  else if (doubleCheckModal.type === 'DELETE_HISTORY') executeDeleteHistory(doubleCheckModal.purchaseId, doubleCheckModal.itemName);
+                  else if (doubleCheckModal.type === 'BULK_DELETE_HISTORY') executeBulkDeleteHistory();
+                }}
+              >
+                {savingSupplier || savingDrawerMapping || loading
+                  ? 'Menyimpan...'
+                  : doubleCheckModal.type.includes('DELETE')
+                    ? 'Hapus'
+                    : 'Simpan'}
+              </button>
             </div>
           </div>
         </div>

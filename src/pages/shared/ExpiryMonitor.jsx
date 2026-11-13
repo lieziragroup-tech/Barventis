@@ -154,9 +154,9 @@ export default function ExpiryMonitor() {
             <AlertTriangle className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-gray-800">Pantau & Setup Kedaluwarsa (FEFO)</h2>
+            <h2 className="text-xl font-bold text-gray-800">Pantau Kedaluwarsa</h2>
             <p className="text-xs text-gray-500">
-              Pengawasan First Expired First Out (FEFO) dengan ambang batas peringatan terintegrasi.
+              Awasi masa simpan bahan (FEFO).
             </p>
           </div>
         </div>
@@ -169,7 +169,7 @@ export default function ExpiryMonitor() {
             }`}
           >
             <Sliders size={14} />
-            {showSettings ? 'Tutup Pengaturan' : 'Setup Ambang Batas'}
+            {showSettings ? 'Tutup' : 'Atur Batas'}
           </button>
           <button
             onClick={fetchExpiry}
@@ -188,7 +188,7 @@ export default function ExpiryMonitor() {
             <div className="flex items-center gap-2">
               <Sliders size={18} className="text-amber-700" />
               <h3 className="font-bold text-sm text-amber-900">
-                Setup Ambang Batas Hari Peringatan Kedaluwarsa
+                Ambang Batas Peringatan
               </h3>
             </div>
             {saveSuccessMsg && (
@@ -248,15 +248,15 @@ export default function ExpiryMonitor() {
                 type="submit"
                 className="btn btn-primary text-xs py-2 px-4 flex-1 flex items-center justify-center gap-1.5 shadow-sm"
               >
-                <CheckCircle2 size={14} /> Simpan Ambang
+                <CheckCircle2 size={14} /> Simpan
               </button>
               <button
                 type="button"
                 onClick={handleResetThresholds}
                 className="btn btn-secondary text-xs py-2 px-3 flex items-center gap-1 text-gray-600 hover:text-gray-900"
-                title="Kembalikan ke standar (3 hari kritis, 7 hari perhatian)"
+                title="Kembalikan ke standar"
               >
-                <RotateCcw size={13} /> Reset Standar
+                <RotateCcw size={13} /> Reset
               </button>
             </div>
           </form>
@@ -290,7 +290,7 @@ export default function ExpiryMonitor() {
         >
           <div className="text-xs text-gray-500 font-medium">Total Terpantau</div>
           <div className="text-2xl font-bold text-gray-800 mt-1">{stats.total}</div>
-          <div className="text-[11px] text-gray-400 mt-0.5">Semua batch aktif</div>
+          <div className="text-[11px] text-gray-400 mt-0.5">Semua batch</div>
         </div>
 
         <div
@@ -305,7 +305,7 @@ export default function ExpiryMonitor() {
             <span className="w-2 h-2 rounded-full bg-red-500"></span> Kritis / Lewat
           </div>
           <div className="text-2xl font-bold text-red-600 mt-1">{stats.redCount}</div>
-          <div className="text-[11px] text-red-500/80 mt-0.5">Prioritas pakai / olah segera</div>
+          <div className="text-[11px] text-red-500/80 mt-0.5">Segera pakai</div>
         </div>
 
         <div
@@ -317,10 +317,10 @@ export default function ExpiryMonitor() {
           }`}
         >
           <div className="text-xs text-amber-700 font-semibold flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-amber-500"></span> Perhatian (Waspada)
+            <span className="w-2 h-2 rounded-full bg-amber-500"></span> Perhatian
           </div>
           <div className="text-2xl font-bold text-amber-600 mt-1">{stats.yellowCount}</div>
-          <div className="text-[11px] text-amber-600/80 mt-0.5">Mendekati tenggat simpan</div>
+          <div className="text-[11px] text-amber-600/80 mt-0.5">Mendekati tenggat</div>
         </div>
 
         <div
@@ -332,10 +332,10 @@ export default function ExpiryMonitor() {
           }`}
         >
           <div className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Masa Simpan Aman
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Aman
           </div>
           <div className="text-2xl font-bold text-emerald-600 mt-1">{stats.greenCount}</div>
-          <div className="text-[11px] text-emerald-600/80 mt-0.5">Sisa waktu &gt; {thresholds.warningDays} hari</div>
+          <div className="text-[11px] text-emerald-600/80 mt-0.5">&gt; {thresholds.warningDays} hari</div>
         </div>
       </div>
 

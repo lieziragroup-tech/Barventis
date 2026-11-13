@@ -211,9 +211,9 @@ export default function UsageRecap() {
               <TrendingUp size={22} style={{ color: 'var(--accent)' }} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Rekapitulasi Pemakaian Bahan</h3>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Rekap Pemakaian</h3>
               <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                Kumulatif pemakaian bahan baku dalam rentang tanggal terpilih
+                Ringkasan pemakaian bahan per periode.
               </p>
             </div>
           </div>
@@ -395,8 +395,8 @@ export default function UsageRecap() {
                   <FileText size={18} />
                 </div>
                 <div>
-                  <h4 className="font-bold text-sm text-[var(--text-primary)]">Keterangan Selisih / Event</h4>
-                  <p className="text-xs text-[var(--text-muted)] m-0">Pengajuan wewenang Head ke Manajer / Direktur</p>
+                  <h4 className="font-bold text-sm text-[var(--text-primary)]">Keterangan Selisih</h4>
+                  <p className="text-xs text-[var(--text-muted)] m-0">Ajukan keterangan selisih ke manajer.</p>
                 </div>
               </div>
               <button type="button" onClick={() => setJustificationModal(prev => ({ ...prev, isOpen: false }))} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
@@ -436,11 +436,11 @@ export default function UsageRecap() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold block mb-1">Catatan Keterangan Resmi (Untuk Manajer / Direktur):</label>
+                <label className="text-xs font-semibold block mb-1">Catatan Keterangan:</label>
                 <textarea
                   rows={3}
                   className="form-control text-xs w-full py-2 px-3"
-                  placeholder="Tuliskan nama acara, tanggal event, atau nomor BAP internal..."
+                  placeholder="Tulis nama acara atau alasan..."
                   value={justificationModal.reason}
                   onChange={e => setJustificationModal(prev => ({ ...prev, reason: e.target.value }))}
                 />
@@ -487,7 +487,7 @@ export default function UsageRecap() {
                     setJustificationModal(prev => ({
                       ...prev,
                       submitting: false,
-                      success: 'Keterangan event berhasil diajukan ke antrean ACC Direktur.'
+                      success: 'Keterangan selisih berhasil diajukan.'
                     }));
                     setTimeout(() => {
                       setJustificationModal(prev => ({ ...prev, isOpen: false }));
@@ -496,13 +496,13 @@ export default function UsageRecap() {
                     setJustificationModal(prev => ({
                       ...prev,
                       submitting: false,
-                      error: err.message || 'Gagal mengajukan keterangan.'
+                      error: err.message || 'Gagal mengirim.'
                     }));
                   }
                 }}
               >
                 {justificationModal.submitting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-                Kirim ke Direktur
+                Kirim
               </button>
             </div>
           </div>

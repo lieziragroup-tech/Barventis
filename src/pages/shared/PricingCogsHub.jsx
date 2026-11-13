@@ -8,9 +8,9 @@ const Recipes = lazyWithRetry(() => import('./Recipes'));
 const MenuEngineering = lazyWithRetry(() => import('./MenuEngineering'));
 
 const TABS = [
-  { key: 'pricing', label: 'Harga Jual & Simulasi Untung', icon: Tag },
-  { key: 'cogs-all', label: 'HPP Semua Minuman (Resep & Bir)', icon: Utensils },
-  { key: 'engineering', label: 'Evaluasi Performa Menu', icon: BarChart3 },
+  { key: 'pricing', label: 'Simulasi Harga', icon: Tag },
+  { key: 'cogs-all', label: 'Resep & HPP', icon: Utensils },
+  { key: 'engineering', label: 'Performa Menu', icon: BarChart3 },
 ];
 
 const Loading = () => (

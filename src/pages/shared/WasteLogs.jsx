@@ -197,7 +197,7 @@ export default function WasteLogs() {
           broken_unit: row.unit,
         }))
       );
-      toast.showSuccess(`BROKEN closing berhasil disimpan untuk ${changedRows.length} material. Stok tidak dipotong oleh pencatatan ini.`);
+      toast.showSuccess(`BROKEN closing disimpan untuk ${changedRows.length} bahan.`);
       setShowBrokenModal(false);
     } catch (err) {
       setBrokenError(err.message || 'Gagal menyimpan BROKEN closing.');
@@ -478,10 +478,10 @@ export default function WasteLogs() {
             </div>
             <div>
               <h1 className="text-xl md:text-2xl font-bold tracking-tight text-[var(--text-primary)]">
-                Consolidated Waste Logs
+                Catatan Limbah
               </h1>
               <p className="text-xs md:text-sm text-[var(--text-secondary)] mt-0.5">
-                Pencatatan dan audit kerugian limbah bar, sisa trimming kitchen, pecah, dan expired.
+                Catat bahan rusak, pecah, dan kedaluwarsa.
               </p>
             </div>
           </div>
@@ -521,7 +521,7 @@ export default function WasteLogs() {
             title="Input sisa kemasan terbuka saat closing"
           >
             <Package size={16} />
-            <span>Input BROKEN Closing</span>
+            <span>Input BROKEN</span>
           </button>
           <button
             type="button"
@@ -532,7 +532,7 @@ export default function WasteLogs() {
             }}
           >
             <Plus size={17} />
-            <span>Catat Limbah Baru</span>
+            <span>Catat Limbah</span>
           </button>
         </div>
       </div>
@@ -556,7 +556,7 @@ export default function WasteLogs() {
           </div>
           <div className="mt-2 text-[11px] text-[var(--text-secondary)] flex items-center gap-1.5">
             <span className="inline-block w-2 h-2 rounded-full bg-red-500"></span>
-            <span>Berdasarkan {filteredLogs.length} entri terfilter</span>
+            <span>{filteredLogs.length} entri</span>
           </div>
         </div>
 
@@ -574,10 +574,10 @@ export default function WasteLogs() {
             <span className="text-2xl md:text-3xl font-extrabold text-[var(--text-primary)]">
               {kpis.totalUnits.toLocaleString('id-ID', { maximumFractionDigits: 2 })}
             </span>
-            <span className="text-xs text-[var(--text-secondary)] ml-1.5 font-medium">Unit / Pcs</span>
+            <span className="text-xs text-[var(--text-secondary)] ml-1.5 font-medium">Unit</span>
           </div>
           <div className="mt-2 text-[11px] text-[var(--text-secondary)]">
-            Akumulasi fisik bahan yang dipotong dari stok
+            Total stok terpotong
           </div>
         </div>
 
@@ -598,7 +598,7 @@ export default function WasteLogs() {
             <span className="text-xs text-[var(--text-secondary)] ml-1.5 font-medium">Insiden</span>
           </div>
           <div className="mt-2 text-[11px] text-[var(--text-secondary)]">
-            Terekam dalam buku besar inventory
+            Tercatat di sistem
           </div>
         </div>
 
@@ -618,7 +618,7 @@ export default function WasteLogs() {
             </span>
           </div>
           <div className="mt-2 text-[11px] text-[var(--text-secondary)]">
-            Pendorong nilai kerugian tertinggi
+            Penyebab kerugian tertinggi
           </div>
         </div>
       </div>
@@ -1028,8 +1028,8 @@ export default function WasteLogs() {
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-amber-500/15 text-amber-600"><Package size={20} /></div>
                 <div>
-                  <h2 className="text-base md:text-lg font-bold text-[var(--text-primary)]">BROKEN — Sisa Kemasan Terbuka</h2>
-                  <p className="text-xs text-[var(--text-secondary)]">Masukkan hasil timbang closing gabungan per material. Ini tidak memotong stok dan bukan transaksi waste.</p>
+                  <h2 className="text-base md:text-lg font-bold text-[var(--text-primary)]">BROKEN Closing</h2>
+                  <p className="text-xs text-[var(--text-secondary)]">Input sisa kemasan terbuka saat closing.</p>
                 </div>
               </div>
               <button type="button" className="btn-icon p-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]" onClick={() => !brokenSaving && setShowBrokenModal(false)} title="Tutup"><X size={20} /></button>
@@ -1114,10 +1114,10 @@ export default function WasteLogs() {
                 </div>
                 <div>
                   <h2 className="text-base md:text-lg font-bold text-[var(--text-primary)]">
-                    Catat Limbah & Kerugian Bahan (Waste)
+                    Catat Limbah
                   </h2>
                   <p className="text-xs text-[var(--text-secondary)]">
-                    Stok bahan baku akan terpotong otomatis dari sistem inventory.
+                    Stok bahan terpotong otomatis setelah disimpan.
                   </p>
                 </div>
               </div>
@@ -1418,7 +1418,7 @@ export default function WasteLogs() {
                     ) : (
                       <>
                         <Trash2 size={15} />
-                        Simpan & Potong Stok
+                        Simpan
                       </>
                     )}
                   </button>

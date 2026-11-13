@@ -141,7 +141,7 @@ export default function Dashboard() {
       <div className="glass-card" style={{ marginBottom: '24px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <Calendar size={18} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-          <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Period:</span>
+          <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Periode:</span>
           <select
             className="form-control"
             style={{ width: '160px', padding: '6px 12px', fontSize: '0.875rem' }}
@@ -159,7 +159,7 @@ export default function Dashboard() {
       <div className="kpi-grid">
         <div className="glass-card kpi-card">
           <div className="kpi-header">
-            <span className="kpi-title">Total F&B Cost %</span>
+            <span className="kpi-title">Rasio Biaya F&B</span>
             <div className="kpi-icon-wrap" style={{ background: 'var(--success-glow)', color: 'var(--success)' }}>
               <TrendingDown size={20} />
             </div>
@@ -170,18 +170,18 @@ export default function Dashboard() {
 
         <div className="glass-card kpi-card">
           <div className="kpi-header">
-            <span className="kpi-title">Total F&B Sales</span>
+            <span className="kpi-title">Total Penjualan</span>
             <div className="kpi-icon-wrap" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>
               <DollarSign size={20} />
             </div>
           </div>
           <div className="kpi-value">{formatIDR(totalSalesBeverage)}</div>
-          <div className="kpi-footer"><span style={{ color: 'var(--text-secondary)' }}>Period {period.split('-')[1]}/{period.split('-')[0]}</span></div>
+          <div className="kpi-footer"><span style={{ color: 'var(--text-secondary)' }}>Periode {period.split('-')[1]}/{period.split('-')[0]}</span></div>
         </div>
 
         <div className="glass-card kpi-card">
           <div className="kpi-header">
-            <span className="kpi-title">Stock Valuation</span>
+            <span className="kpi-title">Nilai Stok</span>
             <div className="kpi-icon-wrap" style={{ background: 'var(--info-glow)', color: 'var(--info)' }}>
               <Package size={20} />
             </div>
@@ -192,7 +192,7 @@ export default function Dashboard() {
 
         <div className="glass-card kpi-card" onClick={() => navigate('./stock')} style={{ cursor: 'pointer' }}>
           <div className="kpi-header">
-            <span className="kpi-title">Low Stock Items</span>
+            <span className="kpi-title">Stok Menipis</span>
             <div className="kpi-icon-wrap" style={{ background: lowStockItems.length > 0 ? 'var(--danger-glow)' : 'var(--success-glow)', color: lowStockItems.length > 0 ? 'var(--danger)' : 'var(--success)' }}>
               <AlertTriangle size={20} />
             </div>
@@ -210,14 +210,14 @@ export default function Dashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '24px' }}>
         <div className="glass-card" style={{ padding: '20px' }}>
           <div className="chart-title" style={{ marginBottom: '16px' }}>
-            <span>Total F&B Cost Trend ({period.split('-')[1]}/{period.split('-')[0]})</span>
+            <span>Tren Biaya ({period.split('-')[1]}/{period.split('-')[0]})</span>
             <span className="badge badge-info">Target: 27%</span>
           </div>
           <WidgetErrorBoundary name="Grafik Tren Biaya">
             {isLoadingTx ? (
               <div style={{ width: '100%', height: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', color: 'var(--text-muted)' }}>
                 <div style={{ width: '24px', height: '24px', border: '2px solid var(--accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                <span style={{ fontSize: '0.8rem', fontWeight: 500 }}>Memuat data grafik tren...</span>
+                <span style={{ fontSize: '0.8rem', fontWeight: 500 }}>Memuat grafik...</span>
               </div>
             ) : (
               <div style={{ width: '100%', height: 300, minHeight: 300, position: 'relative' }}>
@@ -228,7 +228,7 @@ export default function Dashboard() {
                     <YAxis domain={[0, (dataMax) => Math.max(35, Math.ceil(dataMax + 5))]} stroke="var(--text-muted)" tick={{ fontSize: 11 }} unit="%" />
                     <Tooltip contentStyle={tooltipStyle} />
                     <Legend verticalAlign="top" height={36} />
-                    <Line type="monotone" dataKey="cost" name={'Total F&B Cost %'} stroke="var(--accent)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                    <Line type="monotone" dataKey="cost" name={'Biaya F&B %'} stroke="var(--accent)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
                     <Line type="monotone" dataKey="target" name="Target" stroke="var(--danger)" strokeDasharray="5 5" strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
@@ -238,7 +238,7 @@ export default function Dashboard() {
         </div>
 
         <div className="glass-card" style={{ padding: '20px' }}>
-          <div className="chart-title" style={{ marginBottom: '16px' }}>Stock Value by Category</div>
+          <div className="chart-title" style={{ marginBottom: '16px' }}>Nilai Stok per Kategori</div>
           <WidgetErrorBoundary name="Grafik Valuasi Kategori">
             <div style={{ width: '100%', height: 260, minHeight: 260, position: 'relative' }}>
               {pieData.length === 0 ? (
@@ -271,12 +271,12 @@ export default function Dashboard() {
       {/* Row 2: Bar + Alerts */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
         <div className="glass-card" style={{ padding: '20px' }}>
-          <div className="chart-title" style={{ marginBottom: '16px' }}>Top 5 Cost Contributors</div>
+          <div className="chart-title" style={{ marginBottom: '16px' }}>5 Bahan Nilai Tertinggi</div>
           <WidgetErrorBoundary name="Grafik Kontributor Biaya">
             <div style={{ width: '100%', height: 300, minHeight: 300, position: 'relative' }}>
               {contributorsData.length === 0 ? (
                 <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                  Belum ada data pemakaian bahan
+                  Belum ada data pemakaian.
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height={300} minWidth={100} debounce={50}>
@@ -285,7 +285,7 @@ export default function Dashboard() {
                     <XAxis type="number" stroke="var(--text-muted)" tickFormatter={(v) => `${(v / 1000000).toFixed(1)}M`} tick={{ fontSize: 10 }} />
                     <YAxis dataKey="name" type="category" stroke="var(--text-muted)" tick={{ fontSize: 10 }} width={95} />
                     <Tooltip formatter={(v) => formatIDR(v)} contentStyle={tooltipStyle} />
-                    <Bar dataKey="cost" fill="var(--warning)" radius={[0, 4, 4, 0]} name="Pemakaian (IDR)" />
+                    <Bar dataKey="cost" fill="var(--warning)" radius={[0, 4, 4, 0]} name="Nilai (IDR)" />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -295,8 +295,8 @@ export default function Dashboard() {
 
         <div className="glass-card" style={{ padding: '24px' }}>
           <div className="chart-title">
-            <span>Low Stock Alerts</span>
-            {lowStockItems.length > 0 && <span className="badge badge-danger">{lowStockItems.length} items</span>}
+            <span>Stok Menipis</span>
+            {lowStockItems.length > 0 && <span className="badge badge-danger">{lowStockItems.length} bahan</span>}
           </div>
           <div style={{ maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {lowStockItems.length > 0 ? lowStockItems.slice(0, 8).map(item => {
@@ -316,7 +316,7 @@ export default function Dashboard() {
             }) : (
               <div className="empty-state">
                 <CheckCircle size={40} style={{ color: 'var(--success)' }} />
-                <span>All materials above min level</span>
+                <span>Semua stok aman</span>
               </div>
             )}
           </div>

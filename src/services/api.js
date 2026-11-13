@@ -3764,17 +3764,36 @@ export const api = {
 
   saveSupplier: async (supplierData) => {
     const tenantId = await getActiveTenantId();
+    const cleanName = String(supplierData.name || '').trim();
+    if (!cleanName) throw new Error("Nama supplier wajib diisi.");
     const payload = {
       tenant_id: tenantId,
-      name: supplierData.name,
+      name: cleanName,
       phone: supplierData.phone || null,
       address: supplierData.address || null,
       contact_person: supplierData.contact_person || null
     };
 
     if (supplierData.id) {
+      const { data: existingSupplier } = await supabase
+        .from('suppliers')
+        .select('name')
+        .eq('id', supplierData.id)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+
       const { data, error } = await supabase.from('suppliers').update(payload).eq('id', supplierData.id).select().single();
       if (error) throw new Error("Gagal menyimpan supplier: " + error.message);
+
+      // Jika nama supplier berubah, sinkronkan nama supplier pada master bahan baku agar validasi PO tetap konsisten
+      if (existingSupplier?.name && existingSupplier.name.trim() !== data.name.trim()) {
+        await supabase
+          .from('materials')
+          .update({ supplier: data.name })
+          .eq('tenant_id', tenantId)
+          .eq('supplier', existingSupplier.name);
+      }
+
       await logAudit('UPDATE_SUPPLIER', `Mengubah data supplier "${data.name}".`);
       return data;
     }
@@ -3782,6 +3801,48 @@ export const api = {
     if (error) throw new Error("Gagal menyimpan supplier: " + error.message);
     await logAudit('CREATE_SUPPLIER', `Menambahkan supplier baru "${data.name}".`);
     return data;
+  },
+
+  deleteSupplier: async (supplierId) => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) throw new Error("Tenant tidak ditemukan.");
+
+    const { data: existingSupplier } = await supabase
+      .from('suppliers')
+      .select('id, name')
+      .eq('id', supplierId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+
+    if (!existingSupplier) {
+      throw new Error("Data supplier tidak ditemukan.");
+    }
+
+    // Lepaskan FK pada purchase_entries jika ada agar histori tetap aman
+    await supabase
+      .from('purchase_entries')
+      .update({ supplier_id: null })
+      .eq('tenant_id', tenantId)
+      .eq('supplier_id', supplierId);
+
+    // Kosongkan atribut supplier pada materials yang terhubung ke supplier ini
+    if (existingSupplier.name) {
+      await supabase
+        .from('materials')
+        .update({ supplier: '' })
+        .eq('tenant_id', tenantId)
+        .ilike('supplier', existingSupplier.name.trim());
+    }
+
+    const { error } = await supabase
+      .from('suppliers')
+      .delete()
+      .eq('id', supplierId)
+      .eq('tenant_id', tenantId);
+
+    if (error) throw new Error("Gagal menghapus supplier: " + error.message);
+    await logAudit('DELETE_SUPPLIER', `Menghapus supplier "${existingSupplier.name}" beserta pelepasan pemetaan bahannya.`);
+    return { success: true, deletedName: existingSupplier.name };
   },
 
   // --- PURCHASE ENTRIES (Daily Purchasing) ---

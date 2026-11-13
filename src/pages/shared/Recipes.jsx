@@ -304,7 +304,7 @@ function RecipesInner({ categoryFilter } = {}) {
 
   const handleSaveRecipe = async () => {
     if (!activeRecipe) return;
-    if (!window.confirm(`Konfirmasi simpan perubahan resep "${activeRecipe.menu_name}"?`)) return;
+    if (!window.confirm(`Simpan perubahan resep "${activeRecipe.menu_name}"?`)) return;
     const savedIngredients = editedIngredients
       .filter(ing => ing.item_name !== '')
       .map(ing => {
@@ -332,7 +332,7 @@ function RecipesInner({ categoryFilter } = {}) {
     };
     try {
       await onSaveRecipe(updatedRecipe);
-      if (showToast) showToast('Resep berhasil disimpan.', 'success');
+      if (showToast) showToast('Resep disimpan.', 'success');
     } catch (err) {
       if (showToast) showToast(err.message || 'Gagal menyimpan resep', 'error');
       else alert('Gagal menyimpan resep: ' + err.message);
@@ -341,11 +341,11 @@ function RecipesInner({ categoryFilter } = {}) {
 
 
   const handleRecalculateAll = async () => {
-    if (!window.confirm('Hitung ulang HPP & Food Cost% untuk SEMUA resep berdasarkan harga bahan terbaru? Resep yang datanya berubah akan otomatis tersimpan.')) return;
+    if (!window.confirm('Hitung ulang HPP semua resep sesuai harga bahan terbaru?')) return;
     setRecalculating(true);
     try {
       const result = await api.recalculateAllRecipes();
-      showToast?.(`Selesai: ${result.updated} dari ${result.total} resep diperbarui angkanya.`, 'success');
+      showToast?.(`${result.updated} dari ${result.total} resep diperbarui.`, 'success');
       if (refreshData) await refreshData();
     } catch (err) {
       showToast?.(err.message || 'Gagal menghitung ulang resep', 'error');
@@ -472,7 +472,7 @@ function RecipesInner({ categoryFilter } = {}) {
               style={{ width: '38px', height: '38px', padding: 0, borderRadius: 'var(--radius-md)' }}
               onClick={handleRecalculateAll}
               disabled={recalculating}
-              title="Hitung ulang HPP & Food Cost% semua resep berdasarkan harga bahan terbaru (perlu dijalankan setelah memperbaiki data bahan)"
+              title="Hitung ulang HPP semua resep"
             >
               <RefreshCw size={15} className={recalculating ? 'spin' : ''} />
             </button>
@@ -590,10 +590,10 @@ function RecipesInner({ categoryFilter } = {}) {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '18px', marginBottom: '18px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', gap: '16px' }}>
             <div>
               <span className="badge" style={{ marginBottom: '6px', background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid rgba(79,110,247,0.15)', fontSize: '0.65rem', padding: '3px 8px' }}>
-                Resep & Harga Pokok
+                Resep & HPP
               </span>
               <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>{activeRecipe.menu_name}</h2>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginTop: '2px' }}>Kelola komposisi bahan baku dari inventory per porsi</p>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginTop: '2px' }}>Atur takaran bahan per porsi.</p>
             </div>
             
             <div style={{ display: 'flex', gap: '12px', flexShrink: 0 }}>
@@ -730,7 +730,7 @@ function RecipesInner({ categoryFilter } = {}) {
           {/* Ingredients Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
             <h3 style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '1px' }}>
-              Komposisi Bahan Baku (Recipe List)
+              Komposisi Bahan Baku
             </h3>
             <button 
               className="btn premium-btn premium-btn-secondary" 
@@ -747,11 +747,11 @@ function RecipesInner({ categoryFilter } = {}) {
               <thead>
                 <tr>
                   <th style={{ width: '28%' }}>Bahan Baku</th>
-                  <th style={{ width: '12%', textAlign: 'right' }}>Qty</th>
+                  <th style={{ width: '12%', textAlign: 'right' }}>Jumlah</th>
                   <th style={{ width: '12%' }}>Satuan</th>
-                  <th style={{ width: '18%' }}>Pack Info</th>
+                  <th style={{ width: '18%' }}>Kemasan</th>
                   <th style={{ width: '15%', textAlign: 'right' }}>Harga/Pack</th>
-                  <th style={{ width: '12%', textAlign: 'right' }}>Amount</th>
+                  <th style={{ width: '12%', textAlign: 'right' }}>Subtotal</th>
                   <th style={{ width: '3%', textAlign: 'center' }}></th>
                 </tr>
               </thead>
@@ -878,7 +878,7 @@ function RecipesInner({ categoryFilter } = {}) {
                 {editedIngredients.length === 0 && (
                   <tr>
                     <td colSpan="7" style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.825rem' }}>
-                      Belum ada bahan baku terhubung. Klik "Tambah Bahan" untuk meracik resep.
+                      Belum ada bahan. Klik Tambah Bahan.
                     </td>
                   </tr>
                 )}
@@ -916,11 +916,11 @@ function RecipesInner({ categoryFilter } = {}) {
                   className="btn premium-btn premium-btn-danger" 
                   style={{ padding: '10px 20px', fontSize: '0.85rem', borderRadius: 'var(--radius-md)', display: 'flex', gap: '8px', background: 'var(--danger-glow)', color: 'var(--danger-text)', border: '1px solid rgba(220, 38, 38, 0.2)' }} 
                   onClick={async () => {
-                    if (window.confirm(`Yakin ingin menghapus resep menu "${activeRecipe.menu_name}"?`)) {
+                    if (window.confirm(`Hapus resep "${activeRecipe.menu_name}"?`)) {
                       try {
                         await onDeleteRecipe(activeRecipe.id);
                         setActiveRecipe(null);
-                        if (showToast) showToast('Resep berhasil dihapus.', 'success');
+                        if (showToast) showToast('Resep dihapus.', 'success');
                       } catch (err) {
                         if (showToast) showToast(err.message || 'Gagal menghapus resep', 'error');
                         else alert('Gagal menghapus resep: ' + err.message);
@@ -928,7 +928,7 @@ function RecipesInner({ categoryFilter } = {}) {
                     }
                   }}
                 >
-                  <Trash2 size={15} /> Hapus Resep
+                  <Trash2 size={15} /> Hapus
                 </button>
               )}
               <button 
@@ -936,7 +936,7 @@ function RecipesInner({ categoryFilter } = {}) {
                 style={{ padding: '10px 20px', fontSize: '0.85rem', borderRadius: 'var(--radius-md)', display: 'flex', gap: '8px' }} 
                 onClick={handleSaveRecipe}
               >
-                <Save size={15} /> Simpan Resep
+                <Save size={15} /> Simpan
               </button>
             </div>
           </div>
@@ -944,8 +944,8 @@ function RecipesInner({ categoryFilter } = {}) {
       ) : (
         <div className="glass-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', minHeight: '60vh', border: '1px solid var(--border)' }}>
           <ChefHat size={48} style={{ opacity: 0.2, marginBottom: '16px' }} />
-          <h4 style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem', marginBottom: '4px' }}>Tidak Ada Resep Terpilih</h4>
-          <p style={{ fontSize: '0.85rem', maxWidth: '240px', textAlign: 'center' }}>Pilih resep dari menu di sebelah kiri atau buat resep baru.</p>
+          <h4 style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem', marginBottom: '4px' }}>Pilih Resep Menu</h4>
+          <p style={{ fontSize: '0.85rem', maxWidth: '240px', textAlign: 'center' }}>Pilih menu di kiri atau tambah baru.</p>
         </div>
       )}
 
@@ -954,7 +954,7 @@ function RecipesInner({ categoryFilter } = {}) {
         <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 3000, display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.2s ease' }} onClick={() => setShowAddModal(false)}>
           <div style={{ width: '100%', maxWidth: '400px', background: 'var(--bg-primary)', height: '100vh', padding: '32px 24px', overflowY: 'auto', borderLeft: '1px solid var(--border)', boxShadow: '-10px 0 30px rgba(0,0,0,0.1)', animation: 'slideInRight 0.3s ease' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>Tambah Resep Baru</h3>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>Tambah Resep</h3>
               <button style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => setShowAddModal(false)}>
                 <X size={16} />
               </button>
@@ -1029,8 +1029,8 @@ function RecipesInner({ categoryFilter } = {}) {
         isOpen={showBulkImport}
         onClose={() => setShowBulkImport(false)}
         type="recipes"
-        title="Bulk Import Resep & Harga Jual"
-        description="Upload data menu, harga jual, dan resep sekaligus dari file Excel."
+        title="Import Resep & Harga"
+        description="Unggah data menu dari Excel."
         onCommit={async (rows) => {
 
           const normalizedRows = rows.map(row => {

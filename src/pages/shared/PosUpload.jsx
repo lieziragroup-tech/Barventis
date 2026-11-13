@@ -447,16 +447,16 @@ export default function PosUpload() {
       const createdFailed = newRecipeResults.filter(r => !r.success);
 
       let msg = res.duplicate
-        ? (res.message || 'File ESB ini sudah pernah diimpor. Tidak ada data yang ditambahkan ulang.')
-        : `Sukses mengimpor penjualan ESB. Stok fisik tidak dipotong otomatis; theoretical usage dihitung untuk ${res.theoretical_materials || 0} bahan, sedangkan OUT dikonfirmasi di Daily Inventory.`;
+        ? (res.message || 'File POS sudah pernah diimpor.')
+        : `Penjualan POS diimpor (${res.theoretical_materials || 0} bahan dihitung).`;
       if (res.unmapped_items?.length > 0) {
-          msg += ` Ada ${res.unmapped_items.length} menu yang dilewati (tidak ada resep).`;
+          msg += ` ${res.unmapped_items.length} menu dilewati.`;
       }
       if (createdFailed.length > 0) {
-          msg += ` ${createdFailed.length} resep baru GAGAL dibuat: ${createdFailed.map(r => r.name).join(', ')}.`;
+          msg += ` ${createdFailed.length} resep gagal dibuat: ${createdFailed.map(r => r.name).join(', ')}.`;
       }
       if (res.data_issues?.length > 0) {
-          msg += ` ${res.data_issues.length} bahan punya data qty/harga tidak valid (dilewati dari perhitungan biaya) — cek Recipe Builder.`;
+          msg += ` ${res.data_issues.length} bahan bermasalah, cek Resep & HPP.`;
           console.warn('[PosUpload] Data issues saat commit:', res.data_issues);
       }
       setUploadStatus({ type: (res.duplicate ? 'warning' : (createdFailed.length > 0 || res.data_issues?.length > 0) ? 'warning' : 'success'), message: msg });
@@ -481,10 +481,10 @@ export default function PosUpload() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
-            ESB Auto-Deduct Upload
+            Upload Penjualan POS
           </h1>
           <p style={{ color: 'var(--text-secondary)' }}>
-            Upload raw file Penjualan Beverage ESB. Sistem akan otomatis memotong stok real-time (Auto-COGS).
+            Unggah penjualan POS untuk hitung pemakaian.
           </p>
         </div>
       </div>
@@ -526,9 +526,9 @@ export default function PosUpload() {
           display: 'flex', flexDirection: 'column', gap: '14px'
         }}>
           <div>
-            <h4 style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--warning)', marginBottom: '4px' }}>Data POS ESB Terdeteksi (Periode {duplicateInfo.periodStr})</h4>
+            <h4 style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--warning)', marginBottom: '4px' }}>Data POS Sudah Ada ({duplicateInfo.periodStr})</h4>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              Sistem mendeteksi bahwa sudah ada data POS untuk bulan ini. Jika ini adalah revisi, pilih "Hapus & Timpa Baru" (Sistem akan otomatis ROLLBACK stok lama ke gudang sebelum memotong stok baru).
+              Pilih tambahkan atau timpa data periode ini.
             </p>
           </div>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -547,7 +547,7 @@ export default function PosUpload() {
               setParsedData({ ...duplicateInfo, uploadMode: 'append', fileHash });
               setDuplicateInfo(null);
               setUploadStatus(null);
-            }}>Tambahkan Saja</button>
+            }}>Tambahkan</button>
             <button className="btn btn-warning" onClick={async () => {
               const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(duplicateInfo.filename + JSON.stringify(duplicateInfo.sales)));
               const hashArray = Array.from(new Uint8Array(hashBuffer));
@@ -561,7 +561,7 @@ export default function PosUpload() {
               setParsedData({ ...duplicateInfo, uploadMode: 'overwrite', fileHash });
               setDuplicateInfo(null);
               setUploadStatus(null);
-            }}>Hapus & Timpa Baru (Rollback)</button>
+            }}>Timpa Baru</button>
           </div>
         </div>
       )}
@@ -588,10 +588,10 @@ export default function PosUpload() {
           </div>
           <div>
             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
-              {loading ? "Memproses Data..." : "Upload Spreadsheet Penjualan POS"}
+              {loading ? "Memproses Data..." : "Unggah File Penjualan POS"}
             </h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', maxWidth: '420px', margin: '0 auto' }}>
-              Drag and drop file "Penjualan Beverage (ESB).xlsx" atau format POS lainnya kesini. Sistem otomatis menghapus header sampah dan memvisualisasikan data mentahnya.
+              Tarik atau pilih file Excel POS ke sini.
             </p>
           </div>
         </div>
@@ -715,10 +715,10 @@ export default function PosUpload() {
                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
                  <div>
                    <h3 style={{ color: 'var(--danger)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-                      <AlertTriangle size={20} /> Deteksi: {summaryStats.missingMenus.length} Menu Perlu Pemetaan
+                      <AlertTriangle size={20} /> {summaryStats.missingMenus.length} Menu Belum Dipetakan
                    </h3>
                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 0, marginTop: '4px' }}>
-                      Sistem cerdas mencocokkan nama kasir ke resep secara otomatis. Periksa atau gunakan tombol cepat di bawah:
+                      Petakan nama kasir ke resep.
                    </p>
                  </div>
                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -742,9 +742,9 @@ export default function PosUpload() {
                      }}
                      className="btn"
                      style={{ background: '#059669', color: 'white', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', padding: '6px 12px' }}
-                     title="Otomatis petakan menu dengan kemiripan tinggi"
+                     title="Cocokkan otomatis menu yang mirip"
                    >
-                     <Sparkles size={14} /> Terapkan Rekomendasi Pintar
+                     <Sparkles size={14} /> Cocokkan Otomatis
                    </button>
                    <button
                      type="button"
@@ -761,9 +761,9 @@ export default function PosUpload() {
                      }}
                      className="btn btn-secondary"
                      style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', padding: '6px 12px' }}
-                     title="Abaikan item pelengkap seperti es batu, kemasan, atau gratis"
+                     title="Abaikan item pelengkap"
                    >
-                     <CheckCheck size={14} /> Abaikan Semua Add-on
+                     <CheckCheck size={14} /> Abaikan Add-on
                    </button>
                  </div>
                </div>
@@ -869,7 +869,7 @@ export default function PosUpload() {
               display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600
             }}>
               <CheckCircle size={20} />
-              Semua menu berhasil dipetakan ke resep/bahan baku. Aman untuk dipotong!
+              Semua menu sudah dipetakan ke resep.
             </div>
           )}
 
@@ -939,9 +939,9 @@ export default function PosUpload() {
               disabled={loading}
             >
               {loading ? (
-                <>Menyimpan & Memotong Stok...</>
+                <>Menyimpan...</>
               ) : (
-                <><Database size={18} /> Konfirmasi & Potong Stok Sekarang</>
+                <><Database size={18} /> Simpan Data POS</>
               )}
             </button>
           </div>

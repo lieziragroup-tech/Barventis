@@ -99,7 +99,7 @@ export default function BackupCenter() {
 
   // BUG-BC-03: api.deleteBackup(id) expects a backup UUID, not a filename.
   const handleDeleteBackup = async (backup) => {
-    if (!window.confirm(`Apakah Anda yakin ingin menghapus file cadangan "${backup.filename}"? Tindakan ini tidak dapat dibatalkan.`)) {
+    if (!window.confirm(`Hapus file backup "${backup.filename}"?`)) {
       return;
     }
 
@@ -271,9 +271,9 @@ export default function BackupCenter() {
         {/* Generator card */}
         <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
           <div>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '8px' }}>Buat Cadangan Baru (Instant Backup)</h3>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '8px' }}>Buat Backup Baru</h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: '1.5', marginBottom: '20px' }}>
-              Membuat snapshot instan dari seluruh database Anda saat ini (stok bahan, riwayat transaksi, invoices, resep COGS, dan audit logs). File cadangan akan dikompresi ke dalam arsip ZIP yang aman dan disimpan di server.
+              Simpan arsip cadangan seluruh data sistem.
             </p>
             <div style={{
               background: 'var(--bg-tertiary)',
@@ -288,7 +288,7 @@ export default function BackupCenter() {
               alignItems: 'center'
             }}>
               <Info size={16} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-              <span>Seluruh proses aman dilakukan saat server aktif. Sambungan database akan disegarkan otomatis.</span>
+              <span>Proses aman saat operasional tetap berjalan.</span>
             </div>
           </div>
           <button 
@@ -298,15 +298,15 @@ export default function BackupCenter() {
             style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-lg)', fontWeight: '700', display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}
           >
             <RefreshCw size={16} className={actionLoading ? 'animate-spin' : ''} style={{ animation: actionLoading ? 'spin 1s linear infinite' : 'none' }} />
-            {actionLoading ? 'Memproses Arsip ZIP...' : 'Buat Backup Sekarang (ZIP)'}
+            {actionLoading ? 'Memproses...' : 'Buat Backup (ZIP)'}
           </button>
         </div>
 
         {/* Upload restore card */}
         <div className="glass-card" style={{ padding: '24px' }}>
-          <h3 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '8px' }}>Pulihkan dari File Luar (Restore Backup)</h3>
+          <h3 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '8px' }}>Pulihkan Data</h3>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: '1.5', marginBottom: '16px' }}>
-            Unggah file backup ZIP yang pernah Anda unduh sebelumnya untuk memulihkan seluruh data sistem ke titik waktu cadangan tersebut.
+            Unggah file backup ZIP untuk memulihkan data.
           </p>
 
           <form 
@@ -334,8 +334,8 @@ export default function BackupCenter() {
             />
             <label htmlFor="input-file-upload" style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
               <UploadCloud size={32} style={{ color: 'var(--accent)', marginBottom: '4px' }} />
-              <span style={{ fontSize: '0.9rem', fontWeight: '600' }}>Tarik & lepas file ZIP cadangan Anda</span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>atau klik untuk menelusuri dari folder</span>
+              <span style={{ fontSize: '0.9rem', fontWeight: '600' }}>Tarik & lepas file backup ZIP</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>atau klik untuk memilih file</span>
             </label>
           </form>
         </div>
@@ -344,7 +344,7 @@ export default function BackupCenter() {
       {/* Row 2: List of backups */}
       <div className="glass-card" style={{ padding: '0px', overflow: 'hidden' }}>
         <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: '700', minWidth: 0 }}>Riwayat File Cadangan di Server</h3>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: '700', minWidth: 0 }}>Riwayat File Backup</h3>
           <button 
             className="btn btn-secondary" 
             onClick={fetchBackups} 
@@ -352,7 +352,7 @@ export default function BackupCenter() {
             style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'flex', gap: '6px', alignItems: 'center' }}
           >
             <RefreshCw size={12} className={loading ? 'animate-spin' : ''} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-            Segarkan Tabel
+            Muat Ulang
           </button>
         </div>
 
@@ -368,7 +368,7 @@ export default function BackupCenter() {
               animation: 'spin 0.8s linear infinite',
               marginBottom: '12px'
             }}></div>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Memuat daftar cadangan...</p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Memuat daftar backup...</p>
           </div>
         ) : error ? (
           <div style={{ padding: '40px', textAlign: 'center', color: 'var(--danger)' }}>
@@ -378,18 +378,18 @@ export default function BackupCenter() {
         ) : backups.length === 0 ? (
           <div style={{ padding: '60px 40px', textAlign: 'center' }}>
             <Database size={40} style={{ margin: '0 auto 12px', color: 'var(--text-muted)' }} />
-            <h4 style={{ fontSize: '0.95rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '4px' }}>Belum Ada File Cadangan</h4>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Klik tombol "Buat Backup Sekarang" di atas untuk membuat file cadangan pertama Anda.</p>
+            <h4 style={{ fontSize: '0.95rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '4px' }}>Belum Ada Backup</h4>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Klik Buat Backup untuk membuat cadangan pertama.</p>
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)', background: 'var(--bg-tertiary)' }}>
-                  <th style={{ padding: '14px 20px', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Nama File Backup</th>
-                  <th style={{ padding: '14px 20px', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Ukuran File</th>
-                  <th style={{ padding: '14px 20px', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Tanggal Pembuatan</th>
-                  <th style={{ padding: '14px 20px', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', textAlign: 'right' }}>Aksi Kelola</th>
+                  <th style={{ padding: '14px 20px', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Nama File</th>
+                  <th style={{ padding: '14px 20px', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Ukuran</th>
+                  <th style={{ padding: '14px 20px', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase' }}>Tanggal</th>
+                  <th style={{ padding: '14px 20px', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', textAlign: 'right' }}>Aksi</th>
                 </tr>
               </thead>
               <tbody>
@@ -512,8 +512,8 @@ export default function BackupCenter() {
                 <ShieldAlert size={22} />
               </div>
               <div>
-                <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--text-inverse)' }}>PERINGATAN PEMULIHAN DATA!</h3>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Tindakan Administratif Berisiko Tinggi</span>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--text-inverse)' }}>Pulihkan Data</h3>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Data saat ini akan tertimpa permanen.</span>
               </div>
             </div>
 
@@ -529,8 +529,8 @@ export default function BackupCenter() {
                   animation: 'spin 0.8s linear infinite',
                   marginBottom: '20px'
                 }}></div>
-                <h4 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '8px' }}>Merekam Recovery Snapshot & Menulis Ulang SQLite...</h4>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Harap tunggu, proses restorasi sedang berjalan di server. Jangan menutup browser.</p>
+                <h4 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '8px' }}>Memulihkan Data...</h4>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Mohon tunggu, jangan tutup halaman ini.</p>
               </div>
             ) : (
               <div>
@@ -545,19 +545,19 @@ export default function BackupCenter() {
                   marginBottom: '20px'
                 }}>
                   <p style={{ marginBottom: '8px' }}>
-                    Anda akan memulihkan database sistem menggunakan cadangan:
+                    Sumber cadangan:
                   </p>
                   <p style={{ fontFamily: 'monospace', fontWeight: '700', color: 'var(--danger)', fontSize: '0.8rem', background: 'rgba(0,0,0,0.2)', padding: '6px 10px', borderRadius: 'var(--radius-sm)', marginBottom: '8px', wordBreak: 'break-all' }}>
                     {selectedRestoreBackup instanceof File ? selectedRestoreBackup.name : selectedRestoreBackup.filename}
                   </p>
                   <p style={{ fontWeight: '600' }}>
-                    ⚠️ PERHATIAN: Semua perubahan data yang dilakukan SEJAK cadangan ini dibuat akan tertimpa dan terhapus secara permanen!
+                    Semua data setelah cadangan ini akan hilang permanen.
                   </p>
                 </div>
 
                 <div style={{ marginBottom: '24px' }}>
                   <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase' }}>
-                    Harap ketik kata <span style={{ color: 'var(--danger)', fontWeight: '700' }}>PULIHKAN</span> untuk mengonfirmasi:
+                    Ketik <span style={{ color: 'var(--danger)', fontWeight: '700' }}>PULIHKAN</span> untuk konfirmasi:
                   </label>
                   <input
                     type="text"
@@ -601,7 +601,7 @@ export default function BackupCenter() {
                       fontWeight: '700'
                     }}
                   >
-                    Eksekusi Restorasi Data
+                    Pulihkan
                   </button>
                 </div>
               </div>

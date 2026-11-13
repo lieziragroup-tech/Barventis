@@ -7,9 +7,9 @@ const StockOpname = lazyWithRetry(() => import('./StockOpname'));
 const StockAdjustments = lazyWithRetry(() => import('./StockAdjustments'));
 
 const TABS = [
-  { key: 'resto', label: 'Stock Opname Resto', icon: Boxes },
-  { key: 'central', label: 'Stock Opname Central', icon: Warehouse },
-  { key: 'adjustments', label: 'Audit Selisih Stok', icon: FileText },
+  { key: 'resto', label: 'Opname Resto', icon: Boxes },
+  { key: 'central', label: 'Opname Central', icon: Warehouse },
+  { key: 'adjustments', label: 'Audit Selisih', icon: FileText },
 ];
 
 const Loading = () => (

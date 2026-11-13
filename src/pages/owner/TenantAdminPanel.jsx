@@ -169,13 +169,13 @@ export default function TenantAdminPanel() {
 
   const handleDeleteUser = async (user) => {
     if (user.id === sessionUser.id) {
-      displayToast('Anda tidak dapat menghapus diri sendiri.', 'error');
+      displayToast('Tidak bisa menghapus akun sendiri.', 'error');
       return;
     }
     
     requestConfirmation(
       'Hapus Pengguna',
-      `Apakah Anda yakin ingin menghapus staf ${user.name} (${user.email})?`,
+      `Hapus akses staf ${user.name} (${user.email})?`,
       async () => {
         try {
           setLoading(true);
@@ -186,11 +186,11 @@ export default function TenantAdminPanel() {
 
           if (error) {
             if (error.code === '23503') {
-              throw new Error('Tidak dapat menghapus pengguna ini karena sudah memiliki riwayat aktivitas (transaksi, opname, dll).');
+              throw new Error('Tidak bisa menghapus pengguna yang memiliki riwayat aktivitas.');
             }
             throw error;
           }
-          displayToast('Pengguna berhasil dihapus.', 'success');
+          displayToast('Pengguna dihapus.', 'success');
           fetchUsers();
         } catch (err) {
           displayToast('Gagal menghapus pengguna: ' + translateDbError(err), 'error');
@@ -203,7 +203,7 @@ export default function TenantAdminPanel() {
   const handleCancelReset = (requestId) => {
     requestConfirmation(
       'Batalkan Permintaan Reset',
-      'Batalkan permintaan reset yang masih menunggu persetujuan ini? Anda bisa mengajukan permintaan baru setelahnya.',
+      'Batalkan permintaan reset yang sedang menunggu persetujuan?',
       async () => {
         try {
           setIsSaving(true);
@@ -222,13 +222,13 @@ export default function TenantAdminPanel() {
   const executeFactoryReset = async () => {
     setShowResetModal(false);
     requestConfirmation(
-      'Hapus Data (Reset)',
-      `Anda akan MENGHAPUS data terpilih untuk resto "${currentTenant?.company_name}". Data akan TERHAPUS SECARA PERMANEN sekarang juga dan Super Admin akan menerima notifikasi.`,
+      'Reset Data Permanen',
+      `Data terpilih untuk "${currentTenant?.company_name}" akan dihapus permanen sekarang.`,
       async () => {
         try {
           setIsSaving(true);
           await api.executeTenantResetImmediate(currentTenant.id, resetOptions);
-          displayToast('Data berhasil dihapus secara permanen.', 'success');
+          displayToast('Data berhasil direset.', 'success');
           fetchResetRequests();
         } catch (err) {
           displayToast('Gagal menghapus data: ' + translateDbError(err), 'error');
@@ -243,7 +243,7 @@ export default function TenantAdminPanel() {
     e.preventDefault();
     requestConfirmation(
       'Simpan Profil',
-      'Apakah Anda yakin ingin menyimpan perubahan profil pengaturan resto ini?',
+      'Simpan perubahan pengaturan resto ini?',
       async () => {
         try {
           setIsSaving(true);
@@ -287,17 +287,17 @@ export default function TenantAdminPanel() {
 
   const handleDeleteLocation = (loc) => {
     if (loc.isSystem) {
-      displayToast('Lokasi bawaan sistem tidak dapat dihapus.', 'error');
+      displayToast('Lokasi bawaan tidak dapat dihapus.', 'error');
       return;
     }
     requestConfirmation(
-      'Hapus Lokasi Operasional',
-      `Apakah Anda yakin ingin menghapus lokasi "${loc.name}" (${loc.code})? Filterisasi di Stock Ledger dan modul operasional lainnya akan diperbarui.`,
+      'Hapus Lokasi',
+      `Hapus lokasi "${loc.name}" (${loc.code})?`,
       () => {
         try {
           locationService.deleteLocation(currentTenant?.id, loc.id);
           setLocations(locationService.getLocations(currentTenant?.id));
-          displayToast(`Lokasi "${loc.name}" berhasil dihapus.`, 'success');
+          displayToast(`Lokasi "${loc.name}" dihapus.`, 'success');
         } catch (err) {
           displayToast(err.message, 'error');
         }
@@ -307,12 +307,12 @@ export default function TenantAdminPanel() {
 
   const handleResetLocations = () => {
     requestConfirmation(
-      'Reset Lokasi ke Default',
-      'Kembalikan daftar lokasi ke konfigurasi standar sistem (Resto, Central, Kitchen, Service)? Semua lokasi kustom akan dihapus.',
+      'Reset Lokasi',
+      'Kembalikan daftar lokasi ke standar sistem?',
       () => {
         const defs = locationService.resetToDefault(currentTenant?.id);
         setLocations(defs);
-        displayToast('Daftar lokasi berhasil dikembalikan ke default.', 'success');
+        displayToast('Lokasi dikembalikan ke default.', 'success');
       }
     );
   };
@@ -324,19 +324,19 @@ export default function TenantAdminPanel() {
           <Store size={20} style={{ color: 'var(--accent)' }} /> Pengaturan Resto
         </h2>
         <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '0.8rem' }}>
-          Kelola profil resto dan hak akses staf Anda.
+          Kelola profil resto dan akses staf.
         </p>
       </div>
 
       {/* Sleek Sub Menu Capsule Navigation Bar */}
       <div className="flex items-center gap-1.5 p-1.5 bg-[var(--bg-tertiary)]/70 border border-[var(--border)] rounded-2xl mb-4 overflow-x-auto scrollbar-hide shrink-0">
         {[
-          { id: 'users', label: 'Manajemen Pengguna', icon: Users },
-          { id: 'invites', label: 'Link Undangan', icon: LinkIcon },
+          { id: 'users', label: 'Pengguna', icon: Users },
+          { id: 'invites', label: 'Undangan', icon: LinkIcon },
           { id: 'profile', label: 'Profil Resto', icon: Building },
-          { id: 'addons', label: 'Add-Ons & Kuota', icon: Store },
-          { id: 'locations', label: 'Manajemen Lokasi', icon: MapPin },
-          { id: 'branches', label: 'Cabang / Outlet', icon: Store },
+          { id: 'addons', label: 'Add-Ons', icon: Store },
+          { id: 'locations', label: 'Lokasi Gudang', icon: MapPin },
+          { id: 'branches', label: 'Cabang', icon: Store },
         ].map((item) => {
           const isActive = tab === item.id;
           const Icon = item.icon;
@@ -362,9 +362,9 @@ export default function TenantAdminPanel() {
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div>
-                <h3 className="text-sm md:text-base font-bold text-[var(--text-primary)] m-0">Daftar Pengguna Aktif</h3>
+                <h3 className="text-sm md:text-base font-bold text-[var(--text-primary)] m-0">Daftar Pengguna</h3>
                 <p className="text-xs text-[var(--text-secondary)] m-0 mt-0.5">
-                  Kelola staf yang memiliki akses ke modul restoran Anda.
+                  Kelola staf yang mengakses sistem.
                 </p>
               </div>
               <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -389,7 +389,7 @@ export default function TenantAdminPanel() {
                   disabled={isSaving}
                 >
                   <LinkIcon size={13} />
-                  <span>Buat Link Undangan</span>
+                  <span>Buat Undangan</span>
                 </button>
               </div>
             </div>
@@ -492,9 +492,9 @@ export default function TenantAdminPanel() {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', gap: '12px', flexWrap: 'wrap' }}>
               <div>
-                <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1rem', fontWeight: 700 }}>Kelola Link Undangan</h3>
+                <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1rem', fontWeight: 700 }}>Link Undangan</h3>
                 <p style={{ margin: '2px 0 0 0', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                  Buat link undangan untuk merekrut staf baru ke sistem Anda.
+                  Buat tautan undangan staf baru.
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -520,7 +520,7 @@ export default function TenantAdminPanel() {
                   disabled={isSaving}
                   style={{ display: 'flex', gap: '4px', alignItems: 'center', fontSize: '0.78rem', padding: '6px 10px', height: '32px' }}
                 >
-                  <LinkIcon size={12} /> Buat Link Undangan
+                  <LinkIcon size={12} /> Buat Undangan
                 </button>
               </div>
             </div>
@@ -683,9 +683,9 @@ export default function TenantAdminPanel() {
               </div>
 
               <div style={{ background: 'rgba(239, 68, 68, 0.05)', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(239, 68, 68, 0.1)', marginBottom: '16px' }}>
-                <h4 style={{ margin: '0 0 4px 0', color: 'var(--danger)', fontSize: '0.82rem', fontWeight: '700' }}>Zona Berbahaya (Danger Zone)</h4>
+                <h4 style={{ margin: '0 0 4px 0', color: 'var(--danger)', fontSize: '0.82rem', fontWeight: '700' }}>Reset Transaksi</h4>
                 <p style={{ margin: '0 0 12px 0', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                  Reset seluruh statistik penjualan dan transaksi (mengulang dari 0). Bahan baku dan resep tidak akan dihapus.
+                  Hapus data transaksi. Bahan dan resep tetap aman.
                 </p>
                 <button
                   type="button"
@@ -694,7 +694,7 @@ export default function TenantAdminPanel() {
                   className="btn btn-secondary"
                   style={{ padding: '6px 12px', fontSize: '0.75rem', color: 'var(--danger-text)', borderColor: 'var(--danger)' }}
                 >
-                  <Trash2 size={12} style={{ marginRight: 4 }} /> Reset Data Transaksi (0)
+                  <Trash2 size={12} style={{ marginRight: 4 }} /> Reset Transaksi
                 </button>
               </div>
 
@@ -707,7 +707,7 @@ export default function TenantAdminPanel() {
                   marginTop: '8px', display: 'flex', justifyContent: 'center', fontSize: '0.8rem'
                 }}
               >
-                {isSaving ? 'Menyimpan...' : 'Simpan Perubahan'}
+                {isSaving ? 'Menyimpan...' : 'Simpan'}
               </button>
             </form>
           </div>
@@ -715,9 +715,9 @@ export default function TenantAdminPanel() {
         
         {tab === 'addons' && (
           <div>
-            <h3 style={{ margin: '0 0 4px 0', color: 'var(--text-primary)', fontSize: '1.2rem', fontWeight: 700 }}>Upgrade & Beli Add-Ons</h3>
+            <h3 style={{ margin: '0 0 4px 0', color: 'var(--text-primary)', fontSize: '1.2rem', fontWeight: 700 }}>Add-Ons & Paket</h3>
             <p style={{ margin: '0 0 20px 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-              Tingkatkan kapasitas sistem Barventis sesuai kebutuhan bisnis Anda tanpa harus upgrade ke paket yang lebih mahal.
+              Tingkatkan kuota transaksi dan resep.
             </p>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
@@ -805,9 +805,9 @@ export default function TenantAdminPanel() {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', gap: '12px', flexWrap: 'wrap' }}>
               <div>
-                <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1rem', fontWeight: 700 }}>Daftar Lokasi & Gudang Operasional</h3>
+                <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1rem', fontWeight: 700 }}>Lokasi & Gudang</h3>
                 <p style={{ margin: '2px 0 0 0', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                  Kelola lokasi gudang, dapur (Kitchen), area floor (Service), dan titik penyimpanan bahan baku. Lokasi ini otomatis muncul pada filter Stock Ledger dan pencatatan mutasi.
+                  Kelola area gudang dan filter stok.
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -921,10 +921,10 @@ export default function TenantAdminPanel() {
           <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl w-full max-w-md overflow-hidden shadow-2xl">
             <div className="p-5">
               <h3 className="text-base font-bold text-[var(--text-primary)] mb-1 flex items-center gap-2">
-                <MapPin size={18} className="text-[var(--accent)]" /> Tambah Lokasi / Gudang Baru
+                <MapPin size={18} className="text-[var(--accent)]" /> Tambah Lokasi
               </h3>
               <p className="text-xs text-[var(--text-secondary)] mb-4">
-                Tambahkan divisi, dapur, atau area penyimpanan baru untuk mempermudah filterisasi stok.
+                Tambah area gudang atau dapur baru.
               </p>
 
               <form onSubmit={handleAddLocation} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -1057,7 +1057,7 @@ export default function TenantAdminPanel() {
           <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
             <div className="p-5 border-b border-[var(--border)] flex justify-between items-center bg-[rgba(239,68,68,0.05)]">
               <h3 className="text-lg font-bold text-[var(--danger)] flex items-center gap-2 m-0">
-                <Trash2 size={20} /> Reset Data Spesifik
+                <Trash2 size={20} /> Reset Data
               </h3>
               <button onClick={() => setShowResetModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
                 <XCircle size={20} />
@@ -1066,7 +1066,7 @@ export default function TenantAdminPanel() {
             
             <div className="p-5 overflow-y-auto">
               <p className="text-sm text-[var(--text-secondary)] mb-4">
-                Pilih kategori data yang ingin Anda ajukan untuk dihapus. Data Anda akan <strong>langsung terhapus secara permanen</strong> saat Anda menyetujui peringatan di bawah.
+                Pilih kategori data yang akan dihapus permanen.
               </p>
 
               {resetRequests.some(r => r.status?.toLowerCase() === 'pending') && (
@@ -1168,9 +1168,9 @@ export default function TenantAdminPanel() {
                 className="btn premium-btn-danger px-4"
                 onClick={executeFactoryReset}
                 disabled={!Object.values(resetOptions).some(v => v) || resetRequests.some(r => r.status?.toLowerCase() === 'pending')}
-                title={resetRequests.some(r => r.status?.toLowerCase() === 'pending') ? 'Masih ada permintaan yang menunggu persetujuan' : undefined}
+                title={resetRequests.some(r => r.status?.toLowerCase() === 'pending') ? 'Masih ada permintaan menunggu persetujuan' : undefined}
               >
-                Hapus Data Secara Permanen
+                Reset Data
               </button>
             </div>
           </div>

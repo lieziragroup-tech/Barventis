@@ -9,25 +9,25 @@ const CLASS_CONFIG = {
     label: 'Menu Andalan',
     color: '#d97706',
     bg: 'rgba(245,158,11,0.1)',
-    desc: 'Penjualan tinggi dan untung per porsi besar. Pertahankan rasa dan jaga stok bahannya.'
+    desc: 'Laris terjual, margin per porsi tinggi.'
   },
   PLOWHORSE: {
     label: 'Laris Untung Tipis',
     color: '#2563eb',
     bg: 'rgba(59,130,246,0.1)',
-    desc: 'Sering dipesan pelanggan, tetapi untung per porsinya kecil. Cek takaran resep atau sesuaikan harga.'
+    desc: 'Laris terjual, margin per porsi rendah.'
   },
   PUZZLE: {
-    label: 'Untung Besar Jarang Laku',
+    label: 'Jarang Laku Margin Tinggi',
     color: '#7c3aed',
     bg: 'rgba(139,92,246,0.1)',
-    desc: 'Untung per porsinya besar, tetapi jarang dipesan. Dorong lewat paket hemat atau rekomendasi kasir.'
+    desc: 'Margin tinggi, perlu promosi kasir.'
   },
   DOG: {
     label: 'Perlu Ditinjau',
     color: '#4b5563',
     bg: 'rgba(107,114,128,0.1)',
-    desc: 'Jarang dipesan dan untungnya kecil. Pertimbangkan ubah resep atau ganti dengan menu baru.'
+    desc: 'Penjualan dan margin masih rendah.'
   }
 };
 
@@ -203,10 +203,10 @@ export default function MenuEngineering() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-              Evaluasi Untung & Penjualan Menu
+              Performa Menu
             </h3>
             <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              Pengelompokan menu otomatis berdasarkan jumlah porsi terjual dan untung bersih per porsi.
+              Klasifikasi menu dari penjualan dan margin.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -216,7 +216,7 @@ export default function MenuEngineering() {
               onClick={fetch}
               disabled={loading}
             >
-              {loading ? 'Memuat...' : 'Perbarui Data'}
+              {loading ? 'Memuat...' : 'Muat Ulang'}
             </button>
             <button
               type="button"
@@ -224,7 +224,7 @@ export default function MenuEngineering() {
               onClick={handleSave}
               disabled={items.length === 0 || loading}
             >
-              Simpan Pengelompokan
+              Simpan
             </button>
           </div>
         </div>
@@ -263,7 +263,7 @@ export default function MenuEngineering() {
 
       {allZeroSales && (
         <div style={{ padding: '12px 16px', borderRadius: '8px', background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.45 }}>
-          Data penjualan kasir (porsi terjual) saat ini masih 0 untuk seluruh menu, sehingga pengelompokan di atas baru membandingkan besaran untung per porsi. Setelah data penjualan harian masuk, kelompok menu akan otomatis menyesuaikan.
+          Penjualan kasir masih 0; pengelompokan sementara hanya membandingkan margin.
         </div>
       )}
 
@@ -286,7 +286,7 @@ export default function MenuEngineering() {
           <div className="relative flex-1 max-w-md">
             <input
               type="text"
-              placeholder="Cari nama menu atau kategori (contoh: Kopi, Mocktail)..."
+              placeholder="Cari menu atau kategori..."
               className="form-control pr-8 text-xs py-2 w-full"
               style={{ paddingLeft: '12px' }}
               value={searchTerm}
@@ -351,9 +351,9 @@ export default function MenuEngineering() {
                 type="button"
                 onClick={resetAllFilters}
                 className="btn btn-secondary text-xs py-2 px-3 text-red-600 hover:text-red-700 hover:bg-red-50"
-                title="Reset semua filter"
+                title="Reset filter"
               >
-                Atur Ulang Filter
+                Reset Filter
               </button>
             )}
           </div>
@@ -480,7 +480,7 @@ export default function MenuEngineering() {
                         onClick={resetAllFilters}
                         className="btn btn-secondary text-xs mt-3"
                       >
-                        Atur Ulang Filter
+                        Reset Filter
                       </button>
                     )}
                   </td>
