@@ -18,7 +18,7 @@ const PAGE_SIZE = 15;
 
 export default function Purchasing() {
   const { activeUser } = useAuth();
-  const { refreshData } = useData();
+  const { refreshData, activeBranchId } = useData();
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('PURCHASES'); // 'PURCHASES', 'SUPPLIERS'
 
@@ -161,12 +161,15 @@ export default function Purchasing() {
   };
 
   useEffect(() => {
+    setCart([]);
+    setSelectedPurchases([]);
+    setSupplierDrawer(null);
     fetchMasterData();
-  }, []);
+  }, [activeBranchId]);
 
   useEffect(() => {
     fetchHistory(page, search, period);
-  }, [page, search, period, fetchHistory]);
+  }, [page, search, period, fetchHistory, activeBranchId]);
 
   useEffect(() => {
     if (supplierDrawer) {

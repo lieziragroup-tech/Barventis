@@ -12,9 +12,12 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, R
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { stock, unitConversionMap } = useData();
+  const { stock, unitConversionMap, branches, activeBranch, canSwitchBranch, switchBranch } = useData();
   const [transactions, setTransactions] = useState([]);
   const [isLoadingTx, setIsLoadingTx] = useState(true);
+  const [branchScope, setBranchScope] = useState('ACTIVE');
+  const [multiBranchRows, setMultiBranchRows] = useState([]);
+  const [loadingMultiBranch, setLoadingMultiBranch] = useState(false);
 
   const [period, setPeriod] = useState(() => {
     const now = new Date();
@@ -54,7 +57,25 @@ export default function Dashboard() {
     return () => {
       isMounted = false;
     };
-  }, [period]);
+  }, [period, activeBranch?.id]);
+
+  useEffect(() => {
+    if (!canSwitchBranch || branchScope !== 'ALL') return;
+    let active = true;
+    setLoadingMultiBranch(true);
+    api.getMultiBranchSummary(period)
+      .then(rows => {
+        if (active) setMultiBranchRows(rows || []);
+      })
+      .catch(err => {
+        console.warn('Multi-branch summary warning:', err);
+        if (active) setMultiBranchRows([]);
+      })
+      .finally(() => {
+        if (active) setLoadingMultiBranch(false);
+      });
+    return () => { active = false; };
+  }, [canSwitchBranch, branchScope, period]);
 
   const stockValuation = useMemo(() => stock.reduce((acc, item) => acc + calculateIngredientCost(item, (item.qty_resto || 0) + (item.qty_central || 0), item.unit, unitConversionMap), 0), [stock, unitConversionMap]);
   const lowStockItems = useMemo(() => stock.filter(item => ((item.qty_resto || 0) + (item.qty_central || 0)) < (item.min_stock || 15)), [stock]);
@@ -153,7 +174,145 @@ export default function Dashboard() {
             ))}
           </select>
         </div>
+
+        {canSwitchBranch && branches.length > 1 && (
+          <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)]">
+            <button
+              type="button"
+              onClick={() => setBranchScope('ACTIVE')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                branchScope === 'ACTIVE'
+                  ? 'bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-sm'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              {activeBranch?.name || 'Cabang Aktif'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setBranchScope('ALL')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                branchScope === 'ALL'
+                  ? 'bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-sm'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              Semua Cabang ({branches.length})
+            </button>
+          </div>
+        )}
       </div>
+
+      {canSwitchBranch && branchScope === 'ALL' ? (
+        <div className="space-y-6">
+          <div className="kpi-grid">
+            {(() => {
+              const totalSalesAll = multiBranchRows.reduce((s, r) => s + Number(r.pos_sales || 0), 0);
+              const totalCogsAll = multiBranchRows.reduce((s, r) => s + Number(r.actual_cogs || 0), 0);
+              const totalStockAll = multiBranchRows.reduce((s, r) => s + Number(r.stock_valuation || 0), 0);
+              const totalLowAll = multiBranchRows.reduce((s, r) => s + Number(r.low_stock_count || 0), 0);
+              const avgPct = totalSalesAll > 0 ? (totalCogsAll / totalSalesAll) * 100 : 0;
+              return (
+                <>
+                  <div className="glass-card kpi-card">
+                    <div className="kpi-header">
+                      <span className="kpi-title">Rasio Biaya Gabungan</span>
+                      <div className="kpi-icon-wrap" style={{ background: 'var(--success-glow)', color: 'var(--success)' }}>
+                        <TrendingDown size={20} />
+                      </div>
+                    </div>
+                    <div className="kpi-value tabular-nums" style={{ color: avgPct <= 27 ? 'var(--success)' : 'var(--warning)' }}>{avgPct.toFixed(1)}%</div>
+                    <div className="kpi-footer"><span className="text-[var(--text-secondary)]">{multiBranchRows.length} cabang</span></div>
+                  </div>
+                  <div className="glass-card kpi-card">
+                    <div className="kpi-header">
+                      <span className="kpi-title">Total Penjualan Gabungan</span>
+                      <div className="kpi-icon-wrap" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>
+                        <DollarSign size={20} />
+                      </div>
+                    </div>
+                    <div className="kpi-value tabular-nums">{formatIDR(totalSalesAll)}</div>
+                    <div className="kpi-footer"><span className="text-[var(--text-secondary)]">Periode {period.split('-')[1]}/{period.split('-')[0]}</span></div>
+                  </div>
+                  <div className="glass-card kpi-card">
+                    <div className="kpi-header">
+                      <span className="kpi-title">Total Nilai Stok</span>
+                      <div className="kpi-icon-wrap" style={{ background: 'var(--info-glow)', color: 'var(--info)' }}>
+                        <Package size={20} />
+                      </div>
+                    </div>
+                    <div className="kpi-value tabular-nums">{formatIDR(totalStockAll)}</div>
+                    <div className="kpi-footer"><span className="text-[var(--text-secondary)]">Seluruh cabang</span></div>
+                  </div>
+                  <div className="glass-card kpi-card">
+                    <div className="kpi-header">
+                      <span className="kpi-title">Stok Menipis</span>
+                      <div className="kpi-icon-wrap" style={{ background: totalLowAll > 0 ? 'var(--danger-glow)' : 'var(--success-glow)', color: totalLowAll > 0 ? 'var(--danger)' : 'var(--success)' }}>
+                        <AlertTriangle size={20} />
+                      </div>
+                    </div>
+                    <div className="kpi-value tabular-nums" style={{ color: totalLowAll > 0 ? 'var(--danger)' : 'var(--success)' }}>{totalLowAll}</div>
+                    <div className="kpi-footer"><span className="text-[var(--text-secondary)]">Total item kritis</span></div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+
+          <div className="glass-card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-base font-bold text-[var(--text-primary)] m-0">Performa Antar Cabang</h3>
+                <p className="text-xs text-[var(--text-secondary)] m-0 mt-0.5">Klik baris untuk masuk ke cabang.</p>
+              </div>
+            </div>
+            {loadingMultiBranch ? (
+              <div className="py-10 text-center text-xs text-[var(--text-muted)]">Memuat ringkasan cabang...</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="custom-table w-full text-xs">
+                  <thead>
+                    <tr>
+                      <th>Cabang</th>
+                      <th>Tipe</th>
+                      <th className="text-right">Penjualan POS</th>
+                      <th className="text-right">HPP Aktual</th>
+                      <th className="text-right">Food Cost %</th>
+                      <th className="text-right">Nilai Stok</th>
+                      <th className="text-right">Stok Menipis</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {multiBranchRows.map(row => (
+                      <tr
+                        key={row.branch_id}
+                        className="cursor-pointer hover:bg-[var(--bg-tertiary)]/50"
+                        onClick={() => {
+                          switchBranch(row.branch_id);
+                          setBranchScope('ACTIVE');
+                        }}
+                      >
+                        <td className="font-bold text-[var(--text-primary)]">{row.branch_name}</td>
+                        <td className="text-[var(--text-secondary)]">{row.is_central ? 'Central' : 'Outlet'}</td>
+                        <td className="text-right font-mono tabular-nums">{formatIDR(row.pos_sales || 0)}</td>
+                        <td className="text-right font-mono tabular-nums">{formatIDR(row.actual_cogs || 0)}</td>
+                        <td className="text-right font-mono tabular-nums font-bold" style={{ color: Number(row.food_cost_pct) > 30 ? 'var(--danger)' : 'var(--success)' }}>
+                          {Number(row.food_cost_pct || 0).toFixed(1)}%
+                        </td>
+                        <td className="text-right font-mono tabular-nums">{formatIDR(row.stock_valuation || 0)}</td>
+                        <td className="text-right font-mono tabular-nums font-semibold" style={{ color: Number(row.low_stock_count) > 0 ? 'var(--danger)' : 'var(--text-secondary)' }}>
+                          {row.low_stock_count || 0}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
 
         {/* KPI Cards */}
       <div className="kpi-grid">
@@ -322,6 +481,8 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

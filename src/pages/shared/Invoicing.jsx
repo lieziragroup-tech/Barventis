@@ -22,7 +22,7 @@ const rowUid = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUU
 const blankLineItem = () => ({ material_id: null, item_name: '', qty: 1, unit_price: 0, unit: 'pck', _uid: rowUid() });
 
 export default function Invoicing() {
-  const { stock, showToast: toast, handleCreateInvoice: onCreateInvoice, refreshData } = useData();
+  const { stock, showToast: toast, handleCreateInvoice: onCreateInvoice, refreshData, activeBranchId } = useData();
   const { activeUser, tenantName } = useAuth();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
@@ -75,7 +75,7 @@ export default function Invoicing() {
     } catch (e) {
       console.error('Failed to load suppliers:', e);
     }
-  }, []);
+  }, [activeBranchId]);
 
   useEffect(() => {
     loadSuppliers();
@@ -97,7 +97,7 @@ export default function Invoicing() {
     } finally {
       setLoadingList(false);
     }
-  }, [invoicesPage, debouncedSearch, statusFilter]);
+  }, [invoicesPage, debouncedSearch, statusFilter, activeBranchId]);
 
   useEffect(() => {
     setInvoicesPage(1);

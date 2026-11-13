@@ -103,3 +103,79 @@ Append one section per meaningful decision. Keep proposed and approved decisions
 - **Affected baseline requirements/modules:** `src/data/materialsRepo.js`, `src/services/api.js`.
 - **Verification / rollback:** `npm run build` PASS, Vitest 276/276 PASS.
 - **Review trigger/date:** 2026-10-27
+
+## DEC-0008 — Pemisahan Input BROKEN dari Mutasi Limbah & Integrasi v7
+- **Date:** 2026-10-28
+- **Status:** `APPROVED`
+- **Decision owner:** Ayling & Izumi
+- **Context / problem:** Pencatatan sisa fisik pecah/terbuka (*BROKEN*) melalui UI Catatan Limbah sebelumnya berisiko menciptakan transaksi pengurangan limbah palsu atau menggeser saldo stok master secara tidak semestinya.
+- **Options considered:**
+  1. Mencatat BROKEN sebagai transaksi `WASTE` di ledger utama.
+  2. Menyediakan RPC khusus `save_daily_inventory_broken_counts_v7` yang hanya memperbarui detail `daily_inventory_items` dan *open-lot state* tanpa memotong saldo stok master.
+- **Evidence/source:** `supabase/migrations/20261024000000_daily_inventory_broken_from_waste_v7.sql`, `src/services/api.js`.
+- **Decision and rationale:** Opsi 2 dipilih karena BROKEN adalah penghitungan sisa fisik terbuka (*physical remainder*), bukan pergerakan limbah. Hal ini menjaga integritas buku stok harian (*FULL*).
+- **Consequences / trade-offs:** Saldo master `materials` tidak berubah saat input BROKEN disimpan; efek pemakaian tetap dihitung melalui mekanisme EOD Daily Inventory.
+- **Affected baseline requirements/modules:** `DailyInventory.jsx`, `WasteLogs.jsx`, `api.js`, migrasi v7.
+- **Verification / rollback:** Verifikasi skema migrasi v7 dan regresi Daily Inventory pass di Vitest.
+- **Review trigger/date:** 2026-11-12
+
+## DEC-0009 — Konversi 2-Satuan, Rekonsiliasi POS ESB, & Perbaikan Trigger `terpakai_qty` (v9–v10)
+- **Date:** 2026-11-12
+- **Status:** `APPROVED`
+- **Decision owner:** Ayling & Izumi
+- **Context / problem:** Bahan dengan harga beli per kemasan sebelumnya sering tercatat dengan satuan `gr`/`ml` sehingga memicu salah hitung HPP; pembelian harian membutuhkan tujuan kirim (*Central* vs *Resto*) serta acuan kuota bulanan; pemakaian manual barista perlu disandingkan langsung dengan pemakaian teoritis POS ESB; dan kolom `daily_inventory_items.terpakai_qty` yang bertipe `GENERATED ALWAYS` memicu error SQL saat penyimpanan EOD.
+- **Options considered:**
+  1. Mempertahankan 1 satuan datar dan menghitung variansi POS secara terpisah di spreadsheet eksternal.
+  2. Menerapkan arsitektur konversi 2-satuan (`full_pack` format `<kemasan> = <isi> <satuan>`), kolom `monthly_quota_qty`, `is_prep_output`, `delivery_notes`, modul perbandingan Barista vs POS ESB, serta migrasi v10 untuk melepas `GENERATED ALWAYS` pada `terpakai_qty` dengan trigger sinkronisasi `sync_daily_inventory_terpakai_qty_v10`.
+- **Evidence/source:** `supabase/migrations/20261112000000_inventory_two_tier_conversion_pos_compare_v9.sql`, `supabase/migrations/20261113000000_fix_terpakai_qty_generated_column_v10.sql`, `src/services/costUtils.js`.
+- **Decision and rationale:** Opsi 2 menyatukan akurasi satuan beli vs satuan resep sekaligus menuntaskan error SQL EOD secara permanen.
+- **Consequences / trade-offs:** Membutuhkan eksekusi migrasi v9 & v10 secara berurutan pada database eksisting sebelum penggunaan modul POS compare dan kuota bulanan.
+- **Affected baseline requirements/modules:** `costUtils.js`, `materialsRepo.js`, `BaristaReport.jsx`, `Purchasing.jsx`, `DailyInventory.jsx`, `SimplePrep.jsx`.
+- **Verification / rollback:** Vitest (`costUtils.test.js`, `v9InventoryFlow.test.js`, `dailyInventoryMath.test.js`) PASS.
+- **Review trigger/date:** 2026-11-13
+
+## DEC-0010 — Penyederhanaan Copywriting & Sub-Deskripsi UI Seluruh Halaman Utama
+- **Date:** 2026-11-13
+- **Status:** `APPROVED`
+- **Decision owner:** Ayling & Izumi
+- **Context / problem:** Banyak judul, sub-deskripsi halaman, teks modal, dan label kontrol di modul Pengadaan, Gudang, Menu, dan Laporan mengandung kalimat terlalu panjang, kaku, atau ambigu bagi operator lapangan.
+- **Options considered:**
+  1. Merombak ulang struktur tata letak komponen secara menyeluruh.
+  2. Merapikan copywriting secara terarah di seluruh area utama dengan membatasi sub-deskripsi menjadi 4–6 kata yang padat, kontekstual, dan langsung ke inti tindakan.
+- **Evidence/source:** `src/pages/shared/ProcurementHub.jsx`, `DailyInventoryHub.jsx`, `PricingCogsHub.jsx`, `CostControlReportHub.jsx`, dan modul turunannya.
+- **Decision and rationale:** Opsi 2 meningkatkan kejelasan UX operasional secara cepat tanpa memecah alur kerja atau komponen yang sudah stabil.
+- **Consequences / trade-offs:** Seluruh pesan bantu di UI kini konsisten berbahasa Indonesia operasional yang ringkas; perubahan hanya memengaruhi lapisan teks antarmuka.
+- **Affected baseline requirements/modules:** Seluruh halaman hub dan modal operasional utama.
+- **Verification / rollback:** `npm run build` PASS, ESLint 0 errors.
+- **Review trigger/date:** 2026-11-13
+
+## DEC-0011 — Arsitektur Multi-Cabang Penuh: Katalog Terpisah, Distribusi Fleksibel, & Tarik Menu (v11)
+- **Date:** 2026-11-13
+- **Status:** `APPROVED`
+- **Decision owner:** Ayling & Izumi
+- **Context / problem:** Ekspansi restoran membutuhkan dukungan banyak cabang dengan kondisi katalog bahan dan stok yang terpisah total per cabang, pengadaan fleksibel (melalui Central atau langsung per cabang), opsi menyamakan/menarik menu dari cabang lain, serta aturan akses staf yang terkunci pada 1 cabang sedangkan Owner bebas berpindah cabang.
+- **Options considered:**
+  1. Berbagi satu katalog master bahan dan resep secara global antar cabang dengan tabel stok terpisah.
+  2. Memisahkan katalog bahan, supplier, resep, dan stok per `branch_id`, menambahkan RPC `clone_branch_data` (tarik menu/bahan/supplier antar cabang), alur mutasi kirim-terima `inter_branch_transfers` (`DISPATCH → RECEIVE`), undangan staf terikat cabang, serta switcher cabang & RPC ringkasan `get_owner_multi_branch_summary` khusus Owner.
+- **Evidence/source:** `supabase/migrations/20261114000000_multi_branch_full_support_v11.sql`, `src/pages/shared/InterBranchTransfer.jsx`, `src/pages/shared/Recipes.jsx`, `src/pages/owner/TenantAdminPanel.jsx`.
+- **Decision and rationale:** Opsi 2 mencegah harga beli lokal dan komposisi stok antar cabang saling menimpa, sekaligus tetap memudahkan pembukaan cabang baru lewat fitur tarik menu/bahan dari cabang referensi.
+- **Consequences / trade-offs:** Data lama tanpa `branch_id` di-backfill ke cabang utama pertama per tenant; fitur salin resep memulai stok cabang tujuan dari angka `0`.
+- **Affected baseline requirements/modules:** `branches`, `inter_branch_transfers`, `DataContext.jsx`, `AppLayout.jsx`, `Recipes.jsx`, `TenantAdminPanel.jsx`, `api.js`.
+- **Verification / rollback:** Vitest (`multiBranch.test.js`), `npm run build` PASS.
+- **Review trigger/date:** 2026-11-13
+
+## DEC-0012 — Penegakan Isolasi Data Ketat Per Cabang (`NOT NULL`, RLS, Trigger, & Fail-Closed API) (v12)
+- **Date:** 2026-11-13
+- **Status:** `APPROVED`
+- **Decision owner:** Ayling & Izumi
+- **Context / problem:** Untuk menjamin keamanan multi-cabang di level produksi, isolasi tidak boleh hanya mengandalkan filter opsional di sisi klien. Pengguna non-admin harus ditolak secara tegas (*fail-closed*) apabila `branch_id` hilang atau mencoba menyentuh cabang lain, baik di API, interceptor klien, maupun skema & RLS PostgreSQL.
+- **Options considered:**
+  1. Membiarkan `branch_id` nullable dengan fallback pembacaan lintas cabang bila `branch_id` tidak dikirim.
+  2. Memberlakukan strategi *defense-in-depth* v12: (a) backfill & terapkan `NOT NULL` + `DEFAULT bv2_auth_branch_id()` pada seluruh 37 tabel cabang, (b) terapkan kebijakan RLS ketat `strict_branch_*` dan trigger `bv2_enforce_branch_integrity()` + hardening RPC stok, (c) blokir query/mutasi non-admin tanpa `branch_id` atau lintas cabang dan blokir `unscopedFrom()` di `supabase.js`, serta (d) validasi wajib `requireBranchContext()` pada seluruh CRUD Materials, Recipes, dan Stock di `api.js`, `upgradeModulesApi.js`, dan `materialsRepo.js`.
+- **Evidence/source:** `supabase/migrations/20261115000000_strict_branch_isolation_v12.sql`, `src/lib/supabase.js`, `src/contexts/AuthContext.jsx`, `src/data/materialsRepo.js`, `src/services/api.js`, `src/services/upgradeModulesApi.js`, `src/services/__tests__/multiBranch.test.js`.
+- **Decision and rationale:** Opsi 2 menghilangkan celah kebocoran data lintas cabang sekaligus memproteksi integritas stok dari manipulasi permintaan sisi klien.
+- **Consequences / trade-offs:** Seluruh akun non-admin wajib terikat pada `branch_id` yang valid; jika sesi non-admin belum memiliki `branch_id`, seluruh operasi baca/tulis tabel cabang otomatis ditolak dengan galat validasi.
+- **Affected baseline requirements/modules:** Seluruh 37 tabel cabang PostgreSQL, `supabase.js`, `AuthContext.jsx`, `materialsRepo.js`, `api.js`, `upgradeModulesApi.js`.
+- **Verification / rollback:** `npx vitest run` (18 file, 322/322 PASS), `npm run build` PASS, ESLint 0 errors.
+- **Review trigger/date:** 2026-11-13
+

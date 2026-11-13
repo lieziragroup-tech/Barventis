@@ -39,7 +39,7 @@ function convertBetweenUnits(value, fromUnit, toUnit) {
 }
 
 export default function SimplePrep() {
-  const { stock: rawStock, refreshData } = useData();
+  const { stock: rawStock, refreshData, activeBranchId } = useData();
   const materials = useMemo(() => rawStock || [], [rawStock]);
   const toast = useToast();
 
@@ -236,7 +236,7 @@ export default function SimplePrep() {
 
   useEffect(() => {
     fetchHistory();
-  }, []);
+  }, [activeBranchId]);
 
   // Saat Bahan Mentah dipilih di Step 1 -> Otomatis isi satuan, stok, dan sambungkan ke Step 2 & Step 3
   const handleSelectSource = (mat) => {

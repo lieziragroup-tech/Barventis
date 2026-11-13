@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, Factory, FlaskConical, Package, Plus, Save, RefreshCw, Play, Pencil, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useData } from '../../contexts/DataContext';
 import { getLocalDateISO } from '../../services/dailyInventoryMath';
 import MaterialAutocomplete from '../../components/shared/MaterialAutocomplete';
 
@@ -14,6 +15,7 @@ const fmtRp = (value) => `Rp ${Number(value || 0).toLocaleString('id-ID', { maxi
 
 export default function MaterialProduction() {
   const { activeUser } = useAuth();
+  const { activeBranchId } = useData();
   const role = activeUser?.role === 'SuperAdmin' ? 'Super Admin' : activeUser?.role;
   const canManageRecipes = ['Admin / Owner', 'Owner', 'Supervisor', 'Super Admin'].includes(role);
   const [materials, setMaterials] = useState([]);
@@ -52,7 +54,7 @@ export default function MaterialProduction() {
     } finally {
       setLoading(false);
     }
-  }, [date, location, selectedBatchId]);
+  }, [date, location, selectedBatchId, activeBranchId]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 

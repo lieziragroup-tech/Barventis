@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { RefreshCw, Search, ShieldAlert, CheckCircle, Database } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
+import { useData } from '../../contexts/DataContext';
 
 export default function PhysicalCheck() {
+  const { activeBranchId } = useData();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [expectedUsages, setExpectedUsages] = useState([]);
@@ -100,7 +102,7 @@ export default function PhysicalCheck() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchExpectedUsage();
-  }, []);
+  }, [activeBranchId]);
 
   const handleCountChange = (materialId, value) => {
     setPhysicalCounts(prev => ({

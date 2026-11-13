@@ -26,6 +26,7 @@ export default function AuthScreen({ onAuthSuccess }) {
   // Now sourced from the same validated invitation row, so what's shown
   // always matches what actually gets assigned.
   const [inviteRole, setInviteRole] = React.useState(null);
+  const [inviteBranchName, setInviteBranchName] = React.useState('');
 
   React.useEffect(() => {
     if (!inviteToken) return;
@@ -33,7 +34,7 @@ export default function AuthScreen({ onAuthSuccess }) {
       try {
         const { data, error } = await supabase
           .from('invitations')
-          .select('is_used, expires_at, invite_role')
+          .select('is_used, expires_at, invite_role, branch_id')
           .eq('token', inviteToken)
           .single();
           
@@ -48,6 +49,15 @@ export default function AuthScreen({ onAuthSuccess }) {
         if (new Date(data.expires_at) < new Date()) {
           setTokenStatus('expired');
           return;
+        }
+
+        if (data.branch_id) {
+          const fromFn = supabase.unscopedFrom ? supabase.unscopedFrom : supabase.from;
+          const { data: bData } = await fromFn('branches')
+            .select('name')
+            .eq('id', data.branch_id)
+            .maybeSingle();
+          if (bData?.name) setInviteBranchName(bData.name);
         }
         
         setInviteRole(data.invite_role || 'Staff');
@@ -144,7 +154,11 @@ export default function AuthScreen({ onAuthSuccess }) {
           </h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '6px' }}>
             {inviteToken 
-              ? (tokenStatus === 'valid' ? 'Selesaikan pendaftaran untuk mengelola Resto Anda.' : 'Silakan minta link undangan baru ke Administrator.')
+              ? (tokenStatus === 'valid'
+                  ? (inviteBranchName
+                      ? `Penugasan cabang: ${inviteBranchName}`
+                      : 'Selesaikan pendaftaran akun staf.')
+                  : 'Minta link undangan baru ke Admin.')
               : 'Manajemen Stok & COGS Barventis Terpusat'}
           </p>
         </div>

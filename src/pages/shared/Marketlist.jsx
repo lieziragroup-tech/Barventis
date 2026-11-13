@@ -26,7 +26,7 @@ export const OFFICIAL_CATEGORIES = [
 ];
 
 export default function Marketlist() {
-  const { showToast, refreshData } = useData();
+  const { showToast, refreshData, activeBranchId } = useData();
   const { activeUser: _activeUser } = useAuth();
   
   const [materials, setMaterials] = useState([]);
@@ -83,7 +83,7 @@ export default function Marketlist() {
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, activeBranchId]);
 
   useEffect(() => {
     fetchData();

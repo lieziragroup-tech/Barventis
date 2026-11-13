@@ -41,7 +41,8 @@ export const AuthProvider = ({ children }) => {
       profile.whatsapp_number,
       profile.whatsapp_token,
       profile.whatsapp_enabled,
-      profile.branch_id
+      profile.branch_id,
+      profile.role
     );
     initAutoFlush();
   }, []);
@@ -54,7 +55,7 @@ export const AuthProvider = ({ children }) => {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem('bv_cached_profile');
     }
-    api.setSessionData(null, null, null, null, null, false, null);
+    api.setSessionData(null, null, null, null, null, false, null, null);
     stopAutoFlush();
   }, []);
 

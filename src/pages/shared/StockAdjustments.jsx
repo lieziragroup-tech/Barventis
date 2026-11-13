@@ -2,10 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { AlertTriangle, CheckCircle2, XCircle, Loader2, FileText } from 'lucide-react';
 import { adjustmentApi } from '../../services/upgradeModulesApi';
 import { useAuth } from '../../contexts/AuthContext';
+import { useData } from '../../contexts/DataContext';
 import { TableSkeletonRows } from '../../components/shared/TableSkeleton';
 
 export default function StockAdjustments() {
   const { activeUser } = useAuth();
+  const { activeBranchId } = useData();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [items, setItems] = useState([]);
@@ -20,7 +22,7 @@ export default function StockAdjustments() {
       setItems(data);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
-  }, [statusFilter]);
+  }, [statusFilter, activeBranchId]);
 
   useEffect(() => { fetch(); }, [fetch]);
 

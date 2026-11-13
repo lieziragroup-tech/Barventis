@@ -9,7 +9,7 @@ import {
 import { locationService } from '../../services/locationService';
 
 export default function TenantAdminPanel() {
-  const { currentTenant, sessionUser, showToast: displayToast } = useData();
+  const { currentTenant, sessionUser, showToast: displayToast, refreshBranches, refreshData } = useData();
   const [tab, setTab] = useState('users');
   const [loading, setLoading] = useState(false);
   const [tenantUsers, setTenantUsers] = useState([]);
@@ -32,7 +32,7 @@ export default function TenantAdminPanel() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmActionState, setConfirmActionState] = useState(null);
 
-  // Locations management
+  // Locations & Branches management
   const [locations, setLocations] = useState([]);
   const [branchesList, setBranchesList] = useState([]);
   const [loadingBranches, setLoadingBranches] = useState(false);
@@ -40,6 +40,34 @@ export default function TenantAdminPanel() {
   const [newLocName, setNewLocName] = useState('');
   const [newLocCode, setNewLocCode] = useState('');
   const [newLocDesc, setNewLocDesc] = useState('');
+
+  // Invite branch selection
+  const [inviteRole, setInviteRole] = useState('Bar');
+  const [inviteBranchId, setInviteBranchId] = useState('');
+
+  // Branch create/edit/clone modals
+  const [showBranchModal, setShowBranchModal] = useState(false);
+  const [editingBranch, setEditingBranch] = useState(null);
+  const [branchForm, setBranchForm] = useState({
+    name: '',
+    code: '',
+    address: '',
+    is_central: false,
+    setup_mode: 'EMPTY',
+    clone_from_branch_id: '',
+    copy_materials: true,
+    copy_suppliers: true,
+    copy_recipes: true
+  });
+  const [showCloneModal, setShowCloneModal] = useState(false);
+  const [cloneTargetBranch, setCloneTargetBranch] = useState(null);
+  const [cloneForm, setCloneForm] = useState({
+    sourceBranchId: '',
+    copyMaterials: true,
+    copySuppliers: true,
+    copyRecipes: true,
+    conflictMode: 'SKIP'
+  });
 
   // Helper for Double Confirmation
   const requestConfirmation = (title, message, onConfirm) => {
@@ -73,13 +101,12 @@ export default function TenantAdminPanel() {
     if (!currentTenant) return;
     try {
       setLoadingBranches(true);
-      const { data, error } = await supabase
-        .from('branches')
-        .select('*')
-        .eq('tenant_id', currentTenant.id)
-        .order('is_central', { ascending: false });
-      if (error) throw error;
+      const data = await api.getBranches();
       setBranchesList(data || []);
+      if (data?.length > 0 && !inviteBranchId) {
+        const defaultB = data.find(b => b.is_active !== false) || data[0];
+        setInviteBranchId(defaultB.id);
+      }
     } catch (err) {
       console.error('Error fetching branches:', err);
     } finally {
@@ -136,21 +163,178 @@ export default function TenantAdminPanel() {
     }
   }
 
-  const handleGenerateInvite = async (role) => {
+  const handleGenerateInvite = async (role, branchIdParam = null) => {
     if (!currentTenant) return;
     try {
       setIsSaving(true);
-      const inviteUrl = await api.generateTenantInvite(currentTenant.id, role);
+      const isOwnerRole = role === 'Admin / Owner' || role === 'Owner';
+      const targetBranchId = isOwnerRole ? null : (branchIdParam || inviteBranchId || branchesList[0]?.id || null);
+      const inviteUrl = await api.generateTenantInvite(currentTenant.id, role, targetBranchId);
       
       try {
         await navigator.clipboard.writeText(inviteUrl);
-        displayToast(`Link Undangan untuk ${role} disalin! (Berlaku 24 Jam)`, 'success');
+        displayToast(`Link undangan ${role} disalin.`, 'success');
       } catch {
-        window.prompt(`Link Undangan ${role} (Berlaku 24 Jam). Salin teks di bawah ini:`, inviteUrl);
+        window.prompt(`Link Undangan ${role}:`, inviteUrl);
       }
       fetchInvitations();
     } catch (err) {
       displayToast(err.message, 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleAssignUserBranch = async (user, nextBranchId) => {
+    try {
+      setIsSaving(true);
+      await api.assignUserBranch(user.id, nextBranchId || null);
+      displayToast(`Cabang ${user.name} diperbarui.`, 'success');
+      fetchUsers();
+    } catch (err) {
+      displayToast(err.message || 'Gagal mengubah cabang staf.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const openAddBranchModal = () => {
+    const firstActive = branchesList.find(b => b.is_active !== false) || branchesList[0];
+    setEditingBranch(null);
+    setBranchForm({
+      name: '',
+      code: '',
+      address: '',
+      is_central: false,
+      setup_mode: 'EMPTY',
+      clone_from_branch_id: firstActive?.id || '',
+      copy_materials: true,
+      copy_suppliers: true,
+      copy_recipes: true
+    });
+    setShowBranchModal(true);
+  };
+
+  const openEditBranchModal = (b) => {
+    setEditingBranch(b);
+    setBranchForm({
+      name: b.name || '',
+      code: b.code || '',
+      address: b.address || '',
+      is_central: !!b.is_central,
+      setup_mode: 'EMPTY',
+      clone_from_branch_id: '',
+      copy_materials: false,
+      copy_suppliers: false,
+      copy_recipes: false
+    });
+    setShowBranchModal(true);
+  };
+
+  const handleSaveBranch = async (e) => {
+    e.preventDefault();
+    if (!branchForm.name.trim()) {
+      displayToast('Nama cabang wajib diisi.', 'error');
+      return;
+    }
+    try {
+      setIsSaving(true);
+      if (editingBranch) {
+        await api.updateBranch(editingBranch.id, {
+          name: branchForm.name,
+          code: branchForm.code,
+          address: branchForm.address,
+          is_central: branchForm.is_central
+        });
+        displayToast('Cabang diperbarui.', 'success');
+      } else {
+        const res = await api.createBranch({
+          name: branchForm.name,
+          code: branchForm.code,
+          address: branchForm.address,
+          is_central: branchForm.is_central,
+          clone_from_branch_id: branchForm.setup_mode === 'CLONE' ? branchForm.clone_from_branch_id : null,
+          clone_options: branchForm.setup_mode === 'CLONE' ? {
+            materials: branchForm.copy_materials,
+            suppliers: branchForm.copy_suppliers,
+            recipes: branchForm.copy_recipes
+          } : {}
+        });
+        const c = res?.cloneSummary;
+        const msg = c
+          ? `Cabang dibuat (${c.recipes_copied || 0} menu, ${c.materials_copied || 0} bahan disalin).`
+          : 'Cabang baru ditambahkan.';
+        displayToast(msg, 'success');
+      }
+      setShowBranchModal(false);
+      await fetchBranches();
+      if (refreshBranches) await refreshBranches();
+    } catch (err) {
+      displayToast(err.message || 'Gagal menyimpan cabang.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleToggleBranchStatus = (branch) => {
+    const nextActive = branch.is_active === false;
+    requestConfirmation(
+      nextActive ? 'Aktifkan Cabang' : 'Nonaktifkan Cabang',
+      `${nextActive ? 'Aktifkan kembali' : 'Nonaktifkan'} cabang "${branch.name}"?`,
+      async () => {
+        try {
+          setIsSaving(true);
+          await api.updateBranch(branch.id, { is_active: nextActive });
+          displayToast(`Cabang ${nextActive ? 'diaktifkan' : 'dinonaktifkan'}.`, 'success');
+          await fetchBranches();
+          if (refreshBranches) await refreshBranches();
+        } catch (err) {
+          displayToast(err.message, 'error');
+        } finally {
+          setIsSaving(false);
+        }
+      }
+    );
+  };
+
+  const openCloneToBranchModal = (targetBranch) => {
+    const otherBranches = branchesList.filter(b => b.id !== targetBranch.id);
+    if (otherBranches.length === 0) {
+      displayToast('Butuh minimal 2 cabang untuk menyalin data.', 'info');
+      return;
+    }
+    setCloneTargetBranch(targetBranch);
+    setCloneForm({
+      sourceBranchId: otherBranches[0].id,
+      copyMaterials: true,
+      copySuppliers: true,
+      copyRecipes: true,
+      conflictMode: 'SKIP'
+    });
+    setShowCloneModal(true);
+  };
+
+  const handleExecuteCloneBranch = async (e) => {
+    e.preventDefault();
+    if (!cloneTargetBranch || !cloneForm.sourceBranchId) return;
+    try {
+      setIsSaving(true);
+      const res = await api.cloneBranchData({
+        sourceBranchId: cloneForm.sourceBranchId,
+        targetBranchId: cloneTargetBranch.id,
+        copyMaterials: cloneForm.copyMaterials,
+        copySuppliers: cloneForm.copySuppliers,
+        copyRecipes: cloneForm.copyRecipes,
+        conflictMode: cloneForm.conflictMode
+      });
+      displayToast(
+        `Berhasil disalin: ${res.recipes_copied || 0} menu baru, ${res.recipes_updated || 0} diperbarui, ${res.materials_copied || 0} bahan.`,
+        'success'
+      );
+      setShowCloneModal(false);
+      if (refreshData) await refreshData();
+    } catch (err) {
+      displayToast(err.message || 'Gagal menyalin data cabang.', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -367,10 +551,12 @@ export default function TenantAdminPanel() {
                   Kelola staf yang mengakses sistem.
                 </p>
               </div>
-              <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                 <select
                   id={`inviteRoleSelect-${tab}`}
                   className="form-control text-xs py-1.5 px-2.5 flex-1 sm:flex-initial"
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value)}
                 >
                   <option value="Admin / Owner">Owner</option>
                   <option value="Bar">Bar</option>
@@ -380,12 +566,21 @@ export default function TenantAdminPanel() {
                   <option value="Purchasing">Purchasing</option>
                   <option value="Staff">Staff (General)</option>
                 </select>
+                {inviteRole !== 'Admin / Owner' && branchesList.length > 0 && (
+                  <select
+                    className="form-control text-xs py-1.5 px-2.5 flex-1 sm:flex-initial"
+                    value={inviteBranchId}
+                    onChange={(e) => setInviteBranchId(e.target.value)}
+                    title="Cabang Penugasan Staf"
+                  >
+                    {branchesList.filter(b => b.is_active !== false).map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                )}
                 <button
                   className="btn btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5 whitespace-nowrap shrink-0"
-                  onClick={() => {
-                    const role = document.getElementById(`inviteRoleSelect-${tab}`).value;
-                    handleGenerateInvite(role);
-                  }}
+                  onClick={() => handleGenerateInvite(inviteRole, inviteBranchId)}
                   disabled={isSaving}
                 >
                   <LinkIcon size={13} />
@@ -404,6 +599,7 @@ export default function TenantAdminPanel() {
                 <div className="block sm:hidden space-y-2.5">
                   {tenantUsers.map((u) => {
                     const isSelf = u.id === sessionUser?.id;
+                    const isUserOwner = u.role === 'Admin / Owner' || u.role === 'Owner';
                     return (
                       <div
                         key={u.id}
@@ -419,9 +615,28 @@ export default function TenantAdminPanel() {
                               <div className="text-[11px] text-[var(--text-secondary)] truncate">{u.email}</div>
                             </div>
                           </div>
-                          <span className="badge badge-info text-[10px] px-2 py-0.5 rounded-full font-bold whitespace-nowrap shrink-0">
+                          <span className="text-[10px] font-semibold text-[var(--accent)] whitespace-nowrap shrink-0">
                             {u.role.toUpperCase()}
                           </span>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <span className="text-[var(--text-muted)]">Cabang:</span>
+                          {isUserOwner ? (
+                            <span className="font-medium text-[var(--text-primary)]">Semua Cabang</span>
+                          ) : (
+                            <select
+                              className="form-control text-xs py-1 px-2 max-w-[170px]"
+                              value={u.branch_id || ''}
+                              onChange={(e) => handleAssignUserBranch(u, e.target.value)}
+                              disabled={isSaving}
+                            >
+                              <option value="">Pilih Cabang</option>
+                              {branchesList.map(b => (
+                                <option key={b.id} value={b.id}>{b.name}</option>
+                              ))}
+                            </select>
+                          )}
                         </div>
 
                         <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)] pt-2 border-t border-[var(--border)]/60">
@@ -449,6 +664,7 @@ export default function TenantAdminPanel() {
                         <th className="whitespace-nowrap">Nama Pengguna</th>
                         <th className="whitespace-nowrap">Email</th>
                         <th className="whitespace-nowrap">Role</th>
+                        <th className="whitespace-nowrap">Cabang Tugas</th>
                         <th className="whitespace-nowrap">Bergabung Pada</th>
                         <th className="whitespace-nowrap text-right">Aksi</th>
                       </tr>
@@ -456,14 +672,30 @@ export default function TenantAdminPanel() {
                     <tbody>
                       {tenantUsers.map((u) => {
                         const isSelf = u.id === sessionUser?.id;
+                        const isUserOwner = u.role === 'Admin / Owner' || u.role === 'Owner';
                         return (
                           <tr key={u.id}>
                             <td className="whitespace-nowrap font-bold text-[var(--text-primary)]">{u.name}</td>
                             <td className="whitespace-nowrap text-[var(--text-secondary)]">{u.email}</td>
+                            <td className="whitespace-nowrap text-[var(--text-primary)] font-semibold">
+                              {u.role}
+                            </td>
                             <td className="whitespace-nowrap">
-                              <span className="badge badge-info text-[10px] px-2.5 py-0.5 rounded-full font-bold whitespace-nowrap inline-flex items-center">
-                                {u.role.toUpperCase()}
-                              </span>
+                              {isUserOwner ? (
+                                <span className="text-xs text-[var(--text-secondary)] font-medium">Semua Cabang</span>
+                              ) : (
+                                <select
+                                  className="form-control text-xs py-1 px-2 max-w-[180px]"
+                                  value={u.branch_id || ''}
+                                  onChange={(e) => handleAssignUserBranch(u, e.target.value)}
+                                  disabled={isSaving}
+                                >
+                                  <option value="">Belum ditetapkan</option>
+                                  {branchesList.map(b => (
+                                    <option key={b.id} value={b.id}>{b.name}</option>
+                                  ))}
+                                </select>
+                              )}
                             </td>
                             <td className="whitespace-nowrap">{new Date(u.created_at).toLocaleDateString('id-ID')}</td>
                             <td className="whitespace-nowrap text-right">
@@ -497,11 +729,13 @@ export default function TenantAdminPanel() {
                   Buat tautan undangan staf baru.
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <select
                   id={`inviteRoleSelect-${tab}`}
                   className="input-field"
                   style={{ padding: '6px 10px', fontSize: '0.78rem', height: '32px' }}
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value)}
                 >
                   <option value="Admin / Owner">Owner</option>
                   <option value="Bar">Bar</option>
@@ -511,12 +745,21 @@ export default function TenantAdminPanel() {
                   <option value="Purchasing">Purchasing</option>
                   <option value="Staff">Staff (General)</option>
                 </select>
+                {inviteRole !== 'Admin / Owner' && branchesList.length > 0 && (
+                  <select
+                    className="input-field"
+                    style={{ padding: '6px 10px', fontSize: '0.78rem', height: '32px' }}
+                    value={inviteBranchId}
+                    onChange={(e) => setInviteBranchId(e.target.value)}
+                  >
+                    {branchesList.filter(b => b.is_active !== false).map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                )}
                 <button
                   className="btn btn-primary"
-                  onClick={() => {
-                    const role = document.getElementById(`inviteRoleSelect-${tab}`).value;
-                    handleGenerateInvite(role);
-                  }}
+                  onClick={() => handleGenerateInvite(inviteRole, inviteBranchId)}
                   disabled={isSaving}
                   style={{ display: 'flex', gap: '4px', alignItems: 'center', fontSize: '0.78rem', padding: '6px 10px', height: '32px' }}
                 >
@@ -909,11 +1152,349 @@ export default function TenantAdminPanel() {
             </div>
             <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
               <AlertCircle size={14} />
-              <span>Lokasi yang aktif di sini langsung tersedia sebagai opsi filter tab di halaman Stock Ledger dan modul penyesuaian stok.</span>
+              <span>Lokasi yang aktif langsung muncul di filter Buku Stok.</span>
             </div>
           </div>
         )}
+
+        {tab === 'branches' && (
+          <div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div>
+                <h3 className="text-sm md:text-base font-bold text-[var(--text-primary)] m-0">Daftar Cabang Resto</h3>
+                <p className="text-xs text-[var(--text-secondary)] m-0 mt-0.5">
+                  Tambah dan kelola outlet cabang.
+                </p>
+              </div>
+              <button
+                className="btn btn-primary text-xs py-2 px-3.5 flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                onClick={openAddBranchModal}
+              >
+                <Plus size={14} /> Tambah Cabang
+              </button>
+            </div>
+
+            {loadingBranches ? (
+              <div className="text-center py-8 text-xs text-[var(--text-muted)]">Memuat daftar cabang...</div>
+            ) : branchesList.length === 0 ? (
+              <div className="text-center py-10 border border-dashed border-[var(--border)] rounded-xl">
+                <p className="text-sm font-semibold text-[var(--text-primary)] mb-1">Belum ada cabang</p>
+                <p className="text-xs text-[var(--text-secondary)] mb-4">Tambahkan cabang pertama untuk mulai mengelola stok terpisah.</p>
+                <button className="btn btn-primary text-xs py-2 px-4" onClick={openAddBranchModal}>
+                  Tambah Cabang
+                </button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-[var(--border)] rounded-lg">
+                <table className="custom-table w-full text-xs">
+                  <thead>
+                    <tr>
+                      <th className="whitespace-nowrap">Kode</th>
+                      <th className="whitespace-nowrap">Nama Cabang</th>
+                      <th className="whitespace-nowrap">Tipe</th>
+                      <th className="whitespace-nowrap">Status</th>
+                      <th className="whitespace-nowrap">Alamat</th>
+                      <th className="whitespace-nowrap text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {branchesList.map(b => {
+                      const active = b.is_active !== false;
+                      return (
+                        <tr key={b.id}>
+                          <td className="font-mono font-bold text-[var(--accent)] whitespace-nowrap">{b.code || '-'}</td>
+                          <td className="font-bold text-[var(--text-primary)] whitespace-nowrap">{b.name}</td>
+                          <td className="whitespace-nowrap text-[var(--text-secondary)]">
+                            {b.is_central ? 'Central' : 'Outlet'}
+                          </td>
+                          <td className="whitespace-nowrap font-semibold" style={{ color: active ? 'var(--success)' : 'var(--text-muted)' }}>
+                            {active ? 'Aktif' : 'Nonaktif'}
+                          </td>
+                          <td className="text-[var(--text-secondary)] max-w-[220px] truncate">{b.address || '-'}</td>
+                          <td className="whitespace-nowrap text-right">
+                            <div className="inline-flex items-center gap-1.5">
+                              <button
+                                className="btn btn-secondary text-xs py-1 px-2.5"
+                                onClick={() => openEditBranchModal(b)}
+                              >
+                                Edit
+                              </button>
+                              {branchesList.length > 1 && (
+                                <button
+                                  className="btn btn-secondary text-xs py-1 px-2.5 flex items-center gap-1"
+                                  onClick={() => openCloneToBranchModal(b)}
+                                  title="Tarik menu, bahan, atau supplier dari cabang lain"
+                                >
+                                  <Copy size={12} /> Salin Data
+                                </button>
+                              )}
+                              <button
+                                className="btn btn-secondary text-xs py-1 px-2.5"
+                                onClick={() => handleToggleBranchStatus(b)}
+                                style={{ color: active ? 'var(--danger)' : 'var(--success)' }}
+                              >
+                                {active ? 'Nonaktifkan' : 'Aktifkan'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Add / Edit Branch Modal */}
+      {showBranchModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="p-5">
+              <h3 className="text-base font-bold text-[var(--text-primary)] mb-1">
+                {editingBranch ? 'Edit Cabang' : 'Tambah Cabang Baru'}
+              </h3>
+              <p className="text-xs text-[var(--text-secondary)] mb-4">
+                {editingBranch ? 'Perbarui profil outlet cabang.' : 'Buat outlet baru atau salin katalog cabang lain.'}
+              </p>
+
+              <form onSubmit={handleSaveBranch} className="space-y-3.5">
+                <div>
+                  <label className="form-label block mb-1 text-xs font-semibold">Nama Cabang *</label>
+                  <input
+                    type="text"
+                    className="form-control w-full text-xs py-2 px-2.5"
+                    placeholder="Contoh: Outlet Kemang"
+                    value={branchForm.name}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setBranchForm(prev => ({
+                        ...prev,
+                        name: val,
+                        code: editingBranch ? prev.code : (prev.code === '' || prev.code === prev.name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
+                          ? val.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
+                          : prev.code)
+                      }));
+                    }}
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="form-label block mb-1 text-xs font-semibold">Kode Cabang *</label>
+                    <input
+                      type="text"
+                      className="form-control w-full text-xs py-2 px-2.5 font-mono uppercase"
+                      placeholder="KEMANG"
+                      value={branchForm.code}
+                      onChange={(e) => setBranchForm(prev => ({ ...prev, code: e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '') }))}
+                      required
+                    />
+                  </div>
+                  <div className="flex items-end pb-2">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-primary)] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={branchForm.is_central}
+                        onChange={(e) => setBranchForm(prev => ({ ...prev, is_central: e.target.checked }))}
+                      />
+                      <span>Gudang Central</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="form-label block mb-1 text-xs font-semibold">Alamat (Opsional)</label>
+                  <input
+                    type="text"
+                    className="form-control w-full text-xs py-2 px-2.5"
+                    placeholder="Jalan / kota cabang..."
+                    value={branchForm.address}
+                    onChange={(e) => setBranchForm(prev => ({ ...prev, address: e.target.value }))}
+                  />
+                </div>
+
+                {!editingBranch && branchesList.length > 0 && (
+                  <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)]/40 space-y-2.5">
+                    <div className="text-xs font-bold text-[var(--text-primary)]">Data Awal Cabang</div>
+                    <div className="flex gap-4 text-xs">
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="branchSetupMode"
+                          checked={branchForm.setup_mode === 'EMPTY'}
+                          onChange={() => setBranchForm(prev => ({ ...prev, setup_mode: 'EMPTY' }))}
+                        />
+                        <span>Isi Manual (Kosong)</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="branchSetupMode"
+                          checked={branchForm.setup_mode === 'CLONE'}
+                          onChange={() => setBranchForm(prev => ({ ...prev, setup_mode: 'CLONE' }))}
+                        />
+                        <span>Tarik dari Cabang Lain</span>
+                      </label>
+                    </div>
+
+                    {branchForm.setup_mode === 'CLONE' && (
+                      <div className="space-y-2 pt-1">
+                        <select
+                          className="form-control w-full text-xs py-1.5 px-2"
+                          value={branchForm.clone_from_branch_id}
+                          onChange={(e) => setBranchForm(prev => ({ ...prev, clone_from_branch_id: e.target.value }))}
+                        >
+                          {branchesList.map(b => (
+                            <option key={b.id} value={b.id}>Sumber: {b.name}</option>
+                          ))}
+                        </select>
+                        <div className="flex flex-wrap gap-3 text-xs text-[var(--text-secondary)]">
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={branchForm.copy_recipes}
+                              onChange={(e) => setBranchForm(prev => ({ ...prev, copy_recipes: e.target.checked }))}
+                            />
+                            <span>Menu & Harga</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={branchForm.copy_materials}
+                              onChange={(e) => setBranchForm(prev => ({ ...prev, copy_materials: e.target.checked }))}
+                            />
+                            <span>Katalog Bahan</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={branchForm.copy_suppliers}
+                              onChange={(e) => setBranchForm(prev => ({ ...prev, copy_suppliers: e.target.checked }))}
+                            />
+                            <span>Supplier</span>
+                          </label>
+                        </div>
+                        <p className="text-[11px] text-[var(--text-muted)] m-0">Stok awal cabang baru dimulai dari 0.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    className="btn btn-secondary text-xs px-3.5 py-2"
+                    onClick={() => setShowBranchModal(false)}
+                    disabled={isSaving}
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary text-xs px-4 py-2"
+                    disabled={isSaving}
+                  >
+                    {isSaving ? 'Menyimpan...' : 'Simpan'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clone Data Between Branches Modal */}
+      {showCloneModal && cloneTargetBranch && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="p-5">
+              <h3 className="text-base font-bold text-[var(--text-primary)] mb-1">
+                Salin Data ke {cloneTargetBranch.name}
+              </h3>
+              <p className="text-xs text-[var(--text-secondary)] mb-4">
+                Tarik katalog atau menu dari cabang lain.
+              </p>
+
+              <form onSubmit={handleExecuteCloneBranch} className="space-y-3.5">
+                <div>
+                  <label className="form-label block mb-1 text-xs font-semibold">Ambil dari Cabang</label>
+                  <select
+                    className="form-control w-full text-xs py-2 px-2.5"
+                    value={cloneForm.sourceBranchId}
+                    onChange={(e) => setCloneForm(prev => ({ ...prev, sourceBranchId: e.target.value }))}
+                  >
+                    {branchesList.filter(b => b.id !== cloneTargetBranch.id).map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5 text-xs">
+                  <div className="font-semibold text-[var(--text-primary)]">Data yang Disalin</div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={cloneForm.copyRecipes}
+                      onChange={(e) => setCloneForm(prev => ({ ...prev, copyRecipes: e.target.checked }))}
+                    />
+                    <span>Menu, Resep & Harga Jual</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={cloneForm.copyMaterials}
+                      onChange={(e) => setCloneForm(prev => ({ ...prev, copyMaterials: e.target.checked }))}
+                    />
+                    <span>Katalog Bahan Baku (Stok 0)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={cloneForm.copySuppliers}
+                      onChange={(e) => setCloneForm(prev => ({ ...prev, copySuppliers: e.target.checked }))}
+                    />
+                    <span>Master Supplier</span>
+                  </label>
+                </div>
+
+                <div>
+                  <label className="form-label block mb-1 text-xs font-semibold">Jika Nama Menu Sudah Ada</label>
+                  <select
+                    className="form-control w-full text-xs py-2 px-2.5"
+                    value={cloneForm.conflictMode}
+                    onChange={(e) => setCloneForm(prev => ({ ...prev, conflictMode: e.target.value }))}
+                  >
+                    <option value="SKIP">Lewati menu yang sama</option>
+                    <option value="OVERWRITE">Perbarui harga dan resep</option>
+                  </select>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    className="btn btn-secondary text-xs px-3.5 py-2"
+                    onClick={() => setShowCloneModal(false)}
+                    disabled={isSaving}
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary text-xs px-4 py-2"
+                    disabled={isSaving || (!cloneForm.copyRecipes && !cloneForm.copyMaterials && !cloneForm.copySuppliers)}
+                  >
+                    {isSaving ? 'Menyalin...' : 'Salin Data'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Location Modal */}
       {showAddLocationModal && (

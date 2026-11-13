@@ -52,7 +52,7 @@ const QUICK_REASONS = [
 ];
 
 export default function WasteLogs() {
-  const { stock, refreshData } = useData();
+  const { stock, refreshData, activeBranchId } = useData();
   const { role } = useAuth();
   const toast = useToast();
 
@@ -148,7 +148,7 @@ export default function WasteLogs() {
     } finally {
       setBrokenLoading(false);
     }
-  }, [brokenDate, brokenLocation]);
+  }, [brokenDate, brokenLocation, activeBranchId]);
 
   useEffect(() => {
     if (showBrokenModal) loadBrokenRows();
@@ -218,7 +218,7 @@ export default function WasteLogs() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, activeBranchId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect

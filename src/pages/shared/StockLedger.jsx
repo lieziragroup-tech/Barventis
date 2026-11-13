@@ -88,7 +88,7 @@ const parseFullPack = resolvePackInfo;
 
 function StockLedgerInner() {
   const { profile } = useAuth();
-  const { currentTenant, stock, loadingData, handleAdjustStock, handleUpdateItem, handleAddItem, handleDeleteItem, refreshData } = useData();
+  const { currentTenant, stock, loadingData, handleAdjustStock, handleUpdateItem, handleAddItem, handleDeleteItem, refreshData, activeBranchId } = useData();
   const onAdjustStock = handleAdjustStock;
   const onUpdateItem = handleUpdateItem;
   const onAddItem = handleAddItem;
@@ -135,11 +135,11 @@ function StockLedgerInner() {
   const [expiryMap, setExpiryMap] = useState({});
   useEffect(() => {
     api.getNearestExpiry().then(setExpiryMap).catch(console.error);
-  }, []);
+  }, [activeBranchId]);
 
   useEffect(() => {
     api.getSuppliers().then(setSuppliers).catch(console.error);
-  }, []);
+  }, [activeBranchId]);
 
   useEffect(() => {
     if (selectedItem && historyTab === 'PURCHASES') {

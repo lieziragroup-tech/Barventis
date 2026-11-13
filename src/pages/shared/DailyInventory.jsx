@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { getExpiryColor } from '../../utils/expiryColor';
 import { Calendar, FileText, PlusCircle, Save, Loader2, Lock, Unlock, Info, Package, Camera, HelpCircle, ChevronDown, X, AlertCircle, Search, ChevronLeft, ChevronRight, CheckCheck, Eye, AlertTriangle, Plus, Check, Clock, Trash2, ArrowLeftRight, FlaskConical } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useData } from '../../contexts/DataContext';
 import { api } from '../../services/api';
 import ExportButton from '../../components/shared/ExportButton';
 import PrintButton from '../../components/shared/PrintButton';
@@ -243,6 +244,7 @@ export function getInventoryRowMetrics(item, row = {}, strict = false) {
 
 export default function DailyInventory({ category: _category, initialTab }) {
   const { activeUser } = useAuth();
+  const { activeBranchId } = useData();
   // Daily Inventory is primarily an input workflow. Open the editable EOD form by default;
   // users can switch to REKAP whenever they need historical output.
   const [activeTab, setActiveTab] = useState(initialTab || 'EOD');
@@ -325,8 +327,9 @@ export default function DailyInventory({ category: _category, initialTab }) {
 
   const getLocalDraftKey = useCallback((d = date, loc = location) => {
     const tenantId = activeUser?.tenant_id || 'default';
-    return `barventis_daily_inv_draft_${tenantId}_${loc}_${d}`;
-  }, [activeUser?.tenant_id, date, location]);
+    const branchKey = activeBranchId || 'default';
+    return `barventis_daily_inv_draft_${tenantId}_${branchKey}_${loc}_${d}`;
+  }, [activeUser?.tenant_id, activeBranchId, date, location]);
 
   const saveDraftToLocalStorage = useCallback((invState, d = date, loc = location) => {
     try {
@@ -525,7 +528,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
     } finally {
       setLoading(false);
     }
-  }, [date, location]);
+  }, [date, location, activeBranchId]);
 
   const fetchEodData = useCallback(async () => {
     setLoading(true);
@@ -585,7 +588,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
     } finally {
       setLoading(false);
     }
-  }, [date, location, getLocalDraftKey]);
+  }, [date, location, getLocalDraftKey, activeBranchId]);
   useEffect(() => {
     if (activeTab === 'REKAP') {
       // eslint-disable-next-line react-hooks/set-state-in-effect

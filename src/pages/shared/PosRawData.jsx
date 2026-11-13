@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, Calendar, FileText as Database, FileText as FileSpreadsheet } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useData } from '../../contexts/DataContext';
 import { formatIDR } from '../../services/costUtils';
 import { translateDbError } from '../../utils/dbMessageHelper';
 
@@ -16,6 +17,7 @@ function debounce(func, wait) {
 
 export default function PosRawData() {
   const { currentTenant } = useAuth();
+  const { activeBranchId } = useData();
 
   const [data, setData] = useState([]);
   const [total, setTotal] = useState(0);
@@ -49,7 +51,7 @@ export default function PosRawData() {
     } finally {
       setLoading(false);
     }
-  }, [currentTenant, page, pageSize, searchTerm, dateFrom, dateTo]);
+  }, [currentTenant, activeBranchId, page, pageSize, searchTerm, dateFrom, dateTo]);
 
   useEffect(() => {
     // eslint-disable-next-line

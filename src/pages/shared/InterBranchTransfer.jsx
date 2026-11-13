@@ -20,7 +20,9 @@ import {
   HelpCircle,
   ChevronDown,
   Trash2,
-  Sparkles
+  Sparkles,
+  Truck,
+  ClipboardCheck
 } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -31,10 +33,34 @@ import useIsMobile from '../../hooks/useIsMobile';
 import { locationService } from '../../services/locationService';
 
 export default function InterBranchTransfer() {
-  const { currentTenant, stock, refreshData, showToast } = useData();
+  const {
+    currentTenant,
+    stock,
+    refreshData,
+    showToast,
+    branches,
+    activeBranch,
+    activeBranchId
+  } = useData();
   const { activeUser } = useAuth();
   const isMobile = useIsMobile(768);
   const [showTransferGuide, setShowTransferGuide] = useState(false);
+
+  const activeBranches = useMemo(
+    () => (branches || []).filter(b => b.is_active !== false),
+    [branches]
+  );
+  const branchById = useMemo(
+    () => new Map((branches || []).map(b => [b.id, b])),
+    [branches]
+  );
+  const otherBranches = useMemo(
+    () => activeBranches.filter(b => b.id !== activeBranchId),
+    [activeBranches, activeBranchId]
+  );
+
+  const [selectedMode, setSelectedMode] = useState(null);
+  const transferMode = selectedMode || (activeBranches.length > 1 ? 'INTER_BRANCH' : 'INTERNAL');
 
   const [locations, setLocations] = useState(() => locationService.getLocations(currentTenant?.id));
   useEffect(() => {
@@ -47,10 +73,21 @@ export default function InterBranchTransfer() {
 
   const [transfers, setTransfers] = useState([]);
   const [requests, setRequests] = useState([]);
+  const [shipments, setShipments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
+
+  // Inter-Branch Dispatch & Receive Modals
+  const [showInterBranchModal, setShowInterBranchModal] = useState(false);
+  const [interBranchTargetId, setInterBranchTargetId] = useState('');
+  const [interBranchNotes, setInterBranchNotes] = useState('');
+  const [interBranchCart, setInterBranchCart] = useState([]);
+  const [directionFilter, setDirectionFilter] = useState('ALL');
+  const [receiveModalShipment, setReceiveModalShipment] = useState(null);
+  const [receiveQtys, setReceiveQtys] = useState({});
+  const [receivingSaving, setReceivingSaving] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [sourceFilter, setSourceFilter] = useState('ALL');
@@ -70,19 +107,21 @@ export default function InterBranchTransfer() {
     setLoading(true);
     setError('');
     try {
-      const [data, reqData] = await Promise.all([
+      const [data, reqData, shipmentData] = await Promise.all([
         api.getTransfers(),
-        api.getTransferRequests()
+        api.getTransferRequests(),
+        api.getInterBranchShipments().catch(() => [])
       ]);
       setTransfers(data || []);
       setRequests(reqData || []);
+      setShipments(shipmentData || []);
     } catch (err) {
       console.error('Error fetching transfers:', err);
       setError(err.message || 'Gagal memuat data transfer.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeBranchId]);
 
   useEffect(() => {
     fetchTransfers();
@@ -365,6 +404,155 @@ export default function InterBranchTransfer() {
     }
   };
 
+  const incomingPendingShipments = useMemo(
+    () => (shipments || []).filter(s => s.status === 'DISPATCHED' && s.to_branch_id === activeBranchId),
+    [shipments, activeBranchId]
+  );
+
+  const branchShipments = useMemo(() => {
+    return (shipments || []).filter(s => {
+      if (activeBranchId && s.from_branch_id !== activeBranchId && s.to_branch_id !== activeBranchId) {
+        // Show all tenant shipments if activeBranchId matches neither, or restrict to active branch:
+        return false;
+      }
+      if (directionFilter === 'INCOMING' && s.to_branch_id !== activeBranchId) return false;
+      if (directionFilter === 'OUTGOING' && s.from_branch_id !== activeBranchId) return false;
+      if (!searchTerm.trim()) return true;
+      const q = searchTerm.toLowerCase();
+      const fromName = branchById.get(s.from_branch_id)?.name || '';
+      const toName = branchById.get(s.to_branch_id)?.name || '';
+      const itemNames = (s.inter_branch_transfer_items || []).map(i => i.materials?.name || '').join(' ');
+      return `${s.transfer_number} ${fromName} ${toName} ${s.notes || ''} ${itemNames}`.toLowerCase().includes(q);
+    });
+  }, [shipments, activeBranchId, directionFilter, searchTerm, branchById]);
+
+  const interBranchStats = useMemo(() => {
+    const incomingWait = incomingPendingShipments.length;
+    const outgoingTransit = (shipments || []).filter(s => s.status === 'DISPATCHED' && s.from_branch_id === activeBranchId).length;
+    const receivedCount = (shipments || []).filter(s => s.status === 'RECEIVED' && (s.from_branch_id === activeBranchId || s.to_branch_id === activeBranchId)).length;
+    const varianceCount = (shipments || []).filter(s => s.status === 'VARIANCE_FLAGGED' && (s.from_branch_id === activeBranchId || s.to_branch_id === activeBranchId)).length;
+    return { incomingWait, outgoingTransit, receivedCount, varianceCount };
+  }, [shipments, incomingPendingShipments, activeBranchId]);
+
+  const handleAddInterBranchMaterial = (material) => {
+    if (!material) return;
+    setError('');
+    setInterBranchCart(prev => {
+      const idx = prev.findIndex(i => String(i.material_id) === String(material.id));
+      if (idx !== -1) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], qty: String((parseFloat(next[idx].qty) || 0) + 1) };
+        return next;
+      }
+      const avail = activeBranch?.is_central
+        ? Number(material.qty_central || 0)
+        : Number(material.qty_resto || material.qty_central || 0);
+      return [
+        ...prev,
+        {
+          cart_id: `${material.id}-${Date.now()}`,
+          material_id: material.id,
+          name: material.name,
+          unit: material.unit || 'pck',
+          category: material.category || 'Umum',
+          available: avail,
+          qty: '1',
+          notes: ''
+        }
+      ];
+    });
+  };
+
+  const handleOpenInterBranchModal = () => {
+    setError('');
+    setInterBranchTargetId(otherBranches[0]?.id || '');
+    setInterBranchNotes('');
+    setInterBranchCart([]);
+    setShowInterBranchModal(true);
+  };
+
+  const handleDispatchInterBranch = async (e) => {
+    e?.preventDefault();
+    if (!activeBranchId || !interBranchTargetId) {
+      setError('Pilih cabang tujuan pengiriman.');
+      return;
+    }
+    if (interBranchCart.length === 0) {
+      setError('Tambahkan minimal 1 bahan baku.');
+      return;
+    }
+    for (const item of interBranchCart) {
+      const q = parseFloat(item.qty);
+      if (!Number.isFinite(q) || q <= 0) {
+        setError(`Kuantitas "${item.name}" harus lebih dari 0.`);
+        return;
+      }
+    }
+    setSubmitting(true);
+    setError('');
+    try {
+      await api.dispatchInterBranchShipment({
+        fromBranchId: activeBranchId,
+        toBranchId: interBranchTargetId,
+        items: interBranchCart.map(i => ({ material_id: i.material_id, qty: parseFloat(i.qty), notes: i.notes })),
+        notes: interBranchNotes
+      });
+      if (showToast) {
+        const destName = branchById.get(interBranchTargetId)?.name || 'cabang tujuan';
+        showToast(`Pengiriman ke ${destName} berhasil dibuat.`, 'success');
+      }
+      setShowInterBranchModal(false);
+      setInterBranchCart([]);
+      await fetchTransfers();
+      if (refreshData) refreshData();
+    } catch (err) {
+      setError(err.message || 'Gagal mengirim stok ke cabang.');
+      if (showToast) showToast(err.message || 'Gagal mengirim stok ke cabang.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleOpenReceiveModal = (shipment) => {
+    const initial = {};
+    (shipment.inter_branch_transfer_items || []).forEach(it => {
+      initial[it.id] = String(it.qty_dispatched ?? 0);
+    });
+    setReceiveQtys(initial);
+    setReceiveModalShipment(shipment);
+  };
+
+  const handleConfirmReceiveShipment = async (e) => {
+    e?.preventDefault();
+    if (!receiveModalShipment) return;
+    setReceivingSaving(true);
+    try {
+      const receivedItems = (receiveModalShipment.inter_branch_transfer_items || []).map(it => ({
+        id: it.id,
+        qty_received: Math.max(0, parseFloat(receiveQtys[it.id] ?? it.qty_dispatched) || 0)
+      }));
+      const completed = await api.receiveInterBranchShipment({
+        transferId: receiveModalShipment.id,
+        receivedItems
+      });
+      if (showToast) {
+        showToast(
+          completed?.status === 'VARIANCE_FLAGGED'
+            ? 'Barang diterima dengan catatan selisih kuantitas.'
+            : 'Barang diterima & stok cabang diperbarui.',
+          'success'
+        );
+      }
+      setReceiveModalShipment(null);
+      await fetchTransfers();
+      if (refreshData) refreshData();
+    } catch (err) {
+      if (showToast) showToast(err.message || 'Gagal memproses penerimaan barang.', 'error');
+    } finally {
+      setReceivingSaving(false);
+    }
+  };
+
   return (
     <div className="page-container fade-in space-y-5">
       {/* Header */}
@@ -379,15 +567,15 @@ export default function InterBranchTransfer() {
                 Mutasi Gudang
               </h1>
               <p className="text-xs md:text-sm mt-0.5 m-0" style={{ color: 'var(--text-secondary)' }}>
-                Transfer stok antar gudang dan cabang.
+                Distribusi stok antar cabang dan area.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            className="btn btn-secondary text-xs md:text-sm flex items-center gap-1.5"
+            className="btn btn-secondary text-xs md:text-sm flex items-center gap-1.5 whitespace-nowrap shrink-0"
             onClick={fetchTransfers}
             disabled={loading}
             title="Muat Ulang Data"
@@ -398,7 +586,7 @@ export default function InterBranchTransfer() {
 
           <button
             type="button"
-            className="btn btn-secondary text-xs md:text-sm flex items-center gap-1.5"
+            className="btn btn-secondary text-xs md:text-sm flex items-center gap-1.5 whitespace-nowrap shrink-0"
             onClick={() => setShowTransferGuide(prev => !prev)}
             style={{
               color: showTransferGuide ? 'var(--accent)' : 'var(--text-secondary)',
@@ -410,18 +598,63 @@ export default function InterBranchTransfer() {
             <ChevronDown size={13} className={`transition-transform duration-200 ${showTransferGuide ? 'rotate-180' : ''}`} />
           </button>
 
-          <button
-            className="btn btn-primary text-xs md:text-sm flex items-center gap-2 shadow font-bold"
-            onClick={() => {
-              setError('');
-              setShowModal(true);
-            }}
-          >
-            <Plus size={17} />
-            <span>{activeUser?.role === 'Bar' ? 'Minta Barang' : 'Buat Mutasi'}</span>
-          </button>
+          {transferMode === 'INTER_BRANCH' && otherBranches.length > 0 ? (
+            <button
+              className="btn btn-primary text-xs md:text-sm flex items-center gap-2 shadow font-bold whitespace-nowrap shrink-0"
+              onClick={handleOpenInterBranchModal}
+            >
+              <Truck size={16} />
+              <span>Kirim ke Cabang</span>
+            </button>
+          ) : (
+            <button
+              className="btn btn-primary text-xs md:text-sm flex items-center gap-2 shadow font-bold whitespace-nowrap shrink-0"
+              onClick={() => {
+                setError('');
+                setShowModal(true);
+              }}
+            >
+              <Plus size={17} />
+              <span>{activeUser?.role === 'Bar' ? 'Minta Barang' : 'Buat Mutasi'}</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Mode Switcher Tabs (Antar Cabang vs Internal Area) */}
+      {activeBranches.length > 1 && (
+        <div className="flex items-center gap-1.5 p-1 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] w-fit">
+          <button
+            type="button"
+            onClick={() => setSelectedMode('INTER_BRANCH')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all whitespace-nowrap shrink-0 ${
+              transferMode === 'INTER_BRANCH'
+                ? 'bg-[var(--accent)] text-white shadow-sm'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <Truck size={14} />
+            <span>Antar Cabang</span>
+            {incomingPendingShipments.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white tabular-nums">
+                {incomingPendingShipments.length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedMode('INTERNAL')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all whitespace-nowrap shrink-0 ${
+              transferMode === 'INTERNAL'
+                ? 'bg-[var(--accent)] text-white shadow-sm'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <ArrowRightLeft size={14} />
+            <span>Internal Area (Gudang ↔ Bar)</span>
+          </button>
+        </div>
+      )}
 
       {showTransferGuide && (
         <div
@@ -460,6 +693,304 @@ export default function InterBranchTransfer() {
         </div>
       )}
 
+      {transferMode === 'INTER_BRANCH' ? (
+        <>
+          {/* KPI Antar Cabang */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+            <div className="glass-card p-3.5 flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500 shrink-0">
+                <Package size={18} />
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider block">
+                  Menunggu Diterima
+                </span>
+                <div className="text-lg md:text-xl font-extrabold text-[var(--text-primary)] tabular-nums">
+                  {interBranchStats.incomingWait} <span className="text-xs font-normal text-[var(--text-secondary)]">kiriman</span>
+                </div>
+              </div>
+            </div>
+            <div className="glass-card p-3.5 flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500 shrink-0">
+                <Truck size={18} />
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider block">
+                  Dikirim Cabang Ini
+                </span>
+                <div className="text-lg md:text-xl font-extrabold text-[var(--text-primary)] tabular-nums">
+                  {interBranchStats.outgoingTransit} <span className="text-xs font-normal text-[var(--text-secondary)]">kiriman</span>
+                </div>
+              </div>
+            </div>
+            <div className="glass-card p-3.5 flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500 shrink-0">
+                <CheckCircle2 size={18} />
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider block">
+                  Selesai Diterima
+                </span>
+                <div className="text-lg md:text-xl font-extrabold text-[var(--text-primary)] tabular-nums">
+                  {interBranchStats.receivedCount} <span className="text-xs font-normal text-[var(--text-secondary)]">kiriman</span>
+                </div>
+              </div>
+            </div>
+            <div className="glass-card p-3.5 flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-rose-500/10 text-rose-500 shrink-0">
+                <AlertCircle size={18} />
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider block">
+                  Selisih Terima
+                </span>
+                <div className="text-lg md:text-xl font-extrabold text-[var(--text-primary)] tabular-nums">
+                  {interBranchStats.varianceCount} <span className="text-xs font-normal text-[var(--text-secondary)]">kiriman</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Pengiriman Masuk Menunggu Konfirmasi */}
+          {incomingPendingShipments.length > 0 && (
+            <div className="glass-card p-4 md:p-5 space-y-3 border border-amber-500/30">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ClipboardCheck size={18} className="text-amber-500 shrink-0" />
+                  <div>
+                    <h3 className="text-sm font-bold m-0 text-[var(--text-primary)]">
+                      Barang Masuk ke {activeBranch?.name} ({incomingPendingShipments.length})
+                    </h3>
+                    <p className="text-xs text-[var(--text-secondary)] m-0">
+                      Periksa fisik barang sebelum diterima.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {incomingPendingShipments.map(s => {
+                  const senderName = branchById.get(s.from_branch_id)?.name || 'Cabang Asal';
+                  const itemsList = s.inter_branch_transfer_items || [];
+                  return (
+                    <div key={s.id} className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)]/50 flex flex-col justify-between gap-3">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-[var(--bg-primary)] border border-[var(--border)]">
+                            {s.transfer_number}
+                          </span>
+                          <span className="text-[11px] text-[var(--text-secondary)]">
+                            {s.dispatched_at ? new Date(s.dispatched_at).toLocaleDateString('id-ID') : '-'}
+                          </span>
+                        </div>
+                        <div className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+                          <Store size={13} className="text-[var(--accent)]" />
+                          <span>Dari {senderName}</span>
+                          <span className="text-[var(--text-secondary)]">• {itemsList.length} item</span>
+                        </div>
+                        <div className="text-xs text-[var(--text-secondary)] line-clamp-2">
+                          {itemsList.map(i => `${i.materials?.name || 'Item'} (${i.qty_dispatched} ${i.materials?.unit || ''})`).join(', ')}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenReceiveModal(s)}
+                        className="btn btn-primary py-2 px-3 text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
+                      >
+                        <CheckCircle2 size={14} /> Terima Barang
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Tabel Riwayat Pengiriman Antar Cabang */}
+          <div className="glass-card p-4 md:p-6 space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" size={16} />
+                <input
+                  type="text"
+                  placeholder="Cari no. pengiriman, cabang, atau bahan..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="form-control pl-9 text-sm"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5 text-xs">
+                {[
+                  { id: 'ALL', label: 'Semua' },
+                  { id: 'INCOMING', label: 'Masuk' },
+                  { id: 'OUTGOING', label: 'Keluar' }
+                ].map(opt => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setDirectionFilter(opt.id)}
+                    className={`px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap shrink-0 ${
+                      directionFilter === opt.id
+                        ? 'bg-[var(--accent)] text-white'
+                        : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] border border-[var(--border)]'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="table-responsive hidden md:block border rounded-xl overflow-hidden">
+              <table className="table w-full">
+                <thead className="bg-[var(--bg-secondary)] border-b text-xs uppercase font-bold text-[var(--text-secondary)]">
+                  <tr>
+                    <th className="py-3 px-4 text-left">No. Surat Jalan</th>
+                    <th className="py-3 px-4 text-left">Tanggal</th>
+                    <th className="py-3 px-4 text-left">Rute Cabang</th>
+                    <th className="py-3 px-4 text-left">Daftar Bahan</th>
+                    <th className="py-3 px-4 text-left">Catatan</th>
+                    <th className="py-3 px-4 text-center">Status</th>
+                    <th className="py-3 px-4 text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y text-sm">
+                  {loading ? (
+                    <tr>
+                      <td colSpan="7" className="text-center py-12 text-[var(--text-secondary)]">
+                        <Loader2 size={24} className="animate-spin mx-auto mb-2 text-indigo-500" />
+                        <span>Memuat pengiriman antar cabang...</span>
+                      </td>
+                    </tr>
+                  ) : branchShipments.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" className="text-center py-12 text-[var(--text-secondary)]">
+                        <Truck size={28} className="mx-auto mb-2 text-indigo-500 opacity-60" />
+                        <p className="font-semibold text-sm text-[var(--text-primary)] mb-1">Belum Ada Pengiriman Cabang</p>
+                        <p className="text-xs mb-3">Kirim stok dari {activeBranch?.name} ke cabang lain.</p>
+                        {otherBranches.length > 0 && (
+                          <button type="button" onClick={handleOpenInterBranchModal} className="btn btn-primary text-xs">
+                            <Truck size={14} /> Kirim ke Cabang
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ) : (
+                    branchShipments.map(s => {
+                      const fromName = branchById.get(s.from_branch_id)?.name || '-';
+                      const toName = branchById.get(s.to_branch_id)?.name || '-';
+                      const items = s.inter_branch_transfer_items || [];
+                      const canReceive = s.status === 'DISPATCHED' && s.to_branch_id === activeBranchId;
+                      return (
+                        <tr key={s.id} className="hover:bg-[var(--bg-secondary)]/50">
+                          <td className="py-3 px-4 font-mono text-xs font-semibold whitespace-nowrap">{s.transfer_number}</td>
+                          <td className="py-3 px-4 text-xs whitespace-nowrap text-[var(--text-secondary)]">
+                            {s.created_at ? new Date(s.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-1.5 text-xs font-medium whitespace-nowrap">
+                              <span className="px-2 py-0.5 rounded bg-slate-500/10 border border-slate-500/20">{fromName}</span>
+                              <ArrowRight size={13} className="text-indigo-500 shrink-0" />
+                              <span className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20">{toName}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-xs text-[var(--text-primary)]">
+                            <div className="font-semibold tabular-nums">{items.length} bahan</div>
+                            <div className="text-[11px] text-[var(--text-secondary)] truncate max-w-[260px]">
+                              {items.map(i => `${i.materials?.name || 'Bahan'} (${i.qty_dispatched})`).join(', ')}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-xs text-[var(--text-secondary)] max-w-[160px] truncate">{s.notes || '-'}</td>
+                          <td className="py-3 px-4 text-center whitespace-nowrap">
+                            {s.status === 'RECEIVED' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
+                                <CheckCircle2 size={12} /> Diterima
+                              </span>
+                            )}
+                            {s.status === 'DISPATCHED' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-400">
+                                <Truck size={12} /> Dalam Perjalanan
+                              </span>
+                            )}
+                            {s.status === 'VARIANCE_FLAGGED' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-500/15 text-rose-700 dark:text-rose-400">
+                                <AlertCircle size={12} /> Selisih Qty
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-center whitespace-nowrap">
+                            {canReceive ? (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenReceiveModal(s)}
+                                className="btn btn-primary py-1 px-2.5 text-xs font-bold whitespace-nowrap"
+                              >
+                                Terima Barang
+                              </button>
+                            ) : (
+                              <span className="text-xs text-[var(--text-secondary)]">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards for Inter-Branch Shipments */}
+            <div className="md:hidden space-y-3">
+              {loading ? (
+                <div className="text-center py-8 text-[var(--text-secondary)]">
+                  <Loader2 size={24} className="animate-spin mx-auto mb-2 text-indigo-500" />
+                  <span>Memuat pengiriman...</span>
+                </div>
+              ) : branchShipments.length === 0 ? (
+                <div className="text-center py-8 text-[var(--text-secondary)] border rounded-xl p-4">
+                  <Truck size={28} className="mx-auto mb-2 text-indigo-500" />
+                  <p className="font-semibold text-sm">Belum Ada Pengiriman Cabang</p>
+                </div>
+              ) : (
+                branchShipments.map(s => {
+                  const fromName = branchById.get(s.from_branch_id)?.name || '-';
+                  const toName = branchById.get(s.to_branch_id)?.name || '-';
+                  const items = s.inter_branch_transfer_items || [];
+                  const canReceive = s.status === 'DISPATCHED' && s.to_branch_id === activeBranchId;
+                  return (
+                    <div key={s.id} className="border rounded-xl p-3.5 bg-[var(--bg-secondary)]/30 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-[var(--bg-secondary)] border">{s.transfer_number}</span>
+                        <span className="text-[11px] font-semibold">
+                          {s.status === 'RECEIVED' ? 'Diterima' : s.status === 'VARIANCE_FLAGGED' ? 'Selisih' : 'Dikirim'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs font-medium">
+                        <span className="px-1.5 py-0.5 rounded bg-slate-500/10">{fromName}</span>
+                        <ArrowRight size={12} className="text-indigo-500" />
+                        <span className="px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600">{toName}</span>
+                      </div>
+                      <div className="text-xs text-[var(--text-secondary)]">
+                        {items.map(i => `${i.materials?.name || 'Bahan'} (${i.qty_dispatched})`).join(', ')}
+                      </div>
+                      {canReceive && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReceiveModal(s)}
+                          className="btn btn-primary w-full py-2 text-xs font-bold justify-center"
+                        >
+                          <CheckCircle2 size={14} /> Terima Barang
+                        </button>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <div className="glass-card p-3.5 flex items-center gap-3">
@@ -1157,6 +1688,349 @@ export default function InterBranchTransfer() {
                       <Check size={15} /> Simpan ({transferCart.length} Item)
                     </>
                   )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+        </>
+      )}
+
+      {/* MODAL KIRIM STOK ANTAR CABANG */}
+      {showInterBranchModal && (
+        <div
+          className="modal-overlay"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.65)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: isMobile ? '10px' : '16px'
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !submitting) setShowInterBranchModal(false);
+          }}
+        >
+          <div
+            className="modal-card"
+            style={{
+              background: 'var(--bg-card, var(--bg-primary))',
+              borderRadius: '20px',
+              border: '1px solid var(--border)',
+              maxWidth: '720px',
+              width: '100%',
+              maxHeight: '92vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)',
+              overflow: 'hidden'
+            }}
+          >
+            <div className="p-4 md:p-5 border-b flex items-center justify-between shrink-0 bg-[var(--bg-secondary)]/40">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
+                  <Truck size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base md:text-lg font-bold m-0 text-[var(--text-primary)]">
+                    Kirim Stok ke Cabang
+                  </h3>
+                  <p className="text-xs text-[var(--text-secondary)] m-0">
+                    Potong stok cabang ini lalu kirim.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn-icon text-[var(--text-secondary)] p-1.5 rounded-lg"
+                onClick={() => !submitting && setShowInterBranchModal(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleDispatchInterBranch} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-4 md:p-5 space-y-4 overflow-y-auto flex-1">
+                {error && (
+                  <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 text-xs flex items-center gap-2">
+                    <AlertCircle size={16} className="shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)]/40">
+                  <div>
+                    <label className="text-[11px] font-semibold text-[var(--text-secondary)] block mb-1">
+                      Dari Cabang (Pengirim)
+                    </label>
+                    <div className="form-control text-xs font-bold py-2 bg-[var(--bg-primary)] opacity-80 flex items-center gap-1.5">
+                      <Building size={14} className="text-[var(--accent)]" />
+                      <span>{activeBranch?.name || '-'}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-[var(--text-secondary)] block mb-1">
+                      Ke Cabang (Penerima) *
+                    </label>
+                    <select
+                      className="form-control text-xs font-semibold py-2 w-full"
+                      value={interBranchTargetId}
+                      onChange={(e) => setInterBranchTargetId(e.target.value)}
+                      required
+                    >
+                      {otherBranches.map(b => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}{b.is_central ? ' (Central)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-bold text-xs text-[var(--text-primary)] block">
+                    Pilih Bahan dari {activeBranch?.name} *
+                  </label>
+                  <MaterialAutocomplete
+                    materials={stock || []}
+                    onSelect={handleAddInterBranchMaterial}
+                    clearOnSelect={true}
+                    sourceLocation={activeBranch?.is_central ? 'Central Warehouse' : 'Resto Bar'}
+                    placeholder="Cari nama bahan atau SKU..."
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-[var(--text-primary)]">
+                      Daftar Item Dikirim ({interBranchCart.length})
+                    </span>
+                    {interBranchCart.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setInterBranchCart([])}
+                        className="text-xs text-rose-500 hover:underline font-semibold"
+                      >
+                        Kosongkan
+                      </button>
+                    )}
+                  </div>
+
+                  {interBranchCart.length === 0 ? (
+                    <div className="border border-dashed border-[var(--border)] rounded-xl p-5 text-center text-xs text-[var(--text-secondary)]">
+                      Pilih bahan baku di atas untuk ditambahkan.
+                    </div>
+                  ) : (
+                    <div className="border border-[var(--border)] rounded-xl overflow-hidden">
+                      <table className="custom-table w-full text-xs">
+                        <thead>
+                          <tr>
+                            <th>Bahan Baku</th>
+                            <th style={{ textAlign: 'right' }}>Stok Tersedia</th>
+                            <th style={{ width: '120px', textAlign: 'right' }}>Qty Kirim *</th>
+                            <th style={{ width: '60px' }}>Satuan</th>
+                            <th style={{ width: '48px', textAlign: 'center' }}>Hapus</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {interBranchCart.map(item => (
+                            <tr key={item.cart_id}>
+                              <td className="font-semibold text-[var(--text-primary)]">{item.name}</td>
+                              <td className="text-right tabular-nums text-[var(--text-secondary)]">
+                                {Number(item.available).toLocaleString('id-ID')}
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min="0.01"
+                                  required
+                                  className="form-control text-right py-1 px-2 text-xs tabular-nums"
+                                  value={item.qty}
+                                  onChange={(e) => setInterBranchCart(prev => prev.map(x => x.cart_id === item.cart_id ? { ...x, qty: e.target.value } : x))}
+                                />
+                              </td>
+                              <td>{item.unit}</td>
+                              <td className="text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => setInterBranchCart(prev => prev.filter(x => x.cart_id !== item.cart_id))}
+                                  className="p-1 text-rose-500 hover:bg-rose-500/10 rounded"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="font-bold text-xs text-[var(--text-primary)] block mb-1">
+                    Catatan Pengiriman (Opsional)
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control text-xs py-2 w-full"
+                    placeholder="Contoh: Kiriman mingguan, driver Budi..."
+                    value={interBranchNotes}
+                    onChange={(e) => setInterBranchNotes(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="p-4 border-t bg-[var(--bg-secondary)]/40 flex items-center justify-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  className="btn btn-secondary text-xs py-2 px-4"
+                  onClick={() => !submitting && setShowInterBranchModal(false)}
+                  disabled={submitting}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary text-xs py-2 px-5 font-bold flex items-center gap-1.5 whitespace-nowrap"
+                  disabled={submitting || interBranchCart.length === 0}
+                >
+                  {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                  <span>{submitting ? 'Mengirim...' : `Kirim (${interBranchCart.length} Item)`}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL VERIFIKASI PENERIMAAN BARANG ANTAR CABANG */}
+      {receiveModalShipment && (
+        <div
+          className="modal-overlay"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.65)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: isMobile ? '10px' : '16px'
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !receivingSaving) setReceiveModalShipment(null);
+          }}
+        >
+          <div
+            className="modal-card"
+            style={{
+              background: 'var(--bg-card, var(--bg-primary))',
+              borderRadius: '20px',
+              border: '1px solid var(--border)',
+              maxWidth: '640px',
+              width: '100%',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)',
+              overflow: 'hidden'
+            }}
+          >
+            <div className="p-4 md:p-5 border-b flex items-center justify-between shrink-0 bg-[var(--bg-secondary)]/40">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                  <ClipboardCheck size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base md:text-lg font-bold m-0 text-[var(--text-primary)]">
+                    Terima Barang ({receiveModalShipment.transfer_number})
+                  </h3>
+                  <p className="text-xs text-[var(--text-secondary)] m-0">
+                    Cocokkan jumlah fisik sebelum masuk stok.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn-icon text-[var(--text-secondary)] p-1.5 rounded-lg"
+                onClick={() => !receivingSaving && setReceiveModalShipment(null)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmReceiveShipment} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-4 md:p-5 space-y-4 overflow-y-auto flex-1">
+                <div className="flex items-center gap-2 text-xs font-medium p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)]/40">
+                  <span>{branchById.get(receiveModalShipment.from_branch_id)?.name || 'Pengirim'}</span>
+                  <ArrowRight size={14} className="text-indigo-500" />
+                  <strong className="text-[var(--text-primary)]">{branchById.get(receiveModalShipment.to_branch_id)?.name || 'Cabang Aktif'}</strong>
+                </div>
+
+                <div className="border border-[var(--border)] rounded-xl overflow-hidden">
+                  <table className="custom-table w-full text-xs">
+                    <thead>
+                      <tr>
+                        <th>Bahan Baku</th>
+                        <th style={{ textAlign: 'right' }}>Dikirim</th>
+                        <th style={{ width: '130px', textAlign: 'right' }}>Diterima *</th>
+                        <th style={{ width: '60px' }}>Satuan</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(receiveModalShipment.inter_branch_transfer_items || []).map(it => {
+                        const dispatched = Number(it.qty_dispatched || 0);
+                        const receivedVal = parseFloat(receiveQtys[it.id] ?? dispatched) || 0;
+                        const hasVariance = Math.abs(receivedVal - dispatched) > 0.001;
+                        return (
+                          <tr key={it.id}>
+                            <td className="font-semibold text-[var(--text-primary)]">{it.materials?.name || 'Bahan'}</td>
+                            <td className="text-right tabular-nums text-[var(--text-secondary)]">{dispatched.toLocaleString('id-ID')}</td>
+                            <td>
+                              <input
+                                type="number"
+                                step="any"
+                                min="0"
+                                required
+                                className="form-control text-right py-1 px-2 text-xs tabular-nums"
+                                style={{ borderColor: hasVariance ? '#f59e0b' : 'var(--border)' }}
+                                value={receiveQtys[it.id] ?? ''}
+                                onChange={(e) => setReceiveQtys(prev => ({ ...prev, [it.id]: e.target.value }))}
+                              />
+                            </td>
+                            <td>{it.materials?.unit || '-'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="p-4 border-t bg-[var(--bg-secondary)]/40 flex items-center justify-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  className="btn btn-secondary text-xs py-2 px-4"
+                  onClick={() => !receivingSaving && setReceiveModalShipment(null)}
+                  disabled={receivingSaving}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary text-xs py-2 px-5 font-bold flex items-center gap-1.5 whitespace-nowrap"
+                  disabled={receivingSaving}
+                >
+                  {receivingSaving ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                  <span>{receivingSaving ? 'Menyimpan...' : 'Konfirmasi Terima'}</span>
                 </button>
               </div>
             </form>

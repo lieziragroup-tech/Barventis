@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useData } from '../../contexts/DataContext';
 import { Calendar, TrendingUp, Loader2, AlertTriangle, FileText, Check, X, Sparkles } from 'lucide-react';
 import ExportButton from '../../components/shared/ExportButton';
 import { exportWithAudit } from '../../services/export/exportAudit';
@@ -12,6 +13,7 @@ import { calculateIngredientCost } from '../../services/costUtils';
 // ponytail: inline component, no external state management. Add context when multi-page usage needed.
 export default function UsageRecap() {
   const { activeUser } = useAuth();
+  const { activeBranchId } = useData();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -144,7 +146,7 @@ export default function UsageRecap() {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate]);
+  }, [startDate, endDate, activeBranchId]);
 
   useEffect(() => { fetchUsageData(); }, [fetchUsageData]);
 

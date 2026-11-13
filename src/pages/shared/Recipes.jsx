@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
-import { Search, Plus, Trash2, Save, X, UploadCloud, Coins, AlertTriangle, CheckCircle, ChefHat, RefreshCw, Download } from 'lucide-react';
+import { Search, Plus, Trash2, Save, X, UploadCloud, Coins, AlertTriangle, CheckCircle, ChefHat, RefreshCw, Download, Copy } from 'lucide-react';
 import BulkImport from '../../components/BulkImport';
 import Pagination from '../../components/shared/Pagination';
 import { useData } from '../../contexts/DataContext';
@@ -17,7 +17,11 @@ const ensureUids = (arr = []) => arr.map(x => ({ ...x, _uid: x._uid ?? rowUid() 
 function RecipesInner({ categoryFilter } = {}) {
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const { stock, recipes, handleSaveRecipe: onSaveRecipe, handleAddRecipe: onAddRecipe, handleDeleteRecipe: onDeleteRecipe, refreshData, showToast, unitConversionMap } = useData();
+  const {
+    stock, recipes, handleSaveRecipe: onSaveRecipe, handleAddRecipe: onAddRecipe,
+    handleDeleteRecipe: onDeleteRecipe, refreshData, showToast, unitConversionMap,
+    branches, activeBranch, activeBranchId, canSwitchBranch
+  } = useData();
   const [recalculating, setRecalculating] = useState(false);
   const [activeRecipe, setActiveRecipe] = useState(recipes[0] || null);
   const [search, setSearch] = useState('');
@@ -40,6 +44,80 @@ function RecipesInner({ categoryFilter } = {}) {
   const [openDropdown, setOpenDropdown] = useState(null);
   const [selectedItems, setSelectedItems] = useState([]);
   const [showExportMenu, setShowExportMenu] = useState(false);
+
+  // Pull recipes from another branch modal
+  const [showPullBranchModal, setShowPullBranchModal] = useState(false);
+  const [pullSourceBranchId, setPullSourceBranchId] = useState('');
+  const [pullSourceRecipes, setPullSourceRecipes] = useState([]);
+  const [pullSelectedIds, setPullSelectedIds] = useState([]);
+  const [pullConflictMode, setPullConflictMode] = useState('SKIP');
+  const [loadingPullRecipes, setLoadingPullRecipes] = useState(false);
+  const [submittingPull, setSubmittingPull] = useState(false);
+
+  const otherBranches = useMemo(
+    () => (branches || []).filter(b => b.id !== activeBranchId && b.is_active !== false),
+    [branches, activeBranchId]
+  );
+
+  const loadSourceBranchRecipes = async (branchId) => {
+    if (!branchId) {
+      setPullSourceRecipes([]);
+      setPullSelectedIds([]);
+      return;
+    }
+    setLoadingPullRecipes(true);
+    try {
+      const list = await api.getRecipesByBranch(branchId);
+      setPullSourceRecipes(list || []);
+      setPullSelectedIds((list || []).map(r => r.id));
+    } catch (err) {
+      if (showToast) showToast(err.message || 'Gagal memuat menu cabang sumber.', 'error');
+      setPullSourceRecipes([]);
+    } finally {
+      setLoadingPullRecipes(false);
+    }
+  };
+
+  const openPullBranchModal = () => {
+    if (otherBranches.length === 0) {
+      if (showToast) showToast('Belum ada cabang lain yang tersedia.', 'info');
+      return;
+    }
+    const defaultSrc = otherBranches[0].id;
+    setPullSourceBranchId(defaultSrc);
+    setPullConflictMode('SKIP');
+    setShowPullBranchModal(true);
+    loadSourceBranchRecipes(defaultSrc);
+  };
+
+  const handleConfirmPullRecipes = async (e) => {
+    e.preventDefault();
+    if (!pullSourceBranchId || !activeBranchId || pullSelectedIds.length === 0) return;
+    setSubmittingPull(true);
+    try {
+      const res = await api.cloneBranchData({
+        sourceBranchId: pullSourceBranchId,
+        targetBranchId: activeBranchId,
+        copyMaterials: false,
+        copySuppliers: false,
+        copyRecipes: true,
+        selectedRecipeIds: pullSelectedIds,
+        conflictMode: pullConflictMode
+      });
+      if (refreshData) await refreshData();
+      if (showToast) {
+        showToast(
+          `Selesai: ${res.recipes_copied || 0} menu ditambahkan, ${res.recipes_updated || 0} diperbarui.`,
+          'success'
+        );
+      }
+      setShowPullBranchModal(false);
+    } catch (err) {
+      if (showToast) showToast(err.message || 'Gagal menarik menu cabang.', 'error');
+    } finally {
+      setSubmittingPull(false);
+    }
+  };
 
 
 
@@ -459,6 +537,16 @@ function RecipesInner({ categoryFilter } = {}) {
             >
               <Plus size={15} /> Tambah Menu
             </button>
+            {canSwitchBranch && otherBranches.length > 0 && (
+              <button
+                className="btn premium-btn premium-btn-secondary"
+                style={{ width: '38px', height: '38px', padding: 0, borderRadius: 'var(--radius-md)' }}
+                onClick={openPullBranchModal}
+                title="Tarik Menu & Harga dari Cabang Lain"
+              >
+                <Copy size={15} />
+              </button>
+            )}
             <button 
               className="btn premium-btn premium-btn-secondary" 
               style={{ width: '38px', height: '38px', padding: 0, borderRadius: 'var(--radius-md)' }} 
@@ -1100,6 +1188,141 @@ function RecipesInner({ categoryFilter } = {}) {
           { key: 'qty_10', label: 'QTY 10', required: false, type: 'number', description: 'Jumlah bahan baku 10', sample: '' }
         ]}
       />
+
+      {showPullBranchModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="p-5 border-b border-[var(--border)] flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-[var(--text-primary)] m-0">Tarik Menu dari Cabang</h3>
+                <p className="text-xs text-[var(--text-secondary)] m-0 mt-0.5">
+                  Salin menu dan harga ke {activeBranch?.name || 'cabang aktif'}.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPullBranchModal(false)}
+                className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmPullRecipes} className="p-5 flex-1 overflow-y-auto space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="form-label block mb-1 text-xs font-semibold">Cabang Sumber</label>
+                  <select
+                    className="form-control w-full text-xs py-2 px-2.5"
+                    value={pullSourceBranchId}
+                    onChange={(e) => {
+                      setPullSourceBranchId(e.target.value);
+                      loadSourceBranchRecipes(e.target.value);
+                    }}
+                  >
+                    {otherBranches.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label block mb-1 text-xs font-semibold">Jika Menu Sudah Ada</label>
+                  <select
+                    className="form-control w-full text-xs py-2 px-2.5"
+                    value={pullConflictMode}
+                    onChange={(e) => setPullConflictMode(e.target.value)}
+                  >
+                    <option value="SKIP">Lewati menu sama</option>
+                    <option value="OVERWRITE">Timpa harga & resep</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-[var(--text-primary)]">
+                    Daftar Menu ({pullSelectedIds.length}/{pullSourceRecipes.length})
+                  </span>
+                  {pullSourceRecipes.length > 0 && (
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-[var(--accent)] bg-transparent border-0 cursor-pointer p-0"
+                      onClick={() => {
+                        if (pullSelectedIds.length === pullSourceRecipes.length) setPullSelectedIds([]);
+                        else setPullSelectedIds(pullSourceRecipes.map(r => r.id));
+                      }}
+                    >
+                      {pullSelectedIds.length === pullSourceRecipes.length ? 'Batal Pilih' : 'Pilih Semua'}
+                    </button>
+                  )}
+                </div>
+
+                {loadingPullRecipes ? (
+                  <div className="py-8 text-center text-xs text-[var(--text-muted)]">Memuat menu cabang...</div>
+                ) : pullSourceRecipes.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-[var(--text-muted)] border border-dashed border-[var(--border)] rounded-lg">
+                    Belum ada resep menu di cabang sumber.
+                  </div>
+                ) : (
+                  <div className="border border-[var(--border)] rounded-lg max-h-[260px] overflow-y-auto divide-y divide-[var(--border)]">
+                    {pullSourceRecipes.map(sr => {
+                      const alreadyExists = recipes.some(
+                        r => String(r.menu_name || '').trim().toLowerCase() === String(sr.menu_name || '').trim().toLowerCase()
+                      );
+                      const checked = pullSelectedIds.includes(sr.id);
+                      return (
+                        <label
+                          key={sr.id}
+                          className="flex items-center justify-between gap-3 px-3 py-2.5 text-xs cursor-pointer hover:bg-[var(--bg-tertiary)]/50"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                setPullSelectedIds(prev =>
+                                  prev.includes(sr.id) ? prev.filter(id => id !== sr.id) : [...prev, sr.id]
+                                );
+                              }}
+                            />
+                            <div className="min-w-0">
+                              <div className="font-semibold text-[var(--text-primary)] truncate">{sr.menu_name}</div>
+                              <div className="text-[11px] text-[var(--text-muted)]">
+                                {sr.category || '-'} · {alreadyExists ? 'Sudah ada di cabang ini' : 'Menu baru'}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="font-mono tabular-nums font-bold text-[var(--text-primary)] shrink-0">
+                            {formatIDR(sr.selling_price || 0)}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)]">
+                <button
+                  type="button"
+                  className="btn btn-secondary text-xs px-3.5 py-2"
+                  onClick={() => setShowPullBranchModal(false)}
+                  disabled={submittingPull}
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary text-xs px-4 py-2"
+                  disabled={submittingPull || pullSelectedIds.length === 0}
+                >
+                  {submittingPull ? 'Menyalin...' : `Salin ${pullSelectedIds.length} Menu`}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

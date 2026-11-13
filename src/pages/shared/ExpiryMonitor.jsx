@@ -3,6 +3,7 @@ import { AlertTriangle, Clock, Sliders, CheckCircle2, Search, RefreshCw, Info, R
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { useData } from '../../contexts/DataContext';
 import {
   getExpiryColor,
   getExpiryThresholds,
@@ -12,6 +13,7 @@ import {
 
 export default function ExpiryMonitor() {
   const { profile } = useAuth();
+  const { activeBranchId } = useData();
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -77,7 +79,7 @@ export default function ExpiryMonitor() {
     } finally {
       setLoading(false);
     }
-  }, [profile]);
+  }, [profile, activeBranchId]);
 
   useEffect(() => {
     fetchExpiry();

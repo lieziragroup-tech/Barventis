@@ -32,7 +32,7 @@ function inferIsPrepOutput(material) {
   );
 }
 
-function normalizeMaterialCreatePayload(tenantId, material) {
+function normalizeMaterialCreatePayload(tenantId, material, branchId = null) {
   const roundedPrice = Math.round(Number(material.price) || 0);
   const newPrice = Number(material.new_price ?? material.price ?? 0);
   const unit = (material.unit || 'pck').trim();
@@ -43,10 +43,12 @@ function normalizeMaterialCreatePayload(tenantId, material) {
     unit === 'pck' ? 'pck = 1000 gr' :
     unit === 'carton' ? 'carton = 24 pcs' :
     `${unit} = 1 pcs`;
+  const effectiveBranchId = branchId || material.branch_id || null;
 
   return {
     ...material,
     tenant_id: tenantId,
+    ...(effectiveBranchId ? { branch_id: effectiveBranchId } : {}),
     name: String(material.name || '').trim(),
     category: material.category || 'Bahan Mentah / Raw Material',
     supplier: material.supplier != null && String(material.supplier).trim() !== '' ? String(material.supplier).trim() : '-',
@@ -140,22 +142,24 @@ function mergeShelfLife(tenantId, items) {
 }
 
 export const materialsRepo = {
-  getAll: async (tenantId) => {
+  getAll: async (tenantId, branchId = null) => {
     if (!tenantId) throw new Error("Missing active session.");
-    const { data, error } = await supabase
+    let query = supabase
       .from('materials')
       .select('*')
       .eq('tenant_id', tenantId)
-      .eq('is_active', true)
-      .order('name');
+      .eq('is_active', true);
+    if (branchId) query = query.eq('branch_id', branchId);
+    const { data, error } = await query.order('name');
     if (error) throw error;
     return mergeShelfLife(tenantId, data);
   },
 
-  getPaged: async (tenantId, { page = 1, pageSize = 20, search = '', category = 'ALL' } = {}) => {
+  getPaged: async (tenantId, { page = 1, pageSize = 20, search = '', category = 'ALL', branchId = null } = {}) => {
     if (!tenantId) throw new Error("Missing active session.");
     let query = supabase.from('materials').select('*', { count: 'exact' }).eq('tenant_id', tenantId).eq('is_active', true);
 
+    if (branchId) query = query.eq('branch_id', branchId);
     if (search) query = query.ilike('name', `%${search}%`);
     if (category && category !== 'ALL') query = query.eq('category', category);
 
@@ -167,10 +171,10 @@ export const materialsRepo = {
     return { data: mergeShelfLife(tenantId, data), total: count || 0, page, pageSize };
   },
 
-  create: async (tenantId, material) => {
+  create: async (tenantId, material, branchId = null) => {
     if (!tenantId) throw new Error("Missing active session.");
     const shelfLifeVal = material.shelf_life_days;
-    const basePayload = normalizeMaterialCreatePayload(tenantId, material);
+    const basePayload = normalizeMaterialCreatePayload(tenantId, material, branchId);
     const cleanPayload = stripUnsupportedColumns(basePayload);
 
     try {
@@ -222,8 +226,11 @@ export const materialsRepo = {
     }
   },
 
-  update: async (tenantId, id, updates) => {
+  update: async (tenantId, id, updates, branchIdOrOld = null, branchIdArg = null) => {
     if (!tenantId) throw new Error("Missing active session.");
+    const resolvedBranchId = typeof branchIdOrOld === 'string'
+      ? branchIdOrOld
+      : (branchIdArg || (typeof updates?.branch_id === 'string' ? updates.branch_id : null));
     const shelfLifeVal = updates.shelf_life_days;
     if (updates.monthly_quota_qty !== undefined || updates.is_prep_output !== undefined) {
       setLocalV9Meta(tenantId, id, {
@@ -233,13 +240,13 @@ export const materialsRepo = {
     }
     const cleanUpdates = stripUnsupportedColumns(updates);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('materials')
         .update(cleanUpdates)
         .eq('id', id)
-        .eq('tenant_id', tenantId)
-        .select()
-        .single();
+        .eq('tenant_id', tenantId);
+      if (resolvedBranchId) query = query.eq('branch_id', resolvedBranchId);
+      const { data, error } = await query.select().single();
       if (error) throw error;
       if (shelfLifeVal !== undefined) setLocalShelfLife(tenantId, id, shelfLifeVal);
       return {
@@ -260,13 +267,13 @@ export const materialsRepo = {
         if (Object.keys(fallbackUpdates).length === 0) {
           return { id, ...updates };
         }
-        const { data, error } = await supabase
+        let fallbackQuery = supabase
           .from('materials')
           .update(fallbackUpdates)
           .eq('id', id)
-          .eq('tenant_id', tenantId)
-          .select()
-          .single();
+          .eq('tenant_id', tenantId);
+        if (resolvedBranchId) fallbackQuery = fallbackQuery.eq('branch_id', resolvedBranchId);
+        const { data, error } = await fallbackQuery.select().single();
         if (error) throw error;
         if (shelfLifeVal !== undefined) setLocalShelfLife(tenantId, id, shelfLifeVal);
         return {
@@ -281,22 +288,16 @@ export const materialsRepo = {
   },
 
 
-  delete: async (tenantId, id) => {
+  delete: async (tenantId, id, branchId = null) => {
     if (!tenantId) throw new Error("Missing active session.");
 
-    // We already fetch the material name in deleteMaterial in api.js if we want it,
-    // wait... in api.js I did:
-    // const data = await materialsRepo.delete(tenantId, id);
-    // await logAudit('DELETE_MATERIAL', `Menonaktifkan bahan mentah: "${data.name}" dari database inventory.`);
-    // So delete needs to return the deleted row!
-
-    const { data, error } = await supabase
+    let query = supabase
       .from('materials')
-      .update({ is_active: false }) // It's soft delete in api.js!!!
+      .update({ is_active: false })
       .eq('id', id)
-      .eq('tenant_id', tenantId)
-      .select('*')
-      .single();
+      .eq('tenant_id', tenantId);
+    if (branchId) query = query.eq('branch_id', branchId);
+    const { data, error } = await query.select('*').single();
     if (error) throw error;
     return data;
   }

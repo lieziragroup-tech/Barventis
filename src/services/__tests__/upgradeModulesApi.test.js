@@ -30,7 +30,8 @@ vi.mock('../api', () => ({
   api: {
     getActiveTenantId: vi.fn().mockResolvedValue('test-tenant-123'),
     getActiveUserId: vi.fn().mockResolvedValue('test-user-123'),
-    getMaterials: vi.fn().mockResolvedValue([])
+    getMaterials: vi.fn().mockResolvedValue([]),
+    requireBranchContext: vi.fn().mockResolvedValue(null)
   }
 }));
 

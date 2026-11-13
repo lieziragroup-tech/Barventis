@@ -8,9 +8,14 @@ import { formatIDR } from '../../services/costUtils';
 
 import { exportWithAudit } from '../../services/export/exportAudit';
 import { useAuth } from '../../contexts/AuthContext';
+import { useData } from '../../contexts/DataContext';
 
 export default function CostControl() {
   const { profile } = useAuth();
+  const { branches, activeBranch, canSwitchBranch, switchBranch } = useData();
+  const [branchScope, setBranchScope] = useState('ACTIVE');
+  const [multiBranchRows, setMultiBranchRows] = useState([]);
+  const [loadingMultiBranch, setLoadingMultiBranch] = useState(false);
   const [period, setPeriod] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -40,7 +45,18 @@ export default function CostControl() {
     };
     loadReport();
     return () => { active = false; };
-  }, [period]);
+  }, [period, activeBranch?.id]);
+
+  useEffect(() => {
+    if (!canSwitchBranch || branchScope !== 'ALL') return;
+    let active = true;
+    setLoadingMultiBranch(true);
+    api.getMultiBranchSummary(period)
+      .then(rows => { if (active) setMultiBranchRows(rows || []); })
+      .catch(() => { if (active) setMultiBranchRows([]); })
+      .finally(() => { if (active) setLoadingMultiBranch(false); });
+    return () => { active = false; };
+  }, [canSwitchBranch, branchScope, period]);
 
   // Re-calculate all metrics dynamically on the frontend to support Tab Filtering
   const { openingStock, totalPembelian, closingStock, pemakaianBulan, totalSalesBeverage, beverageCostPct, wasteValuation, statusLabel, filteredOpnameItems, actualDailyUsageCost, theoreticalCogsCost, theoreticalUsageItems, reconciliationDifference, closedEodSessions, openingStockEstimated, closingStockEstimated } = useMemo(() => {
@@ -324,6 +340,33 @@ export default function CostControl() {
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
+
+          {canSwitchBranch && branches.length > 1 && (
+            <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)]">
+              <button
+                type="button"
+                onClick={() => setBranchScope('ACTIVE')}
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  branchScope === 'ACTIVE'
+                    ? 'bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-sm'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                {activeBranch?.name || 'Cabang Aktif'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setBranchScope('ALL')}
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  branchScope === 'ALL'
+                    ? 'bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-sm'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                Semua Cabang
+              </button>
+            </div>
+          )}
         </div>
 
         <div style={{ position: 'relative' }}>
@@ -359,6 +402,56 @@ export default function CostControl() {
           )}
         </div>
       </div>
+
+      {canSwitchBranch && branchScope === 'ALL' && (
+        <div className="glass-card p-5 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-base font-bold text-[var(--text-primary)] m-0">Perbandingan Cost Control Cabang</h3>
+              <p className="text-xs text-[var(--text-secondary)] m-0 mt-0.5">Rekap rasio biaya per outlet bulan ini.</p>
+            </div>
+          </div>
+          {loadingMultiBranch ? (
+            <div className="py-8 text-center text-xs text-[var(--text-muted)]">Memuat ringkasan cabang...</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="custom-table w-full text-xs">
+                <thead>
+                  <tr>
+                    <th>Cabang</th>
+                    <th>Tipe</th>
+                    <th className="text-right">Penjualan POS</th>
+                    <th className="text-right">HPP Aktual</th>
+                    <th className="text-right">Rasio Biaya %</th>
+                    <th className="text-right">Nilai Stok</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {multiBranchRows.map(row => (
+                    <tr
+                      key={row.branch_id}
+                      className="cursor-pointer hover:bg-[var(--bg-tertiary)]/50"
+                      onClick={() => {
+                        switchBranch(row.branch_id);
+                        setBranchScope('ACTIVE');
+                      }}
+                    >
+                      <td className="font-bold text-[var(--text-primary)]">{row.branch_name}</td>
+                      <td className="text-[var(--text-secondary)]">{row.is_central ? 'Central' : 'Outlet'}</td>
+                      <td className="text-right font-mono tabular-nums">{formatIDR(row.pos_sales || 0)}</td>
+                      <td className="text-right font-mono tabular-nums">{formatIDR(row.actual_cogs || 0)}</td>
+                      <td className="text-right font-mono tabular-nums font-bold" style={{ color: Number(row.food_cost_pct) > 30 ? 'var(--danger)' : 'var(--success)' }}>
+                        {Number(row.food_cost_pct || 0).toFixed(1)}%
+                      </td>
+                      <td className="text-right font-mono tabular-nums">{formatIDR(row.stock_valuation || 0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 0', gap: '16px' }}>

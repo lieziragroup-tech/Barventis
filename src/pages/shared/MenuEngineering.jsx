@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Pagination from '../../components/shared/Pagination';
 import { menuEngApi } from '../../services/upgradeModulesApi';
 import { TableSkeletonRows } from '../../components/shared/TableSkeleton';
+import { useData } from '../../contexts/DataContext';
 import useDebounce from '../../hooks/useDebounce';
 
 const CLASS_CONFIG = {
@@ -32,6 +33,7 @@ const CLASS_CONFIG = {
 };
 
 export default function MenuEngineering() {
+  const { activeBranchId } = useData();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [savedNotice, setSavedNotice] = useState('');
@@ -63,7 +65,7 @@ export default function MenuEngineering() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeBranchId]);
 
   useEffect(() => {
     fetch();

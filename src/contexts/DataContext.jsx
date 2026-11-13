@@ -19,11 +19,31 @@ export const DataProvider = ({ children }) => {
   const [invoices, setInvoices] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
   const [unitConversions, setUnitConversions] = useState([]);
+  const [branches, setBranches] = useState([]);
+  const [activeBranchId, setActiveBranchId] = useState(() => api.getActiveBranchId());
 
-  const fetchAllData = useCallback(async () => {
-    if (!isAuthenticated || !activeUser || activeUser.role === 'Super Admin' || activeUser.role === 'SuperAdmin') return;
+  const roleNorm = String(activeUser?.role || '').trim();
+  const canSwitchBranch = roleNorm === 'Admin / Owner' || roleNorm === 'Owner';
 
-    // Cancel any in-flight fetch (prevents race condition on rapid re-renders)
+  const refreshBranches = useCallback(async () => {
+    if (!isAuthenticated || !activeUser || roleNorm === 'Super Admin' || roleNorm === 'SuperAdmin') {
+      setBranches([]);
+      return [];
+    }
+    try {
+      const list = await api.getBranches();
+      setBranches(list || []);
+      return list || [];
+    } catch (e) {
+      console.warn('refreshBranches warning:', e);
+      return [];
+    }
+  }, [isAuthenticated, activeUser, roleNorm]);
+
+  const fetchAllData = useCallback(async (overrideBranchId = undefined) => {
+    if (!isAuthenticated || !activeUser || roleNorm === 'Super Admin' || roleNorm === 'SuperAdmin') return;
+
+    // Cancel any in-flight fetch (prevents race condition on rapid re-renders / branch switches)
     if (fetchControllerRef.current) {
       fetchControllerRef.current.cancelled = true;
     }
@@ -32,6 +52,33 @@ export const DataProvider = ({ children }) => {
 
     setLoadingData(true);
     try {
+      const branchList = await api.getBranches().catch(() => []);
+      if (controller.cancelled) return;
+      setBranches(branchList);
+
+      const storageKey = activeUser?.tenant_id ? `bv_owner_branch_${activeUser.tenant_id}` : null;
+      const savedOwnerBranch = canSwitchBranch && storageKey && typeof sessionStorage !== 'undefined'
+        ? sessionStorage.getItem(storageKey)
+        : null;
+
+      let resolvedBranchId = activeUser.branch_id || null;
+      if (canSwitchBranch) {
+        const candidateId = overrideBranchId !== undefined ? overrideBranchId : (activeBranchId || savedOwnerBranch || activeUser.branch_id);
+        const existsInList = branchList.find(b => b.id === candidateId && b.is_active !== false);
+        resolvedBranchId = existsInList
+          ? existsInList.id
+          : (branchList.find(b => b.is_active !== false)?.id || branchList[0]?.id || candidateId || null);
+        if (storageKey && resolvedBranchId && typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem(storageKey, resolvedBranchId);
+        }
+      } else {
+        // Staf terkunci pada branch_id miliknya
+        resolvedBranchId = activeUser.branch_id || branchList.find(b => b.is_active !== false)?.id || branchList[0]?.id || null;
+      }
+
+      api.setActiveBranch(resolvedBranchId);
+      setActiveBranchId(resolvedBranchId);
+
       const [materialsData, recipesData, invoicesData, transactionsData, conversionsData] = await Promise.all([
         api.getMaterials().catch(e => { console.error('Materials:', e); return []; }),
         api.getRecipes().catch(e => { console.error('Recipes:', e); return []; }),
@@ -76,9 +123,11 @@ export const DataProvider = ({ children }) => {
     } catch (e) {
       console.error('fetchAllData error:', e);
     } finally {
-      setLoadingData(false);
+      if (!controller.cancelled) {
+        setLoadingData(false);
+      }
     }
-  }, [isAuthenticated, activeUser]);
+  }, [isAuthenticated, activeUser, roleNorm, canSwitchBranch, activeBranchId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -271,6 +320,25 @@ export const DataProvider = ({ children }) => {
     return map;
   }, [unitConversions]);
 
+  const activeBranch = useMemo(() => {
+    return branches.find(b => b.id === activeBranchId) || branches[0] || null;
+  }, [branches, activeBranchId]);
+
+  const switchBranch = useCallback(async (nextBranchId) => {
+    if (!canSwitchBranch || !nextBranchId || nextBranchId === activeBranchId) return;
+    const target = branches.find(b => b.id === nextBranchId);
+    const storageKey = activeUser?.tenant_id ? `bv_owner_branch_${activeUser.tenant_id}` : null;
+    if (storageKey && typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(storageKey, nextBranchId);
+    }
+    api.setActiveBranch(nextBranchId);
+    setActiveBranchId(nextBranchId);
+    await fetchAllData(nextBranchId);
+    if (target) {
+      showToast(`Beralih ke ${target.name}`, 'info');
+    }
+  }, [canSwitchBranch, activeBranchId, branches, activeUser, fetchAllData, showToast]);
+
   const value = useMemo(() => ({
     stock,
     recipes,
@@ -279,6 +347,12 @@ export const DataProvider = ({ children }) => {
     unitConversions,
     unitConversionMap,
     loadingData,
+    branches,
+    activeBranch,
+    activeBranchId,
+    canSwitchBranch,
+    switchBranch,
+    refreshBranches,
     refreshData: fetchAllData,
     fetchAllData,
     showToast,
@@ -306,7 +380,7 @@ export const DataProvider = ({ children }) => {
     handleReceiveInvoice,
     handleCancelInvoice,
     handleSendInvoice
-  }), [stock, recipes, transactions, invoices, unitConversions, unitConversionMap, loadingData, fetchAllData, showToast, activeUser, handleAdjustStock, handleUpdateItem, handleAddItem, handleDeleteItem, handleProcessPosSales, handleSaveRecipe, handleAddRecipe, handleDeleteRecipe, handleCompleteOpname, handleCreateInvoice, handleReceiveInvoice, handleCancelInvoice, handleSendInvoice]);
+  }), [stock, recipes, transactions, invoices, unitConversions, unitConversionMap, loadingData, branches, activeBranch, activeBranchId, canSwitchBranch, switchBranch, refreshBranches, fetchAllData, showToast, activeUser, handleAdjustStock, handleUpdateItem, handleAddItem, handleDeleteItem, handleProcessPosSales, handleSaveRecipe, handleAddRecipe, handleDeleteRecipe, handleCompleteOpname, handleCreateInvoice, handleReceiveInvoice, handleCancelInvoice, handleSendInvoice]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 };

@@ -1,5 +1,5 @@
 // UMATIS Serverless API Service Client for Supabase Backend Integration
-import { supabase } from '../lib/supabase';
+import { supabase, isAdminRole } from '../lib/supabase';
 import { materialsRepo } from '../data/materialsRepo';
 import { parsePackSize, calculateIngredientCost, getUnitPrice, computeRecipeCosts, convertQtyToStockUnit, DEFAULT_ROUNDING_DIRECTION, DEFAULT_ROUNDING_INCREMENT, DEFAULT_PRICE_ADJUSTMENT } from './costUtils';
 // NOTE: DEFAULT_FIX_COST_PCT intentionally NOT imported here — per PRD §4.2
@@ -18,6 +18,7 @@ let activeWhatsappNumber = null;
 let activeWhatsappToken = null;
 let activeWhatsappEnabled = false;
 let activeBranchId = null;
+let activeUserRole = null;
 
 // Helper to sanitize search strings for PostgREST .or() filters to prevent injection
 const sanitizePostgrest = (str) => String(str).replace(/[,.()"'\\]/g, ' ').trim();
@@ -49,7 +50,7 @@ const getActiveTenantId = async () => {
 
   const { data: user, error } = await supabase
     .from('users')
-    .select('tenant_id, branch_id')
+    .select('tenant_id, branch_id, role')
     .eq('id', session.user.id)
     .maybeSingle();
 
@@ -57,7 +58,14 @@ const getActiveTenantId = async () => {
 
   // SuperAdmin may not have a tenant_id — return null so read-only guards gracefully return empty data.
   activeTenantId = user?.tenant_id ?? null;
-  activeBranchId = user?.branch_id ?? null;
+  if (!activeBranchId && user?.branch_id) {
+    activeBranchId = user.branch_id;
+    if (typeof window !== 'undefined') window.__activeBranchId = activeBranchId;
+  }
+  if (!activeUserRole && user?.role) {
+    activeUserRole = user.role;
+    if (typeof window !== 'undefined') window.__activeUserRole = activeUserRole;
+  }
   return activeTenantId;
 };
 
@@ -66,6 +74,38 @@ const requireTenantId = async () => {
   const tenantId = await getActiveTenantId();
   if (!tenantId) throw new Error("Operasi ini membutuhkan tenant aktif. SuperAdmin tidak bisa melakukan mutasi data tanpa konteks tenant.");
   return tenantId;
+};
+
+const getEffectiveUserRole = () => {
+  return activeUserRole || (typeof window !== 'undefined' && window.__activeUserRole) || null;
+};
+
+const getEffectiveBranchId = () => {
+  return activeBranchId || (typeof window !== 'undefined' && window.__activeBranchId) || null;
+};
+
+// Strict branch_id guard: non-admin users MUST have an active branch_id and cannot override to another branch.
+const requireBranchId = async (overrideBranchId = null, { requiredForAdmin = false } = {}) => {
+  await getActiveTenantId();
+  const role = getEffectiveUserRole();
+  const currentBranch = getEffectiveBranchId();
+  const nonAdmin = Boolean(role) && !isAdminRole(role);
+
+  if (nonAdmin) {
+    if (!currentBranch) {
+      throw new Error('Akses cabang tidak valid: pengguna non-admin wajib memiliki branch_id aktif untuk operasi ini.');
+    }
+    if (overrideBranchId && overrideBranchId !== currentBranch) {
+      throw new Error('Akses cabang ditolak: pengguna non-admin tidak diizinkan mengakses cabang lain.');
+    }
+    return currentBranch;
+  }
+
+  const resolved = overrideBranchId || currentBranch || null;
+  if (requiredForAdmin && !resolved) {
+    throw new Error('Cabang aktif belum dipilih. Pilih cabang terlebih dahulu.');
+  }
+  return resolved;
 };
 
 // Helper to get authenticated user ID — uses cached memory first, falls back to Supabase session
@@ -115,24 +155,29 @@ const deductStockSmart = async (materialId, deductQty, location = 'RESTO') => {
 export const api = {
   // Daily Inventory
   // Get header/items for a given date
-  getDailyInventoryRecords: async (date, location = 'RESTO') => {
+  getDailyInventoryRecords: async (date, location = 'RESTO', branchIdArg = null) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return [];
-    const { data: headers, error: headerErr } = await supabase
+    const branchId = await requireBranchId(branchIdArg);
+    let headersQuery = supabase
       .from('daily_inventories')
       .select('*')
       .eq('tenant_id', tenantId)
       .eq('date', date)
       .eq('location', location);
+    if (branchId) headersQuery = headersQuery.eq('branch_id', branchId);
+    const { data: headers, error: headerErr } = await headersQuery;
     if (headerErr) throw headerErr;
     if (!headers || headers.length === 0) return [];
     const headerIds = headers.map(h => h.id);
+    let itemsQuery = supabase
+      .from('daily_inventory_items')
+      .select('*')
+      .in('inventory_id', headerIds);
+    if (branchId) itemsQuery = itemsQuery.eq('branch_id', branchId);
     const [{ data: itemRows, error: itemsErr }, materialsList] = await Promise.all([
-      supabase
-        .from('daily_inventory_items')
-        .select('*')
-        .in('inventory_id', headerIds),
-      api.getMaterials().catch(() => [])
+      itemsQuery,
+      api.getMaterials(branchId).catch(() => [])
     ]);
     if (itemsErr) throw itemsErr;
     const materialsById = Object.fromEntries((materialsList || []).map(m => [m.id, m]));
@@ -171,32 +216,36 @@ export const api = {
       };
     });
   },
-  getDailyInventoryEodData: async (date, location = 'RESTO') => {
+  getDailyInventoryEodData: async (date, location = 'RESTO', branchIdArg = null) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { items: [], inventory: {} };
-    let materialsList = await api.getMaterials();
+    const branchId = await requireBranchId(branchIdArg);
+    let materialsList = await api.getMaterials(branchId);
     materialsList = (materialsList || []).filter(m => (m.category || '').toUpperCase() !== 'ASSET' && m.is_active !== false);
 
     // 1. Get header for date
-    const { data: header, error: headerErr } = await supabase
+    let headerQuery = supabase
       .from('daily_inventories')
       .select('*')
       .eq('tenant_id', tenantId)
       .eq('date', date)
-      .eq('location', location)
-      .maybeSingle();
+      .eq('location', location);
+    if (branchId) headerQuery = headerQuery.eq('branch_id', branchId);
+    const { data: header, error: headerErr } = await headerQuery.maybeSingle();
     if (headerErr) throw headerErr;
 
     // The last final EOD provides the opening snapshot. Any stock movements
     // posted after that close (including late receipts on the same date) are
     // carried forward from the ledger; never jump over an unaccounted gap.
-    const { data: previousHeaders, error: previousHeaderErr } = await supabase
+    let prevHeaderQuery = supabase
       .from('daily_inventories')
       .select('id, date, status, updated_at')
       .eq('tenant_id', tenantId)
       .eq('location', location)
       .lt('date', date)
-      .in('status', ['verified', 'closed'])
+      .in('status', ['verified', 'closed']);
+    if (branchId) prevHeaderQuery = prevHeaderQuery.eq('branch_id', branchId);
+    const { data: previousHeaders, error: previousHeaderErr } = await prevHeaderQuery
       .order('date', { ascending: false })
       .limit(1);
     if (previousHeaderErr) throw previousHeaderErr;
@@ -204,10 +253,12 @@ export const api = {
     const previousOpeningPartsMap = {};
     const previousHeader = previousHeaders?.[0] || null;
     if (previousHeader) {
-      const { data: previousItems, error: previousItemsErr } = await supabase
+      let prevItemsQ = supabase
         .from('daily_inventory_items')
         .select('material_id, closing_qty, full_qty, broken_qty, broken_unit, broken_confirmed, active_open_lot_id')
         .eq('inventory_id', previousHeader.id);
+      if (branchId) prevItemsQ = prevItemsQ.eq('branch_id', branchId);
+      const { data: previousItems, error: previousItemsErr } = await prevItemsQ;
       if (previousItemsErr) throw previousItemsErr;
       const closingMap = Object.fromEntries((previousItems || []).map(item => [item.material_id, Number(item.closing_qty) || 0]));
       (previousItems || []).forEach(item => {
@@ -218,7 +269,7 @@ export const api = {
           activeOpenLotId: item.active_open_lot_id || null,
         };
       });
-      const { data: carryRows, error: carryErr } = await supabase
+      let carryQ = supabase
         .from('transactions')
         .select('material_id, type, qty, is_reversed, source_module, date, created_at')
         .eq('tenant_id', tenantId)
@@ -226,7 +277,8 @@ export const api = {
         .gte('date', previousHeader.date)
         .lt('date', date)
         .in('type', ['IN', 'OUT', 'TRANSFER', 'POS_DEDUCTION', 'PURCHASE_IN', 'OPNAME_ADJ', 'WASTE', 'BREAKAGE', 'EXPIRED', 'COMP']);
-      if (carryErr) throw carryErr;
+      if (branchId) carryQ = carryQ.eq('branch_id', branchId);
+      const { data: carryRows, error: carryErr } = await carryQ;
       const netCarryByMaterial = {};
       const previousCloseTs = previousHeader.updated_at ? new Date(previousHeader.updated_at).getTime() : Number.POSITIVE_INFINITY;
       (carryRows || []).forEach(tx => {
@@ -248,10 +300,12 @@ export const api = {
 
     const invMap = {};
     if (header) {
-      const { data: itemRows, error: itemsErr } = await supabase
+      let itemsEodQ = supabase
         .from('daily_inventory_items')
         .select('*')
         .eq('inventory_id', header.id);
+      if (branchId) itemsEodQ = itemsEodQ.eq('branch_id', branchId);
+      const { data: itemRows, error: itemsErr } = await itemsEodQ;
       if (itemsErr) throw itemsErr;
       (itemRows || []).forEach(row => {
         invMap[row.material_id] = {
@@ -282,7 +336,7 @@ export const api = {
 
     // Source-derived daily quantities. Auto receipts are included in the visible IN total; EOD only stores any manual delta over those receipts. WASTE remains source-derived.
     const validWasteTypes = ['WASTE', 'BREAKAGE', 'EXPIRED', 'COMP'];
-    const { data: dailyTxRows, error: dailyTxErr } = await supabase
+    let dailyTxQ = supabase
       .from('transactions')
       .select('material_id, type, qty, is_reversed, source_module')
       .eq('tenant_id', tenantId)
@@ -290,6 +344,8 @@ export const api = {
       .eq('location', location)
       .eq('is_reversed', false)
       .in('type', ['IN', 'OUT', 'TRANSFER', 'PURCHASE_IN', 'OPNAME_ADJ', ...validWasteTypes]);
+    if (branchId) dailyTxQ = dailyTxQ.eq('branch_id', branchId);
+    const { data: dailyTxRows, error: dailyTxErr } = await dailyTxQ;
     if (dailyTxErr) throw dailyTxErr;
 
     const inTxMap = {};
@@ -320,11 +376,13 @@ export const api = {
       }
     });
 
-    const { data: locationCosts, error: costsErr } = await supabase
+    let locCostsQ = supabase
       .from('material_location_costs')
       .select('material_id, average_unit_cost')
       .eq('tenant_id', tenantId)
       .eq('location', location);
+    if (branchId) locCostsQ = locCostsQ.eq('branch_id', branchId);
+    const { data: locationCosts, error: costsErr } = await locCostsQ;
     if (costsErr && costsErr.code !== 'PGRST205') throw costsErr;
     const costMap = Object.fromEntries((locationCosts || []).map(c => [c.material_id, Number(c.average_unit_cost) || 0]));
 
@@ -335,16 +393,20 @@ export const api = {
     let batchRows = [];
     let openLotRows = [];
     if (materialIds.length) {
+      let batchesQ = supabase.from('material_batches')
+        .select('id, material_id, batch_no, expiry_date, expired_date, qty_resto, qty_central, status, lot_qty_verified')
+        .eq('tenant_id', tenantId)
+        .in('material_id', materialIds)
+        .in('status', ['ACTIVE', 'active']);
+      if (branchId) batchesQ = batchesQ.eq('branch_id', branchId);
+      let openLotsQ = supabase.from('material_open_lot_state')
+        .select('material_id, active_open_lot_id')
+        .eq('tenant_id', tenantId)
+        .eq('location', location);
+      if (branchId) openLotsQ = openLotsQ.eq('branch_id', branchId);
       const [{ data: batches, error: batchesErr }, { data: openLots, error: openLotsErr }] = await Promise.all([
-        supabase.from('material_batches')
-          .select('id, material_id, batch_no, expiry_date, expired_date, qty_resto, qty_central, status, lot_qty_verified')
-          .eq('tenant_id', tenantId)
-          .in('material_id', materialIds)
-          .in('status', ['ACTIVE', 'active']),
-        supabase.from('material_open_lot_state')
-          .select('material_id, active_open_lot_id')
-          .eq('tenant_id', tenantId)
-          .eq('location', location),
+        batchesQ,
+        openLotsQ,
       ]);
       if (batchesErr) throw new Error('Gagal memuat lot/expired date: ' + batchesErr.message);
       if (openLotsErr) throw new Error('Gagal memuat lot terbuka: ' + openLotsErr.message);
@@ -480,8 +542,9 @@ export const api = {
       previousDate: previousHeaders?.[0]?.date || null
     };
   },
-  saveDailyInventory: async (date, items, isClosing, userId, location = 'RESTO') => {
+  saveDailyInventory: async (date, items, isClosing, userId, location = 'RESTO', branchIdArg = null) => {
     const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(branchIdArg);
     const user = userId || await getActiveUserId();
     const locUpper = String(location || 'RESTO').toUpperCase();
     const itemsToSave = items.map(item => ({
@@ -530,13 +593,14 @@ export const api = {
 
     // Fallback when public.daily_inventory_items.terpakai_qty is a GENERATED ALWAYS column in PostgreSQL:
     // Perform header & detail upsert strictly omitting terpakai_qty so PostgreSQL computes it automatically.
-    const { data: existingHeader, error: headerLookupErr } = await supabase
+    let existingHeaderQ = supabase
       .from('daily_inventories')
       .select('id, status')
       .eq('tenant_id', tenantId)
       .eq('date', date)
-      .eq('location', locUpper)
-      .maybeSingle();
+      .eq('location', locUpper);
+    if (branchId) existingHeaderQ = existingHeaderQ.eq('branch_id', branchId);
+    const { data: existingHeader, error: headerLookupErr } = await existingHeaderQ.maybeSingle();
     if (headerLookupErr) {
       throw new Error('Gagal memeriksa sesi Daily Inventory: ' + headerLookupErr.message);
     }
@@ -550,6 +614,7 @@ export const api = {
         .from('daily_inventories')
         .insert({
           tenant_id: tenantId,
+          ...(branchId ? { branch_id: branchId } : {}),
           date,
           location: locUpper,
           status: isClosing ? 'closed' : 'draft',
@@ -566,13 +631,15 @@ export const api = {
     const autoInByMat = {};
     const wasteByMat = {};
     try {
-      const { data: txRows } = await supabase
+      let dailyInvTxQ = supabase
         .from('transactions')
         .select('material_id, type, qty, is_reversed, source_module')
         .eq('tenant_id', tenantId)
         .eq('date', date)
         .eq('location', locUpper)
         .eq('is_reversed', false);
+      if (branchId) dailyInvTxQ = dailyInvTxQ.eq('branch_id', branchId);
+      const { data: txRows } = await dailyInvTxQ;
       (txRows || []).forEach(tx => {
         if (tx.is_reversed) return;
         const mId = Number(tx.material_id);
@@ -598,6 +665,7 @@ export const api = {
       return {
         inventory_id: headerId,
         tenant_id: tenantId,
+        ...(branchId ? { branch_id: branchId } : {}),
         material_id: mId,
         prev_full_qty: Number(item.opening_qty) || 0,
         opening_qty_snapshot: Number(item.opening_qty) || 0,
@@ -659,17 +727,21 @@ export const api = {
         const stockPatch = locUpper === 'CENTRAL'
           ? { qty_central: closingQty, updated_at: new Date().toISOString() }
           : { qty_resto: closingQty, stock: closingQty, updated_at: new Date().toISOString() };
-        await supabase
+        let matUpdQ = supabase
           .from('materials')
           .update(stockPatch)
           .eq('id', mId)
           .eq('tenant_id', tenantId);
+        if (branchId) matUpdQ = matUpdQ.eq('branch_id', branchId);
+        await matUpdQ;
       }
-      await supabase
+      let closeHdrQ = supabase
         .from('daily_inventories')
         .update({ status: 'closed', updated_at: new Date().toISOString() })
         .eq('id', headerId)
         .eq('tenant_id', tenantId);
+      if (branchId) closeHdrQ = closeHdrQ.eq('branch_id', branchId);
+      await closeHdrQ;
     }
 
     return {
@@ -682,6 +754,7 @@ export const api = {
 
   saveDailyInventoryBrokenCounts: async (date, location = 'RESTO', items = []) => {
     const tenantId = await requireTenantId();
+    await requireBranchId();
     const userId = await getActiveUserId();
     if (!Array.isArray(items) || items.length === 0) {
       throw new Error('Tidak ada perubahan BROKEN yang perlu disimpan.');
@@ -714,6 +787,7 @@ export const api = {
 
   unlockDailyInventory: async (date, location = 'RESTO') => {
     const tenantId = await requireTenantId();
+    await requireBranchId();
     const userId = await getActiveUserId();
     const { data, error } = await supabase.rpc('reopen_daily_inventory_session_v4', {
       p_tenant_id: tenantId,
@@ -761,14 +835,22 @@ export const api = {
   // Recipe quantities are stored in expected_usage for theoretical comparison.
   processESBSalesImport: async (posDataArray, options = {}) => {
     const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(options?.branchId || null);
     const userId = await getActiveUserId();
     if (!Array.isArray(posDataArray) || posDataArray.length === 0) throw new Error('File ESB tidak berisi baris penjualan yang valid.');
 
+    let recQ = supabase.from('recipes')
+      .select('*, recipe_ingredients(material_id, qty_in_use, unit, unit_price, amount, materials(id, name, price, new_price, avg_cost, unit, full_pack))')
+      .eq('tenant_id', tenantId);
+    let matQ = supabase.from('materials').select('*').eq('tenant_id', tenantId);
+    if (branchId) {
+      recQ = recQ.eq('branch_id', branchId);
+      matQ = matQ.eq('branch_id', branchId);
+    }
+
     const [{ data: recipes, error: recipesErr }, { data: materials, error: materialsErr }] = await Promise.all([
-      supabase.from('recipes')
-        .select('*, recipe_ingredients(material_id, qty_in_use, unit, unit_price, amount, materials(id, name, price, new_price, avg_cost, unit, full_pack))')
-        .eq('tenant_id', tenantId),
-      supabase.from('materials').select('*').eq('tenant_id', tenantId)
+      recQ,
+      matQ
     ]);
     if (recipesErr) throw recipesErr;
     if (materialsErr) throw materialsErr;
@@ -776,7 +858,7 @@ export const api = {
     const recipeMapByCode = new Map((recipes || []).filter(r => r.pos_code).map(r => [String(r.pos_code).toLowerCase().trim(), r]));
     const recipeMapByName = new Map((recipes || []).map(r => [String(r.menu_name).toLowerCase().trim(), r]));
     const materialMapByName = new Map((materials || []).map(m => [String(m.name).toLowerCase().trim(), m]));
-    const unitConversionMap = await api._loadUnitConversionMap(tenantId);
+    const unitConversionMap = await api._loadUnitConversionMap(tenantId, branchId);
     const today = getLocalDateISO();
     const cleanSales = posDataArray.map(item => ({
       salesDate: String(item.salesDate || today).slice(0, 10),
@@ -813,11 +895,13 @@ export const api = {
     };
     const contentHash = options.fileHash || deterministicHash(canonicalPayload);
 
-    const { data: priorUpload, error: priorUploadErr } = await supabase
+    let priorUploadQ = supabase
       .from('pos_upload_logs')
       .select('id, filename, period, category_filter')
       .eq('tenant_id', tenantId)
-      .eq('file_hash', contentHash)
+      .eq('file_hash', contentHash);
+    if (branchId) priorUploadQ = priorUploadQ.eq('branch_id', branchId);
+    const { data: priorUpload, error: priorUploadErr } = await priorUploadQ
       .limit(1)
       .maybeSingle();
     if (priorUploadErr && priorUploadErr.code !== 'PGRST116') throw priorUploadErr;
@@ -841,14 +925,15 @@ export const api = {
     // revenue. Block overlap by default; user must explicitly overwrite period.
     // This also protects periods imported by the legacy POS sync path.
     if (options.mode !== 'overwrite') {
-      const { data: overlappingSales, error: overlapErr } = await supabase
+      let overlapQ = supabase
         .from('transactions')
         .select('id, date, source_module')
         .eq('tenant_id', tenantId)
         .eq('type', 'POS_SALE')
         .gte('date', minDate)
-        .lte('date', maxDate)
-        .limit(1);
+        .lte('date', maxDate);
+      if (branchId) overlapQ = overlapQ.eq('branch_id', branchId);
+      const { data: overlappingSales, error: overlapErr } = await overlapQ.limit(1);
       if (overlapErr) throw new Error('Gagal memeriksa potensi duplikasi periode POS: ' + overlapErr.message);
       if (overlappingSales?.length) {
         throw new Error(`Periode ESB ${minDate} sampai ${maxDate} bersinggungan dengan penjualan yang sudah ada. Untuk mencegah omzet terhitung dua kali, pilih mode Timpa/Overwrite setelah memeriksa periode dan file sumber.`);
@@ -859,18 +944,26 @@ export const api = {
     // It does not reverse or remove old POS_DEDUCTION rows, since those may
     // already be reflected in historical balances. Legacy deductions are surfaced.
     if (options.mode === 'overwrite') {
-      const { data: legacyDeductions, error: legacyErr } = await supabase
+      let legacyQ = supabase
         .from('transactions').select('id').eq('tenant_id', tenantId).eq('type', 'POS_DEDUCTION')
-        .gte('date', minDate).lte('date', maxDate).limit(1);
+        .gte('date', minDate).lte('date', maxDate);
+      if (branchId) legacyQ = legacyQ.eq('branch_id', branchId);
+      const { data: legacyDeductions, error: legacyErr } = await legacyQ.limit(1);
       if (legacyErr) throw legacyErr;
-      const { error: salesDeleteErr } = await supabase.from('transactions').delete()
+      let salesDelQ = supabase.from('transactions').delete()
         .eq('tenant_id', tenantId).eq('type', 'POS_SALE').gte('date', minDate).lte('date', maxDate);
+      if (branchId) salesDelQ = salesDelQ.eq('branch_id', branchId);
+      const { error: salesDeleteErr } = await salesDelQ;
       if (salesDeleteErr) throw new Error('Gagal mengganti data penjualan periode: ' + salesDeleteErr.message);
-      const { error: expectedDeleteErr } = await supabase.from('expected_usage').delete()
+      let expectedDelQ = supabase.from('expected_usage').delete()
         .eq('tenant_id', tenantId).lte('week_start', maxDate).gte('week_end', minDate);
+      if (branchId) expectedDelQ = expectedDelQ.eq('branch_id', branchId);
+      const { error: expectedDeleteErr } = await expectedDelQ;
       if (expectedDeleteErr) throw new Error('Gagal mengganti data theoretical usage periode: ' + expectedDeleteErr.message);
       // Keep prior upload metadata except the same content hash, which is replaced below.
-      await supabase.from('pos_upload_logs').delete().eq('tenant_id', tenantId).eq('file_hash', contentHash);
+      let logDelQ = supabase.from('pos_upload_logs').delete().eq('tenant_id', tenantId).eq('file_hash', contentHash);
+      if (branchId) logDelQ = logDelQ.eq('branch_id', branchId);
+      await logDelQ;
       if (legacyDeductions?.length) {
         console.warn('[ESB] Periode berisi POS_DEDUCTION historis; baris legacy tetap dipertahankan untuk melindungi saldo stok.', { minDate, maxDate });
       }
@@ -937,6 +1030,7 @@ export const api = {
 
     const saleRows = Array.from(salesByDate.entries()).filter(([, amount]) => Number.isFinite(amount)).map(([date, amount]) => ({
       tenant_id: tenantId,
+      ...(branchId ? { branch_id: branchId } : {}),
       date,
       material_id: null,
       type: 'POS_SALE',
@@ -960,6 +1054,7 @@ export const api = {
 
     const expectedUsageRows = Array.from(expectedByMaterial.entries()).filter(([, data]) => data.qty > 0).map(([materialId, data]) => ({
       tenant_id: tenantId,
+      ...(branchId ? { branch_id: branchId } : {}),
       week_start: minDate,
       week_end: maxDate,
       material_id: materialId,
@@ -981,6 +1076,7 @@ export const api = {
 
     const { error: uploadLogErr } = await supabase.from('pos_upload_logs').insert({
       tenant_id: tenantId,
+      ...(branchId ? { branch_id: branchId } : {}),
       filename: options.filename || 'ESB Upload',
       file_hash: contentHash,
       period: `${options.periodMonth || ''}/${options.periodYear || ''}`,
@@ -1015,13 +1111,16 @@ export const api = {
     }
 
     const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(options?.branchId || null);
     const recipeIds = [...new Set(posDataArray.map(row => row.recipe_id).filter(Boolean))];
     let recipesById = new Map();
     if (recipeIds.length) {
-      const { data, error } = await supabase.from('recipes')
+      let recQ = supabase.from('recipes')
         .select('id, menu_name, pos_code')
         .eq('tenant_id', tenantId)
         .in('id', recipeIds);
+      if (branchId) recQ = recQ.eq('branch_id', branchId);
+      const { data, error } = await recQ;
       if (error) throw error;
       recipesById = new Map((data || []).map(recipe => [String(recipe.id), recipe]));
     }
@@ -1048,41 +1147,51 @@ export const api = {
   },
 
   // Theoretical usage variance calculation vs actual inputs
-  getUsageVariance: async (month, year) => {
+  getUsageVariance: async (month, year, branchIdArg = null) => {
     const tenantId = await getActiveTenantId();
+    if (!tenantId) return [];
+    const branchId = await requireBranchId(branchIdArg);
     const m = month.toString().padStart(2, '0');
     const startDate = `${year}-${m}-01`;
     const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
     const endDate = `${year}-${m}-${String(lastDay).padStart(2, '0')}`;
 
+    let euQ = supabase.from('expected_usage').select('*')
+      .eq('tenant_id', tenantId)
+      .gte('week_start', startDate).lte('week_end', endDate);
+    let diQ = supabase.from('daily_inventories').select('*, daily_inventory_items(*)')
+      .eq('tenant_id', tenantId)
+      .gte('date', startDate).lte('date', endDate);
+    let matQ = supabase.from('materials').select('id, name, price, unit, full_pack').eq('tenant_id', tenantId);
+    if (branchId) {
+      euQ = euQ.eq('branch_id', branchId);
+      diQ = diQ.eq('branch_id', branchId);
+      matQ = matQ.eq('branch_id', branchId);
+    }
+
     const [{ data: expectedUsageRows, error: euErr }, { data: dailyInventories, error: diErr }, { data: materials, error: matErr }] =
-      await Promise.all([
-        supabase.from('expected_usage').select('*')
-          .eq('tenant_id', tenantId)
-          .gte('week_start', startDate).lte('week_end', endDate),
-        supabase.from('daily_inventories').select('*, daily_inventory_items(*)')
-          .eq('tenant_id', tenantId)
-          .gte('date', startDate).lte('date', endDate),
-        supabase.from('materials').select('id, name, price, unit, full_pack').eq('tenant_id', tenantId),
-      ]);
+      await Promise.all([euQ, diQ, matQ]);
 
     if (euErr) throw euErr;
     if (diErr) throw diErr;
     if (matErr) throw matErr;
 
-    const unitConversionMap = await api._loadUnitConversionMap(tenantId);
+    const unitConversionMap = await api._loadUnitConversionMap(tenantId, branchId);
     return calculateUsageVariance(expectedUsageRows || [], dailyInventories || [], materials || [], unitConversionMap);
   },
 
   // Set memory cache to avoid async locks in browser
-  getPOSOrders: async () => {
+  getPOSOrders: async (branchIdArg = null) => {
     try {
       const tenantId = await getActiveTenantId();
-      const { data, error } = await supabase
+      if (!tenantId) return [];
+      const branchId = await requireBranchId(branchIdArg);
+      let query = supabase
         .from('pos_orders')
         .select('*')
-        .eq('tenant_id', tenantId)
-        ;
+        .eq('tenant_id', tenantId);
+      if (branchId) query = query.eq('branch_id', branchId);
+      const { data, error } = await query;
       if (error) { console.error("DB Error:", error); throw error; }
       return data;
     } catch (err) {
@@ -1091,16 +1200,21 @@ export const api = {
     }
   },
 
-  getPOSOrderItems: async (orderId) => {
+  getPOSOrderItems: async (orderId, branchIdArg = null) => {
     try {
       const tenantId = await getActiveTenantId();
-      // Verify the order belongs to the active tenant before returning items
-      const { data: order } = await supabase.from('pos_orders').select('id').eq('id', orderId).eq('tenant_id', tenantId).maybeSingle();
+      const branchId = await requireBranchId(branchIdArg);
+      // Verify the order belongs to the active tenant and branch before returning items
+      let orderQ = supabase.from('pos_orders').select('id').eq('id', orderId).eq('tenant_id', tenantId);
+      if (branchId) orderQ = orderQ.eq('branch_id', branchId);
+      const { data: order } = await orderQ.maybeSingle();
       if (!order) throw new Error('Order tidak ditemukan atau akses ditolak.');
-      const { data, error } = await supabase
+      let itemsQ = supabase
         .from('pos_order_items')
         .select('*, recipes(menu_name)')
         .eq('order_id', orderId);
+      if (branchId) itemsQ = itemsQ.eq('branch_id', branchId);
+      const { data, error } = await itemsQ;
       if (error) { console.error("DB Error:", error); throw error; }
       return data;
     } catch (err) {
@@ -1109,7 +1223,7 @@ export const api = {
     }
   },
 
-  setSessionData: (tenantId, userId, overheadPct, whatsappNumber, whatsappToken, whatsappEnabled, branchId) => {
+  setSessionData: (tenantId, userId, overheadPct, whatsappNumber, whatsappToken, whatsappEnabled, branchId, role = undefined) => {
     activeTenantId = tenantId;
     activeUserId = userId;
     if (overheadPct !== undefined && overheadPct !== null) {
@@ -1119,7 +1233,31 @@ export const api = {
     activeWhatsappToken = whatsappToken || null;
     activeWhatsappEnabled = !!whatsappEnabled;
     activeBranchId = branchId || null;
-    window.__activeBranchId = activeBranchId;
+    if (role !== undefined) {
+      activeUserRole = role || null;
+    }
+    if (typeof window !== 'undefined') {
+      window.__activeBranchId = activeBranchId;
+      if (role !== undefined) {
+        window.__activeUserRole = activeUserRole;
+      }
+    }
+  },
+
+  setActiveBranch: (branchId) => {
+    activeBranchId = branchId || null;
+    if (typeof window !== 'undefined') {
+      window.__activeBranchId = activeBranchId;
+    }
+  },
+
+  getActiveBranchId: () => activeBranchId,
+
+  requireBranchContext: (overrideBranchId = null, opts = {}) => requireBranchId(overrideBranchId, opts),
+
+  isAdminSession: () => {
+    const r = getEffectiveUserRole();
+    return r ? isAdminRole(r) : false;
   },
 
   getOverheadPct: () => activeOverheadPct,
@@ -1302,10 +1440,10 @@ export const api = {
 
   registerWithToken: async (name, email, password, token) => {
     // 1. Re-validate the invitation server-side (client SDK) right before using it,
-    //    and grab tenant_id so we can fallback-create the profile below.
+    //    and grab tenant_id + branch_id so we can assign the user's branch.
     const { data: invite, error: inviteErr } = await supabase
       .from('invitations')
-      .select('id, tenant_id, is_used, expires_at, invite_role')
+      .select('id, tenant_id, branch_id, is_used, expires_at, invite_role')
       .eq('token', token)
       .single();
 
@@ -1320,8 +1458,9 @@ export const api = {
     }
 
     const assignedRole = invite.invite_role || 'Staff';
+    const assignedBranchId = invite.branch_id || null;
 
-    // 2. Create the Supabase Auth user (passing full metadata including tenant_id and role to prevent database trigger failures)
+    // 2. Create the Supabase Auth user
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -1329,6 +1468,7 @@ export const api = {
         data: {
           name: name,
           tenant_id: invite.tenant_id,
+          branch_id: assignedBranchId,
           role: assignedRole,
           invite_token: token,
         }
@@ -1342,13 +1482,13 @@ export const api = {
       );
     }
 
-    // 3. Fallback: insert into public.users in case the DB trigger didn't
-    //    (mirrors the same fallback already used in register() — KRITIS-01 fix pattern)
-    const { data: profileCheck } = await supabase.from('users').select('id').eq('id', data.user.id).maybeSingle();
+    // 3. Fallback / ensure branch_id is persisted on public.users
+    const { data: profileCheck } = await supabase.from('users').select('id, branch_id').eq('id', data.user.id).maybeSingle();
     if (!profileCheck) {
       const { error: insertErr } = await supabase.from('users').insert({
         id: data.user.id,
         tenant_id: invite.tenant_id,
+        branch_id: assignedBranchId,
         name: name,
         email: email,
         role: assignedRole
@@ -1356,6 +1496,8 @@ export const api = {
       if (insertErr) {
         throw new Error('Akun berhasil dibuat, tapi gagal menyimpan profil: ' + insertErr.message);
       }
+    } else if (assignedBranchId && !profileCheck.branch_id) {
+      await supabase.from('users').update({ branch_id: assignedBranchId }).eq('id', data.user.id);
     }
 
     // 4. Mark the invitation as used so the same link can't be reused
@@ -1374,6 +1516,12 @@ export const api = {
     // SEC-01: Clear module-level cache
     activeTenantId = null;
     activeUserId = null;
+    activeBranchId = null;
+    activeUserRole = null;
+    if (typeof window !== 'undefined') {
+      window.__activeBranchId = null;
+      window.__activeUserRole = null;
+    }
     activeOverheadPct = 0.05;
     activeWhatsappNumber = null;
     activeWhatsappToken = null;
@@ -1400,6 +1548,14 @@ export const api = {
       try {
         const parsed = JSON.parse(cached);
         if (parsed?.id) {
+          if (parsed.role) {
+            activeUserRole = parsed.role;
+            if (typeof window !== 'undefined') window.__activeUserRole = parsed.role;
+          }
+          if (parsed.branch_id && !activeBranchId) {
+            activeBranchId = parsed.branch_id;
+            if (typeof window !== 'undefined') window.__activeBranchId = parsed.branch_id;
+          }
           setTimeout(() => api.revalidateProfile().catch(() => {}), 50);
           return parsed;
         }
@@ -1482,6 +1638,17 @@ export const api = {
       whatsapp_enabled: false
     };
 
+    activeTenantId = userProfile.tenant_id ?? null;
+    activeUserId = userProfile.id;
+    activeUserRole = userProfile.role || null;
+    if (typeof window !== 'undefined') {
+      window.__activeUserRole = activeUserRole;
+    }
+    if (userProfile.branch_id && (!activeBranchId || !isAdminRole(userProfile.role))) {
+      activeBranchId = userProfile.branch_id;
+      if (typeof window !== 'undefined') window.__activeBranchId = activeBranchId;
+    }
+
     if (typeof sessionStorage !== 'undefined') {
       try { sessionStorage.setItem('bv_cached_profile', JSON.stringify(fullProfile)); } catch {
         // ignore storage errors
@@ -1490,21 +1657,24 @@ export const api = {
     return fullProfile;
   },
   // 1.5 Tenant Invitations
-  generateTenantInvite: async (tenantId, role = 'Admin / Owner') => {
+  generateTenantInvite: async (tenantId, role = 'Admin / Owner', branchId = null) => {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 24);
 
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id || null;
 
+    const payload = {
+      tenant_id: tenantId,
+      expires_at: expiresAt.toISOString(),
+      created_by: userId,
+      invite_role: role
+    };
+    if (branchId) payload.branch_id = branchId;
+
     const { data, error } = await supabase
       .from('invitations')
-      .insert({
-        tenant_id: tenantId,
-        expires_at: expiresAt.toISOString(),
-        created_by: userId,
-        invite_role: role
-      })
+      .insert(payload)
       .select('token')
       .single();
 
@@ -1516,14 +1686,16 @@ export const api = {
   },
 
   // --- LEDGER TRANSACTIONS ---
-  getTransactions: async (period = null) => {
+  getTransactions: async (period = null, branchIdArg = null) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return []; // H-2: Super Admin / no-tenant — avoid malformed .eq('tenant_id', null) query
+    const branchId = await requireBranchId(branchIdArg);
     let query = supabase
       .from('transactions')
       .select('*, materials(name)')
       .eq('tenant_id', tenantId);
-    
+    if (branchId) query = query.eq('branch_id', branchId);
+
     if (period) {
       const [year, month] = period.split('-');
       const lastDay = new Date(year, month, 0).getDate();
@@ -1531,7 +1703,7 @@ export const api = {
     } else {
       query = query.limit(500);
     }
-    
+
     const { data, error } = await query;
 
     if (error) throw new Error("Gagal mengambil transaksi: " + error.message);
@@ -1551,9 +1723,10 @@ export const api = {
   // Paginated version for Stock Ledger's transaction history panel.
   // Uses server-side LIMIT/OFFSET (.range) + optional search so we don't
   // pull hundreds of rows just to show one page.
-  getTransactionsPaged: async ({ page = 1, pageSize = 20, search = '', materialName = null, location = null } = {}) => {
+  getTransactionsPaged: async ({ page = 1, pageSize = 20, search = '', materialName = null, location = null, branchId: branchIdArg = null } = {}) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { data: [], totalCount: 0 };
+    const branchId = await requireBranchId(branchIdArg);
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
@@ -1561,9 +1734,12 @@ export const api = {
       .from('transactions')
       .select('*, materials(name)', { count: 'exact' })
       .eq('tenant_id', tenantId);
+    if (branchId) query = query.eq('branch_id', branchId);
 
     if (materialName) {
-      const { data: mat } = await supabase.from('materials').select('id').eq('tenant_id', tenantId).eq('name', materialName).maybeSingle();
+      let matQ = supabase.from('materials').select('id').eq('tenant_id', tenantId).eq('name', materialName);
+      if (branchId) matQ = matQ.eq('branch_id', branchId);
+      const { data: mat } = await matQ.maybeSingle();
       query = query.eq('material_id', mat ? mat.id : -1);
     }
     if (location && location !== 'ALL') {
@@ -1597,21 +1773,24 @@ export const api = {
   },
 
   // --- STOCK / MATERIALS ---
-  getStockSnapshotAt: async (location, targetDate) => {
+  getStockSnapshotAt: async (location, targetDate, branchIdArg = null) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return [];
+    const branchId = await requireBranchId(branchIdArg);
 
     // 1. Get current stock
-    const materials = await materialsRepo.getAll(tenantId);
+    const materials = await materialsRepo.getAll(tenantId, branchId);
 
     // If targetDate is in the future or within the current day, just return current stock
     if (new Date(targetDate) >= new Date()) return materials;
 
     // 2. Fetch all transactions AFTER targetDate
-    const { data: txs } = await supabase.from('transactions')
+    let txQ = supabase.from('transactions')
       .select('material_id, qty, location, type')
       .eq('tenant_id', tenantId)
       .gt('date', targetDate);
+    if (branchId) txQ = txQ.eq('branch_id', branchId);
+    const { data: txs } = await txQ;
 
     // 3. Reverse transactions
     const stockMap = {};
@@ -1642,35 +1821,41 @@ export const api = {
     return Object.values(stockMap);
   },
 
-  getMaterials: async () => {
+  getMaterials: async (branchIdArg = null) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return []; // H-2: Super Admin / no-tenant — avoid malformed .eq('tenant_id', null) query
-    return await materialsRepo.getAll(tenantId);
+    const branchId = await requireBranchId(branchIdArg);
+    return await materialsRepo.getAll(tenantId, branchId);
   },
 
   // Paginated + searchable version for the Stock Ledger table. The full
   // getMaterials() above is kept as-is since other forms (recipe/invoice
   // ingredient pickers) still need the complete unpaginated list.
-  getMaterialsPaged: async ({ page = 1, pageSize = 20, search = '' } = {}) => {
+  getMaterialsPaged: async ({ page = 1, pageSize = 20, search = '', branchId: branchIdArg = null } = {}) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { data: [], totalCount: 0 };
-    return await materialsRepo.getPaged(tenantId, { page, pageSize, search: sanitizePostgrest(search) });
+    const branchId = await requireBranchId(branchIdArg);
+    return await materialsRepo.getPaged(tenantId, { page, pageSize, search: sanitizePostgrest(search), branchId });
   },
-  
+
   createMaterial: async (materialData) => {
     const tenantId = await requireTenantId();
-    const data = await materialsRepo.create(tenantId, materialData);
+    const branchId = await requireBranchId(materialData?.branch_id || null);
+    const data = await materialsRepo.create(tenantId, materialData, branchId);
     await logAudit('CREATE_MATERIAL', `Menambahkan bahan baku baru: "${data.name}" ke kategori "${data.category}".`);
     return data;
   },
 
   updateMaterial: async (id, materialData) => {
     const tenantId = await requireTenantId();
-    const { data: oldMaterial } = await supabase.from('materials').select('*').eq('id', id).eq('tenant_id', tenantId).single();
+    const branchId = await requireBranchId(materialData?.branch_id || null);
+    let oldQuery = supabase.from('materials').select('*').eq('id', id).eq('tenant_id', tenantId);
+    if (branchId) oldQuery = oldQuery.eq('branch_id', branchId);
+    const { data: oldMaterial } = await oldQuery.single();
 
-    const data = await materialsRepo.update(tenantId, id, materialData, oldMaterial);
+    const data = await materialsRepo.update(tenantId, id, materialData, oldMaterial, branchId);
 
-    if (oldMaterial.price !== data.price || oldMaterial.new_price !== data.new_price) {
+    if (oldMaterial && (oldMaterial.price !== data.price || oldMaterial.new_price !== data.new_price)) {
       const formattedOld = new Intl.NumberFormat('id-ID').format(oldMaterial.new_price || oldMaterial.price);
       const formattedNew = new Intl.NumberFormat('id-ID').format(data.new_price);
       await logAudit('UPDATE_PRICE', `Mengubah harga bahan "${data.name}" dari Rp${formattedOld} menjadi Rp${formattedNew}.`);
@@ -1681,13 +1866,16 @@ export const api = {
     return data;
   },
 
-  deleteMaterial: async (id, force = false) => {
+  deleteMaterial: async (id, force = false, branchIdArg = null) => {
     const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(branchIdArg);
     // Check if ingredient is used in recipes
-    const { count, error: countErr } = await supabase
+    let countQuery = supabase
       .from('recipe_ingredients')
       .select('*', { count: 'exact', head: true })
       .eq('material_id', id);
+    if (branchId) countQuery = countQuery.eq('branch_id', branchId);
+    const { count, error: countErr } = await countQuery;
 
     if (!countErr && count > 0) {
       if (!force) {
@@ -1697,17 +1885,21 @@ export const api = {
         throw err;
       } else {
         // Force delete: remove dependencies first
-        await supabase.from('recipe_ingredients').delete().eq('material_id', id);
+        let delIngQuery = supabase.from('recipe_ingredients').delete().eq('material_id', id);
+        if (branchId) delIngQuery = delIngQuery.eq('branch_id', branchId);
+        await delIngQuery;
       }
     }
 
-    const data = await materialsRepo.delete(tenantId, id);
+    const data = await materialsRepo.delete(tenantId, id, branchId);
     await logAudit('DELETE_MATERIAL', `Menonaktifkan bahan mentah: "${data.name}" dari database inventory.`);
     return data;
   },
 
   adjustStock: async (id, arg2, arg3, arg4, arg5) => {
     const tenantId = await requireTenantId();
+    const requestedBranchId = arg2 && typeof arg2 === 'object' ? (arg2.branch_id || null) : null;
+    const branchId = await requireBranchId(requestedBranchId);
 
     // 1. Normalize arguments (supports object { location, type, qty, notes } or positional arguments)
     let location = 'RESTO';
@@ -1772,12 +1964,13 @@ export const api = {
 
     // 3. Resilient Fallback: Direct PostgREST execution if RPC is missing, un-cached, or failed
     if (!rpcSuccess) {
-      const { data: mat, error: fetchErr } = await supabase
+      let fetchQ = supabase
         .from('materials')
         .select('*')
         .eq('id', id)
-        .eq('tenant_id', tenantId)
-        .single();
+        .eq('tenant_id', tenantId);
+      if (branchId) fetchQ = fetchQ.eq('branch_id', branchId);
+      const { data: mat, error: fetchErr } = await fetchQ.single();
 
       if (fetchErr || !mat) {
         throw new Error('Material tidak ditemukan atau gagal dimuat: ' + (fetchErr?.message || 'Bahan tidak ditemukan'));
@@ -1802,14 +1995,16 @@ export const api = {
       }
 
       const locField = safeLocation === 'CENTRAL' ? 'qty_central' : 'qty_resto';
-      const { data: updatedMat, error: updateErr } = await supabase
+      let updQ = supabase
         .from('materials')
         .update({
           [locField]: newStock,
           updated_at: new Date().toISOString()
         })
         .eq('id', id)
-        .eq('tenant_id', tenantId)
+        .eq('tenant_id', tenantId);
+      if (branchId) updQ = updQ.eq('branch_id', branchId);
+      const { data: updatedMat, error: updateErr } = await updQ
         .select()
         .single();
 
@@ -1827,6 +2022,7 @@ export const api = {
         .from('transactions')
         .insert({
           tenant_id: tenantId,
+          ...(branchId ? { branch_id: branchId } : {}),
           date: new Date().toISOString().split('T')[0],
           material_id: id,
           type: safeType,
@@ -1850,8 +2046,9 @@ export const api = {
   },
 
   // --- INTER-BRANCH TRANSFERS ---
-  createTransfer: async ({ material_id, quantity, source_branch, target_branch, notes }) => {
+  createTransfer: async ({ material_id, quantity, source_branch, target_branch, notes, branch_id = null }) => {
     const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(branch_id);
     const userId = await getActiveUserId();
     const qty = parseFloat(quantity);
     if (!material_id || isNaN(qty) || qty <= 0) {
@@ -1862,12 +2059,13 @@ export const api = {
       throw new Error('Lokasi asal dan lokasi tujuan transfer tidak boleh sama.');
     }
 
-    const { data: mat, error: matErr } = await supabase
+    let matQ = supabase
       .from('materials')
       .select('*')
       .eq('id', material_id)
-      .eq('tenant_id', tenantId)
-      .single();
+      .eq('tenant_id', tenantId);
+    if (branchId) matQ = matQ.eq('branch_id', branchId);
+    const { data: mat, error: matErr } = await matQ.single();
     if (matErr || !mat) throw new Error('Bahan baku tidak ditemukan: ' + (matErr?.message || ''));
 
     const isSourceCentral = String(source_branch).toUpperCase().includes('CENTRAL');
@@ -1899,16 +2097,18 @@ export const api = {
     return { success: true, material: mat, transfer: result, target_location: targetLoc };
   },
   // --- TRANSFER REQUISITION (WBS Phase 2) ---
-  // Flag penanda apakah database mendukung enum TRANSFER_REQUEST
-  // Mencegah tembakan HTTP 400 berulang ke endpoint transactions
-  createTransferRequest: async ({ material_id, qty, source_branch, target_branch, notes }) => {
-    const tenantId = await getActiveTenantId();
-    const { data: mat } = await supabase.from('materials').select('price, new_price').eq('id', material_id).single();
+  createTransferRequest: async ({ material_id, qty, source_branch, target_branch, notes, branch_id = null }) => {
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(branch_id);
+    let matQ = supabase.from('materials').select('price, new_price').eq('id', material_id).eq('tenant_id', tenantId);
+    if (branchId) matQ = matQ.eq('branch_id', branchId);
+    const { data: mat } = await matQ.single();
     const unitPrice = parseFloat(mat?.new_price || mat?.price) || 0;
     const safeLocation = String(target_branch || '').toUpperCase().includes('CENTRAL') ? 'CENTRAL' : 'RESTO';
-    
+
     const { data, error } = await supabase.from('transactions').insert({
       tenant_id: tenantId,
+      ...(branchId ? { branch_id: branchId } : {}),
       date: new Date().toISOString().split('T')[0],
       material_id: material_id,
       type: 'TRANSFER_REQUEST',
@@ -1917,71 +2117,85 @@ export const api = {
       amount: Math.round(parseFloat(qty) * unitPrice),
       notes: `Request Transfer [${source_branch} ➔ ${target_branch}] - ${notes || ''}`
     }).select().single();
-    
+
     if (error) throw new Error('Gagal membuat request transfer: ' + error.message);
     return data;
   },
-  
-  getTransferRequests: async () => {
+
+  getTransferRequests: async (branchIdArg = null) => {
     try {
       if (typeof window !== 'undefined' && window.__dbSupportsTransferRequestEnum === false) {
         return [];
       }
       const tenantId = await getActiveTenantId();
       if (!tenantId) return [];
-      const { data, error } = await supabase.from('transactions')
+      const branchId = await requireBranchId(branchIdArg);
+      let reqQ = supabase.from('transactions')
         .select('*, materials(id, name, sku, unit, qty_resto, qty_central)')
         .eq('tenant_id', tenantId)
-        .eq('type', 'TRANSFER_REQUEST')
-        .order('id', { ascending: false });
+        .eq('type', 'TRANSFER_REQUEST');
+      if (branchId) reqQ = reqQ.eq('branch_id', branchId);
+      const { data, error } = await reqQ.order('id', { ascending: false });
       if (error) {
-        // Handle database enum transaction_type without TRANSFER_REQUEST gracefully
         if (typeof window !== 'undefined') window.__dbSupportsTransferRequestEnum = false;
         console.warn('Transfer requests not available in DB transaction_type enum:', error.message);
         return [];
       }
       return data || [];
     } catch (err) {
+      if (String(err?.message || '').includes('branch_id')) throw err;
       console.warn('Error in getTransferRequests:', err);
       return [];
     }
   },
-  
-  approveTransferRequest: async (txId) => {
-    const tenantId = await getActiveTenantId();
-    const { data: tx, error: fetchErr } = await supabase.from('transactions').select('*').eq('id', txId).eq('tenant_id', tenantId).single();
+
+  approveTransferRequest: async (txId, branchIdArg = null) => {
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(branchIdArg);
+    let txQ = supabase.from('transactions').select('*').eq('id', txId).eq('tenant_id', tenantId);
+    if (branchId) txQ = txQ.eq('branch_id', branchId);
+    const { data: tx, error: fetchErr } = await txQ.single();
     if (fetchErr || !tx) throw new Error('Request tidak ditemukan.');
-    
+
     const match = tx.notes ? tx.notes.match(/Request Transfer \[([^\]]+) ➔ ([^\]]+)\]/) : null;
     const source = match ? match[1] : 'Central Warehouse';
     const target = match ? match[2] : 'Resto Bar';
-    
+
     // Execute real transfer
     await api.createTransfer({
       material_id: tx.material_id,
       quantity: tx.qty,
       source_branch: source,
       target_branch: target,
-      notes: 'Disetujui dari Request'
+      notes: 'Disetujui dari Request',
+      branch_id: tx.branch_id || branchId
     });
-    
+
     // Delete the request
-    await supabase.from('transactions').delete().eq('id', txId);
-  },
-  
-  rejectTransferRequest: async (txId) => {
-    const tenantId = await getActiveTenantId();
-    await supabase.from('transactions').delete().eq('id', txId).eq('tenant_id', tenantId);
+    let delQ = supabase.from('transactions').delete().eq('id', txId).eq('tenant_id', tenantId);
+    if (branchId) delQ = delQ.eq('branch_id', branchId);
+    await delQ;
   },
 
-  getTransfers: async () => {
+  rejectTransferRequest: async (txId, branchIdArg = null) => {
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(branchIdArg);
+    let delQ = supabase.from('transactions').delete().eq('id', txId).eq('tenant_id', tenantId);
+    if (branchId) delQ = delQ.eq('branch_id', branchId);
+    await delQ;
+  },
+
+  getTransfers: async (branchIdArg = null) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return [];
-    const { data, error } = await supabase
+    const branchId = await requireBranchId(branchIdArg);
+    let query = supabase
       .from('transactions')
       .select('*, materials(id, name, sku, unit, price, category, qty_resto, qty_central)')
       .eq('tenant_id', tenantId)
-      .eq('type', 'TRANSFER')
+      .eq('type', 'TRANSFER');
+    if (branchId) query = query.eq('branch_id', branchId);
+    const { data, error } = await query
       .order('date', { ascending: false })
       .order('id', { ascending: false });
 
@@ -1995,7 +2209,6 @@ export const api = {
     });
     return Array.from(grouped.values()).map(group => {
       const tx = group.find(row => Number(row.qty) > 0) || group[0];
-      const match = tx.notes ? tx.notes.match(/Transfer \[([^\]]+) ➔ ([^\]]+)\](?: - (.*))?/) : null;
       const sourceTx = group.find(row => Number(row.qty) < 0) || tx;
       const targetTx = group.find(row => Number(row.qty) > 0) || tx;
       const pairMatch = (sourceTx.notes || targetTx.notes || '').match(/Transfer \[([^\]]+) ➔ ([^\]]+)\](?: - (.*))?/);
@@ -2020,8 +2233,9 @@ export const api = {
   },
 
   // --- WASTE & LOSS LOGS ---
-  recordWaste: async ({ material_id, quantity, type = 'WASTE', location = 'RESTO', reason = '', notes = '', date = null, request_key = null }) => {
+  recordWaste: async ({ material_id, quantity, type = 'WASTE', location = 'RESTO', reason = '', notes = '', date = null, request_key = null, branch_id = null }) => {
     const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(branch_id);
     const qty = Number(quantity);
     if (!material_id || !Number.isFinite(qty) || qty <= 0) {
       throw new Error('Pilih bahan baku dan masukkan kuantitas waste yang valid (lebih dari 0).');
@@ -2035,8 +2249,15 @@ export const api = {
     const userId = await getActiveUserId();
     const requestKey = request_key || createRequestKey();
 
-    // No client-side fallback: stock and ledger must change atomically, otherwise
-    // a partial success could deduct inventory twice after a retry.
+    // Verify material belongs to active branch before atomic RPC
+    let matCheckQ = supabase.from('materials').select('id, name, unit').eq('id', material_id).eq('tenant_id', tenantId);
+    if (branchId) matCheckQ = matCheckQ.eq('branch_id', branchId);
+    const { data: mat, error: matErr } = await matCheckQ.maybeSingle();
+    if (matErr) throw new Error('Gagal memverifikasi bahan baku: ' + matErr.message);
+    if (branchId && !mat) {
+      throw new Error('Bahan baku tidak ditemukan pada cabang aktif.');
+    }
+
     const { data: result, error } = await supabase.rpc('atomic_record_waste_v2', {
       p_tenant_id: tenantId,
       p_material_id: Number(material_id),
@@ -2050,15 +2271,15 @@ export const api = {
     });
     if (error) throw new Error('Gagal mencatat waste secara atomik: ' + error.message);
 
-    const { data: mat } = await supabase.from('materials').select('name, unit').eq('id', material_id).eq('tenant_id', tenantId).maybeSingle();
     const costLoss = Number(result?.cost_loss) || 0;
     await logAudit('RECORD_WASTE', `${result?.duplicate ? 'Retry duplikat diabaikan. ' : ''}Mencatat waste ${qty} ${mat?.unit || ''} "${mat?.name || 'Item'}" (${safeTxType}) di ${locKey}. Kerugian: Rp ${costLoss.toLocaleString('id-ID')}.`);
     return { success: true, duplicate: Boolean(result?.duplicate), material: mat || null, costLoss, transaction_id: result?.transaction_id };
   },
 
-  getWasteLogs: async ({ period = null, type = null } = {}) => {
+  getWasteLogs: async ({ period = null, type = null, branchId: branchIdArg = null } = {}) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return [];
+    const branchId = await requireBranchId(branchIdArg);
 
     const validWasteTypes = ['WASTE', 'BREAKAGE', 'EXPIRED', 'COMP'];
 
@@ -2066,9 +2287,9 @@ export const api = {
       .from('transactions')
       .select('*, materials(id, name, sku, unit, price, category, full_pack, qty_resto, qty_central)')
       .eq('tenant_id', tenantId)
-      .in('type', validWasteTypes)
-      .order('date', { ascending: false })
-      .order('id', { ascending: false });
+      .in('type', validWasteTypes);
+    if (branchId) query = query.eq('branch_id', branchId);
+    query = query.order('date', { ascending: false }).order('id', { ascending: false });
 
     if (period) {
       const [year, month] = period.split('-');
@@ -2112,20 +2333,23 @@ export const api = {
   },
 
   // --- RECIPES ---
-  getRecipes: async () => {
+  getRecipes: async (branchIdArg = null) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return []; // H-2: Super Admin / no-tenant — avoid malformed .eq('tenant_id', null) query
-    const { data, error } = await supabase
+    const branchId = await requireBranchId(branchIdArg);
+    let query = supabase
       .from('recipes')
       .select('*, recipe_ingredients(*, materials(*))')
-      .eq('tenant_id', tenantId)
-      .order('menu_name');
+      .eq('tenant_id', tenantId);
+    if (branchId) query = query.eq('branch_id', branchId);
+    const { data, error } = await query.order('menu_name');
 
     if (error) throw new Error("Gagal memuat resep: " + error.message);
 
     // Map ingredients structures to match UI expectations
     return data.map(r => ({
       id: r.id,
+      branch_id: r.branch_id,
       menu_name: r.menu_name,
       pos_code: r.pos_code,
       category: r.category || 'NON-KOPI',
@@ -2152,9 +2376,10 @@ export const api = {
 
   // Paginated + searchable (by menu name / category) version for the
   // Recipes list panel.
-  getRecipesPaged: async ({ page = 1, pageSize = 15, search = '' } = {}) => {
+  getRecipesPaged: async ({ page = 1, pageSize = 15, search = '', branchId: branchIdArg = null } = {}) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { data: [], totalCount: 0 };
+    const branchId = await requireBranchId(branchIdArg);
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
@@ -2162,6 +2387,7 @@ export const api = {
       .from('recipes')
       .select('*, recipe_ingredients(*, materials(*))', { count: 'exact' })
       .eq('tenant_id', tenantId);
+    if (branchId) query = query.eq('branch_id', branchId);
 
     if (search && search.trim()) {
       const s = sanitizePostgrest(search);
@@ -2177,6 +2403,7 @@ export const api = {
     return {
       data: data.map(r => ({
         id: r.id,
+        branch_id: r.branch_id,
         menu_name: r.menu_name,
         pos_code: r.pos_code,
         category: r.category || 'NON-KOPI',
@@ -2202,21 +2429,29 @@ export const api = {
       totalCount: count || 0
     };
   },
-  
+
   createRecipe: async (recipeData) => {
-    const tenantId = await getActiveTenantId();
-    
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(recipeData?.branch_id || null);
+
     // 1. Process calculations using ported controller logic
     let subtotal = 0.00;
     const ingredientRows = [];
 
-    // Pre-fetch all materials for this recipe
-    const matIds = recipeData.ingredients.map(i => i.material_id);
-    const { data: materials } = await supabase.from('materials').select('*').in('id', matIds);
+    // Pre-fetch all materials for this recipe scoped to tenant and active branch
+    const matIds = (recipeData.ingredients || []).map(i => i.material_id).filter(Boolean);
+    let materials = [];
+    if (matIds.length > 0) {
+      let matsQ = supabase.from('materials').select('*').eq('tenant_id', tenantId).in('id', matIds);
+      if (branchId) matsQ = matsQ.eq('branch_id', branchId);
+      const { data: fetchedMats, error: matsErr } = await matsQ;
+      if (matsErr) throw new Error("Gagal memuat bahan resep: " + matsErr.message);
+      materials = fetchedMats || [];
+    }
     const materialsMap = new Map(materials.map(m => [m.id, m]));
-    const unitConversionMap = await api._loadUnitConversionMap(tenantId);
+    const unitConversionMap = await api._loadUnitConversionMap(tenantId, branchId);
 
-    for (const ing of recipeData.ingredients) {
+    for (const ing of (recipeData.ingredients || [])) {
       const material = materialsMap.get(ing.material_id);
       if (!material) continue;
 
@@ -2234,12 +2469,6 @@ export const api = {
       });
     }
 
-    // Recipe pricing engine (merged from barventis-vercel-repo, PRD §4.2 Opsi B):
-    // fix_cost_pct defaults to this tenant's existing Overhead % setting
-    // (activeOverheadPct) rather than a hardcoded 5%, unless the caller
-    // explicitly passes one. selling_price_override (sent by the unchanged
-    // Recipes.jsx form via DataContext.jsx) wins over the computed target
-    // price, so manual price entry keeps working exactly as before.
     const fixCostPct = recipeData.fix_cost_pct != null ? parseFloat(recipeData.fix_cost_pct) : activeOverheadPct;
     const roundingDirection = recipeData.rounding_direction || DEFAULT_ROUNDING_DIRECTION;
     const roundingIncrement = recipeData.rounding_increment != null ? parseFloat(recipeData.rounding_increment) : DEFAULT_ROUNDING_INCREMENT;
@@ -2259,12 +2488,9 @@ export const api = {
       .from('recipes')
       .insert({
         tenant_id: tenantId,
+        ...(branchId ? { branch_id: branchId } : {}),
         menu_name: recipeData.menu_name,
         category: recipeData.category || 'NON-KOPI',
-        // FIX: jangan selalu kirim `image_url` — kolom ini belum tentu ada di
-        // schema cache PostgREST (lihat migrasi 0004_add_recipe_image_url.sql).
-        // Sama seperti pola aman di updateRecipe: hanya ikutkan key ini kalau
-        // caller memang secara eksplisit mengisi image_url.
         ...(recipeData.image_url !== undefined ? { image_url: recipeData.image_url || null } : {}),
         selling_price: sellingPrice,
         subtotal: parseFloat(subtotal.toFixed(2)),
@@ -2286,14 +2512,16 @@ export const api = {
     const rowsToInsert = ingredientRows.map(row => ({
       recipe_id: recipe.id,
       tenant_id: tenantId,
+      ...(branchId ? { branch_id: branchId } : {}),
       ...row
     }));
 
     if (rowsToInsert.length > 0) {
       const { error: ingErr } = await supabase.from('recipe_ingredients').insert(rowsToInsert);
       if (ingErr) {
-        // Rollback
-        await supabase.from('recipes').delete().eq('id', recipe.id);
+        let rbQ = supabase.from('recipes').delete().eq('id', recipe.id).eq('tenant_id', tenantId);
+        if (branchId) rbQ = rbQ.eq('branch_id', branchId);
+        await rbQ;
         throw new Error("Gagal menyimpan bahan resep: " + ingErr.message);
       }
     }
@@ -2306,18 +2534,26 @@ export const api = {
   },
 
   updateRecipe: async (id, recipeData) => {
-    const tenantId = await getActiveTenantId();
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(recipeData?.branch_id || null);
     // 1. Process calculations
     let subtotal = 0.00;
     const ingredientRows = [];
 
-    const matIds = recipeData.ingredients.map(i => i.material_id);
-    const { data: materials } = await supabase.from('materials').select('*').in('id', matIds);
+    const matIds = (recipeData.ingredients || []).map(i => i.material_id).filter(Boolean);
+    let materials = [];
+    if (matIds.length > 0) {
+      let matsQ = supabase.from('materials').select('*').eq('tenant_id', tenantId).in('id', matIds);
+      if (branchId) matsQ = matsQ.eq('branch_id', branchId);
+      const { data: fetchedMats, error: matsErr } = await matsQ;
+      if (matsErr) throw new Error("Gagal memuat bahan resep: " + matsErr.message);
+      materials = fetchedMats || [];
+    }
     const materialsMap = new Map(materials.map(m => [m.id, m]));
-    const unitConversionMap = await api._loadUnitConversionMap(tenantId);
+    const unitConversionMap = await api._loadUnitConversionMap(tenantId, branchId);
 
     const mergedMap = new Map();
-    for (const ing of recipeData.ingredients) {
+    for (const ing of (recipeData.ingredients || [])) {
       const material = materialsMap.get(ing.material_id);
       if (!material) continue;
 
@@ -2344,6 +2580,7 @@ export const api = {
       ingredientRows.push({
         recipe_id: id,
         tenant_id: tenantId,
+        ...(branchId ? { branch_id: branchId } : {}),
         material_id: item.material_id,
         qty_in_use: item.qty_in_use,
         unit: item.unit,
@@ -2352,8 +2589,6 @@ export const api = {
       });
     }
 
-    // Recipe pricing engine (merged from barventis-vercel-repo, PRD §4.2 Opsi B) —
-    // see createRecipe above for the full rationale.
     const fixCostPct = recipeData.fix_cost_pct != null ? parseFloat(recipeData.fix_cost_pct) : activeOverheadPct;
     const roundingDirection = recipeData.rounding_direction || DEFAULT_ROUNDING_DIRECTION;
     const roundingIncrement = recipeData.rounding_increment != null ? parseFloat(recipeData.rounding_increment) : DEFAULT_ROUNDING_INCREMENT;
@@ -2370,13 +2605,11 @@ export const api = {
         : (sellingPriceFinal || parseFloat(recipeData.selling_price || 0))
     );
 
-    // 2. Update Recipe (pastikan kolom int8 dibulatkan dengan Math.round)
-    const { data: recipe, error: recipeErr } = await supabase
+    // 2. Update Recipe
+    let updRecQ = supabase
       .from('recipes')
       .update({
         menu_name: recipeData.menu_name,
-        // Only touch category when explicitly provided, so recalc (which omits it)
-        // never clobbers an existing category. (M-2)
         ...(recipeData.category !== undefined ? { category: recipeData.category } : {}),
         ...(recipeData.image_url !== undefined ? { image_url: recipeData.image_url } : {}),
         selling_price: sellingPrice,
@@ -2391,17 +2624,20 @@ export const api = {
         price_adjustment: priceAdjustment
       })
       .eq('id', id)
-      .select('*')
-      .single();
+      .eq('tenant_id', tenantId);
+    if (branchId) updRecQ = updRecQ.eq('branch_id', branchId);
+    const { data: recipe, error: recipeErr } = await updRecQ.select('*').single();
 
     if (recipeErr) throw new Error("Gagal update resep: " + recipeErr.message);
 
     // 3. Upsert bahan baru/diubah berdasarkan (recipe_id, material_id), lalu hapus bahan yang dilepas
     const newMaterialIds = new Set(ingredientRows.map(r => Number(r.material_id)));
-    const { data: oldIngredientRows } = await supabase
+    let oldIngQ = supabase
       .from('recipe_ingredients')
       .select('id, material_id')
       .eq('recipe_id', id);
+    if (branchId) oldIngQ = oldIngQ.eq('branch_id', branchId);
+    const { data: oldIngredientRows } = await oldIngQ;
 
     if (ingredientRows.length > 0) {
       const { error: ingErr } = await supabase
@@ -2415,7 +2651,9 @@ export const api = {
       .map(r => r.id);
 
     if (idsToDelete.length > 0) {
-      await supabase.from('recipe_ingredients').delete().in('id', idsToDelete);
+      let delIngQ = supabase.from('recipe_ingredients').delete().in('id', idsToDelete);
+      if (branchId) delIngQ = delIngQ.eq('branch_id', branchId);
+      await delIngQ;
     }
 
     const formattedHpp = new Intl.NumberFormat('id-ID').format(recipe.basic_cost);
@@ -2424,16 +2662,22 @@ export const api = {
     return recipe;
   },
 
-  deleteRecipe: async (id) => {
-    const { data: recipe } = await supabase.from('recipes').select('*').eq('id', id).single();
+  deleteRecipe: async (id, branchIdArg = null) => {
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(branchIdArg);
+    let recQ = supabase.from('recipes').select('*').eq('id', id).eq('tenant_id', tenantId);
+    if (branchId) recQ = recQ.eq('branch_id', branchId);
+    const { data: recipe, error: fetchErr } = await recQ.single();
+    if (fetchErr || !recipe) throw new Error("Resep tidak ditemukan atau bukan milik cabang aktif.");
 
     // Harus hapus dependencies dulu karena tidak ada ON DELETE CASCADE
-    await supabase.from('recipe_ingredients').delete().eq('recipe_id', id);
-    await supabase.from('pos_order_items').delete().eq('recipe_id', id);
-    await supabase.from('pos_transaction_items').delete().eq('recipe_id', id);
-    await supabase.from('recipe_versions').delete().eq('recipe_id', id);
+    const scopeBranch = (q) => (branchId ? q.eq('branch_id', branchId) : q);
+    await scopeBranch(supabase.from('recipe_ingredients').delete().eq('recipe_id', id));
+    await scopeBranch(supabase.from('pos_order_items').delete().eq('recipe_id', id));
+    await scopeBranch(supabase.from('pos_transaction_items').delete().eq('recipe_id', id));
+    await scopeBranch(supabase.from('recipe_versions').delete().eq('recipe_id', id));
 
-    const { error } = await supabase.from('recipes').delete().eq('id', id);
+    const { error } = await scopeBranch(supabase.from('recipes').delete().eq('id', id).eq('tenant_id', tenantId));
 
     if (error) throw new Error("Gagal menghapus resep: " + error.message);
     await logAudit('DELETE_RECIPE', `Menghapus resep menu: "${recipe.menu_name}" dari database COGS.`);
@@ -2441,17 +2685,20 @@ export const api = {
   },
 
   // Recalculate basic cost and food cost pct for all recipes.
-  recalculateAllRecipes: async () => {
+  recalculateAllRecipes: async (branchIdArg = null) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { updated: 0, results: [] };
+    const branchId = await requireBranchId(branchIdArg);
 
-    const { data: recipes, error } = await supabase
+    let recQ = supabase
       .from('recipes')
       .select('*, recipe_ingredients(*, materials(*))')
       .eq('tenant_id', tenantId);
+    if (branchId) recQ = recQ.eq('branch_id', branchId);
+    const { data: recipes, error } = await recQ;
     if (error) throw new Error("Gagal memuat resep: " + error.message);
 
-    const unitConversionMap = await api._loadUnitConversionMap(tenantId);
+    const unitConversionMap = await api._loadUnitConversionMap(tenantId, branchId);
 
     const results = [];
     for (const r of (recipes || [])) {
@@ -2487,10 +2734,13 @@ export const api = {
       const changed = Math.abs(before.basic_cost - basicCost) > 1 || Math.abs(before.selling_price - sellingPrice) > 1;
 
       if (changed) {
-        const { error: updErr } = await supabase
+        let updQ = supabase
           .from('recipes')
           .update({ subtotal, fix_cost: fixCost, basic_cost: basicCost, selling_price: sellingPrice, food_cost_pct: foodCostPct, updated_at: new Date().toISOString() })
-          .eq('id', r.id);
+          .eq('id', r.id)
+          .eq('tenant_id', tenantId);
+        if (branchId) updQ = updQ.eq('branch_id', branchId);
+        const { error: updErr } = await updQ;
         if (updErr) {
           results.push({ menu_name: r.menu_name, status: 'error', message: updErr.message });
           continue;
@@ -2502,7 +2752,9 @@ export const api = {
           const qty = parseFloat(ing.qty_in_use || 0);
           const amount = calculateIngredientCost(mat, qty, unit, unitConversionMap);
           const { unitPrice } = getUnitPrice(mat, unitConversionMap);
-          await supabase.from('recipe_ingredients').update({ unit_price: unitPrice, amount }).eq('id', ing.id);
+          let ingUpdQ = supabase.from('recipe_ingredients').update({ unit_price: unitPrice, amount }).eq('id', ing.id);
+          if (branchId) ingUpdQ = ingUpdQ.eq('branch_id', branchId);
+          await ingUpdQ;
         }
       }
       results.push({
@@ -2519,14 +2771,16 @@ export const api = {
   },
 
   // --- INVOICES ---
-  getInvoices: async () => {
+  getInvoices: async (branchIdArg = null) => {
     const tenantId = await getActiveTenantId();
-    if (!tenantId) return []; // H-2: Super Admin / no-tenant — avoid malformed .eq('tenant_id', null) query
-    const { data, error } = await supabase
+    if (!tenantId) return [];
+    const branchId = await requireBranchId(branchIdArg);
+    let query = supabase
       .from('invoices')
       .select('*, invoice_items(*, materials(*))')
-      .eq('tenant_id', tenantId)
-      ;
+      .eq('tenant_id', tenantId);
+    if (branchId) query = query.eq('branch_id', branchId);
+    const { data, error } = await query;
 
     if (error) throw new Error("Gagal memuat invoices: " + error.message);
 
@@ -2550,11 +2804,10 @@ export const api = {
     }));
   },
 
-  // Paginated + searchable (by invoice no / supplier) version for
-  // the Invoicing list page.
-  getInvoicesPaged: async ({ page = 1, pageSize = 15, search = '', status = 'ALL' } = {}) => {
+  getInvoicesPaged: async ({ page = 1, pageSize = 15, search = '', status = 'ALL', branchId: branchIdArg = null } = {}) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { data: [], totalCount: 0 };
+    const branchId = await requireBranchId(branchIdArg);
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
@@ -2562,6 +2815,7 @@ export const api = {
       .from('invoices')
       .select('*, invoice_items(*, materials(*))', { count: 'exact' })
       .eq('tenant_id', tenantId);
+    if (branchId) query = query.eq('branch_id', branchId);
 
     if (search && search.trim()) {
       const s = sanitizePostgrest(search);
@@ -2603,22 +2857,24 @@ export const api = {
       totalCount: count || 0
     };
   },
-  
+
   createInvoice: async (invoiceData) => {
-    const tenantId = await getActiveTenantId();
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(invoiceData?.branch_id || null);
 
     // 1. Generate Invoice Number: INV-YYYYMMDD-XXX
     const dateToday = new Date();
-    const dateStr = dateToday.getFullYear() + 
-                    String(dateToday.getMonth() + 1).padStart(2, '0') + 
+    const dateStr = dateToday.getFullYear() +
+                    String(dateToday.getMonth() + 1).padStart(2, '0') +
                     String(dateToday.getDate()).padStart(2, '0');
 
-    // Count PO created today
-    const { count } = await supabase
+    let countQ = supabase
       .from('invoices')
       .select('*', { count: 'exact', head: true })
       .eq('tenant_id', tenantId)
       .like('invoice_no', `INV-${dateStr}-%`);
+    if (branchId) countQ = countQ.eq('branch_id', branchId);
+    const { count } = await countQ;
 
     const serial = String((count || 0) + 1).padStart(3, '0');
     const invoiceNo = `INV-${dateStr}-${serial}`;
@@ -2642,6 +2898,7 @@ export const api = {
       .from('invoices')
       .insert({
         tenant_id: tenantId,
+        ...(branchId ? { branch_id: branchId } : {}),
         invoice_no: invoiceNo,
         supplier: invoiceData.supplier,
         date: dateToday.toISOString().split('T')[0],
@@ -2658,12 +2915,16 @@ export const api = {
     // 4. Save Invoice Line Items
     const itemsToInsert = lineItems.map(item => ({
       invoice_id: invoice.id,
+      tenant_id: tenantId,
+      ...(branchId ? { branch_id: branchId } : {}),
       ...item
     }));
 
     const { error: itemsErr } = await supabase.from('invoice_items').insert(itemsToInsert);
     if (itemsErr) {
-      await supabase.from('invoices').delete().eq('id', invoice.id);
+      let rbQ = supabase.from('invoices').delete().eq('id', invoice.id).eq('tenant_id', tenantId);
+      if (branchId) rbQ = rbQ.eq('branch_id', branchId);
+      await rbQ;
       throw new Error("Gagal menyimpan rincian barang PO: " + itemsErr.message);
     }
 
@@ -2673,20 +2934,23 @@ export const api = {
     return invoice;
   },
 
-  updateInvoiceStatus: async (id, status) => {
-    const tenantId = await getActiveTenantId();
-    const { data: oldInvoice } = await supabase.from('invoices').select('*').eq('id', id).eq('tenant_id', tenantId).single();
+  updateInvoiceStatus: async (id, status, branchIdArg = null) => {
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(branchIdArg);
+    let oldQ = supabase.from('invoices').select('*').eq('id', id).eq('tenant_id', tenantId);
+    if (branchId) oldQ = oldQ.eq('branch_id', branchId);
+    const { data: oldInvoice } = await oldQ.single();
     if (oldInvoice.status === 'RECEIVED') {
       throw new Error('Tidak bisa mengubah status invoice PO yang sudah diterima (RECEIVED).');
     }
 
-    const { data, error } = await supabase
+    let updQ = supabase
       .from('invoices')
       .update({ status })
       .eq('id', id)
-      .eq('tenant_id', tenantId)
-      .select('*')
-      .single();
+      .eq('tenant_id', tenantId);
+    if (branchId) updQ = updQ.eq('branch_id', branchId);
+    const { data, error } = await updQ.select('*').single();
 
     if (error) throw new Error("Gagal update status PO: " + error.message);
 
@@ -2702,7 +2966,8 @@ export const api = {
 
   receiveInvoice: async (id, payload = {}) => {
     const { photoUrl = null, signatureUrl = null, gps = null } = payload;
-    const tenantId = await getActiveTenantId();
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(payload?.branch_id || null);
     const userId = await getActiveUserId();
 
     const receivedDate = payload.received_date || getLocalDateISO();
@@ -2715,27 +2980,31 @@ export const api = {
 
     if (rpcErr) throw new Error("Gagal menerima PO secara atomik: " + rpcErr.message);
     if (receiveResult?.duplicate) {
-      // Idempotent retry: invoice already received; do not re-add quantities.
-      return await supabase.from('invoices').select('*').eq('id', id).eq('tenant_id', tenantId).single().then(({ data, error }) => {
+      let dupQ = supabase.from('invoices').select('*').eq('id', id).eq('tenant_id', tenantId);
+      if (branchId) dupQ = dupQ.eq('branch_id', branchId);
+      return await dupQ.single().then(({ data, error }) => {
         if (error) throw error;
         return data;
       });
     }
 
     if (photoUrl || signatureUrl || gps) {
-      await supabase.from('invoices').update({
+      let proofQ = supabase.from('invoices').update({
         receipt_photo_url: photoUrl,
         receipt_signature_url: signatureUrl,
         receipt_gps: gps
-      }).eq('id', id);
+      }).eq('id', id).eq('tenant_id', tenantId);
+      if (branchId) proofQ = proofQ.eq('branch_id', branchId);
+      await proofQ;
     }
 
-    // Fetch the updated invoice to return to the UI
-    const { data: updatedInvoice, error: fetchErr } = await supabase
+    let fetchQ = supabase
       .from('invoices')
       .select('*')
       .eq('id', id)
-      .single();
+      .eq('tenant_id', tenantId);
+    if (branchId) fetchQ = fetchQ.eq('branch_id', branchId);
+    const { data: updatedInvoice, error: fetchErr } = await fetchQ.single();
 
     if (fetchErr || !updatedInvoice) throw new Error("Gagal memuat invoice yang diperbarui.");
 
@@ -2746,9 +3015,8 @@ export const api = {
       console.warn("Failed to log audit for receive PO:", e);
     }
 
-    // Auto-sync market_list_items with the newly received invoice prices
     try {
-      await api.syncMarketListPricesFromInvoice({ invoiceId: id });
+      await api.syncMarketListPricesFromInvoice({ invoiceId: id, branchId });
     } catch (syncErr) {
       console.warn("Auto-sync market list items warning:", syncErr);
     }
@@ -3042,18 +3310,21 @@ export const api = {
 
   // --- NATIVE POS CHECKOUT ---
   processPosCheckout: async (cartItems, paymentMethod = 'CASH', customerName = '') => {
-    const tenantId = await getActiveTenantId();
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId();
     const userId = await getActiveUserId();
     const nowStr = new Date().toISOString().split('T')[0];
 
     // Check transaction limit (Maks 50 transaksi / hari)
-    const { count, error: countErr } = await supabase
+    let countQ = supabase
       .from('pos_orders')
       .select('*', { count: 'exact', head: true })
       .eq('tenant_id', tenantId)
       .gte('created_at', `${nowStr}T00:00:00Z`)
       .lte('created_at', `${nowStr}T23:59:59Z`);
-      
+    if (branchId) countQ = countQ.eq('branch_id', branchId);
+    const { count, error: countErr } = await countQ;
+
     if (!countErr && count >= 50) {
       throw new Error('Batas transaksi POS harian (50) telah tercapai untuk paket Langkah Awal. Silakan upgrade paket atau beli Add-On untuk limit yang lebih besar.');
     }
@@ -3062,10 +3333,13 @@ export const api = {
 
     // 1. Fetch recipes & ingredients for deduction calculation
     const recipeIds = cartItems.map(item => item.id);
-    const { data: recipes } = await supabase
+    let recQ = supabase
       .from('recipes')
       .select('id, menu_name, selling_price, recipe_ingredients(material_id, qty_in_use, unit, materials(id, name, unit, full_pack, qty_resto, price, new_price))')
+      .eq('tenant_id', tenantId)
       .in('id', recipeIds);
+    if (branchId) recQ = recQ.eq('branch_id', branchId);
+    const { data: recipes } = await recQ;
 
     const recipeMap = new Map((recipes || []).map(r => [r.id, r]));
 
@@ -3123,7 +3397,7 @@ export const api = {
     const transactionRows = [];
     const deductionsPayload = [];
     const negativeWarnings = [];
-    const unitConversionMap = await api._loadUnitConversionMap(tenantId);
+    const unitConversionMap = await api._loadUnitConversionMap(tenantId, branchId);
 
     // Revenue transaction
     transactionRows.push({
@@ -3141,7 +3415,6 @@ export const api = {
       const deductQty = data.totalDeduct;
       const currentResto = parseFloat(material.qty_resto);
 
-      // Allow negative stock to reflect actual physical depletion over delayed system inputs
       if (currentResto - deductQty < 0) {
         negativeWarnings.push(`Stok ${material.name} tersisa ${currentResto.toFixed(2)}, tapi order butuh ${deductQty.toFixed(2)}. (Stok akan jadi minus)`);
       }
@@ -3151,7 +3424,6 @@ export const api = {
         deduct_qty: deductQty
       });
 
-      // Calculate precise deduction amount
       const exactCost = calculateIngredientCost(material, deductQty, material.unit, unitConversionMap);
 
       transactionRows.push({
@@ -3177,16 +3449,16 @@ export const api = {
       p_transactions: transactionRows
     });
 
-    
     if (checkoutErr) {
       console.error("Checkout failed:", checkoutErr);
       return { success: false, error: checkoutErr.message };
     }
 
     if (customerName) {
-      await supabase.from('pos_orders').update({ customer_name: customerName }).eq('order_no', orderNo);
+      let custUpdQ = supabase.from('pos_orders').update({ customer_name: customerName }).eq('order_no', orderNo).eq('tenant_id', tenantId);
+      if (branchId) custUpdQ = custUpdQ.eq('branch_id', branchId);
+      await custUpdQ;
     }
-
 
     await logAudit('POS_CHECKOUT', `Transaksi POS Kasir ${orderNo} berhasil (Rp ${totalAmount.toLocaleString('id-ID')}).`);
 
@@ -3199,24 +3471,24 @@ export const api = {
 
   // --- STOCK OPNAME ---
   completeOpname: async (opnameData) => {
-    const tenantId = await getActiveTenantId();
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(opnameData?.branch_id || null);
     const userId = await getActiveUserId();
-    
+
     const location = opnameData.location;
-    const items = opnameData.items;
+    const items = opnameData.items || [];
     const currentMonth = opnameData.period_month ? parseInt(opnameData.period_month, 10) : new Date().getMonth() + 1;
     const currentYear = opnameData.period_year ? parseInt(opnameData.period_year, 10) : new Date().getFullYear();
 
-    // Do not erase a submitted/approved stock snapshot to recreate the same
-    // period. Drafts may be replaced, but approved valuation is historical data.
-    const { data: oldOpname, error: oldOpnameErr } = await supabase
+    let oldOpnameQ = supabase
       .from('stock_opnames')
       .select('id, status')
       .eq('tenant_id', tenantId)
       .eq('period_month', currentMonth)
       .eq('period_year', currentYear)
-      .eq('location', location)
-      .maybeSingle();
+      .eq('location', location);
+    if (branchId) oldOpnameQ = oldOpnameQ.eq('branch_id', branchId);
+    const { data: oldOpname, error: oldOpnameErr } = await oldOpnameQ.maybeSingle();
     if (oldOpnameErr) throw new Error('Gagal memeriksa stock opname periode ini: ' + oldOpnameErr.message);
 
     if (oldOpname && !['DRAFT', 'COUNTING'].includes(String(oldOpname.status || '').toUpperCase())) {
@@ -3224,9 +3496,13 @@ export const api = {
     }
 
     if (oldOpname) {
-      const { error: oldItemsDeleteErr } = await supabase.from('stock_opname_items').delete().eq('opname_id', oldOpname.id);
+      let delOldItemsQ = supabase.from('stock_opname_items').delete().eq('opname_id', oldOpname.id);
+      if (branchId) delOldItemsQ = delOldItemsQ.eq('branch_id', branchId);
+      const { error: oldItemsDeleteErr } = await delOldItemsQ;
       if (oldItemsDeleteErr) throw new Error('Gagal mengganti draft stock opname: ' + oldItemsDeleteErr.message);
-      const { error: oldHeaderDeleteErr } = await supabase.from('stock_opnames').delete().eq('id', oldOpname.id).eq('tenant_id', tenantId);
+      let delOldHdrQ = supabase.from('stock_opnames').delete().eq('id', oldOpname.id).eq('tenant_id', tenantId);
+      if (branchId) delOldHdrQ = delOldHdrQ.eq('branch_id', branchId);
+      const { error: oldHeaderDeleteErr } = await delOldHdrQ;
       if (oldHeaderDeleteErr) throw new Error('Gagal menghapus draft stock opname lama: ' + oldHeaderDeleteErr.message);
     }
 
@@ -3235,6 +3511,7 @@ export const api = {
       .from('stock_opnames')
       .insert({
         tenant_id: tenantId,
+        ...(branchId ? { branch_id: branchId } : {}),
         period_month: currentMonth,
         period_year: currentYear,
         location,
@@ -3250,9 +3527,16 @@ export const api = {
 
     const opnameItems = [];
 
-    // Pre-fetch materials system book quantities
-    const matIds = items.map(i => i.material_id);
-    const { data: materials } = await supabase.from('materials').select('*').in('id', matIds);
+    // Pre-fetch materials system book quantities scoped to branch
+    const matIds = items.map(i => i.material_id).filter(Boolean);
+    let materials = [];
+    if (matIds.length > 0) {
+      let matsQ = supabase.from('materials').select('*').eq('tenant_id', tenantId).in('id', matIds);
+      if (branchId) matsQ = matsQ.eq('branch_id', branchId);
+      const { data: fetchedMats, error: matsErr } = await matsQ;
+      if (matsErr) throw new Error("Gagal memuat bahan opname: " + matsErr.message);
+      materials = fetchedMats || [];
+    }
     const materialsMap = new Map(materials.map(m => [m.id, m]));
 
     for (const item of items) {
@@ -3264,6 +3548,8 @@ export const api = {
 
       opnameItems.push({
         opname_id: opname.id,
+        tenant_id: tenantId,
+        ...(branchId ? { branch_id: branchId } : {}),
         material_id: material.id,
         book_qty: systemQty,
         physical_qty: physicalQty,
@@ -3275,7 +3561,9 @@ export const api = {
     if (opnameItems.length > 0) {
       const { error: itemsErr } = await supabase.from('stock_opname_items').insert(opnameItems);
       if (itemsErr) {
-        await supabase.from('stock_opnames').delete().eq('id', opname.id);
+        let rbQ = supabase.from('stock_opnames').delete().eq('id', opname.id).eq('tenant_id', tenantId);
+        if (branchId) rbQ = rbQ.eq('branch_id', branchId);
+        await rbQ;
         throw new Error("Gagal menyimpan rincian item opname: " + itemsErr.message);
       }
     }
@@ -3290,8 +3578,14 @@ export const api = {
 
     if (rpcErr) {
       // Rollback
-      await supabase.from('stock_opname_items').delete().eq('opname_id', opname.id);
-      await supabase.from('stock_opnames').delete().eq('id', opname.id);
+      let rbItemsQ = supabase.from('stock_opname_items').delete().eq('opname_id', opname.id);
+      let rbHdrQ = supabase.from('stock_opnames').delete().eq('id', opname.id).eq('tenant_id', tenantId);
+      if (branchId) {
+        rbItemsQ = rbItemsQ.eq('branch_id', branchId);
+        rbHdrQ = rbHdrQ.eq('branch_id', branchId);
+      }
+      await rbItemsQ;
+      await rbHdrQ;
       throw new Error("Gagal menyelesaikan opname secara atomik: " + rpcErr.message);
     }
 
@@ -3302,48 +3596,31 @@ export const api = {
   },
 
   // --- REPORTS ---
-  getCostControlReport: async (month) => {
+  getCostControlReport: async (month, branchIdArg = null) => {
     // month is "YYYY-MM"
     const tenantId = await getActiveTenantId();
-    // Read-only view log removed to prevent audit_logs table bloat
+    const branchId = await requireBranchId(branchIdArg);
 
     const startDate = `${month}-01`;
-    // Calculate last date of month in JS
     const parts = month.split('-');
     const year = parseInt(parts[0]);
     const m = parseInt(parts[1]);
     const lastDay = new Date(year, m, 0).getDate();
     const endDate = `${month}-${String(lastDay).padStart(2, '0')}`;
-    const unitConversionMap = await api._loadUnitConversionMap(tenantId);
+    const unitConversionMap = await api._loadUnitConversionMap(tenantId, branchId);
 
-    // 1. Fetch closing valuation from this month's opnames if they exist (RESTO + CENTRAL)
-    // FIX 2026-09 (QA finding 3C, root cause Total Stock Akhir ~2x lipat): query
-    // ini sebelumnya tidak memfilter status, jadi draft/opname ganda untuk
-    // periode+cabang yang sama ikut dijumlah. Sekarang hanya opname yang sudah
-    // final yang dihitung — didukung juga oleh UNIQUE constraint di migrasi
-    // 0009_cost_control_integrity_fix.sql yang mencegah duplikat baru terbentuk.
-    //
-    // !! VERIFIKASI SEBELUM DEPLOY !!: nilai 'APPROVED' di bawah ini ASUMSI.
-    // Enum `opname_status` di-set final oleh RPC `complete_opname_atomic`
-    // (Postgres function), yang badannya TIDAK ADA di source/migration yang
-    // di-export ke QA ini — hanya default 'DRAFT' yang terlihat. Cek langsung
-    // definisi RPC tsb di Supabase Dashboard (Database > Functions) untuk
-    // memastikan nilai status final yang benar (mis. bisa jadi 'APPROVED',
-    // 'COMPLETED', atau 'SUBMITTED'), lalu sesuaikan filter di bawah. Kalau
-    // nilainya salah, query ini akan selalu kosong dan JUSTRU memaksa semua
-    // laporan masuk fallback derivation (memperparah, bukan memperbaiki).
-    const { data: rawThisOpnames, error: thisOpnamesErr } = await supabase
+    let thisOpnamesQ = supabase
       .from('stock_opnames')
       .select('id, location, approved_at, created_at')
       .eq('tenant_id', tenantId)
       .eq('period_month', m)
       .eq('period_year', year)
-      .eq('status', 'APPROVED')
+      .eq('status', 'APPROVED');
+    if (branchId) thisOpnamesQ = thisOpnamesQ.eq('branch_id', branchId);
+    const { data: rawThisOpnames, error: thisOpnamesErr } = await thisOpnamesQ
       .order('approved_at', { ascending: false })
       .order('created_at', { ascending: false });
     if (thisOpnamesErr) throw thisOpnamesErr;
-    // Use one latest approved snapshot per location; summing multiple approved
-    // snapshots for the same month would inflate closing inventory.
     const latestThisOpnameByLocation = {};
     for (const opname of (rawThisOpnames || [])) {
       const location = opname.location || 'RESTO';
@@ -3351,10 +3628,12 @@ export const api = {
     }
     const thisOpnames = Object.values(latestThisOpnameByLocation);
     const opnameLocationById = Object.fromEntries(thisOpnames.map(o => [o.id, o.location || 'RESTO']));
-    const { data: locationCostRows, error: locationCostErr } = await supabase
+    let locCostQ = supabase
       .from('material_location_costs')
       .select('material_id, location, average_unit_cost, is_opening_estimated')
       .eq('tenant_id', tenantId);
+    if (branchId) locCostQ = locCostQ.eq('branch_id', branchId);
+    const { data: locationCostRows, error: locationCostErr } = await locCostQ;
     if (locationCostErr && locationCostErr.code !== 'PGRST205') throw locationCostErr;
     const locationCostMap = Object.fromEntries((locationCostRows || []).map(c => [`${c.material_id}:${c.location}`, { cost: Number(c.average_unit_cost) || 0, estimated: Boolean(c.is_opening_estimated) }]));
 
@@ -3367,10 +3646,12 @@ export const api = {
 
     if (thisOpnames && thisOpnames.length > 0) {
       const opnameIds = thisOpnames.map(o => o.id);
-      const { data: opnameItems } = await supabase
+      let opnameItemsQ = supabase
         .from('stock_opname_items')
         .select('opname_id, physical_qty, book_qty, material_id, unit_cost_snapshot, valuation_snapshot, valuation_is_estimated, materials(name, new_price, price, avg_cost, category, unit, full_pack, supplier)')
         .in('opname_id', opnameIds);
+      if (branchId) opnameItemsQ = opnameItemsQ.eq('branch_id', branchId);
+      const { data: opnameItems } = await opnameItemsQ;
 
       if (opnameItems && opnameItems.length > 0) {
         hasThisMonthOpname = true;
@@ -3443,15 +3724,15 @@ export const api = {
     }
 
     if (!hasThisMonthOpname) {
-      // Prefer the last final EOD per location for the month; never use today's
-      // live balance to silently rewrite a prior month's closing stock.
-      const { data: eodClosingHeaders, error: eodClosingErr } = await supabase
+      let eodClosingQ = supabase
         .from('daily_inventories')
         .select('id, date, location')
         .eq('tenant_id', tenantId)
         .gte('date', startDate)
         .lte('date', endDate)
-        .in('status', ['verified', 'closed'])
+        .in('status', ['verified', 'closed']);
+      if (branchId) eodClosingQ = eodClosingQ.eq('branch_id', branchId);
+      const { data: eodClosingHeaders, error: eodClosingErr } = await eodClosingQ
         .order('date', { ascending: false });
       if (eodClosingErr) throw eodClosingErr;
       const latestEodByLocation = {};
@@ -3460,11 +3741,13 @@ export const api = {
       }
       const latestEodHeaders = Object.values(latestEodByLocation);
       if (latestEodHeaders.length) {
-        const { data: eodItems, error: eodItemErr } = await supabase
+        let eodItemsQ = supabase
           .from('daily_inventory_items')
           .select('inventory_id, material_id, closing_qty, book_qty_before_close, out_qty, unit_cost_snapshot, materials(name, category, unit, full_pack, supplier, avg_cost, price)')
           .eq('tenant_id', tenantId)
           .in('inventory_id', latestEodHeaders.map(h => h.id));
+        if (branchId) eodItemsQ = eodItemsQ.eq('branch_id', branchId);
+        const { data: eodItems, error: eodItemErr } = await eodItemsQ;
         if (eodItemErr) throw eodItemErr;
         if (eodItems?.length) {
           hasThisMonthEodClose = true;
@@ -3507,11 +3790,11 @@ export const api = {
       }
 
       if (!hasThisMonthEodClose) {
-        // Last-resort fallback for an unclosed/current period. This is explicitly
-        // marked estimated; it is not a historical stock snapshot.
         closingStockEstimated = true;
-        const { data: materials, error: materialsErr } = await supabase
+        let matsQ = supabase
           .from('materials').select('*').eq('tenant_id', tenantId).eq('is_active', true);
+        if (branchId) matsQ = matsQ.eq('branch_id', branchId);
+        const { data: materials, error: materialsErr } = await matsQ;
         if (materialsErr) throw materialsErr;
         const categoryGroup = {};
         for (const mat of (materials || [])) {
@@ -3538,32 +3821,36 @@ export const api = {
     }
 
     // 2. Query Transactions for calculations
-    const { data: transactions } = await supabase
+    let txsQ = supabase
       .from('transactions')
       .select('type, amount, date, notes, material_id, is_reversed, materials(category)')
       .eq('tenant_id', tenantId)
       .eq('is_reversed', false)
       .gte('date', startDate)
       .lte('date', endDate);
+    if (branchId) txsQ = txsQ.eq('branch_id', branchId);
+    const { data: transactions } = await txsQ;
 
-    // Actual daily usage is based only on verified EOD sessions and the OUT
-    // confirmed by staff. This remains separate from the stock-based method.
-    const { data: closedEodHeaders, error: eodHeadersErr } = await supabase
+    let eodHeadersQ = supabase
       .from('daily_inventories')
       .select('id, date, location')
       .eq('tenant_id', tenantId)
       .gte('date', startDate)
       .lte('date', endDate)
       .in('status', ['verified', 'closed']);
+    if (branchId) eodHeadersQ = eodHeadersQ.eq('branch_id', branchId);
+    const { data: closedEodHeaders, error: eodHeadersErr } = await eodHeadersQ;
     if (eodHeadersErr) throw new Error('Gagal memuat sesi EOD final untuk Cost Control: ' + eodHeadersErr.message);
 
     let closedEodItems = [];
     if (closedEodHeaders?.length) {
-      const { data: eodItems, error: eodItemsErr } = await supabase
+      let eodItemsQ = supabase
         .from('daily_inventory_items')
         .select('inventory_id, material_id, out_qty, usage_value, unit_cost_snapshot, stock_based_usage_qty, usage_variance_qty, waste_qty')
         .eq('tenant_id', tenantId)
         .in('inventory_id', closedEodHeaders.map(h => h.id));
+      if (branchId) eodItemsQ = eodItemsQ.eq('branch_id', branchId);
+      const { data: eodItems, error: eodItemsErr } = await eodItemsQ;
       if (eodItemsErr) throw new Error('Gagal memuat rincian pemakaian EOD untuk Cost Control: ' + eodItemsErr.message);
       closedEodItems = eodItems || [];
     }
@@ -3578,12 +3865,14 @@ export const api = {
       return sum + ((Number(item.usage_variance_qty) || 0) * (Number(item.unit_cost_snapshot) || 0));
     }, 0);
 
-    const { data: expectedUsageRows, error: expectedUsageErr } = await supabase
+    let expUsageQ = supabase
       .from('expected_usage')
       .select('material_id, expected_qty, expected_cost_value, unit_cost_snapshot, materials(avg_cost, price)')
       .eq('tenant_id', tenantId)
       .lte('week_start', endDate)
       .gte('week_end', startDate);
+    if (branchId) expUsageQ = expUsageQ.eq('branch_id', branchId);
+    const { data: expectedUsageRows, error: expectedUsageErr } = await expUsageQ;
     if (expectedUsageErr) throw new Error('Gagal memuat theoretical usage: ' + expectedUsageErr.message);
     let theoreticalCogsCost = 0;
     let theoreticalRowsEstimated = 0;
@@ -3623,13 +3912,15 @@ export const api = {
     // FIX 2026-09 (QA finding, sama seperti closing valuation di atas): filter
     // status APPROVED supaya fallback derivation di bawah tidak dipicu secara
     // keliru hanya karena ada draft opname bulan lalu yang belum di-submit.
-    const { data: rawPrevOpnames, error: prevOpnamesErr } = await supabase
+    let prevOpnamesQ = supabase
       .from('stock_opnames')
       .select('id, location, approved_at, created_at')
       .eq('tenant_id', tenantId)
       .eq('period_month', prevMonth)
       .eq('period_year', prevYear)
-      .eq('status', 'APPROVED')
+      .eq('status', 'APPROVED');
+    if (branchId) prevOpnamesQ = prevOpnamesQ.eq('branch_id', branchId);
+    const { data: rawPrevOpnames, error: prevOpnamesErr } = await prevOpnamesQ
       .order('approved_at', { ascending: false })
       .order('created_at', { ascending: false });
     if (prevOpnamesErr) throw prevOpnamesErr;
@@ -3645,10 +3936,12 @@ export const api = {
     let openingSnapshotFound = false;
     if (prevOpnames && prevOpnames.length > 0) {
       const prevOpnameIds = prevOpnames.map(o => o.id);
-      const { data: prevOpnameItems, error: prevItemsErr } = await supabase
+      let prevItemsQ = supabase
         .from('stock_opname_items')
         .select('opname_id, physical_qty, material_id, unit_cost_snapshot, valuation_snapshot, valuation_is_estimated, materials(new_price, price, avg_cost, unit, full_pack, name)')
         .in('opname_id', prevOpnameIds);
+      if (branchId) prevItemsQ = prevItemsQ.eq('branch_id', branchId);
+      const { data: prevOpnameItems, error: prevItemsErr } = await prevItemsQ;
       if (prevItemsErr) throw prevItemsErr;
       if (prevOpnameItems?.length) {
         const prevLocationById = Object.fromEntries(prevOpnames.map(o => [o.id, o.location || 'RESTO']));
@@ -3666,13 +3959,14 @@ export const api = {
     }
 
     if (!openingSnapshotFound) {
-      const { data: priorEodHeaders, error: priorEodErr } = await supabase
+      let priorEodQ = supabase
         .from('daily_inventories')
         .select('id, date, location')
         .eq('tenant_id', tenantId)
         .lt('date', startDate)
-        .in('status', ['verified', 'closed'])
-        .order('date', { ascending: false });
+        .in('status', ['verified', 'closed']);
+      if (branchId) priorEodQ = priorEodQ.eq('branch_id', branchId);
+      const { data: priorEodHeaders, error: priorEodErr } = await priorEodQ.order('date', { ascending: false });
       if (priorEodErr) throw priorEodErr;
       const latestPriorByLocation = {};
       for (const header of (priorEodHeaders || [])) {
@@ -3680,11 +3974,13 @@ export const api = {
       }
       const priorHeaders = Object.values(latestPriorByLocation);
       if (priorHeaders.length) {
-        const { data: priorItems, error: priorItemsErr } = await supabase
+        let priorItemsQ = supabase
           .from('daily_inventory_items')
           .select('inventory_id, material_id, closing_qty, unit_cost_snapshot, materials(avg_cost, price, unit, full_pack, name)')
           .eq('tenant_id', tenantId)
           .in('inventory_id', priorHeaders.map(h => h.id));
+        if (branchId) priorItemsQ = priorItemsQ.eq('branch_id', branchId);
+        const { data: priorItems, error: priorItemsErr } = await priorItemsQ;
         if (priorItemsErr) throw priorItemsErr;
         if (priorItems?.length) {
           const locationByHeader = Object.fromEntries(priorHeaders.map(h => [h.id, h.location]));
@@ -3750,24 +4046,28 @@ export const api = {
   },
 
   // --- SUPPLIERS ---
-  getSuppliers: async () => {
+  getSuppliers: async (branchIdArg = null) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return [];
-    const { data, error } = await supabase
+    const branchId = await requireBranchId(branchIdArg);
+    let query = supabase
       .from('suppliers')
       .select('*')
-      .eq('tenant_id', tenantId)
-      .order('name');
+      .eq('tenant_id', tenantId);
+    if (branchId) query = query.eq('branch_id', branchId);
+    const { data, error } = await query.order('name');
     if (error) throw new Error("Gagal memuat supplier: " + error.message);
     return data;
   },
 
   saveSupplier: async (supplierData) => {
-    const tenantId = await getActiveTenantId();
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(supplierData?.branch_id || null);
     const cleanName = String(supplierData.name || '').trim();
     if (!cleanName) throw new Error("Nama supplier wajib diisi.");
     const payload = {
       tenant_id: tenantId,
+      ...(branchId ? { branch_id: branchId } : {}),
       name: cleanName,
       phone: supplierData.phone || null,
       address: supplierData.address || null,
@@ -3775,23 +4075,27 @@ export const api = {
     };
 
     if (supplierData.id) {
-      const { data: existingSupplier } = await supabase
+      let existQ = supabase
         .from('suppliers')
         .select('name')
         .eq('id', supplierData.id)
-        .eq('tenant_id', tenantId)
-        .maybeSingle();
+        .eq('tenant_id', tenantId);
+      if (branchId) existQ = existQ.eq('branch_id', branchId);
+      const { data: existingSupplier } = await existQ.maybeSingle();
 
-      const { data, error } = await supabase.from('suppliers').update(payload).eq('id', supplierData.id).select().single();
+      let updSupQ = supabase.from('suppliers').update(payload).eq('id', supplierData.id).eq('tenant_id', tenantId);
+      if (branchId) updSupQ = updSupQ.eq('branch_id', branchId);
+      const { data, error } = await updSupQ.select().single();
       if (error) throw new Error("Gagal menyimpan supplier: " + error.message);
 
-      // Jika nama supplier berubah, sinkronkan nama supplier pada master bahan baku agar validasi PO tetap konsisten
       if (existingSupplier?.name && existingSupplier.name.trim() !== data.name.trim()) {
-        await supabase
+        let updMatSupQ = supabase
           .from('materials')
           .update({ supplier: data.name })
           .eq('tenant_id', tenantId)
           .eq('supplier', existingSupplier.name);
+        if (branchId) updMatSupQ = updMatSupQ.eq('branch_id', branchId);
+        await updMatSupQ;
       }
 
       await logAudit('UPDATE_SUPPLIER', `Mengubah data supplier "${data.name}".`);
@@ -3803,42 +4107,47 @@ export const api = {
     return data;
   },
 
-  deleteSupplier: async (supplierId) => {
-    const tenantId = await getActiveTenantId();
-    if (!tenantId) throw new Error("Tenant tidak ditemukan.");
+  deleteSupplier: async (supplierId, branchIdArg = null) => {
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(branchIdArg);
 
-    const { data: existingSupplier } = await supabase
+    let findSupQ = supabase
       .from('suppliers')
       .select('id, name')
       .eq('id', supplierId)
-      .eq('tenant_id', tenantId)
-      .maybeSingle();
+      .eq('tenant_id', tenantId);
+    if (branchId) findSupQ = findSupQ.eq('branch_id', branchId);
+    const { data: existingSupplier } = await findSupQ.maybeSingle();
 
     if (!existingSupplier) {
       throw new Error("Data supplier tidak ditemukan.");
     }
 
-    // Lepaskan FK pada purchase_entries jika ada agar histori tetap aman
-    await supabase
+    let peRelQ = supabase
       .from('purchase_entries')
       .update({ supplier_id: null })
       .eq('tenant_id', tenantId)
       .eq('supplier_id', supplierId);
+    if (branchId) peRelQ = peRelQ.eq('branch_id', branchId);
+    await peRelQ;
 
-    // Kosongkan atribut supplier pada materials yang terhubung ke supplier ini
     if (existingSupplier.name) {
-      await supabase
+      let matRelQ = supabase
         .from('materials')
         .update({ supplier: '' })
         .eq('tenant_id', tenantId)
         .ilike('supplier', existingSupplier.name.trim());
+      if (branchId) matRelQ = matRelQ.eq('branch_id', branchId);
+      await matRelQ;
     }
 
-    const { error } = await supabase
+    let delQ = supabase
       .from('suppliers')
       .delete()
       .eq('id', supplierId)
       .eq('tenant_id', tenantId);
+    if (branchId) delQ = delQ.eq('branch_id', branchId);
+    const { error } = await delQ;
 
     if (error) throw new Error("Gagal menghapus supplier: " + error.message);
     await logAudit('DELETE_SUPPLIER', `Menghapus supplier "${existingSupplier.name}" beserta pelepasan pemetaan bahannya.`);
@@ -3846,13 +4155,10 @@ export const api = {
   },
 
   // --- PURCHASE ENTRIES (Daily Purchasing) ---
-  // Paginated + searchable (search matches purchase notes or the linked
-  // material's name) so the history table never has to pull hundreds of
-  // rows at once — fixes the previous unbounded 400/embedding issue too,
-  // since this goes through a single well-formed query with FK embeds.
-  getPurchaseEntriesPaged: async ({ page = 1, pageSize = 15, search = '', material_id = null, period = null } = {}) => {
+  getPurchaseEntriesPaged: async ({ page = 1, pageSize = 15, search = '', material_id = null, period = null, branchId: branchIdArg = null } = {}) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { data: [], totalCount: 0 };
+    const branchId = await requireBranchId(branchIdArg);
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
@@ -3861,6 +4167,7 @@ export const api = {
       .select('*, materials(name, unit), suppliers(name)', { count: 'exact' })
       .eq('tenant_id', tenantId)
       .eq('is_cancelled', false);
+    if (branchId) query = query.eq('branch_id', branchId);
 
     if (material_id) {
       query = query.eq('material_id', material_id);
@@ -3880,11 +4187,13 @@ export const api = {
 
     if (search && search.trim()) {
       const s = sanitizePostgrest(search);
-      const { data: matMatches } = await supabase
+      let matMatchQ = supabase
         .from('materials')
         .select('id')
         .eq('tenant_id', tenantId)
         .ilike('name', `%${s}%`);
+      if (branchId) matMatchQ = matMatchQ.eq('branch_id', branchId);
+      const { data: matMatches } = await matMatchQ;
       const matIds = (matMatches || []).map(m => m.id);
       if (matIds.length > 0) {
         query = query.or(`notes.ilike.%${s}%,material_id.in.(${matIds.join(',')})`);
@@ -3899,13 +4208,12 @@ export const api = {
 
     if (error) throw new Error("Gagal memuat riwayat pembelian: " + error.message);
 
-    // Calculate total nominal and get ALL IDs across ALL matching records (not just the current page)
-    // We clone the query but only select the fields we need to calculate total
     let totalQuery = supabase
       .from('purchase_entries')
       .select('id, qty, unit_price')
       .eq('tenant_id', tenantId)
       .eq('is_cancelled', false);
+    if (branchId) totalQuery = totalQuery.eq('branch_id', branchId);
 
     if (material_id) totalQuery = totalQuery.eq('material_id', material_id);
 
@@ -3921,11 +4229,13 @@ export const api = {
 
     if (search && search.trim()) {
       const s = sanitizePostgrest(search);
-      const { data: matMatches } = await supabase
+      let matMatchQ2 = supabase
         .from('materials')
         .select('id')
         .eq('tenant_id', tenantId)
         .ilike('name', `%${s}%`);
+      if (branchId) matMatchQ2 = matMatchQ2.eq('branch_id', branchId);
+      const { data: matMatches } = await matMatchQ2;
       const matIds = (matMatches || []).map(m => m.id);
       if (matIds.length > 0) {
         totalQuery = totalQuery.or(`notes.ilike.%${s}%,material_id.in.(${matIds.join(',')})`);
@@ -3943,12 +4253,25 @@ export const api = {
 
   createPurchaseEntry: async (purchaseData) => {
     const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(purchaseData?.branch_id || null);
     const userId = await getActiveUserId();
     const destination = String(purchaseData.destination || 'RESTO').toUpperCase().includes('CENTRAL') ? 'CENTRAL' : 'RESTO';
     const qty = Number(purchaseData.qty);
     const unitPrice = Number(purchaseData.unit_price);
     if (!purchaseData.material_id || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(unitPrice) || unitPrice < 0) {
       throw new Error('Barang, kuantitas pembelian (> 0), dan harga satuan yang valid wajib diisi.');
+    }
+    if (branchId) {
+      const { data: matCheck } = await supabase
+        .from('materials')
+        .select('id')
+        .eq('id', Number(purchaseData.material_id))
+        .eq('tenant_id', tenantId)
+        .eq('branch_id', branchId)
+        .maybeSingle();
+      if (!matCheck) {
+        throw new Error('Bahan baku tidak ditemukan pada cabang aktif.');
+      }
     }
     const deliveryNotes = purchaseData.delivery_notes ? String(purchaseData.delivery_notes).trim() : '';
     const combinedNotes = [
@@ -3984,14 +4307,13 @@ export const api = {
     });
     if (rpcErr) throw new Error('Gagal menyimpan pembelian secara atomik: ' + rpcErr.message);
 
-    // Daily Inventory IN is derived from the transaction ledger at read-time;
-    // never increment daily_inventory_items from the purchase form as well.
     await logAudit('CREATE_PURCHASE_ENTRY', `${rpcResult?.duplicate ? 'Retry duplikat diabaikan. ' : ''}Mencatat pembelian ${payload.qty} ${payload.unit} ke ${destination} (Rp ${(payload.qty * payload.unit_price).toLocaleString('id-ID')}).`);
     return { success: true, duplicate: Boolean(rpcResult?.duplicate), ...rpcResult };
   },
 
-  deletePurchaseEntry: async (purchaseId) => {
+  deletePurchaseEntry: async (purchaseId, branchIdArg = null) => {
     const tenantId = await requireTenantId();
+    await requireBranchId(branchIdArg);
     const userId = await getActiveUserId();
     const { data, error } = await supabase.rpc('atomic_cancel_purchase_v3', {
       p_tenant_id: tenantId,
@@ -4403,32 +4725,28 @@ export const api = {
   },
 
   // --- BULK IMPORT ---
-  bulkImportMaterials: async (rows) => {
-    const tenantId = await getActiveTenantId();
+  bulkImportMaterials: async (rows, branchIdArg = null) => {
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(branchIdArg);
     let success = 0;
     let failed = 0;
     const errors = [];
 
-    // Pre-fetch all existing suppliers to avoid duplicates
-    const { data: allSuppliers } = await supabase
+    let supQ = supabase
       .from('suppliers')
       .select('id, name')
       .eq('tenant_id', tenantId);
+    if (branchId) supQ = supQ.eq('branch_id', branchId);
+    const { data: allSuppliers } = await supQ;
 
-    // Track known suppliers by name (case-insensitive)
     const suppliersMap = new Map((allSuppliers || []).map(s => [s.name.toLowerCase().trim(), s]));
 
-    // BUG-FIX 2026-08: previously upserted with `onConflict: 'tenant_id, name'`,
-    // so re-importing after a name fix/rename (KODE ITEM unchanged) inserted a
-    // NEW orphaned row instead of updating the existing one — see analysis
-    // Bagian 1.1. Pre-fetch existing materials by sku AND name, resolve the
-    // target row ourselves (sku wins over name), then use an explicit
-    // update()/insert() instead of upsert()+onConflict — this also sidesteps
-    // needing a DB unique constraint on (tenant_id, sku) (analysis Bagian 3.4).
-    const { data: allMaterialsForImport } = await supabase
+    let matImpQ = supabase
       .from('materials')
       .select('id, name, sku')
       .eq('tenant_id', tenantId);
+    if (branchId) matImpQ = matImpQ.eq('branch_id', branchId);
+    const { data: allMaterialsForImport } = await matImpQ;
 
     const materialsBySkuForImport = new Map(
       (allMaterialsForImport || []).filter(m => m.sku).map(m => [String(m.sku).toLowerCase().trim(), m])
@@ -4441,20 +4759,20 @@ export const api = {
       try {
         let supplierName = row.supplier ? String(row.supplier).trim() : 'Default Supplier';
         if (supplierName === '') supplierName = 'Default Supplier';
-        
+
         let supplierKey = supplierName.toLowerCase();
-        
-        // Auto-create supplier if it doesn't exist
+
         if (!suppliersMap.has(supplierKey)) {
           const { data: newSupplier, error: suppErr } = await supabase.from('suppliers').insert({
             tenant_id: tenantId,
+            ...(branchId ? { branch_id: branchId } : {}),
             name: supplierName,
             status: 'active',
             address: '',
             phone: '',
             contact_person: ''
           }).select('id, name').single();
-          
+
           if (!suppErr && newSupplier) {
             suppliersMap.set(supplierKey, newSupplier);
           }
@@ -4462,6 +4780,7 @@ export const api = {
 
         const insertData = {
           tenant_id: tenantId,
+          ...(branchId ? { branch_id: branchId } : {}),
           name: row.name,
           category: row.category || 'Others',
           supplier: supplierName,
@@ -4473,22 +4792,15 @@ export const api = {
           is_active: true
         };
 
-        // Stable code (KODE ITEM) for cross-referencing this material from
-        // recipe bulk imports and any external backend/POS integration,
-        // instead of matching by name text alone.
         const rowSku = row.sku !== undefined && row.sku !== '' ? String(row.sku).trim() : '';
         if (rowSku) {
           insertData.sku = rowSku;
         }
-        
-        // If they provided initial stock, set it (optional)
+
         if (row.qty_resto !== undefined && row.qty_resto !== '') {
           insertData.qty_resto = parseFloat(row.qty_resto || 0);
         }
 
-        // Resolve the existing row this import row refers to: KODE ITEM (sku)
-        // wins over name, so editing the name on re-import (typo fix, rename)
-        // still updates the SAME material instead of creating an orphan.
         let existingMaterial = null;
         if (rowSku) existingMaterial = materialsBySkuForImport.get(rowSku.toLowerCase());
         if (!existingMaterial && row.name) {
@@ -4497,7 +4809,9 @@ export const api = {
 
         let error;
         if (existingMaterial) {
-          ({ error } = await supabase.from('materials').update(insertData).eq('id', existingMaterial.id));
+          let updMatQ = supabase.from('materials').update(insertData).eq('id', existingMaterial.id).eq('tenant_id', tenantId);
+          if (branchId) updMatQ = updMatQ.eq('branch_id', branchId);
+          ({ error } = await updMatQ);
         } else {
           const { data: insertedMaterial, error: insErr } = await supabase
             .from('materials')
@@ -4505,8 +4819,6 @@ export const api = {
             .select('id, name, sku')
             .single();
           error = insErr;
-          // Keep local maps in sync so later rows in this same import batch
-          // (e.g. duplicate sku typo'd twice) resolve against it too.
           if (!insErr && insertedMaterial) {
             materialsByNameForImport.set(insertedMaterial.name.toLowerCase().trim(), insertedMaterial);
             if (insertedMaterial.sku) {
@@ -4527,45 +4839,33 @@ export const api = {
     return { success, failed, errors };
   },
 
-  bulkImportRecipes: async (rows) => {
-    // FIX 2026-09: use requireTenantId() (throws immediately with a clear
-    // message) instead of getActiveTenantId() (silently returns null for
-    // SuperAdmin / no-tenant sessions). Previously a null tenantId here would
-    // silently flow into every recipe_ingredients row built below, and only
-    // surface much later as a cryptic per-row Postgres "null value in column
-    // tenant_id" error instead of one clear upfront failure.
+  bulkImportRecipes: async (rows, branchIdArg = null) => {
     const tenantId = await requireTenantId();
-    const unitConversionMap = await api._loadUnitConversionMap(tenantId);
+    const branchId = await requireBranchId(branchIdArg);
+    const unitConversionMap = await api._loadUnitConversionMap(tenantId, branchId);
 
     let success = 0;
     let failed = 0;
     const errors = [];
     const warnings = [];
 
-    // Pre-fetch all materials for the tenant, indexed by both name AND sku
-    // (kode item) so ingredient references can be resolved deterministically
-    // by code when given, instead of relying purely on exact name matching.
-    const { data: allMaterials } = await supabase
+    let allMatsQ = supabase
       .from('materials')
       .select('id, name, sku, unit, full_pack, price, new_price')
       .eq('tenant_id', tenantId)
       .eq('is_active', true);
+    if (branchId) allMatsQ = allMatsQ.eq('branch_id', branchId);
+    const { data: allMaterials } = await allMatsQ;
 
     const materialsMap = new Map((allMaterials || []).map(m => [m.name.toLowerCase().trim(), m]));
     const materialsBySku = new Map((allMaterials || []).filter(m => m.sku).map(m => [m.sku.toLowerCase().trim(), m]));
 
-    // BUG-FIX 2026-08: previously upserted with `onConflict: 'menu_name,tenant_id'`,
-    // so re-importing after a menu name fix/rename (KODE MENU/pos_code unchanged)
-    // inserted a NEW recipe row with the SAME pos_code as the old one — see
-    // analysis Bagian 1.2, which then breaks POS matching (Bagian 1.3) because
-    // two recipes share one pos_code. Pre-fetch existing recipes by pos_code AND
-    // menu_name, resolve the target row ourselves (pos_code wins over name), then
-    // use an explicit update()/insert() instead of upsert()+onConflict — this also
-    // sidesteps needing a DB unique constraint on (tenant_id, pos_code) (Bagian 3.4).
-    const { data: allRecipesForImport } = await supabase
+    let allRecQ = supabase
       .from('recipes')
       .select('id, menu_name, pos_code')
       .eq('tenant_id', tenantId);
+    if (branchId) allRecQ = allRecQ.eq('branch_id', branchId);
+    const { data: allRecipesForImport } = await allRecQ;
 
     const recipesByCodeForImport = new Map(
       (allRecipesForImport || []).filter(r => r.pos_code).map(r => [String(r.pos_code).toLowerCase().trim(), r])
@@ -4683,6 +4983,7 @@ export const api = {
 
         const recipePayload = {
           tenant_id: tenantId,
+          ...(branchId ? { branch_id: branchId } : {}),
           menu_name: row.menu_name,
           pos_code: normalizedRecipeCode,
           category: category,
@@ -4698,10 +4999,6 @@ export const api = {
           price_adjustment: priceAdjustment
         };
 
-        // Resolve the existing row this import row refers to: KODE MENU
-        // (pos_code) wins over menu_name, so editing the name on re-import
-        // still updates the SAME recipe instead of creating a pos_code-colliding
-        // duplicate.
         let existingRecipe = null;
         if (normalizedRecipeCode) {
           existingRecipe = recipesByCodeForImport.get(normalizedRecipeCode.toLowerCase());
@@ -4712,12 +5009,13 @@ export const api = {
 
         let recipeData, recipeErr;
         if (existingRecipe) {
-          ({ data: recipeData, error: recipeErr } = await supabase
+          let updRecQ = supabase
             .from('recipes')
             .update(recipePayload)
             .eq('id', existingRecipe.id)
-            .select('id')
-            .single());
+            .eq('tenant_id', tenantId);
+          if (branchId) updRecQ = updRecQ.eq('branch_id', branchId);
+          ({ data: recipeData, error: recipeErr } = await updRecQ.select('id').single());
         } else {
           ({ data: recipeData, error: recipeErr } = await supabase
             .from('recipes')
@@ -4728,31 +5026,24 @@ export const api = {
 
         if (recipeErr) throw new Error(recipeErr.message);
 
-        // Keep local maps in sync so later rows in this same import batch
-        // resolve against the row we just wrote.
         if (recipeData?.id) {
           const rec = { id: recipeData.id, menu_name: row.menu_name, pos_code: normalizedRecipeCode };
           if (normalizedRecipeCode) recipesByCodeForImport.set(normalizedRecipeCode.toLowerCase(), rec);
           if (row.menu_name) recipesByNameForImport.set(String(row.menu_name).toLowerCase().trim(), rec);
         }
 
-        // Link ingredients if recipe was successfully upserted
         if (ingredients.length > 0 && recipeData?.id) {
           const ingredientsToInsert = [];
           for (const ing of ingredients) {
             if (!ing.item_name && !ing.item_code) continue;
 
             let mat = resolveMaterial(ing.item_code, ing.item_name);
-            
-            // AUTO-CREATE MATERIAL IF NOT FOUND (by kode or nama) — kept as a
-            // convenience default so an import never hard-fails over a missing
-            // material, but now tracked and surfaced via `warnings` so it's
-            // visible and fixable instead of a silent Rp0 material quietly
-            // skewing this and every other recipe's HPP.
+
             if (!mat) {
               const newName = ing.item_name || ing.item_code;
               const { data: newMat, error: newMatErr } = await supabase.from('materials').insert({
                 tenant_id: tenantId,
+                ...(branchId ? { branch_id: branchId } : {}),
                 name: newName,
                 sku: ing.item_code || null,
                 category: 'Others',
@@ -4764,7 +5055,7 @@ export const api = {
                 min_stock: 15,
                 is_active: true
               }).select('id, name, sku, unit, full_pack, price, new_price').single();
-              
+
               if (!newMatErr && newMat) {
                 materialsMap.set(newName.toLowerCase(), newMat);
                 if (newMat.sku) materialsBySku.set(newMat.sku.toLowerCase(), newMat);
@@ -4777,7 +5068,7 @@ export const api = {
               const unit = ing.unit || mat.unit || 'gr';
               const unitPrice = parseFloat(mat.new_price ?? mat.price ?? 0);
               const amount = calculateIngredientCost(mat, parseFloat(ing.qty_in_use || 0), unit, unitConversionMap);
-              
+
               ingredientsToInsert.push({
                 recipe_id: recipeData.id,
                 material_id: mat.id,
@@ -4785,26 +5076,20 @@ export const api = {
                 unit: unit,
                 unit_price: unitPrice,
                 amount: parseFloat(amount.toFixed(2)),
-                tenant_id: tenantId
+                tenant_id: tenantId,
+                ...(branchId ? { branch_id: branchId } : {})
               });
             }
           }
 
           if (ingredientsToInsert.length > 0) {
-            // FIX 2026-09: insert the NEW ingredient rows first, and only
-            // delete the OLD ones after that insert succeeds. Previously this
-            // deleted old ingredients FIRST, so any failure on the insert
-            // (e.g. a NOT NULL violation, a bad material_id, a dropped
-            // connection) left the recipe with ZERO ingredients — silently
-            // wiping its BOM/HPP — with no rollback, since these are two
-            // separate calls, not one DB transaction. Doing it this order
-            // means a failed import can never destroy existing ingredient
-            // data; the recipe just keeps its old (still-correct) BOM.
             const newMaterialIds = new Set(ingredientsToInsert.map(r => Number(r.material_id)));
-            const { data: oldIngredientRows } = await supabase
+            let oldIngQ = supabase
               .from('recipe_ingredients')
               .select('id, material_id')
               .eq('recipe_id', recipeData.id);
+            if (branchId) oldIngQ = oldIngQ.eq('branch_id', branchId);
+            const { data: oldIngredientRows } = await oldIngQ;
 
             const { error: ingErr } = await supabase
               .from('recipe_ingredients')
@@ -4816,7 +5101,9 @@ export const api = {
               .map(r => r.id);
 
             if (idsToDelete.length > 0) {
-              await supabase.from('recipe_ingredients').delete().in('id', idsToDelete);
+              let delIngQ = supabase.from('recipe_ingredients').delete().in('id', idsToDelete);
+              if (branchId) delIngQ = delIngQ.eq('branch_id', branchId);
+              await delIngQ;
             }
           }
         }
@@ -4832,22 +5119,26 @@ export const api = {
     return { success, failed, errors, warnings };
   },
 
-  bulkImportOpnameItems: async (opnameId, rows) => {
+  bulkImportOpnameItems: async (opnameId, rows, branchIdArg = null) => {
     let success = 0;
     let failed = 0;
-    const tenantId = await getActiveTenantId();
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(branchIdArg);
 
-    // Verify ownership of the opnameId
-    const { data: opnameCheck } = await supabase.from('stock_opnames').select('id').eq('id', opnameId).eq('tenant_id', tenantId).maybeSingle();
-    if (!opnameCheck) throw new Error("Akses ditolak: Opname tidak valid atau bukan milik tenant ini.");
+    let opCheckQ = supabase.from('stock_opnames').select('id, branch_id').eq('id', opnameId).eq('tenant_id', tenantId);
+    if (branchId) opCheckQ = opCheckQ.eq('branch_id', branchId);
+    const { data: opnameCheck } = await opCheckQ.maybeSingle();
+    if (!opnameCheck) throw new Error("Akses ditolak: Opname tidak valid atau bukan milik cabang ini.");
 
-    // rows: { material_name, physical_qty, notes }
-    const { data: allMaterials } = await supabase
+    let matQ = supabase
       .from('materials')
       .select('id, name')
       .eq('tenant_id', tenantId);
+    if (branchId) matQ = matQ.eq('branch_id', branchId);
+    const { data: allMaterials } = await matQ;
 
     const materialMap = new Map((allMaterials || []).map(m => [m.name.toLowerCase(), m.id]));
+    const resolvedBranchId = branchId || opnameCheck.branch_id || null;
 
     for (const row of rows) {
       try {
@@ -4858,6 +5149,8 @@ export const api = {
           .from('stock_opname_items')
           .upsert({
             opname_id: opnameId,
+            tenant_id: tenantId,
+            ...(resolvedBranchId ? { branch_id: resolvedBranchId } : {}),
             material_id: materialId,
             physical_qty: parseFloat(row.physical_qty || 0),
             notes: row.notes || ''
@@ -4959,15 +5252,19 @@ export const api = {
   },
 
   // ── Barista Report: bulk fetch all data for a given month ──
-  getBaristaReportData: async (month, year) => {
+  getBaristaReportData: async (month, year, branchIdArg = null) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) throw new Error('Tenant not found');
+    const branchId = await requireBranchId(branchIdArg);
 
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     const lastDay = new Date(year, month, 0).getDate();
     const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-    // Parallel fetch all needed data
+    const prevMonth = month === 1 ? 12 : month - 1;
+    const prevYear = month === 1 ? year - 1 : year;
+    const scopeB = (q) => (branchId ? q.eq('branch_id', branchId) : q);
+
     const [
       materialsRes,
       recipesRes,
@@ -4978,35 +5275,19 @@ export const api = {
       transactionsRes,
       unitConversionsRes
     ] = await Promise.all([
-      // 1. Materials (marketlist)
-      supabase.from('materials').select('*').eq('tenant_id', tenantId).eq('is_active', true).order('category').order('name'),
-      // 2. Recipes + ingredients + materials
-      supabase.from('recipes').select('*, recipe_ingredients(*, materials(*))').eq('tenant_id', tenantId).order('category').order('menu_name'),
-      // 3. Purchase entries for the month
-      supabase.from('purchase_entries').select('*, materials(name, unit), suppliers(name)').eq('tenant_id', tenantId).gte('date', startDate).lte('date', endDate).order('date'),
-      // 4. Stock Opname RESTO
-      supabase.from('stock_opnames').select('*, stock_opname_items(*, materials(*))').eq('tenant_id', tenantId).eq('period_month', month).eq('period_year', year).eq('location', 'RESTO').maybeSingle(),
-      // 5. Stock Opname CENTRAL
-      supabase.from('stock_opnames').select('*, stock_opname_items(*, materials(*))').eq('tenant_id', tenantId).eq('period_month', month).eq('period_year', year).eq('location', 'CENTRAL').maybeSingle(),
-      // 6. Daily Inventories for the month
-      // BUG-FIX 2026-07: added full_pack + id — computeDailyUsage/buildDailyInventorySheet
-      // now need these to compute a correct pack-size-aware valuation. We map materials in JS
-      // to avoid PostgREST relationship errors when material_id doesn't have an explicit FK constraint.
-      supabase.from('daily_inventories').select('*, daily_inventory_items(*)').eq('tenant_id', tenantId).gte('date', startDate).lte('date', endDate).order('date'),
-      // 7. Transactions (for pemakaian/cost control)
-      supabase.from('transactions').select('*, materials(name, category)').eq('tenant_id', tenantId).gte('date', startDate).lte('date', endDate).order('date'),
-      // 8. GAP-FIX 2026-07: unit_conversions was in the schema but never fetched/used
-      // anywhere — needed by validateUnitConversion() to know which unit mismatches
-      // have an explicit, human-confirmed conversion factor rather than flagging them.
-      supabase.from('unit_conversions').select('*').eq('tenant_id', tenantId)
+      scopeB(supabase.from('materials').select('*').eq('tenant_id', tenantId).eq('is_active', true)).order('category').order('name'),
+      scopeB(supabase.from('recipes').select('*, recipe_ingredients(*, materials(*))').eq('tenant_id', tenantId)).order('category').order('menu_name'),
+      scopeB(supabase.from('purchase_entries').select('*, materials(name, unit), suppliers(name)').eq('tenant_id', tenantId).gte('date', startDate).lte('date', endDate)).order('date'),
+      scopeB(supabase.from('stock_opnames').select('*, stock_opname_items(*, materials(*))').eq('tenant_id', tenantId).eq('period_month', month).eq('period_year', year).eq('location', 'RESTO')).maybeSingle(),
+      scopeB(supabase.from('stock_opnames').select('*, stock_opname_items(*, materials(*))').eq('tenant_id', tenantId).eq('period_month', month).eq('period_year', year).eq('location', 'CENTRAL')).maybeSingle(),
+      scopeB(supabase.from('daily_inventories').select('*, daily_inventory_items(*)').eq('tenant_id', tenantId).gte('date', startDate).lte('date', endDate)).order('date'),
+      scopeB(supabase.from('transactions').select('*, materials(name, category)').eq('tenant_id', tenantId).gte('date', startDate).lte('date', endDate)).order('date'),
+      scopeB(supabase.from('unit_conversions').select('*').eq('tenant_id', tenantId))
     ]);
 
-    // Also fetch previous month's opname for opening stock
-    const prevMonth = month === 1 ? 12 : month - 1;
-    const prevYear = month === 1 ? year - 1 : year;
     const [prevOpnameRestoRes, prevOpnameCentralRes] = await Promise.all([
-      supabase.from('stock_opnames').select('*, stock_opname_items(*, materials(*))').eq('tenant_id', tenantId).eq('period_month', prevMonth).eq('period_year', prevYear).eq('location', 'RESTO').maybeSingle(),
-      supabase.from('stock_opnames').select('*, stock_opname_items(*, materials(*))').eq('tenant_id', tenantId).eq('period_month', prevMonth).eq('period_year', prevYear).eq('location', 'CENTRAL').maybeSingle()
+      scopeB(supabase.from('stock_opnames').select('*, stock_opname_items(*, materials(*))').eq('tenant_id', tenantId).eq('period_month', prevMonth).eq('period_year', prevYear).eq('location', 'RESTO')).maybeSingle(),
+      scopeB(supabase.from('stock_opnames').select('*, stock_opname_items(*, materials(*))').eq('tenant_id', tenantId).eq('period_month', prevMonth).eq('period_year', prevYear).eq('location', 'CENTRAL')).maybeSingle()
     ]);
 
     const materialsMap = new Map((materialsRes.data || []).map(m => [m.id, m]));
@@ -5033,59 +5314,47 @@ export const api = {
     };
   },
 
-  // SEC-FIX 2026-08: factoryReset() (direct execution) has been removed.
-  // The underlying `factory_reset_atomic` RPC is now REVOKEd from client
-  // roles entirely (see FEATURE_reset_approval_workflow.sql) — it can only
-  // be invoked from inside approve_tenant_reset(), and only after a Super
-  // Admin approves. This closes a real hole: previously any authenticated
-  // user of any role could call factory_reset_atomic directly (e.g. via
-  // devtools) with an arbitrary tenant_id, since the RPC itself never
-  // checked who was calling it or which tenant they belonged to.
-
   // --- UNIT CONVERSIONS (manual pack-size overrides) ---
-  // Secondary/optional path — the PRIMARY way to set a material's pack/content
-  // conversion is now the structured `full_pack` field ("Carton = 24 pcs",
-  // see costUtils.js getPackUnitInfo()/StockLedger.jsx's "Konversi Isi"
-  // fields), which every call site already reads with zero extra wiring.
-  // This table exists for the Settings page's central list/override view and
-  // for any material where editing Full Pack directly isn't wanted. getUnitPrice()
-  // checks this FIRST, then falls back to parsing full_pack.
-  getUnitConversions: async () => {
+  getUnitConversions: async (branchIdArg = null) => {
     const tenantId = await getActiveTenantId();
-    const { data, error } = await supabase
+    if (!tenantId) return [];
+    const branchId = await requireBranchId(branchIdArg);
+    let q = supabase
       .from('unit_conversions')
       .select('*, materials(id, name, unit, full_pack)')
-      .eq('tenant_id', tenantId)
-      ;
+      .eq('tenant_id', tenantId);
+    if (branchId) q = q.eq('branch_id', branchId);
+    const { data, error } = await q;
     if (error) { console.error("DB Error:", error); throw error; }
     return data || [];
   },
 
-  // Internal helper — builds the Map<material_id, factor> shape that
-  // getUnitPrice()/calculateIngredientCost() expect. Used by every other
-  // function in this file that computes a Rupiah cost from a material, so a
-  // conversion saved here actually takes effect everywhere, not just in the
-  // Settings page that lists it.
-  async _loadUnitConversionMap(tenantId) {
-    const { data, error } = await supabase
+  async _loadUnitConversionMap(tenantId, branchId = null) {
+    let q = supabase
       .from('unit_conversions')
       .select('material_id, factor')
       .eq('tenant_id', tenantId);
+    if (branchId) q = q.eq('branch_id', branchId);
+    const { data, error } = await q;
     if (error) { console.warn('Gagal memuat unit_conversions:', error.message); return new Map(); }
     return new Map((data || []).map(c => [c.material_id, parseFloat(c.factor)]));
   },
 
-  upsertUnitConversion: async ({ id, material_id, from_unit, to_unit, factor }) => {
-    const tenantId = await getActiveTenantId();
+  upsertUnitConversion: async ({ id, material_id, from_unit, to_unit, factor, branch_id = null }) => {
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(branch_id);
     const payload = {
       tenant_id: tenantId,
+      ...(branchId ? { branch_id: branchId } : {}),
       material_id,
       from_unit,
       to_unit,
       factor: parseFloat(factor)
     };
     if (id) {
-      const { error } = await supabase.from('unit_conversions').update(payload).eq('id', id).eq('tenant_id', tenantId);
+      let updQ = supabase.from('unit_conversions').update(payload).eq('id', id).eq('tenant_id', tenantId);
+      if (branchId) updQ = updQ.eq('branch_id', branchId);
+      const { error } = await updQ;
       if (error) { console.error("DB Error:", error); throw error; }
     } else {
       const { error } = await supabase.from('unit_conversions').insert(payload);
@@ -5094,9 +5363,12 @@ export const api = {
     await logAudit('UPSERT_UNIT_CONVERSION', `Konversi satuan disimpan: 1 ${to_unit} = ${factor} ${from_unit}.`);
   },
 
-  deleteUnitConversion: async (id) => {
-    const tenantId = await getActiveTenantId();
-    const { error } = await supabase.from('unit_conversions').delete().eq('id', id).eq('tenant_id', tenantId);
+  deleteUnitConversion: async (id, branchIdArg = null) => {
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(branchIdArg);
+    let delQ = supabase.from('unit_conversions').delete().eq('id', id).eq('tenant_id', tenantId);
+    if (branchId) delQ = delQ.eq('branch_id', branchId);
+    const { error } = await delQ;
     if (error) { console.error("DB Error:", error); throw error; }
     await logAudit('DELETE_UNIT_CONVERSION', `Konversi satuan (id: ${id}) dihapus.`);
   },
@@ -5244,15 +5516,17 @@ export const api = {
     return true;
   },
 
-  getInvoicesStats: async () => {
+  getInvoicesStats: async (branchIdArg = null) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { total: 0, pending: 0, received: 0, totalValue: 0 };
+    const branchId = await requireBranchId(branchIdArg);
 
-    // Quick query for stats
-    const { data } = await supabase
+    let invQ = supabase
       .from('invoices')
       .select('status, total')
       .eq('tenant_id', tenantId);
+    if (branchId) invQ = invQ.eq('branch_id', branchId);
+    const { data } = await invQ;
 
     if (!data) return { total: 0, pending: 0, received: 0, totalValue: 0 };
 
@@ -5264,79 +5538,73 @@ export const api = {
     };
   },
 
-  // Delete a transaction and reverse its stock impact atomically.
-  // PURCHASE_IN (qty > 0): stock was added → reversal deducts same qty.
-  // WASTE (qty < 0): stock was deducted → reversal adds back (deduct_stock_atomic with negative qty adds stock).
-  deleteTransactionAndReverseStock: async (txId) => {
-    const tenantId = await getActiveTenantId();
+  deleteTransactionAndReverseStock: async (txId, branchIdArg = null) => {
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(branchIdArg);
 
-    // Fetch raw id (txId may be prefixed with 'tx-' from getTransactions mapper)
     const rawId = String(txId).replace(/^tx-/, '');
 
-    const { data: tx, error: fetchErr } = await supabase
+    let fetchTxQ = supabase
       .from('transactions')
-      .select('id, type, qty, material_id, amount, notes, date, location')
+      .select('id, type, qty, material_id, amount, notes, date, location, branch_id')
       .eq('id', rawId)
-      .eq('tenant_id', tenantId)
-      .maybeSingle();
+      .eq('tenant_id', tenantId);
+    if (branchId) fetchTxQ = fetchTxQ.eq('branch_id', branchId);
+    const { data: tx, error: fetchErr } = await fetchTxQ.maybeSingle();
 
     if (fetchErr) throw new Error('Gagal mengambil data transaksi: ' + fetchErr.message);
     if (!tx) throw new Error('Transaksi tidak ditemukan.');
 
-    // Reverse stock if material is linked
+    const resolvedBranchId = branchId || tx.branch_id || null;
+
     if (tx.material_id) {
       const { error: rpcErr } = await supabase.rpc('deduct_stock_atomic', {
         p_material_id: tx.material_id,
-        p_deduct_qty: parseFloat(tx.qty) // Positive = deduct, Negative = add back
+        p_deduct_qty: parseFloat(tx.qty)
       });
       if (rpcErr) throw new Error('Gagal membalikkan stok: ' + rpcErr.message);
 
-      // Restore specific location stock in materials row
       const isWasteType = ['WASTE', 'BREAKAGE', 'EXPIRED', 'COMP'].includes(tx.type);
       if (isWasteType) {
         const isCentral = tx.location === 'CENTRAL';
-        const { data: curMat } = await supabase.from('materials').select('qty_resto, qty_central').eq('id', tx.material_id).maybeSingle();
+        let curMatQ = supabase.from('materials').select('qty_resto, qty_central').eq('id', tx.material_id).eq('tenant_id', tenantId);
+        if (resolvedBranchId) curMatQ = curMatQ.eq('branch_id', resolvedBranchId);
+        const { data: curMat } = await curMatQ.maybeSingle();
         if (curMat) {
           const restoreQty = Math.abs(parseFloat(tx.qty));
-          if (isCentral) {
-            await supabase.from('materials').update({
-              qty_central: parseFloat(curMat.qty_central || 0) + restoreQty,
-              updated_at: new Date().toISOString()
-            }).eq('id', tx.material_id);
-          } else {
-            await supabase.from('materials').update({
-              qty_resto: parseFloat(curMat.qty_resto || 0) + restoreQty,
-              updated_at: new Date().toISOString()
-            }).eq('id', tx.material_id);
-          }
+          const updFields = isCentral
+            ? { qty_central: parseFloat(curMat.qty_central || 0) + restoreQty, updated_at: new Date().toISOString() }
+            : { qty_resto: parseFloat(curMat.qty_resto || 0) + restoreQty, updated_at: new Date().toISOString() };
+          let matUpdQ = supabase.from('materials').update(updFields).eq('id', tx.material_id).eq('tenant_id', tenantId);
+          if (resolvedBranchId) matUpdQ = matUpdQ.eq('branch_id', resolvedBranchId);
+          await matUpdQ;
         }
       }
     }
 
-    // Try to also delete from purchase_entries if applicable
     if (tx.type === 'PURCHASE_IN') {
-      const { data: purchaseEntries } = await supabase.from('purchase_entries').select('id, qty')
+      let peQ = supabase.from('purchase_entries').select('id, qty')
         .eq('tenant_id', tenantId)
         .eq('date', tx.date)
         .eq('material_id', tx.material_id);
+      if (resolvedBranchId) peQ = peQ.eq('branch_id', resolvedBranchId);
+      const { data: purchaseEntries } = await peQ;
 
       if (purchaseEntries && purchaseEntries.length > 0) {
-         const match = purchaseEntries.find(p => p.qty === tx.qty);
-         if (match) {
-            await supabase.from('purchase_entries').delete().eq('id', match.id);
-         } else {
-            // fallback to first one if exact qty match not found
-            await supabase.from('purchase_entries').delete().eq('id', purchaseEntries[0].id);
-         }
+        const match = purchaseEntries.find(p => p.qty === tx.qty) || purchaseEntries[0];
+        let delPeQ = supabase.from('purchase_entries').delete().eq('id', match.id).eq('tenant_id', tenantId);
+        if (resolvedBranchId) delPeQ = delPeQ.eq('branch_id', resolvedBranchId);
+        await delPeQ;
       }
     }
 
-    // Delete the transaction row
-    const { error: delErr } = await supabase
+    let delTxQ = supabase
       .from('transactions')
       .delete()
       .eq('id', rawId)
       .eq('tenant_id', tenantId);
+    if (resolvedBranchId) delTxQ = delTxQ.eq('branch_id', resolvedBranchId);
+    const { error: delErr } = await delTxQ;
 
     if (delErr) throw new Error('Gagal menghapus transaksi: ' + delErr.message);
 
@@ -5345,25 +5613,27 @@ export const api = {
   },
 
   editTransactionAndAdjustStock: async (txId, payload) => {
-    const tenantId = await getActiveTenantId();
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(payload?.branch_id || null);
     const rawId = String(txId).replace(/^tx-/, '');
 
-    const { data: tx, error: fetchErr } = await supabase
+    let fetchTxQ = supabase
       .from('transactions')
-      .select('id, type, qty, material_id, amount, notes, date')
+      .select('id, type, qty, material_id, amount, notes, date, branch_id')
       .eq('id', rawId)
-      .eq('tenant_id', tenantId)
-      .maybeSingle();
+      .eq('tenant_id', tenantId);
+    if (branchId) fetchTxQ = fetchTxQ.eq('branch_id', branchId);
+    const { data: tx, error: fetchErr } = await fetchTxQ.maybeSingle();
 
     if (fetchErr) throw new Error('Gagal mengambil data transaksi: ' + fetchErr.message);
     if (!tx) throw new Error('Transaksi tidak ditemukan.');
 
-    // Calculate diffs
+    const resolvedBranchId = branchId || tx.branch_id || null;
+
     const oldQty = parseFloat(tx.qty);
     const newQty = parseFloat(payload.qty);
     const qtyDiff = oldQty - newQty;
 
-    // Adjust stock if material is linked and qty changed
     if (tx.material_id && qtyDiff !== 0) {
       const { error: rpcErr } = await supabase.rpc('deduct_stock_atomic', {
         p_material_id: tx.material_id,
@@ -5372,13 +5642,11 @@ export const api = {
       if (rpcErr) throw new Error('Gagal adjust stok: ' + rpcErr.message);
     }
 
-    // Calculate new amount based on type
     const newAmount = tx.type === 'PURCHASE_IN'
-        ? newQty * (payload.unit_price || 0)
-        : (oldQty !== 0 ? (tx.amount / oldQty) * newQty : 0);
+      ? newQty * (payload.unit_price || 0)
+      : (oldQty !== 0 ? (tx.amount / oldQty) * newQty : 0);
 
-    // Update transactions table
-    const { error: updateErr } = await supabase
+    let updTxQ = supabase
       .from('transactions')
       .update({
         qty: newQty,
@@ -5388,38 +5656,46 @@ export const api = {
       })
       .eq('id', rawId)
       .eq('tenant_id', tenantId);
+    if (resolvedBranchId) updTxQ = updTxQ.eq('branch_id', resolvedBranchId);
+    const { error: updateErr } = await updTxQ;
 
     if (updateErr) throw new Error('Gagal update transaksi: ' + updateErr.message);
 
-    // Update purchase_entries if applicable
     if (tx.type === 'PURCHASE_IN') {
-      const { data: purchaseEntries } = await supabase.from('purchase_entries').select('id, qty, unit_price')
+      let peQ = supabase.from('purchase_entries').select('id, qty, unit_price')
         .eq('tenant_id', tenantId)
         .eq('date', tx.date)
         .eq('material_id', tx.material_id);
+      if (resolvedBranchId) peQ = peQ.eq('branch_id', resolvedBranchId);
+      const { data: purchaseEntries } = await peQ;
 
       if (purchaseEntries && purchaseEntries.length > 0) {
-         const match = purchaseEntries.find(p => p.qty === oldQty) || purchaseEntries[0];
-         await supabase.from('purchase_entries').update({
-             qty: newQty,
-             unit_price: payload.unit_price,
-             date: payload.date || tx.date,
-             notes: payload.notes || tx.notes
-         }).eq('id', match.id);
+        const match = purchaseEntries.find(p => p.qty === oldQty) || purchaseEntries[0];
+        let peUpdQ = supabase.from('purchase_entries').update({
+          qty: newQty,
+          unit_price: payload.unit_price,
+          date: payload.date || tx.date,
+          notes: payload.notes || tx.notes
+        }).eq('id', match.id).eq('tenant_id', tenantId);
+        if (resolvedBranchId) peUpdQ = peUpdQ.eq('branch_id', resolvedBranchId);
+        await peUpdQ;
       }
     }
 
-    // Update daily_inventory_items if applicable
     if (tx.type === 'WASTE' || tx.type === 'BREAKAGE' || tx.type === 'EXPIRED' || tx.type === 'COMP') {
-       const { data: dailyItems } = await supabase.from('daily_inventory_items').select('id, qty')
-         .eq('material_id', tx.material_id)
-         .eq('qty', Math.abs(oldQty)); // NOTE: daily items store absolute values
+      let diQ = supabase.from('daily_inventory_items').select('id, qty')
+        .eq('material_id', tx.material_id)
+        .eq('qty', Math.abs(oldQty));
+      if (resolvedBranchId) diQ = diQ.eq('branch_id', resolvedBranchId);
+      const { data: dailyItems } = await diQ;
 
-       if(dailyItems && dailyItems.length > 0){
-          await supabase.from('daily_inventory_items').update({
-              qty: Math.abs(newQty)
-          }).eq('id', dailyItems[0].id);
-       }
+      if (dailyItems && dailyItems.length > 0) {
+        let diUpdQ = supabase.from('daily_inventory_items').update({
+          qty: Math.abs(newQty)
+        }).eq('id', dailyItems[0].id);
+        if (resolvedBranchId) diUpdQ = diUpdQ.eq('branch_id', resolvedBranchId);
+        await diUpdQ;
+      }
     }
 
     await logAudit('EDIT_TRANSACTION', `Mengubah transaksi tipe "${tx.type}" tgl ${tx.date}.`);
@@ -5427,14 +5703,16 @@ export const api = {
   },
 
   // --- MARKET LISTS ---
-  getMarketLists: async () => {
+  getMarketLists: async (branchIdArg = null) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return [];
-    const { data, error } = await supabase
+    const branchId = await requireBranchId(branchIdArg);
+    let mlQ = supabase
       .from('market_lists')
       .select('*, market_list_items(*)')
-      .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false });
+      .eq('tenant_id', tenantId);
+    if (branchId) mlQ = mlQ.eq('branch_id', branchId);
+    const { data, error } = await mlQ.order('created_at', { ascending: false });
     if (error) throw new Error("Gagal mengambil market list: " + error.message);
 
     if (data && data.length > 0) {
@@ -5446,10 +5724,13 @@ export const api = {
       });
 
       if (allMaterialIds.size > 0) {
-        const { data: mats, error: matsError } = await supabase
+        let matsQ = supabase
           .from('materials')
           .select('id, name, sku, price, unit, category')
+          .eq('tenant_id', tenantId)
           .in('id', Array.from(allMaterialIds));
+        if (branchId) matsQ = matsQ.eq('branch_id', branchId);
+        const { data: mats, error: matsError } = await matsQ;
 
         if (!matsError && mats) {
           const matMap = mats.reduce((acc, m) => {
@@ -5471,30 +5752,46 @@ export const api = {
 
   createMarketList: async (payload) => {
     const tenantId = await requireTenantId();
-    const { data, error } = await supabase.from('market_lists').insert({ ...payload, tenant_id: tenantId }).select().single();
+    const branchId = await requireBranchId(payload?.branch_id || null);
+    const { data, error } = await supabase.from('market_lists').insert({
+      ...payload,
+      tenant_id: tenantId,
+      ...(branchId ? { branch_id: branchId } : {})
+    }).select().single();
     if (error) throw new Error("Gagal membuat market list: " + error.message);
     return data;
   },
 
   updateMarketList: async (id, payload) => {
-    const tenantId = await getActiveTenantId();
-    const { data, error } = await supabase.from('market_lists').update(payload).eq('id', id).eq('tenant_id', tenantId).select().single();
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(payload?.branch_id || null);
+    let q = supabase.from('market_lists').update(payload).eq('id', id).eq('tenant_id', tenantId);
+    if (branchId) q = q.eq('branch_id', branchId);
+    const { data, error } = await q.select().single();
     if (error) throw new Error("Gagal update market list: " + error.message);
     return data;
   },
 
-  deleteMarketList: async (id) => {
-    const tenantId = await getActiveTenantId();
-    const { error } = await supabase.from('market_lists').delete().eq('id', id).eq('tenant_id', tenantId);
+  deleteMarketList: async (id, branchIdArg = null) => {
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(branchIdArg);
+    let q = supabase.from('market_lists').delete().eq('id', id).eq('tenant_id', tenantId);
+    if (branchId) q = q.eq('branch_id', branchId);
+    const { error } = await q;
     if (error) throw new Error("Gagal menghapus market list: " + error.message);
   },
 
-  upsertMarketListItems: async (marketListId, items) => {
-    await requireTenantId();
-    await supabase.from('market_list_items').delete().eq('market_list_id', marketListId);
+  upsertMarketListItems: async (marketListId, items, branchIdArg = null) => {
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(branchIdArg);
+    let delQ = supabase.from('market_list_items').delete().eq('market_list_id', marketListId);
+    if (branchId) delQ = delQ.eq('branch_id', branchId);
+    await delQ;
     if (items && items.length > 0) {
       const payload = items.map(item => ({
         market_list_id: marketListId,
+        tenant_id: tenantId,
+        ...(branchId ? { branch_id: branchId } : {}),
         material_id: item.material_id,
         unit: item.unit || '',
         current_stock: Number(item.current_stock) || 0,
@@ -5512,15 +5809,17 @@ export const api = {
     }
   },
 
-  getMaterialSupplierHistory: async () => {
+  getMaterialSupplierHistory: async (branchIdArg = null) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return [];
-    const { data, error } = await supabase
+    const branchId = await requireBranchId(branchIdArg);
+    let q = supabase
       .from('purchase_entries')
       .select('material_id, supplier_id, unit_price, date, suppliers(id, name)')
       .eq('tenant_id', tenantId)
-      .not('supplier_id', 'is', null)
-      .order('date', { ascending: false });
+      .not('supplier_id', 'is', null);
+    if (branchId) q = q.eq('branch_id', branchId);
+    const { data, error } = await q.order('date', { ascending: false });
     if (error) {
       console.warn("Gagal mengambil riwayat harga material supplier:", error);
       return [];
@@ -5528,17 +5827,18 @@ export const api = {
     return data || [];
   },
 
-  // --- MARKET LIST BULK PRICE SYNC WITH INVOICES ---
-  getLatestInvoiceMaterialPrices: async ({ materialIds = null, onlyLatestSingleInvoice = false } = {}) => {
+  getLatestInvoiceMaterialPrices: async ({ materialIds = null, onlyLatestSingleInvoice = false, branchId: branchIdArg = null } = {}) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { pricesMap: {}, latestInvoice: null, allRecentInvoices: [] };
+    const branchId = await requireBranchId(branchIdArg);
 
-    // Fetch successful purchasing invoices (status RECEIVED or GOODS_RECEIVED)
     let query = supabase
       .from('invoices')
       .select('id, invoice_no, supplier, date, received_date, total, status, created_at, invoice_items(id, material_id, qty, unit_price, materials(id, name, unit, sku))')
       .eq('tenant_id', tenantId)
-      .in('status', ['RECEIVED', 'GOODS_RECEIVED'])
+      .in('status', ['RECEIVED', 'GOODS_RECEIVED']);
+    if (branchId) query = query.eq('branch_id', branchId);
+    query = query
       .order('received_date', { ascending: false, nullsFirst: false })
       .order('date', { ascending: false })
       .order('created_at', { ascending: false });
@@ -5568,7 +5868,6 @@ export const api = {
         if (!item.material_id) continue;
         if (materialIds && !materialIds.includes(item.material_id)) continue;
 
-        // Earliest match is the most recent because invoices are ordered descending
         if (!pricesMap[item.material_id]) {
           pricesMap[item.material_id] = {
             material_id: item.material_id,
@@ -5609,20 +5908,22 @@ export const api = {
     };
   },
 
-  syncMarketListPricesFromInvoice: async ({ marketListId = null, invoiceId = null } = {}) => {
+  syncMarketListPricesFromInvoice: async ({ marketListId = null, invoiceId = null, branchId: branchIdArg = null } = {}) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { updatedCount: 0, changes: [] };
+    const branchId = await requireBranchId(branchIdArg);
 
     let targetPricesMap = {};
     let invoiceInfo = null;
 
     if (invoiceId) {
-      const { data: inv, error: invErr } = await supabase
+      let invQ = supabase
         .from('invoices')
         .select('id, invoice_no, supplier, date, received_date, total, status, invoice_items(material_id, unit_price, materials(name))')
         .eq('id', invoiceId)
-        .eq('tenant_id', tenantId)
-        .single();
+        .eq('tenant_id', tenantId);
+      if (branchId) invQ = invQ.eq('branch_id', branchId);
+      const { data: inv, error: invErr } = await invQ.single();
 
       if (!invErr && inv) {
         invoiceInfo = {
@@ -5646,7 +5947,7 @@ export const api = {
         });
       }
     } else {
-      const res = await api.getLatestInvoiceMaterialPrices();
+      const res = await api.getLatestInvoiceMaterialPrices({ branchId });
       targetPricesMap = res.pricesMap;
       invoiceInfo = res.latestInvoice;
     }
@@ -5655,11 +5956,11 @@ export const api = {
       return { updatedCount: 0, changes: [], invoiceInfo };
     }
 
-    // Fetch market_list_items to sync
     let itemsQuery = supabase
       .from('market_list_items')
-      .select('*, market_lists!inner(id, name, tenant_id)')
+      .select('*, market_lists!inner(id, name, tenant_id, branch_id)')
       .eq('market_lists.tenant_id', tenantId);
+    if (branchId) itemsQuery = itemsQuery.eq('branch_id', branchId);
 
     if (marketListId) {
       itemsQuery = itemsQuery.eq('market_list_id', marketListId);
@@ -5704,15 +6005,15 @@ export const api = {
           supplier_name: matched.supplier_name
         });
 
-        updatePromises.push(
-          supabase
-            .from('market_list_items')
-            .update({
-              estimated_price: newPrice,
-              remarks: JSON.stringify(remarksObj)
-            })
-            .eq('id', item.id)
-        );
+        let updMliQ = supabase
+          .from('market_list_items')
+          .update({
+            estimated_price: newPrice,
+            remarks: JSON.stringify(remarksObj)
+          })
+          .eq('id', item.id);
+        if (branchId) updMliQ = updMliQ.eq('branch_id', branchId);
+        updatePromises.push(updMliQ);
       }
     }
 
@@ -5733,14 +6034,16 @@ export const api = {
   },
 
   // --- TRIMMING & PRODUKSI 2-TAHAP ---
-  getTrimmingBatches: async () => {
+  getTrimmingBatches: async (branchIdArg = null) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return [];
-    const { data, error } = await supabase
+    const branchId = await requireBranchId(branchIdArg);
+    let q = supabase
       .from('production_trimming_batches')
       .select('*, materials(id, name, unit, sku, price, category)')
-      .eq('tenant_id', tenantId)
-      .order('created_at', { ascending: false });
+      .eq('tenant_id', tenantId);
+    if (branchId) q = q.eq('branch_id', branchId);
+    const { data, error } = await q.order('created_at', { ascending: false });
     if (error) {
       console.warn("Error fetching production_trimming_batches:", error);
       return [];
@@ -5748,11 +6051,12 @@ export const api = {
     return data || [];
   },
 
-  createTrimmingBatchStep1: async ({ material_id, gross_weight, gross_photo_url, gross_latitude, gross_longitude, batch_number }) => {
+  createTrimmingBatchStep1: async ({ material_id, gross_weight, gross_photo_url, gross_latitude, gross_longitude, batch_number, branch_id = null }) => {
     const tenantId = await requireTenantId();
-    let branchId = activeBranchId || (typeof window !== 'undefined' && window.__activeBranchId);
+    let branchId = await requireBranchId(branch_id, { requiredForAdmin: false });
     if (!branchId) {
-      const { data: branches } = await supabase.from('branches').select('id').eq('tenant_id', tenantId).limit(1);
+      const fromFn = supabase.unscopedFrom ? supabase.unscopedFrom : supabase.from;
+      const { data: branches } = await fromFn('branches').select('id').eq('tenant_id', tenantId).limit(1);
       branchId = branches?.[0]?.id || null;
     }
     const finalBatchNumber = batch_number || `TRM-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
@@ -5761,7 +6065,7 @@ export const api = {
 
     const payload = {
       tenant_id: tenantId,
-      branch_id: branchId,
+      ...(branchId ? { branch_id: branchId } : {}),
       material_id,
       batch_number: finalBatchNumber,
       gross_weight: parseFloat(gross_weight),
@@ -5780,7 +6084,6 @@ export const api = {
 
     if (error) throw new Error("Gagal mendaftarkan Tahap 1: " + error.message);
 
-    // Atomic stock deduction for raw material
     try {
       await supabase.rpc('deduct_stock_atomic', {
         p_material_id: material_id,
@@ -5794,8 +6097,9 @@ export const api = {
     return data;
   },
 
-  completeTrimmingBatchStep2: async (batchId, { clean_weight, waste_weight, clean_photo_url, waste_photo_url, target_material_id, portion_pack_output, yield_status }) => {
+  completeTrimmingBatchStep2: async (batchId, { clean_weight, waste_weight, clean_photo_url, waste_photo_url, target_material_id, portion_pack_output, yield_status, branch_id = null }) => {
     const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(branch_id);
     const timestamp = new Date().toISOString();
     const cleanPhoto = clean_photo_url || `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="100%" height="100%" fill="%23064e3b"/><text x="50%" y="50%" fill="%236ee7b7" font-family="sans-serif" font-weight="bold" font-size="14" text-anchor="middle">Hasil Bersih Trimming</text></svg>`;
     const wastePhoto = waste_photo_url || `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="100%" height="100%" fill="%237f1d1d"/><text x="50%" y="50%" fill="%23fca5a5" font-family="sans-serif" font-weight="bold" font-size="14" text-anchor="middle">Limbah Kulit Trimming</text></svg>`;
@@ -5811,17 +6115,18 @@ export const api = {
       status: 'STEP2_COMPLETED'
     };
 
-    const { data, error } = await supabase
+    let updBatchQ = supabase
       .from('production_trimming_batches')
       .update(payload)
       .eq('id', batchId)
-      .eq('tenant_id', tenantId)
+      .eq('tenant_id', tenantId);
+    if (branchId) updBatchQ = updBatchQ.eq('branch_id', branchId);
+    const { data, error } = await updBatchQ
       .select('*, materials(id, name, unit, sku)')
       .single();
 
     if (error) throw new Error("Gagal menyelesaikan Tahap 2: " + error.message);
 
-    // If target material (pack jadi) is provided, increment stock
     if (target_material_id && parseInt(portion_pack_output || 0, 10) > 0) {
       try {
         await supabase.rpc('deduct_stock_atomic', {
@@ -5854,12 +6159,14 @@ export const api = {
     photo_clean = null,
     photo_waste = null,
     notes = '',
-    expiry_date = null
+    expiry_date = null,
+    branch_id = null
   }) => {
     const tenantId = await requireTenantId();
-    let branchId = activeBranchId || (typeof window !== 'undefined' && window.__activeBranchId);
+    let branchId = await requireBranchId(branch_id, { requiredForAdmin: false });
     if (!branchId) {
-      const { data: branches } = await supabase.from('branches').select('id').eq('tenant_id', tenantId).limit(1);
+      const fromFn = supabase.unscopedFrom ? supabase.unscopedFrom : supabase.from;
+      const { data: branches } = await fromFn('branches').select('id').eq('tenant_id', tenantId).limit(1);
       branchId = branches?.[0]?.id || null;
     }
 
@@ -5908,28 +6215,31 @@ export const api = {
     // Fetch source material first
     let sourceMat = null;
     try {
-      const { data: sMat } = await supabase
+      let sMatQ = supabase
         .from('materials')
         .select('*')
         .eq('id', parseInt(source_mat_id, 10))
-        .maybeSingle();
+        .eq('tenant_id', tenantId);
+      if (branchId) sMatQ = sMatQ.eq('branch_id', branchId);
+      const { data: sMat } = await sMatQ.maybeSingle();
       sourceMat = sMat || null;
     } catch (sErr) {
       console.warn("Fetch sourceMat warning:", sErr);
     }
 
-    // Auto-resolve or auto-create target clean material so user doesn't have to manually register it again
     let targetMat = null;
     const resolvedTargetName = (target_mat_name || (sourceMat ? `${sourceMat.name} (${processed_into || 'Bersih'})` : 'Hasil Olahan Bersih')).trim();
     const resolvedTargetUnit = target_unit || source_unit || sourceMat?.unit || 'gr';
 
     if (target_mat_id) {
       try {
-        const { data: tMat } = await supabase
+        let tMatQ = supabase
           .from('materials')
           .select('*')
           .eq('id', parseInt(target_mat_id, 10))
-          .maybeSingle();
+          .eq('tenant_id', tenantId);
+        if (branchId) tMatQ = tMatQ.eq('branch_id', branchId);
+        const { data: tMat } = await tMatQ.maybeSingle();
         targetMat = tMat || null;
       } catch (tErr) {
         console.warn("Fetch targetMat warning:", tErr);
@@ -5938,13 +6248,13 @@ export const api = {
 
     if (!targetMat && resolvedTargetName) {
       try {
-        const { data: existingTarget } = await supabase
+        let exTargetQ = supabase
           .from('materials')
           .select('*')
           .eq('tenant_id', tenantId)
-          .ilike('name', resolvedTargetName)
-          .limit(1)
-          .maybeSingle();
+          .ilike('name', resolvedTargetName);
+        if (branchId) exTargetQ = exTargetQ.eq('branch_id', branchId);
+        const { data: existingTarget } = await exTargetQ.limit(1).maybeSingle();
         if (existingTarget) {
           targetMat = existingTarget;
         } else {
@@ -5953,6 +6263,7 @@ export const api = {
             resolvedTargetUnit === 'L' ? 'btl = 1000 ml' :
             `${resolvedTargetUnit} = 1 ${resolvedTargetUnit === 'ml' ? 'ml' : resolvedTargetUnit === 'pcs' ? 'pcs' : 'gr'}`;
           const createdTarget = await api.createMaterial({
+            ...(branchId ? { branch_id: branchId } : {}),
             name: resolvedTargetName,
             category: 'Bahan Olahan / Prep',
             unit: resolvedTargetUnit,
@@ -6056,6 +6367,7 @@ export const api = {
       try {
         await supabase.from('material_batches').insert({
           tenant_id: tenantId,
+          ...(branchId ? { branch_id: branchId } : {}),
           material_id: finalTargetMatId,
           batch_no: batchNumber,
           expired_date: expiry_date,
@@ -6075,7 +6387,6 @@ export const api = {
       ? convertQtyToStockUnit(targetMat, rawClean, resolvedTargetUnit || targetMat.unit)
       : { qty: rawClean };
 
-    // 2. Atomic stock operations: Deduct raw material once (covers clean + waste), Increment processed material
     try {
       await supabase.rpc('deduct_stock_atomic', {
         p_material_id: parseInt(source_mat_id, 10),
@@ -6096,7 +6407,6 @@ export const api = {
       }
     }
 
-    // 2b. Update HPP & is_prep_output bahan hasil trimming secara proporsional
     if (targetMat) {
       try {
         const packSize = parsePackSize(targetMat.full_pack) || 1;
@@ -6104,6 +6414,7 @@ export const api = {
           ? Math.round(Number(new_target_hpp) * packSize)
           : Math.round(Number(targetMat.price) || 0);
         await api.updateMaterial(targetMat.id, {
+          ...(branchId ? { branch_id: branchId } : {}),
           price: newPackPrice,
           new_price: newPackPrice,
           avg_cost: newPackPrice,
@@ -6117,11 +6428,11 @@ export const api = {
     }
 
     const todayIso = getLocalDateISO();
-    // 2c. Catat mutasi produksi ke transactions agar Daily Inventory menampilkan Masuk (IN) pada bahan olahan & Diolah Prep pada bahan mentah
     if (finalTargetMatId && addRes.qty > 0) {
       try {
         await supabase.from('transactions').insert({
           tenant_id: tenantId,
+          ...(branchId ? { branch_id: branchId } : {}),
           material_id: finalTargetMatId,
           type: 'IN',
           qty: addRes.qty,
@@ -6139,6 +6450,7 @@ export const api = {
       try {
         await supabase.from('transactions').insert({
           tenant_id: tenantId,
+          ...(branchId ? { branch_id: branchId } : {}),
           material_id: parseInt(source_mat_id, 10),
           type: 'OUT',
           qty: -Math.abs(deductRes.qty),
@@ -6152,11 +6464,11 @@ export const api = {
       }
     }
 
-    // 3. Record Waste audit trail in transactions without double-deducting raw stock
     if (rawWaste > 0) {
       try {
         await supabase.from('transactions').insert({
           tenant_id: tenantId,
+          ...(branchId ? { branch_id: branchId } : {}),
           material_id: parseInt(source_mat_id, 10),
           type: 'WASTE',
           quantity: normWasteForDb,
@@ -6176,12 +6488,13 @@ export const api = {
     return savedRecord || { batch_number: batchNumber, success: true, target_material: targetMat };
   },
 
-  // --- V9 INVENTORY FLOW HELPERS (Compare POS ESB, Acuan Stok 1 Bulan, Sync SO Central -> Resto) ---
-  getDailyPosTheoreticalUsage: async (date) => {
+  // --- V9 INVENTORY FLOW HELPERS ---
+  getDailyPosTheoreticalUsage: async (date, branchIdArg = null) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId || !date) return {};
+    const branchId = await requireBranchId(branchIdArg);
 
-    const materialsList = await api.getMaterials();
+    const materialsList = await api.getMaterials(branchId);
     const matById = Object.fromEntries((materialsList || []).map(m => [Number(m.id), m]));
 
     const buildNormalizedResult = (rawList) => {
@@ -6232,17 +6545,19 @@ export const api = {
         return buildNormalizedResult(rpcRows);
       }
     } catch {
-      // Fallback to client-side calculation below if RPC v9 is not yet deployed
+      // Fallback below
     }
 
     try {
+      let posQ = supabase
+        .from('pos_transactions')
+        .select('menu_name, qty')
+        .eq('tenant_id', tenantId)
+        .eq('date', date);
+      if (branchId) posQ = posQ.eq('branch_id', branchId);
       const [{ data: posRows }, recipesList] = await Promise.all([
-        supabase
-          .from('pos_transactions')
-          .select('menu_name, qty')
-          .eq('tenant_id', tenantId)
-          .eq('date', date),
-        api.getRecipes()
+        posQ,
+        api.getRecipes(branchId)
       ]);
 
       if (!posRows || posRows.length === 0) return {};
@@ -6305,9 +6620,10 @@ export const api = {
     }
   },
 
-  getMonthlyQuotaSummary: async (period) => {
+  getMonthlyQuotaSummary: async (period, branchIdArg = null) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return [];
+    const branchId = await requireBranchId(branchIdArg);
 
     const targetPeriod = period || new Date().toISOString().slice(0, 7);
     const [yearStr, monthStr] = targetPeriod.split('-');
@@ -6317,20 +6633,27 @@ export const api = {
     const lastDay = new Date(year, month, 0).getDate();
     const endDate = `${targetPeriod}-${String(lastDay).padStart(2, '0')}`;
 
+    let txQ = supabase
+      .from('transactions')
+      .select('material_id, type, location, qty, is_reversed, date')
+      .eq('tenant_id', tenantId)
+      .gte('date', startDate)
+      .lte('date', endDate);
+    let invQ = supabase
+      .from('daily_inventories')
+      .select('id, date, location')
+      .eq('tenant_id', tenantId)
+      .gte('date', startDate)
+      .lte('date', endDate);
+    if (branchId) {
+      txQ = txQ.eq('branch_id', branchId);
+      invQ = invQ.eq('branch_id', branchId);
+    }
+
     const [materialsList, { data: txRows }, { data: invHeaders }] = await Promise.all([
-      api.getMaterials(),
-      supabase
-        .from('transactions')
-        .select('material_id, type, location, qty, is_reversed, date')
-        .eq('tenant_id', tenantId)
-        .gte('date', startDate)
-        .lte('date', endDate),
-      supabase
-        .from('daily_inventories')
-        .select('id, date, location')
-        .eq('tenant_id', tenantId)
-        .gte('date', startDate)
-        .lte('date', endDate)
+      api.getMaterials(branchId),
+      txQ,
+      invQ
     ]);
 
     const purchasedMap = {};
@@ -6350,10 +6673,12 @@ export const api = {
     const eodOutMap = {};
     const headerIds = (invHeaders || []).map(h => h.id).filter(Boolean);
     if (headerIds.length > 0) {
-      const { data: invItems } = await supabase
+      let invItemsQ = supabase
         .from('daily_inventory_items')
         .select('material_id, out_qty, qty_out')
         .in('inventory_id', headerIds);
+      if (branchId) invItemsQ = invItemsQ.eq('branch_id', branchId);
+      const { data: invItems } = await invItemsQ;
       (invItems || []).forEach(row => {
         const mId = Number(row.material_id);
         const outVal = Number(row.out_qty ?? row.qty_out) || 0;
@@ -6381,8 +6706,9 @@ export const api = {
       });
   },
 
-  syncCentralOpnameToResto: async (materialIds = [], transferQty = 0) => {
+  syncCentralOpnameToResto: async (materialIds = [], transferQty = 0, branchIdArg = null) => {
     const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(branchIdArg);
     const userId = await getActiveUserId();
     const cleanIds = (materialIds || []).map(id => Number(id)).filter(Boolean);
     if (!cleanIds.length) {
@@ -6406,12 +6732,13 @@ export const api = {
 
     let syncedCount = 0;
     for (const matId of cleanIds) {
-      const { data: mat } = await supabase
+      let matQ = supabase
         .from('materials')
         .select('*')
         .eq('id', matId)
-        .eq('tenant_id', tenantId)
-        .maybeSingle();
+        .eq('tenant_id', tenantId);
+      if (branchId) matQ = matQ.eq('branch_id', branchId);
+      const { data: mat } = await matQ.maybeSingle();
       if (!mat) continue;
 
       const moveQty = Number(transferQty) > 0
@@ -6419,6 +6746,7 @@ export const api = {
         : 0;
 
       await api.updateMaterial(matId, {
+        ...(branchId ? { branch_id: branchId } : {}),
         is_active: true,
         qty_resto: (Number(mat.qty_resto) || 0) + moveQty,
         qty_central: Math.max(0, (Number(mat.qty_central) || 0) - moveQty)
@@ -6428,6 +6756,7 @@ export const api = {
         try {
           await supabase.from('transactions').insert({
             tenant_id: tenantId,
+            ...(branchId ? { branch_id: branchId } : {}),
             date: getLocalDateISO(),
             material_id: matId,
             type: 'TRANSFER',
@@ -6449,14 +6778,17 @@ export const api = {
     return { success: true, synced_count: syncedCount };
   },
 
-  getOlahBahanHistory: async () => {
+  getOlahBahanHistory: async (branchIdArg = null) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return [];
+    const branchId = await requireBranchId(branchIdArg);
     try {
-      const { data, error } = await supabase
+      let q = supabase
         .from('production_trimming_batches')
         .select('*, materials(id, name, unit, sku, price, category)')
-        .eq('tenant_id', tenantId)
+        .eq('tenant_id', tenantId);
+      if (branchId) q = q.eq('branch_id', branchId);
+      const { data, error } = await q
         .order('created_at', { ascending: false })
         .limit(30);
       if (error) {
@@ -6487,9 +6819,593 @@ export const api = {
         };
       });
     } catch (err) {
+      if (String(err?.message || '').includes('branch_id')) throw err;
       console.warn("Error fetching olah bahan history:", err);
       return [];
     }
+  },
+
+  // --- MULTI-BRANCH MANAGEMENT & CLONING ---
+  getBranches: async () => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return [];
+    const fromFn = supabase.unscopedFrom ? supabase.unscopedFrom : supabase.from;
+    const { data, error } = await fromFn('branches')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .order('is_central', { ascending: false })
+      .order('created_at', { ascending: true });
+    if (error) {
+      console.warn('Error fetching branches:', error.message);
+      return [];
+    }
+    return data || [];
+  },
+
+  createBranch: async ({ name, code, address = '', is_central = false, clone_from_branch_id = null, clone_options = {} }) => {
+    const tenantId = await requireTenantId();
+    const cleanName = String(name || '').trim();
+    if (!cleanName) throw new Error('Nama cabang wajib diisi.');
+    const cleanCode = String(code || '').trim().toUpperCase() || cleanName.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+
+    const fromFn = supabase.unscopedFrom ? supabase.unscopedFrom : supabase.from;
+    const { data: created, error } = await fromFn('branches')
+      .insert({
+        tenant_id: tenantId,
+        name: cleanName,
+        code: cleanCode,
+        address: address?.trim() || null,
+        is_central: !!is_central,
+        is_active: true
+      })
+      .select()
+      .single();
+
+    if (error) throw new Error('Gagal membuat cabang: ' + error.message);
+
+    let cloneSummary = null;
+    if (clone_from_branch_id && (clone_options.materials || clone_options.suppliers || clone_options.recipes)) {
+      cloneSummary = await api.cloneBranchData({
+        sourceBranchId: clone_from_branch_id,
+        targetBranchId: created.id,
+        copyMaterials: !!clone_options.materials,
+        copySuppliers: !!clone_options.suppliers,
+        copyRecipes: !!clone_options.recipes,
+        conflictMode: 'SKIP'
+      });
+    }
+
+    await logAudit('CREATE_BRANCH', `Membuat cabang baru "${cleanName}" (${cleanCode}).`);
+    return { branch: created, cloneSummary };
+  },
+
+  updateBranch: async (branchId, updates) => {
+    const tenantId = await requireTenantId();
+    const fromFn = supabase.unscopedFrom ? supabase.unscopedFrom : supabase.from;
+    const payload = {};
+    if (updates.name !== undefined) payload.name = String(updates.name).trim();
+    if (updates.code !== undefined) payload.code = String(updates.code).trim().toUpperCase();
+    if (updates.address !== undefined) payload.address = updates.address?.trim() || null;
+    if (updates.is_central !== undefined) payload.is_central = !!updates.is_central;
+    if (updates.is_active !== undefined) payload.is_active = !!updates.is_active;
+
+    const { data, error } = await fromFn('branches')
+      .update(payload)
+      .eq('id', branchId)
+      .eq('tenant_id', tenantId)
+      .select()
+      .single();
+
+    if (error) throw new Error('Gagal memperbarui cabang: ' + error.message);
+    await logAudit('UPDATE_BRANCH', `Memperbarui cabang "${data.name}".`);
+    return data;
+  },
+
+  assignUserBranch: async (userId, branchId) => {
+    const tenantId = await requireTenantId();
+    const fromFn = supabase.unscopedFrom ? supabase.unscopedFrom : supabase.from;
+    const { data, error } = await fromFn('users')
+      .update({ branch_id: branchId || null })
+      .eq('id', userId)
+      .eq('tenant_id', tenantId)
+      .select()
+      .single();
+    if (error) throw new Error('Gagal mengubah cabang pengguna: ' + error.message);
+    await logAudit('ASSIGN_USER_BRANCH', `Menugaskan ${data.name} ke cabang baru.`);
+    return data;
+  },
+
+  getRecipesByBranch: async (branchId) => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId || !branchId) return [];
+    const fromFn = supabase.unscopedFrom ? supabase.unscopedFrom : supabase.from;
+    const { data, error } = await fromFn('recipes')
+      .select('id, menu_name, category, selling_price, basic_cost, food_cost_pct, fix_cost_pct, image_url')
+      .eq('tenant_id', tenantId)
+      .eq('branch_id', branchId)
+      .order('category')
+      .order('menu_name');
+    if (error) throw new Error('Gagal memuat menu cabang sumber: ' + error.message);
+    return data || [];
+  },
+
+  cloneBranchData: async ({
+    sourceBranchId,
+    targetBranchId,
+    copyMaterials = false,
+    copySuppliers = false,
+    copyRecipes = false,
+    selectedRecipeIds = null,
+    conflictMode = 'SKIP'
+  }) => {
+    const tenantId = await requireTenantId();
+    if (!sourceBranchId || !targetBranchId || sourceBranchId === targetBranchId) {
+      throw new Error('Cabang sumber dan tujuan harus berbeda.');
+    }
+
+    // Try atomic server RPC first
+    const { data: rpcRes, error: rpcErr } = await supabase.rpc('clone_branch_data', {
+      p_tenant_id: tenantId,
+      p_source_branch_id: sourceBranchId,
+      p_target_branch_id: targetBranchId,
+      p_copy_materials: copyMaterials,
+      p_copy_suppliers: copySuppliers,
+      p_copy_recipes: copyRecipes,
+      p_selected_recipe_ids: selectedRecipeIds,
+      p_conflict_mode: conflictMode
+    });
+
+    if (!rpcErr && rpcRes) {
+      await logAudit('CLONE_BRANCH_DATA', `Menyalin data cabang (${JSON.stringify(rpcRes)}).`);
+      return rpcRes;
+    }
+
+    // Fallback: client-side transaction when RPC is not yet deployed
+    const fromFn = supabase.unscopedFrom ? supabase.unscopedFrom : supabase.from;
+    let suppliersCopied = 0;
+    let materialsCopied = 0;
+    let recipesCopied = 0;
+    let recipesUpdated = 0;
+
+    if (copySuppliers) {
+      const [{ data: srcSups }, { data: tgtSups }] = await Promise.all([
+        fromFn('suppliers').select('*').eq('tenant_id', tenantId).eq('branch_id', sourceBranchId),
+        fromFn('suppliers').select('name').eq('tenant_id', tenantId).eq('branch_id', targetBranchId)
+      ]);
+      const existingNames = new Set((tgtSups || []).map(s => String(s.name || '').trim().toLowerCase()));
+      const toInsert = (srcSups || [])
+        .filter(s => !existingNames.has(String(s.name || '').trim().toLowerCase()))
+        .map(s => ({
+          tenant_id: tenantId,
+          branch_id: targetBranchId,
+          name: s.name,
+          phone: s.phone || null,
+          email: s.email || null,
+          address: s.address || null,
+          notes: s.notes || null,
+          category: s.category || null
+        }));
+      if (toInsert.length > 0) {
+        const { error: supInsErr } = await fromFn('suppliers').insert(toInsert);
+        if (!supInsErr) suppliersCopied = toInsert.length;
+      }
+    }
+
+    const ensureMaterialInTarget = async (srcMat, targetMatList) => {
+      const codeKey = srcMat.item_code ? String(srcMat.item_code).trim().toLowerCase() : null;
+      const nameKey = String(srcMat.name || '').trim().toLowerCase();
+      const found = targetMatList.find(m =>
+        (codeKey && String(m.item_code || '').trim().toLowerCase() === codeKey) ||
+        String(m.name || '').trim().toLowerCase() === nameKey
+      );
+      if (found) return found.id;
+
+      const { data: insertedMat, error: matErr } = await fromFn('materials')
+        .insert({
+          tenant_id: tenantId,
+          branch_id: targetBranchId,
+          name: srcMat.name,
+          category: srcMat.category || 'Umum',
+          unit: srcMat.unit || 'pck',
+          full_pack: srcMat.full_pack || '',
+          price: Number(srcMat.price || 0),
+          new_price: srcMat.new_price ?? srcMat.price ?? 0,
+          supplier: srcMat.supplier || '',
+          min_stock: Number(srcMat.min_stock || 0),
+          par_stock: Number(srcMat.par_stock || 0),
+          item_code: srcMat.item_code || null,
+          sku: srcMat.sku || null,
+          qty_resto: 0,
+          qty_central: 0,
+          stock: 0
+        })
+        .select()
+        .single();
+      if (matErr) throw new Error('Gagal menyalin bahan ' + srcMat.name + ': ' + matErr.message);
+      targetMatList.push(insertedMat);
+      materialsCopied += 1;
+      return insertedMat.id;
+    };
+
+    const [{ data: srcMats }, { data: tgtMatsInit }] = await Promise.all([
+      fromFn('materials').select('*').eq('tenant_id', tenantId).eq('branch_id', sourceBranchId),
+      fromFn('materials').select('*').eq('tenant_id', tenantId).eq('branch_id', targetBranchId)
+    ]);
+    const tgtMats = [...(tgtMatsInit || [])];
+    const srcMatById = new Map((srcMats || []).map(m => [m.id, m]));
+
+    if (copyMaterials) {
+      for (const m of (srcMats || [])) {
+        await ensureMaterialInTarget(m, tgtMats);
+      }
+    }
+
+    if (copyRecipes) {
+      let recQuery = fromFn('recipes')
+        .select('*, recipe_ingredients(*)')
+        .eq('tenant_id', tenantId)
+        .eq('branch_id', sourceBranchId);
+      if (Array.isArray(selectedRecipeIds) && selectedRecipeIds.length > 0) {
+        recQuery = recQuery.in('id', selectedRecipeIds);
+      }
+      const { data: srcRecipes, error: srcRecErr } = await recQuery;
+      if (srcRecErr) throw new Error('Gagal membaca resep sumber: ' + srcRecErr.message);
+
+      const { data: tgtRecipes } = await fromFn('recipes')
+        .select('id, menu_name')
+        .eq('tenant_id', tenantId)
+        .eq('branch_id', targetBranchId);
+      const tgtRecMap = new Map((tgtRecipes || []).map(r => [String(r.menu_name || '').trim().toLowerCase(), r]));
+
+      for (const rec of (srcRecipes || [])) {
+        const key = String(rec.menu_name || '').trim().toLowerCase();
+        const existing = tgtRecMap.get(key);
+        if (existing && conflictMode === 'SKIP') continue;
+
+        let targetRecId = existing?.id || null;
+        if (!targetRecId) {
+          const { data: createdRec, error: recInsErr } = await fromFn('recipes')
+            .insert({
+              tenant_id: tenantId,
+              branch_id: targetBranchId,
+              menu_name: rec.menu_name,
+              category: rec.category,
+              selling_price: rec.selling_price,
+              basic_cost: rec.basic_cost,
+              fix_cost_pct: rec.fix_cost_pct,
+              food_cost_pct: rec.food_cost_pct,
+              image_url: rec.image_url || null
+            })
+            .select()
+            .single();
+          if (recInsErr) throw new Error('Gagal menyalin menu ' + rec.menu_name + ': ' + recInsErr.message);
+          targetRecId = createdRec.id;
+          recipesCopied += 1;
+        } else {
+          await fromFn('recipes')
+            .update({
+              category: rec.category,
+              selling_price: rec.selling_price,
+              basic_cost: rec.basic_cost,
+              fix_cost_pct: rec.fix_cost_pct,
+              food_cost_pct: rec.food_cost_pct
+            })
+            .eq('id', targetRecId);
+          await fromFn('recipe_ingredients').delete().eq('recipe_id', targetRecId);
+          recipesUpdated += 1;
+        }
+
+        const ingRows = [];
+        for (const ing of (rec.recipe_ingredients || [])) {
+          const srcMat = srcMatById.get(ing.material_id);
+          let targetMatId = null;
+          if (srcMat) {
+            targetMatId = await ensureMaterialInTarget(srcMat, tgtMats);
+          } else if (ing.item_name) {
+            targetMatId = await ensureMaterialInTarget({
+              name: ing.item_name,
+              unit: ing.unit || 'gr',
+              price: ing.unit_price || 0
+            }, tgtMats);
+          }
+          if (targetMatId) {
+            ingRows.push({
+              recipe_id: targetRecId,
+              material_id: targetMatId,
+              item_name: ing.item_name || srcMat?.name || '',
+              qty_in_use: ing.qty_in_use,
+              unit: ing.unit,
+              unit_price: ing.unit_price || 0,
+              amount: ing.amount || 0
+            });
+          }
+        }
+        if (ingRows.length > 0) {
+          await fromFn('recipe_ingredients').insert(ingRows);
+        }
+      }
+    }
+
+    const summary = {
+      suppliers_copied: suppliersCopied,
+      materials_copied: materialsCopied,
+      recipes_copied: recipesCopied,
+      recipes_updated: recipesUpdated
+    };
+    await logAudit('CLONE_BRANCH_DATA', `Menyalin data cabang: ${recipesCopied} menu baru, ${recipesUpdated} menu diperbarui, ${materialsCopied} bahan.`);
+    return summary;
+  },
+
+  getInterBranchShipments: async () => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return [];
+    const fromFn = supabase.unscopedFrom ? supabase.unscopedFrom : supabase.from;
+    const { data, error } = await fromFn('inter_branch_transfers')
+      .select('*, inter_branch_transfer_items(*, materials(id, name, unit, item_code, price))')
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (error) {
+      console.warn('getInterBranchShipments warning:', error.message);
+      return [];
+    }
+    return data || [];
+  },
+
+  dispatchInterBranchShipment: async ({ fromBranchId, toBranchId, items, notes = '' }) => {
+    const tenantId = await requireTenantId();
+    const userId = await getActiveUserId();
+    if (!fromBranchId || !toBranchId || fromBranchId === toBranchId) {
+      throw new Error('Cabang pengirim dan penerima tidak valid.');
+    }
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new Error('Tambahkan minimal 1 bahan baku.');
+    }
+
+    const fromFn = supabase.unscopedFrom ? supabase.unscopedFrom : supabase.from;
+    const trfNumber = `IBT-${Date.now().toString(36).toUpperCase()}`;
+
+    const { data: header, error: hdrErr } = await fromFn('inter_branch_transfers')
+      .insert({
+        tenant_id: tenantId,
+        transfer_number: trfNumber,
+        from_branch_id: fromBranchId,
+        to_branch_id: toBranchId,
+        status: 'DRAFT',
+        notes: notes || null
+      })
+      .select()
+      .single();
+    if (hdrErr) throw new Error('Gagal membuat dokumen mutasi: ' + hdrErr.message);
+
+    const itemPayloads = items.map(i => ({
+      tenant_id: tenantId,
+      transfer_id: header.id,
+      material_id: i.material_id,
+      qty_dispatched: parseFloat(i.qty),
+      remarks: i.notes || null
+    }));
+
+    const { error: itemsErr } = await fromFn('inter_branch_transfer_items').insert(itemPayloads);
+    if (itemsErr) {
+      await fromFn('inter_branch_transfers').delete().eq('id', header.id);
+      throw new Error('Gagal menyimpan item mutasi: ' + itemsErr.message);
+    }
+
+    // Deduct stock from sender branch & record OUT transaction
+    const { data: srcBranch } = await fromFn('branches').select('name, is_central').eq('id', fromBranchId).maybeSingle();
+    const senderIsCentral = !!srcBranch?.is_central;
+    const today = getLocalDateISO();
+
+    for (const item of items) {
+      const qty = parseFloat(item.qty);
+      const { data: mat } = await fromFn('materials').select('*').eq('id', item.material_id).single();
+      if (mat) {
+        const curCentral = Number(mat.qty_central || 0);
+        const curResto = Number(mat.qty_resto || 0);
+        const deductFromCentral = senderIsCentral || (curCentral >= qty && curResto < qty);
+        const newCentral = deductFromCentral ? Math.max(0, curCentral - qty) : curCentral;
+        const newResto = deductFromCentral ? curResto : Math.max(0, curResto - qty);
+        await fromFn('materials')
+          .update({
+            qty_central: newCentral,
+            qty_resto: newResto,
+            stock: newResto + newCentral
+          })
+          .eq('id', mat.id);
+
+        const unitPrice = Number(mat.new_price || mat.price || 0);
+        await fromFn('transactions').insert({
+          tenant_id: tenantId,
+          branch_id: fromBranchId,
+          date: today,
+          material_id: mat.id,
+          type: 'OUT',
+          location: deductFromCentral ? 'CENTRAL' : 'RESTO',
+          qty: qty,
+          amount: Math.round(qty * unitPrice),
+          notes: `Kirim Antar Cabang (${trfNumber})${notes ? ' - ' + notes : ''}`
+        });
+      }
+    }
+
+    const { data: dispatched, error: dispErr } = await fromFn('inter_branch_transfers')
+      .update({
+        status: 'DISPATCHED',
+        dispatcher_id: userId
+      })
+      .eq('id', header.id)
+      .select()
+      .single();
+    if (dispErr) throw new Error('Gagal mengirim mutasi: ' + dispErr.message);
+
+    await logAudit('INTER_BRANCH_DISPATCH', `Mengirim ${items.length} item (${trfNumber}) lintas cabang.`);
+    return dispatched;
+  },
+
+  receiveInterBranchShipment: async ({ transferId, receivedItems }) => {
+    const tenantId = await requireTenantId();
+    const userId = await getActiveUserId();
+    const fromFn = supabase.unscopedFrom ? supabase.unscopedFrom : supabase.from;
+
+    const { data: trf, error: trfErr } = await fromFn('inter_branch_transfers')
+      .select('*, inter_branch_transfer_items(*, materials(*))')
+      .eq('id', transferId)
+      .eq('tenant_id', tenantId)
+      .single();
+    if (trfErr || !trf) throw new Error('Data pengiriman tidak ditemukan.');
+    if (trf.status !== 'DISPATCHED') throw new Error('Mutasi ini sudah diproses sebelumnya.');
+
+    const { data: destBranch } = await fromFn('branches').select('name, is_central').eq('id', trf.to_branch_id).maybeSingle();
+    const destIsCentral = !!destBranch?.is_central;
+
+    const { data: destMaterials } = await fromFn('materials')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .eq('branch_id', trf.to_branch_id);
+    const destMats = [...(destMaterials || [])];
+    const today = getLocalDateISO();
+
+    for (const trfItem of (trf.inter_branch_transfer_items || [])) {
+      const override = (receivedItems || []).find(r => r.id === trfItem.id);
+      const qtyRec = override ? Math.max(0, parseFloat(override.qty_received) || 0) : Number(trfItem.qty_dispatched);
+
+      await fromFn('inter_branch_transfer_items')
+        .update({ qty_received: qtyRec })
+        .eq('id', trfItem.id);
+
+      if (qtyRec > 0 && trfItem.materials) {
+        const srcMat = trfItem.materials;
+        let destMat = destMats.find(m =>
+          (srcMat.item_code && String(m.item_code || '').trim().toLowerCase() === String(srcMat.item_code).trim().toLowerCase()) ||
+          String(m.name || '').trim().toLowerCase() === String(srcMat.name || '').trim().toLowerCase()
+        );
+
+        if (!destMat) {
+          const { data: createdMat, error: cErr } = await fromFn('materials')
+            .insert({
+              tenant_id: tenantId,
+              branch_id: trf.to_branch_id,
+              name: srcMat.name,
+              category: srcMat.category || 'Umum',
+              unit: srcMat.unit || 'pck',
+              full_pack: srcMat.full_pack || '',
+              price: Number(srcMat.price || 0),
+              new_price: srcMat.new_price ?? srcMat.price ?? 0,
+              supplier: srcMat.supplier || '',
+              min_stock: Number(srcMat.min_stock || 0),
+              par_stock: Number(srcMat.par_stock || 0),
+              item_code: srcMat.item_code || null,
+              sku: srcMat.sku || null,
+              qty_resto: 0,
+              qty_central: 0,
+              stock: 0
+            })
+            .select()
+            .single();
+          if (cErr) throw new Error('Gagal membuat item di cabang tujuan: ' + cErr.message);
+          destMat = createdMat;
+          destMats.push(createdMat);
+        }
+
+        const newCentral = destIsCentral ? Number(destMat.qty_central || 0) + qtyRec : Number(destMat.qty_central || 0);
+        const newResto = destIsCentral ? Number(destMat.qty_resto || 0) : Number(destMat.qty_resto || 0) + qtyRec;
+
+        await fromFn('materials')
+          .update({
+            qty_central: newCentral,
+            qty_resto: newResto,
+            stock: newResto + newCentral
+          })
+          .eq('id', destMat.id);
+
+        const unitPrice = Number(destMat.new_price || destMat.price || srcMat.price || 0);
+        await fromFn('transactions').insert({
+          tenant_id: tenantId,
+          branch_id: trf.to_branch_id,
+          date: today,
+          material_id: destMat.id,
+          type: 'IN',
+          location: destIsCentral ? 'CENTRAL' : 'RESTO',
+          qty: qtyRec,
+          amount: Math.round(qtyRec * unitPrice),
+          notes: `Terima Antar Cabang (${trf.transfer_number})`
+        });
+      }
+    }
+
+    const { data: completed, error: recErr } = await fromFn('inter_branch_transfers')
+      .update({
+        status: 'RECEIVED',
+        receiver_id: userId
+      })
+      .eq('id', transferId)
+      .select()
+      .single();
+    if (recErr) throw new Error('Gagal menyelesaikan penerimaan mutasi: ' + recErr.message);
+
+    await logAudit('INTER_BRANCH_RECEIVE', `Menerima mutasi antar cabang (${trf.transfer_number}).`);
+    return completed;
+  },
+
+  getMultiBranchSummary: async (period) => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return [];
+    const [yearStr, monthStr] = String(period || '').split('-');
+    const year = parseInt(yearStr, 10) || new Date().getFullYear();
+    const month = parseInt(monthStr, 10) || (new Date().getMonth() + 1);
+
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('get_owner_multi_branch_summary', {
+      p_tenant_id: tenantId,
+      p_month: month,
+      p_year: year
+    });
+    if (!rpcErr && Array.isArray(rpcData)) {
+      return rpcData;
+    }
+
+    // Fallback using unscopedFrom
+    const fromFn = supabase.unscopedFrom ? supabase.unscopedFrom : supabase.from;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const startStr = `${year}-${String(month).padStart(2, '0')}-01`;
+    const endStr = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+
+    const [{ data: branches }, { data: mats }, { data: txs }, { data: users }] = await Promise.all([
+      fromFn('branches').select('*').eq('tenant_id', tenantId).order('is_central', { ascending: false }),
+      fromFn('materials').select('id, branch_id, qty_resto, qty_central, price, new_price, min_stock').eq('tenant_id', tenantId),
+      fromFn('transactions').select('branch_id, type, amount').eq('tenant_id', tenantId).gte('date', startStr).lte('date', endStr).in('type', ['POS_SALE', 'POS_DEDUCTION']),
+      fromFn('users').select('id, branch_id').eq('tenant_id', tenantId)
+    ]);
+
+    return (branches || []).map(b => {
+      const bMats = (mats || []).filter(m => m.branch_id === b.id);
+      const bTxs = (txs || []).filter(t => t.branch_id === b.id);
+      const bUsers = (users || []).filter(u => u.branch_id === b.id);
+      const stockValuation = bMats.reduce((sum, m) => {
+        const qty = Number(m.qty_resto || 0) + Number(m.qty_central || 0);
+        const unitVal = Number(m.new_price || m.price || 0);
+        return sum + qty * unitVal;
+      }, 0);
+      const lowStockCount = bMats.filter(m => (Number(m.qty_resto || 0) + Number(m.qty_central || 0)) < (Number(m.min_stock) || 15)).length;
+      const posSales = bTxs.filter(t => t.type === 'POS_SALE').reduce((s, t) => s + Math.abs(Number(t.amount || 0)), 0);
+      const actualCogs = bTxs.filter(t => t.type === 'POS_DEDUCTION').reduce((s, t) => s + Math.abs(Number(t.amount || 0)), 0);
+      const foodCostPct = posSales > 0 ? Number(((actualCogs / posSales) * 100).toFixed(1)) : 0;
+
+      return {
+        branch_id: b.id,
+        branch_code: b.code,
+        branch_name: b.name,
+        is_central: !!b.is_central,
+        is_active: b.is_active !== false,
+        staff_count: bUsers.length,
+        material_count: bMats.length,
+        low_stock_count: lowStockCount,
+        stock_valuation: stockValuation,
+        pos_sales: posSales,
+        actual_cogs: actualCogs,
+        food_cost_pct: foodCostPct
+      };
+    });
   },
 
   uploadPhoto: async (fileBlob, bucket, filename) => {
