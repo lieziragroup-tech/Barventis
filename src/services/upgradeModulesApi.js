@@ -137,7 +137,7 @@ export const maintenanceApi = {
   async getServiceLogs(assetId = null) {
     const tenantId = await api.getActiveTenantId();
     if (!tenantId) return [];
-    let q = supabase.from('equipment_service_logs').select('*, assets(name, category)')
+    let q = supabase.from('equipment_service_logs').select('*, assets(name:asset_name, category:brand_model, asset_name, brand_model)')
       .eq('tenant_id', tenantId).order('performed_at', { ascending: false });
     if (assetId) q = q.eq('asset_id', assetId);
     const { data, error } = await q;
@@ -159,7 +159,7 @@ export const maintenanceApi = {
     if (!tenantId) return [];
     const cutoff = new Date(Date.now() + daysAhead * 86400000).toISOString().split('T')[0];
     const { data, error } = await supabase.from('equipment_service_logs')
-      .select('*, assets(name, category)')
+      .select('*, assets(name:asset_name, category:brand_model, asset_name, brand_model)')
       .eq('tenant_id', tenantId).not('next_due_date', 'is', null)
       .lte('next_due_date', cutoff).order('next_due_date', { ascending: true });
     if (error) throw error;

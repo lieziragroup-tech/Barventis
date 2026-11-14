@@ -388,7 +388,7 @@ function StockLedgerInner() {
 
         return {
           'NO': rowNum++,
-          'KODE / SKU': item.sku || item.id?.slice(0, 8) || '-',
+          'KODE / SKU': item.sku || (item.id != null ? '#MAT-' + String(item.id).slice(0, 8).toUpperCase() : '-'),
           'NAMA BAHAN BAKU': item.name,
           'KATEGORI': item.category || '-',
           'SUPPLIER': item.supplier || '-',

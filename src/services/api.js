@@ -5683,15 +5683,15 @@ export const api = {
     }
 
     if (tx.type === 'WASTE' || tx.type === 'BREAKAGE' || tx.type === 'EXPIRED' || tx.type === 'COMP') {
-      let diQ = supabase.from('daily_inventory_items').select('id, qty')
+      let diQ = supabase.from('daily_inventory_items').select('id, waste_qty')
         .eq('material_id', tx.material_id)
-        .eq('qty', Math.abs(oldQty));
+        .eq('waste_qty', Math.abs(oldQty));
       if (resolvedBranchId) diQ = diQ.eq('branch_id', resolvedBranchId);
       const { data: dailyItems } = await diQ;
 
       if (dailyItems && dailyItems.length > 0) {
         let diUpdQ = supabase.from('daily_inventory_items').update({
-          qty: Math.abs(newQty)
+          waste_qty: Math.abs(newQty)
         }).eq('id', dailyItems[0].id);
         if (resolvedBranchId) diUpdQ = diUpdQ.eq('branch_id', resolvedBranchId);
         await diUpdQ;
@@ -6549,18 +6549,58 @@ export const api = {
     }
 
     try {
-      let posQ = supabase
-        .from('pos_transactions')
-        .select('menu_name, qty')
+      const dayStart = `${date}T00:00:00.000Z`;
+      const dayEnd = `${date}T23:59:59.999Z`;
+      let posItemsQ = supabase
+        .from('pos_transaction_items')
+        .select('menu_name, qty, recipe_id, pos_transactions!inner(id, tenant_id, created_at)')
         .eq('tenant_id', tenantId)
-        .eq('date', date);
-      if (branchId) posQ = posQ.eq('branch_id', branchId);
-      const [{ data: posRows }, recipesList] = await Promise.all([
-        posQ,
+        .gte('pos_transactions.created_at', dayStart)
+        .lte('pos_transactions.created_at', dayEnd);
+      let expUsageQ = supabase
+        .from('expected_usage')
+        .select('material_id, expected_qty, total_sold, week_start, week_end')
+        .eq('tenant_id', tenantId)
+        .lte('week_start', date)
+        .gte('week_end', date);
+      if (branchId) {
+        posItemsQ = posItemsQ.eq('branch_id', branchId);
+        expUsageQ = expUsageQ.eq('branch_id', branchId);
+      }
+      const [{ data: posRows }, { data: expRows }, recipesList] = await Promise.all([
+        posItemsQ,
+        expUsageQ,
         api.getRecipes(branchId)
       ]);
 
-      if (!posRows || posRows.length === 0) return {};
+      if ((!posRows || posRows.length === 0) && (!expRows || expRows.length === 0)) return {};
+      if ((!posRows || posRows.length === 0) && expRows && expRows.length > 0) {
+        const expMap = {};
+        expRows.forEach(er => {
+          const mId = Number(er.material_id);
+          const mat = matById[mId];
+          if (!mId || !mat) return;
+          const daysSpan = Math.max(1, Math.round((new Date(er.week_end) - new Date(er.week_start)) / 86400000) + 1);
+          const dailyStockQty = Number(((Number(er.expected_qty) || 0) / daysSpan).toFixed(4));
+          const dailySold = Math.max(1, Math.round((Number(er.total_sold) || 0) / daysSpan));
+          expMap[mId] = {
+            material_id: mId,
+            theoretical_recipe_qty: dailyStockQty,
+            theoreticalRecipeQty: dailyStockQty,
+            recipe_unit: mat.unit || 'pck',
+            recipeUnit: mat.unit || 'pck',
+            theoretical_stock_qty: dailyStockQty,
+            theoreticalStockQty: dailyStockQty,
+            stock_unit: mat.unit || 'pck',
+            stockUnit: mat.unit || 'pck',
+            menus_sold_count: dailySold,
+            menusSoldCount: dailySold,
+            menu_breakdown: [{ menu_name: 'Rekap POS ESB', qty_sold: dailySold }],
+            menuBreakdown: `Rekap POS ESB (${dailySold})`
+          };
+        });
+        return expMap;
+      }
 
       const normalizeMenu = (str) =>
         String(str || '')
@@ -6675,13 +6715,13 @@ export const api = {
     if (headerIds.length > 0) {
       let invItemsQ = supabase
         .from('daily_inventory_items')
-        .select('material_id, out_qty, qty_out')
+        .select('material_id, out_qty, out_qty_input')
         .in('inventory_id', headerIds);
       if (branchId) invItemsQ = invItemsQ.eq('branch_id', branchId);
       const { data: invItems } = await invItemsQ;
       (invItems || []).forEach(row => {
         const mId = Number(row.material_id);
-        const outVal = Number(row.out_qty ?? row.qty_out) || 0;
+        const outVal = Number(row.out_qty ?? row.out_qty_input) || 0;
         if (mId && outVal > 0) {
           eodOutMap[mId] = (eodOutMap[mId] || 0) + outVal;
         }
@@ -6980,10 +7020,9 @@ export const api = {
           branch_id: targetBranchId,
           name: s.name,
           phone: s.phone || null,
-          email: s.email || null,
           address: s.address || null,
-          notes: s.notes || null,
-          category: s.category || null
+          contact_person: s.contact_person || null,
+          status: s.status || 'ACTIVE'
         }));
       if (toInsert.length > 0) {
         const { error: supInsErr } = await fromFn('suppliers').insert(toInsert);
@@ -7016,8 +7055,7 @@ export const api = {
           item_code: srcMat.item_code || null,
           sku: srcMat.sku || null,
           qty_resto: 0,
-          qty_central: 0,
-          stock: 0
+          qty_central: 0
         })
         .select()
         .single();
@@ -7110,9 +7148,10 @@ export const api = {
           }
           if (targetMatId) {
             ingRows.push({
+              tenant_id: tenantId,
+              ...(targetBranchId ? { branch_id: targetBranchId } : {}),
               recipe_id: targetRecId,
               material_id: targetMatId,
-              item_name: ing.item_name || srcMat?.name || '',
               qty_in_use: ing.qty_in_use,
               unit: ing.unit,
               unit_price: ing.unit_price || 0,
@@ -7209,8 +7248,7 @@ export const api = {
         await fromFn('materials')
           .update({
             qty_central: newCentral,
-            qty_resto: newResto,
-            stock: newResto + newCentral
+            qty_resto: newResto
           })
           .eq('id', mat.id);
 

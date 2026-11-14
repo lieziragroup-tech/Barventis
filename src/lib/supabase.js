@@ -25,8 +25,8 @@ const rawSupabase = createClient(
 
 export const BRANCH_SCOPED_TABLES = [
   'materials', 'recipes', 'recipe_ingredients', 'recipe_versions',
-  'suppliers', 'supplier_materials',
-  'purchase_orders', 'purchase_order_items', 'market_lists', 'market_list_items',
+  'suppliers',
+  'market_lists', 'market_list_items',
   'material_batches', 'material_location_costs', 'material_open_lot_state', 'material_lot_movements_v4',
   'stock_adjustments', 'unit_conversions', 'waste_logs',
   'daily_inventories', 'daily_inventory_items', 'stock_opnames', 'stock_opname_items',

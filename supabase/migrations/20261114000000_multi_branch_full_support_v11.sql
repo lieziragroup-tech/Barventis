@@ -215,10 +215,9 @@ BEGIN
           AND lower(trim(name)) = lower(trim(v_sup.name))
       ) THEN
         INSERT INTO public.suppliers (
-          tenant_id, branch_id, name, phone, email, address, notes, category, pic_name, payment_terms
+          tenant_id, branch_id, name, phone, address, contact_person, status
         ) VALUES (
-          p_tenant_id, p_target_branch_id, v_sup.name, v_sup.phone, v_sup.email,
-          v_sup.address, v_sup.notes, v_sup.category, v_sup.pic_name, v_sup.payment_terms
+          p_tenant_id, p_target_branch_id, v_sup.name, v_sup.phone, v_sup.address, v_sup.contact_person, COALESCE(v_sup.status, 'ACTIVE')
         );
         v_sup_copied := v_sup_copied + 1;
       END IF;
@@ -246,7 +245,7 @@ BEGIN
           tenant_id, branch_id, name, category, unit, full_pack, price, new_price,
           supplier, min_stock, par_stock, item_code, sku, is_preparable,
           broken_tracking_enabled, expiry_tracking_enabled, shelf_life_days,
-          qty_resto, qty_central, stock
+          qty_resto, qty_central
         ) VALUES (
           p_tenant_id, p_target_branch_id, v_mat.name, v_mat.category, v_mat.unit,
           v_mat.full_pack, v_mat.price, v_mat.new_price, v_mat.supplier,
@@ -255,7 +254,7 @@ BEGIN
           COALESCE(v_mat.broken_tracking_enabled, true),
           COALESCE(v_mat.expiry_tracking_enabled, false),
           v_mat.shelf_life_days,
-          0, 0, 0
+          0, 0
         )
         RETURNING id INTO v_target_mat_id;
 
@@ -339,12 +338,12 @@ BEGIN
           IF v_target_mat_id IS NULL THEN
             INSERT INTO public.materials (
               tenant_id, branch_id, name, category, unit, full_pack, price, new_price,
-              supplier, min_stock, par_stock, item_code, sku, qty_resto, qty_central, stock
+              supplier, min_stock, par_stock, item_code, sku, qty_resto, qty_central
             ) VALUES (
               p_tenant_id, p_target_branch_id, v_ing.src_mat_name, COALESCE(v_ing.src_cat, 'Umum'),
               COALESCE(v_ing.src_unit, v_ing.unit), v_ing.src_pack, COALESCE(v_ing.src_price, 0),
               v_ing.src_new_price, v_ing.src_supplier, COALESCE(v_ing.src_min, 0), COALESCE(v_ing.src_par, 0),
-              v_ing.src_code, v_ing.src_sku, 0, 0, 0
+              v_ing.src_code, v_ing.src_sku, 0, 0
             )
             RETURNING id INTO v_target_mat_id;
             v_mat_copied := v_mat_copied + 1;
@@ -353,9 +352,9 @@ BEGIN
 
         IF v_target_mat_id IS NOT NULL THEN
           INSERT INTO public.recipe_ingredients (
-            recipe_id, material_id, item_name, qty_in_use, unit, unit_price, amount
+            tenant_id, branch_id, recipe_id, material_id, qty_in_use, unit, unit_price, amount
           ) VALUES (
-            v_target_rec_id, v_target_mat_id, COALESCE(v_ing.item_name, v_ing.src_mat_name),
+            p_tenant_id, p_target_branch_id, v_target_rec_id, v_target_mat_id,
             v_ing.qty_in_use, v_ing.unit, COALESCE(v_ing.unit_price, 0), COALESCE(v_ing.amount, 0)
           );
         END IF;
