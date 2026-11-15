@@ -43,6 +43,14 @@ const PosTerminal = lazyWithRetry(() => import('./pages/pos/PosTerminal'));
 const BaristaReport = lazyWithRetry(() => import('./pages/shared/BaristaReport'));
 const LandingPage = lazyWithRetry(() => import('./pages/landing/NewLandingPage.tsx'));
 
+const normalizeAppRole = (rawRole) => {
+  const r = String(rawRole || '').trim();
+  if (r === 'SuperAdmin' || r === 'Super Admin') return 'Super Admin';
+  if (r === 'Admin  Owner' || r === 'Admin / Owner') return 'Admin / Owner';
+  if (r === 'Barista' || r === 'Bar') return 'Bar';
+  return r;
+};
+
 const RouteErrorBoundary = ({ children }) => {
   const location = useLocation();
   return <ErrorBoundary key={location.pathname}>{children}</ErrorBoundary>;
@@ -69,8 +77,8 @@ const ProtectedRoute = ({ allowedRoles, children }) => {
   if (loading) return <LoadingSpinner />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 
-  const role = activeUser?.role === 'SuperAdmin' ? 'Super Admin' : activeUser?.role;
-  if (!activeUser || !allowedRoles.includes(role)) {
+  const role = normalizeAppRole(activeUser?.role);
+  if (!activeUser || (!allowedRoles.includes(role) && !allowedRoles.includes(activeUser?.role))) {
     return <Navigate to="/unauthorized" replace />;
   }
 
@@ -83,7 +91,7 @@ const RootRedirect = () => {
   if (loading) return <LoadingSpinner />;
   if (!isAuthenticated || !activeUser) return <LandingPage />;
 
-  const role = activeUser.role === 'SuperAdmin' ? 'Super Admin' : activeUser.role;
+  const role = normalizeAppRole(activeUser.role);
   if (role === 'Super Admin') return <Navigate to="/superadmin" replace />;
 
   return <Navigate to="/dashboard" replace />;
@@ -97,8 +105,8 @@ const AuthRoute = ({ children }) => {
   return children;
 };
 
-const ALL_TENANT = ['Admin / Owner', 'Owner', 'Supervisor', 'Bar', 'Kitchen', 'Central', 'Service', 'Kasir', 'Purchasing', 'Staff'];
-const ADMIN_ROLES = ['Admin / Owner', 'Owner'];
+const ALL_TENANT = ['Admin / Owner', 'Admin  Owner', 'Owner', 'Supervisor', 'Bar', 'Barista', 'Kitchen', 'Central', 'Service', 'Kasir', 'Purchasing', 'Finance', 'Staff'];
+const ADMIN_ROLES = ['Admin / Owner', 'Admin  Owner', 'Owner'];
 
 export default function App() {
   const { activeUser } = useAuth();
@@ -130,7 +138,7 @@ export default function App() {
         }>
           <Route index element={<RouteErrorBoundary><SuperAdminPanel tab="tenants" activeUser={activeUser} /></RouteErrorBoundary>} />
           <Route path="templates" element={<RouteErrorBoundary><SuperAdminPanel tab="templates" activeUser={activeUser} /></RouteErrorBoundary>} />
-                            </Route>
+        </Route>
 
         {/* TENANT DASHBOARD — Konsolidasi 7+1 Menu */}
         <Route path="/dashboard" element={
@@ -144,42 +152,42 @@ export default function App() {
 
           {/* [1] Penjualan Beverage (POS) */}
           <Route path="penjualan" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Service', 'Central', 'Bar', 'Staff']}>
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Service', 'Kasir', 'Central', 'Purchasing', 'Bar', 'Barista', 'Staff']}>
               <RouteErrorBoundary><BeverageSalesHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
           {/* [2] Daily Inventory & Waste */}
           <Route path="daily-inventory" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Bar', 'Kitchen', 'Central', 'Service', 'Purchasing', 'Staff']}>
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Bar', 'Barista', 'Kitchen', 'Central', 'Service', 'Kasir', 'Purchasing', 'Staff']}>
               <RouteErrorBoundary><DailyInventoryHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
           {/* [3] Marketlist & Pembelian */}
           <Route path="procurement" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central', 'Purchasing']}>
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Central', 'Purchasing', 'Staff']}>
               <RouteErrorBoundary><ProcurementHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
           {/* [4] Menu Pricing & COGS */}
           <Route path="pricing-cogs" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Staff']}>
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Bar', 'Barista', 'Kitchen', 'Central', 'Purchasing', 'Staff']}>
               <RouteErrorBoundary><PricingCogsHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
           {/* [5] Stock Opname & Aset */}
           <Route path="opname-assets" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Bar', 'Kitchen', 'Central', 'Staff']}>
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Bar', 'Barista', 'Kitchen', 'Central', 'Purchasing', 'Staff']}>
               <RouteErrorBoundary><OpnameAssetsHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
           {/* [7] Cost Control & Laporan */}
           <Route path="cost-report" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Central', 'Bar', 'Staff']}>
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Central', 'Purchasing', 'Finance', 'Bar', 'Barista', 'Staff']}>
               <RouteErrorBoundary><CostControlReportHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
@@ -192,13 +200,13 @@ export default function App() {
           } />
 
           <Route path="olah-bahan" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Kitchen', 'Central', 'Staff', 'Bar']}>
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Kitchen', 'Central', 'Purchasing', 'Staff', 'Bar', 'Barista']}>
               <RouteErrorBoundary><SimplePrep /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
           <Route path="transfer" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Central', 'Purchasing', 'Bar', 'Kitchen', 'Staff']}>
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Central', 'Purchasing', 'Bar', 'Barista', 'Kitchen', 'Staff']}>
               <RouteErrorBoundary><InterBranchTransfer /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
@@ -207,7 +215,7 @@ export default function App() {
 
         </Route>
         <Route path="/dashboard/pos-terminal" element={
-          <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Service', 'Bar', 'Staff']}>
+          <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Service', 'Kasir', 'Bar', 'Barista', 'Staff']}>
             <RouteErrorBoundary><PosTerminal /></RouteErrorBoundary>
           </ProtectedRoute>
         } />

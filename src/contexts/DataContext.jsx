@@ -23,7 +23,7 @@ export const DataProvider = ({ children }) => {
   const [activeBranchId, setActiveBranchId] = useState(() => api.getActiveBranchId());
 
   const roleNorm = String(activeUser?.role || '').trim();
-  const canSwitchBranch = roleNorm === 'Admin / Owner' || roleNorm === 'Owner';
+  const canSwitchBranch = roleNorm === 'Admin / Owner' || roleNorm === 'Admin  Owner' || roleNorm === 'Owner';
 
   const refreshBranches = useCallback(async () => {
     if (!isAuthenticated || !activeUser || roleNorm === 'Super Admin' || roleNorm === 'SuperAdmin') {
@@ -61,9 +61,19 @@ export const DataProvider = ({ children }) => {
         ? sessionStorage.getItem(storageKey)
         : null;
 
+      const preferredCode = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('bv_preferred_branch_code') : null;
+      const preferredBranchObj = preferredCode
+        ? branchList.find(b => b.is_active !== false && (String(b.code || '').toUpperCase() === preferredCode.toUpperCase() || String(b.name || '').toUpperCase() === preferredCode.toUpperCase()))
+        : null;
+      if (preferredCode && typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem('bv_preferred_branch_code');
+      }
+
       let resolvedBranchId = activeUser.branch_id || null;
       if (canSwitchBranch) {
-        const candidateId = overrideBranchId !== undefined ? overrideBranchId : (activeBranchId || savedOwnerBranch || activeUser.branch_id);
+        const candidateId = overrideBranchId !== undefined
+          ? overrideBranchId
+          : (preferredBranchObj?.id || activeBranchId || savedOwnerBranch || activeUser.branch_id);
         const existsInList = branchList.find(b => b.id === candidateId && b.is_active !== false);
         resolvedBranchId = existsInList
           ? existsInList.id
@@ -72,8 +82,8 @@ export const DataProvider = ({ children }) => {
           sessionStorage.setItem(storageKey, resolvedBranchId);
         }
       } else {
-        // Staf terkunci pada branch_id miliknya
-        resolvedBranchId = activeUser.branch_id || branchList.find(b => b.is_active !== false)?.id || branchList[0]?.id || null;
+        // Staf terkunci pada branch_id miliknya (atau cabang pilihan preset beta jika sesuai)
+        resolvedBranchId = activeUser.branch_id || preferredBranchObj?.id || branchList.find(b => b.is_active !== false)?.id || branchList[0]?.id || null;
       }
 
       api.setActiveBranch(resolvedBranchId);

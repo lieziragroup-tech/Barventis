@@ -1656,6 +1656,166 @@ export const api = {
     }
     return fullProfile;
   },
+
+  // --- BETA TESTING SHORTCUTS & DUMMY SEEDER (RESTO UMATIS: BSD & KASUNA) ---
+  getBetaTestingPresets: () => [
+    {
+      key: 'OWNER_BSD',
+      label: 'Owner Resto Umatis',
+      sublabel: 'Akses Penuh Multi-Cabang (BSD & Kasuna)',
+      email: 'owner.beta@umatis.id',
+      password: 'BetaUmatis2026!',
+      name: 'Owner Resto Umatis (Beta)',
+      role: 'Owner',
+      branchCode: 'BSD',
+      badge: 'OWNER • MULTI-CABANG'
+    },
+    {
+      key: 'BARISTA_BSD',
+      label: 'Barista Cabang BSD',
+      sublabel: 'Daily Inventory, SimplePrep & Opname BSD',
+      email: 'barista.bsd@umatis.id',
+      password: 'BetaUmatis2026!',
+      name: 'Barista Cabang BSD (Beta)',
+      role: 'Barista',
+      branchCode: 'BSD',
+      badge: 'BARISTA • CABANG BSD'
+    },
+    {
+      key: 'BARISTA_KASUNA',
+      label: 'Barista Cabang Kasuna',
+      sublabel: 'Daily Inventory, SimplePrep & Opname Kasuna',
+      email: 'barista.kasuna@umatis.id',
+      password: 'BetaUmatis2026!',
+      name: 'Barista Cabang Kasuna (Beta)',
+      role: 'Barista',
+      branchCode: 'KASUNA',
+      badge: 'BARISTA • CABANG KASUNA'
+    },
+    {
+      key: 'PURCHASING_BSD',
+      label: 'Purchasing & Central',
+      sublabel: 'Pembelian Harian (Resto/Central) & Opname Central',
+      email: 'purchasing.bsd@umatis.id',
+      password: 'BetaUmatis2026!',
+      name: 'Purchasing & Central (Beta)',
+      role: 'Purchasing',
+      branchCode: 'BSD',
+      badge: 'PURCHASING • CENTRAL/RESTO'
+    },
+    {
+      key: 'KASIR_BSD',
+      label: 'Kasir POS ESB',
+      sublabel: 'Kasir POS, Upload Penjualan ESB & Rekonsiliasi',
+      email: 'kasir.bsd@umatis.id',
+      password: 'BetaUmatis2026!',
+      name: 'Kasir POS ESB (Beta)',
+      role: 'Kasir',
+      branchCode: 'BSD',
+      badge: 'KASIR • POS ESB'
+    }
+  ],
+
+  loginWithBetaShortcut: async (presetKey) => {
+    const presets = api.getBetaTestingPresets();
+    const preset = presets.find(p => p.key === presetKey) || presets[0];
+    if (!preset) throw new Error('Preset akun Beta Testing tidak ditemukan.');
+
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem('bv_cached_profile');
+      sessionStorage.setItem('bv_preferred_branch_code', preset.branchCode);
+    }
+    activeTenantId = null;
+    activeUserId = null;
+    activeBranchId = null;
+    activeUserRole = null;
+
+    // 1. Coba login langsung ke Supabase Auth (akun sudah di-seed oleh script SQL v13)
+    let { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
+      email: preset.email,
+      password: preset.password
+    });
+
+    // 2. Self-healing fallback: jika GoTrue menolak hash SQL atau akun belum terdaftar di GoTrue,
+    //    bersihkan baris auth lama via RPC, lakukan signUp native GoTrue, lalu ikat profil ke Resto Umatis
+    if (authErr || !authData?.user) {
+      try {
+        await supabase.rpc('prepare_beta_signup_v13', { p_email: preset.email });
+      } catch {
+        // ignore if RPC not installed yet
+      }
+
+      const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+        email: preset.email,
+        password: preset.password,
+        options: {
+          data: {
+            name: preset.name,
+            role: preset.role,
+            company_name: 'Resto Umatis'
+          }
+        }
+      });
+
+      if (signUpData?.user?.id) {
+        try {
+          await supabase.rpc('bind_beta_user_profile_v13', {
+            p_user_id: signUpData.user.id,
+            p_preset_key: preset.key
+          });
+        } catch (bindErr) {
+          console.warn('[BetaShortcut] bind_beta_user_profile_v13 warning:', bindErr);
+        }
+      }
+
+      if (signUpData?.session?.user) {
+        authData = signUpData;
+        authErr = null;
+      } else {
+        const retry = await supabase.auth.signInWithPassword({
+          email: preset.email,
+          password: preset.password
+        });
+        authData = retry.data;
+        authErr = retry.error;
+        if (authErr && signUpErr) {
+          throw new Error(
+            'Gagal masuk akun Beta Testing (' + preset.email + '): ' +
+            (authErr.message || signUpErr.message) +
+            '. Pastikan Anda sudah menjalankan Barventis_Final_Consolidated_Database.sql di Supabase SQL Editor.'
+          );
+        }
+      }
+    }
+
+    if (!authData?.user?.id) {
+      throw new Error('Gagal menginisialisasi sesi Beta Testing. Jalankan file SQL konsolidasi v13 terlebih dahulu.');
+    }
+
+    // 3. Pastikan profil di public.users terikat ke Resto Umatis dan cabang yang tepat (BSD / Kasuna)
+    try {
+      await supabase.rpc('bind_beta_user_profile_v13', {
+        p_user_id: authData.user.id,
+        p_preset_key: preset.key
+      });
+    } catch {
+      // ignore if already bound
+    }
+
+    const profile = await api.revalidateProfile();
+    if (profile?.branch_id) {
+      api.setActiveBranch(profile.branch_id);
+    }
+    return profile;
+  },
+
+  seedBetaTestingDummyData: async () => {
+    const { data, error } = await supabase.rpc('seed_beta_testing_dummy_data_v13');
+    if (error) {
+      throw new Error('Gagal memuat data dummy Beta Testing: ' + error.message);
+    }
+    return data;
+  },
   // 1.5 Tenant Invitations
   generateTenantInvite: async (tenantId, role = 'Admin / Owner', branchId = null) => {
     const expiresAt = new Date();

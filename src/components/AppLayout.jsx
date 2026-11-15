@@ -84,7 +84,7 @@ const NavGroup = ({ title, children, isFirst, isHovered }) => {
 
 
 export default function DashboardLayout() {
-  const { activeUser, tenantName, logout } = useAuth();
+  const { activeUser, tenantName, logout, checkCurrentAuth } = useAuth();
   const {
     loadingData, stock, refreshData, currentTenant, showToast,
     branches, activeBranch, activeBranchId, canSwitchBranch, switchBranch
@@ -178,11 +178,54 @@ export default function DashboardLayout() {
   // invite flow (TenantAdminPanel.jsx, AuthScreen.jsx) only ever assigns
   // 'Staff', 'Admin / Owner', or 'Super Admin' / 'SuperAdmin' — so exact
   // match here is not a behavior regression, it's the bug fix.
-  const role = activeUser?.role === 'SuperAdmin' ? 'Super Admin' : activeUser?.role;
+  const rawRole = String(activeUser?.role || '').trim();
+  const role = rawRole === 'SuperAdmin'
+    ? 'Super Admin'
+    : rawRole === 'Admin  Owner'
+      ? 'Admin / Owner'
+      : rawRole === 'Barista'
+        ? 'Bar'
+        : rawRole;
   const isSuperAdmin = role === 'Super Admin';
-  const isTenant = ['Admin / Owner', 'Owner', 'Supervisor', 'Staff', 'Bar', 'Kitchen', 'Central', 'Service', 'Kasir', 'Purchasing'].includes(role);
+  const isTenant = ['Admin / Owner', 'Owner', 'Supervisor', 'Staff', 'Bar', 'Barista', 'Kitchen', 'Central', 'Service', 'Kasir', 'Purchasing', 'Finance'].includes(role);
 
-  const hasAccess = (allowedRoles) => allowedRoles.includes(role);
+  const hasAccess = (allowedRoles) => allowedRoles.includes(role) || allowedRoles.includes(rawRole);
+
+  const [showBetaMenu, setShowBetaMenu] = useState(false);
+  const [betaSwitchingKey, setBetaSwitchingKey] = useState('');
+  const [seedingDummy, setSeedingDummy] = useState(false);
+  const betaPresets = typeof api.getBetaTestingPresets === 'function' ? api.getBetaTestingPresets() : [];
+
+  const handleQuickSwitchBeta = async (preset) => {
+    if (!preset || betaSwitchingKey || seedingDummy) return;
+    setBetaSwitchingKey(preset.key);
+    try {
+      await api.loginWithBetaShortcut(preset.key);
+      await checkCurrentAuth();
+      await refreshData();
+      setShowBetaMenu(false);
+      showToast(`Berpindah ke akun ${preset.label} (${preset.branchCode})`, 'success');
+    } catch (err) {
+      showToast(err?.message || 'Gagal berpindah akun Beta Testing', 'error');
+    } finally {
+      setBetaSwitchingKey('');
+    }
+  };
+
+  const handleSeedDummyData = async () => {
+    if (seedingDummy || betaSwitchingKey) return;
+    setSeedingDummy(true);
+    try {
+      await api.seedBetaTestingDummyData();
+      await refreshData();
+      setShowBetaMenu(false);
+      showToast('Data dummy Beta Testing (Resto Umatis: BSD & Kasuna) berhasil dimuat ulang!', 'success');
+    } catch (err) {
+      showToast(err?.message || 'Gagal memuat ulang data dummy Beta Testing', 'error');
+    } finally {
+      setSeedingDummy(false);
+    }
+  };
 
   // ==========================================
   // SUPERADMIN NOTIFICATIONS (Reset Requests)
@@ -337,6 +380,7 @@ export default function DashboardLayout() {
                     <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan operasional bar harian" icon={LayoutDashboard} isHovered={isHovered} />
                     <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Catat stok dan limbah bar" icon={ClipboardList} isHovered={isHovered} />
                     <NavItem to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Catat olahan bahan mentah bar" icon={Scissors} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/opname-assets`} label="Stock Opname" subtitle="Audit fisik stok bar" icon={Boxes} isHovered={isHovered} />
                     <NavItem to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Transfer stok antar gudang" icon={ArrowRightLeft} isHovered={isHovered} />
                     <NavItem to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat bahan rusak atau tumpah" icon={Trash2} isHovered={isHovered} />
                   </NavGroup>
@@ -493,6 +537,9 @@ export default function DashboardLayout() {
         {isTenant && activeBranch && (
           <div className="mx-4 mb-3 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] flex items-center gap-2">
             <Store size={14} className="text-[var(--accent)] shrink-0" />
+            <span className="text-[11px] font-medium text-[var(--text-muted)] shrink-0">
+              {currentTenant?.company_name || 'Resto Umatis'} •
+            </span>
             {canSwitchBranch ? (
               <select
                 aria-label="Pilih Cabang Mobile"
@@ -533,6 +580,7 @@ export default function DashboardLayout() {
                 <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan operasional bar harian" icon={LayoutDashboard} isHovered={true} />
                 <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Catat stok dan limbah bar" icon={ClipboardList} isHovered={true} />
                 <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Catat olahan bahan mentah bar" icon={Scissors} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/opname-assets`} label="Stock Opname" subtitle="Audit fisik stok bar" icon={Boxes} isHovered={true} />
                 <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Transfer stok antar gudang" icon={ArrowRightLeft} isHovered={true} />
                 <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat bahan rusak atau tumpah" icon={Trash2} isHovered={true} />
               </NavGroup>
@@ -676,6 +724,9 @@ export default function DashboardLayout() {
                   title="Pilih cabang aktif"
                 >
                   <Store size={14} className="text-[var(--accent)] shrink-0" />
+                  <span className="hidden lg:inline text-[11px] font-semibold text-[var(--text-muted)] whitespace-nowrap">
+                    {currentTenant?.company_name || 'Resto Umatis'} • Cabang:
+                  </span>
                   <select
                     aria-label="Pilih Cabang"
                     value={activeBranchId || ''}
@@ -714,6 +765,94 @@ export default function DashboardLayout() {
               >
                 <MonitorSmartphone size={16} /> <span className="hidden md:inline">POS Terminal</span>
               </button>
+            )}
+            {betaPresets.length > 0 && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowBetaMenu(!showBetaMenu)}
+                  title="Shortcut Ganti Akun & Data Dummy Beta Testing"
+                  className="btn hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
+                  style={{
+                    background: 'rgba(16, 185, 129, 0.12)',
+                    border: '1px solid rgba(16, 185, 129, 0.4)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '6px 10px',
+                    color: '#10b981',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    flexShrink: 0
+                  }}
+                >
+                  <Store size={15} /> <span className="hidden sm:inline">Shortcut Beta</span>
+                </button>
+                {showBetaMenu && (
+                  <div
+                    className="absolute right-0 mt-2 w-[310px] rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] shadow-2xl p-3 z-50"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-[var(--border)]">
+                      <div>
+                        <div className="text-xs font-extrabold text-[var(--text-primary)] uppercase tracking-wide">
+                          Shortcut Beta Testing
+                        </div>
+                        <div className="text-[11px] text-[var(--text-secondary)]">
+                          Resto Umatis • Cabang BSD & Kasuna
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowBetaMenu(false)}
+                        className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1"
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                    <div className="flex flex-col gap-1.5 max-h-[280px] overflow-y-auto">
+                      {betaPresets.map((p) => {
+                        const isCurrent = activeUser?.email?.toLowerCase() === p.email.toLowerCase();
+                        const isBusy = betaSwitchingKey === p.key;
+                        return (
+                          <button
+                            key={p.key}
+                            type="button"
+                            disabled={Boolean(betaSwitchingKey) || seedingDummy}
+                            onClick={() => handleQuickSwitchBeta(p)}
+                            className={`w-full text-left px-2.5 py-2 rounded-lg border transition-colors flex items-center justify-between gap-2 ${
+                              isCurrent
+                                ? 'border-[var(--accent)] bg-[var(--accent-glow)]'
+                                : 'border-[var(--border)] bg-[var(--bg-primary)] hover:bg-[var(--bg-tertiary)]'
+                            }`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="text-xs font-bold text-[var(--text-primary)] truncate">
+                                {p.label}
+                              </div>
+                              <div className="text-[10px] text-[var(--text-secondary)] truncate">
+                                {p.badge} • {p.email}
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[var(--accent)] text-[var(--text-inverse)] shrink-0">
+                              {isBusy ? 'Masuk...' : isCurrent ? 'Aktif' : 'Masuk'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="mt-2.5 pt-2 border-t border-[var(--border)]">
+                      <button
+                        type="button"
+                        disabled={seedingDummy || Boolean(betaSwitchingKey)}
+                        onClick={handleSeedDummyData}
+                        className="w-full py-2 px-3 rounded-lg text-xs font-bold border border-[var(--accent)] bg-[var(--accent-glow)] text-[var(--accent)] hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
+                      >
+                        <RefreshCw size={13} className={seedingDummy ? 'animate-spin' : ''} />
+                        {seedingDummy ? 'Memuat Data Dummy...' : 'Muat / Reset Data Dummy (BSD & Kasuna)'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
             <button
               className="btn hover:opacity-80 transition-opacity flex items-center justify-center gap-1.5"
