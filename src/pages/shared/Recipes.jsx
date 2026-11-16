@@ -6,7 +6,7 @@ import Pagination from '../../components/shared/Pagination';
 import { useData } from '../../contexts/DataContext';
 import { api } from '../../services/api';
 import {
-  formatIDR, calculateIngredientCost, getPackUnitInfo, resolvePackInfo, computeRecipeCosts
+  formatIDR, calculateIngredientCost, getPackUnitInfo, resolvePackInfo, computeRecipeCosts, formatCleanFullPackLabel
 } from '../../services/costUtils';
 import ErrorBoundary from '../../components/ErrorBoundary';
 

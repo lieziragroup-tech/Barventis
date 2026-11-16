@@ -62,6 +62,22 @@ export default function InterBranchTransfer() {
   const [selectedMode, setSelectedMode] = useState(null);
   const transferMode = 'INTERNAL'; // FT-05.1 & FT-05.2: Disatukan menjadi 1 segmen menu Mutasi Gudang terpadu
   const [filterByRoleUuid, setFilterByRoleUuid] = useState(true);
+  const [locations, setLocations] = useState(() => locationService.getLocations(currentTenant?.id));
+  useEffect(() => {
+    const updateLocs = () => {
+      setLocations(locationService.getLocations(currentTenant?.id));
+    };
+    updateLocs();
+    return locationService.subscribe(updateLocs);
+  }, [currentTenant]);
+
+  // Multi-Item Transfer Cart & Global Route Header
+  const [routeHeader, setRouteHeader] = useState({
+    source_branch: 'Central Warehouse',
+    target_branch: 'Resto Bar',
+    notes: ''
+  });
+
   const unifiedEndpoints = useMemo(
     () => locationService.getUnifiedTransferEndpoints(currentTenant?.id, branches, activeBranchId),
     [currentTenant?.id, branches, activeBranchId, locations]
@@ -78,15 +94,6 @@ export default function InterBranchTransfer() {
     const filtered = (stock || []).filter(m => allowedSet.has(String(m.category || '').toLowerCase().trim()));
     return filtered.length > 0 ? filtered : (stock || []);
   }, [stock, filterByRoleUuid, targetEndpointMeta]);
-
-  const [locations, setLocations] = useState(() => locationService.getLocations(currentTenant?.id));
-  useEffect(() => {
-    const updateLocs = () => {
-      setLocations(locationService.getLocations(currentTenant?.id));
-    };
-    updateLocs();
-    return locationService.subscribe(updateLocs);
-  }, [currentTenant]);
 
   const [transfers, setTransfers] = useState([]);
   const [requests, setRequests] = useState([]);
@@ -111,13 +118,6 @@ export default function InterBranchTransfer() {
   const [targetFilter, setTargetFilter] = useState('ALL');
   const [page, setPage] = useState(1);
   const itemsPerPage = 10;
-
-  // Multi-Item Transfer Cart & Global Route Header
-  const [routeHeader, setRouteHeader] = useState({
-    source_branch: 'Central Warehouse',
-    target_branch: 'Resto Bar',
-    notes: ''
-  });
   const [transferCart, setTransferCart] = useState([]);
 
   const fetchTransfers = useCallback(async () => {

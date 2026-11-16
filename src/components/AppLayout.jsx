@@ -144,6 +144,9 @@ export default function DashboardLayout() {
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showBetaMenu, setShowBetaMenu] = useState(false);
+  const [betaSwitchingKey, setBetaSwitchingKey] = useState('');
+  const [seedingDummy, setSeedingDummy] = useState(false);
 
   const userMenuRef = useRef(null);
   const notifRef = useRef(null);
@@ -195,9 +198,6 @@ export default function DashboardLayout() {
 
   const hasAccess = (allowedRoles) => allowedRoles.includes(role) || allowedRoles.includes(rawRole);
 
-  const [showBetaMenu, setShowBetaMenu] = useState(false);
-  const [betaSwitchingKey, setBetaSwitchingKey] = useState('');
-  const [seedingDummy, setSeedingDummy] = useState(false);
   const betaPresets = typeof api.getBetaTestingPresets === 'function' ? api.getBetaTestingPresets() : [];
 
   const handleQuickSwitchBeta = async (preset) => {

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import {
   normalizeUnitToken,
   parsePackSize,
@@ -13,7 +14,8 @@ import {
 } from '../services/costUtils';
 import { locationService, DEFAULT_LOCATIONS } from '../services/locationService';
 
-const SRC_DIR = path.resolve(__dirname, '..');
+const CURRENT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const SRC_DIR = path.resolve(CURRENT_DIR, '..');
 
 function readSrc(relPath) {
   return fs.readFileSync(path.join(SRC_DIR, relPath), 'utf-8');

@@ -12,7 +12,7 @@ import ExportButton from '../../components/shared/ExportButton';
 import PrintButton from '../../components/shared/PrintButton';
 import { exportWithAudit } from '../../services/export/exportAudit';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatIDR, parseStructuredFullPack, resolvePackInfo } from '../../services/costUtils';
+import { formatIDR, parseStructuredFullPack, resolvePackInfo, formatCleanFullPackLabel } from '../../services/costUtils';
 import { api } from '../../services/api';
 import { locationService } from '../../services/locationService';
 import ErrorBoundary from '../../components/ErrorBoundary';
@@ -125,6 +125,8 @@ function StockLedgerInner() {
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [dependencyDeleteModal, setDependencyDeleteModal] = useState(null);
   const [unsavedCloseConfirm, setUnsavedCloseConfirm] = useState(null);
+  const [newItem, setNewItem] = useState({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15, initial_qty_resto: 0, initial_qty_central: 0, broken_tracking_enabled: true, expiry_tracking_enabled: false });
+  const [selectedItems, setSelectedItems] = useState([]);
 
   const isAddModalDirty = Boolean(
     (newItem.name && newItem.name.trim() !== '') ||
@@ -157,8 +159,6 @@ function StockLedgerInner() {
       setAdjustItem(null);
     }
   };
-  const [newItem, setNewItem] = useState({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15, initial_qty_resto: 0, initial_qty_central: 0, broken_tracking_enabled: true, expiry_tracking_enabled: false });
-  const [selectedItems, setSelectedItems] = useState([]);
 
   // Supplier & Purchase integration states
   const [suppliers, setSuppliers] = useState([]);
