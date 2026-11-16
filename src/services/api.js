@@ -1,7 +1,7 @@
 // UMATIS Serverless API Service Client for Supabase Backend Integration
 import { supabase, isAdminRole } from '../lib/supabase';
 import { materialsRepo } from '../data/materialsRepo';
-import { parsePackSize, calculateIngredientCost, getUnitPrice, computeRecipeCosts, convertQtyToStockUnit, DEFAULT_ROUNDING_DIRECTION, DEFAULT_ROUNDING_INCREMENT, DEFAULT_PRICE_ADJUSTMENT } from './costUtils';
+import { parsePackSize, calculateIngredientCost, getUnitPrice, getPackUnitInfo, computeRecipeCosts, convertQtyToStockUnit, DEFAULT_ROUNDING_DIRECTION, DEFAULT_ROUNDING_INCREMENT, DEFAULT_PRICE_ADJUSTMENT } from './costUtils';
 // NOTE: DEFAULT_FIX_COST_PCT intentionally NOT imported here — per PRD §4.2
 // Opsi B, a new recipe's fix_cost_pct falls back to the tenant's existing
 // `overhead_pct` setting (activeOverheadPct below), not a hardcoded 5%.
@@ -187,13 +187,15 @@ export const api = {
       const unitPrice = Number(r.unit_cost_snapshot ?? mat?.avg_cost ?? mat?.price) || 0;
       const stokAwal = r.prev_full_qty ?? r.stok_awal ?? 0;
       const qtyIn = r.in_qty ?? r.qty_in ?? 0;
+      const manualInQty = Number(r.manual_in_qty) || 0;
+      const autoInQty = Number(Math.max(0, Number(qtyIn) - manualInQty).toFixed(4));
       const qtyOut = r.out_qty ?? r.qty_out ?? 0;
       const waste = r.waste_qty ?? r.waste ?? 0;
       const fullQty = r.full_qty ?? 0;
       const broken = r.broken_qty ?? r.broken ?? 0;
       const stokAkhir = r.closing_qty ?? r.stok_akhir ?? (fullQty + broken);
       const productionUsage = Number(r.production_usage_qty) || 0;
-      const terpakai = r.terpakai_qty ?? r.qty_terpakai ?? Number(qtyOut);
+      const terpakai = r.terpakai_qty ?? r.qty_terpakai ?? Number((Number(qtyOut) + Number(waste)).toFixed(4));
       return {
         ...r,
         status: headerById[r.inventory_id]?.status || 'draft',
@@ -201,6 +203,8 @@ export const api = {
         materials: mat,
         stok_awal: stokAwal,
         qty_in: qtyIn,
+        auto_in_qty: autoInQty,
+        manual_in_qty: manualInQty,
         qty_out: qtyOut,
         production_usage_qty: productionUsage,
         waste: waste,
@@ -2974,7 +2978,8 @@ export const api = {
       const ings = r.recipe_ingredients || [];
       const subtotal = ings.reduce((sum, ing) => {
         const mat = ing.materials;
-        const unit = ing.unit || mat?.unit || 'gr';
+        const { contentUnit } = getPackUnitInfo(mat?.full_pack, mat?.unit);
+        const unit = ing.unit || contentUnit || mat?.unit || 'gr';
         return sum + calculateIngredientCost(mat, parseFloat(ing.qty_in_use || 0), unit, unitConversionMap);
       }, 0);
 
@@ -5069,6 +5074,9 @@ export const api = {
         if (row.qty_resto !== undefined && row.qty_resto !== '') {
           insertData.qty_resto = parseFloat(row.qty_resto || 0);
         }
+        if (row.qty_central !== undefined && row.qty_central !== '') {
+          insertData.qty_central = parseFloat(row.qty_central || 0);
+        }
 
         let existingMaterial = null;
         if (rowSku) existingMaterial = materialsBySkuForImport.get(rowSku.toLowerCase());
@@ -5077,6 +5085,7 @@ export const api = {
         }
 
         let error;
+        let targetMatId = existingMaterial?.id || null;
         if (existingMaterial) {
           let updMatQ = supabase.from('materials').update(insertData).eq('id', existingMaterial.id).eq('tenant_id', tenantId);
           if (branchId) updMatQ = updMatQ.eq('branch_id', branchId);
@@ -5089,6 +5098,7 @@ export const api = {
             .single();
           error = insErr;
           if (!insErr && insertedMaterial) {
+            targetMatId = insertedMaterial.id;
             materialsByNameForImport.set(insertedMaterial.name.toLowerCase().trim(), insertedMaterial);
             if (insertedMaterial.sku) {
               materialsBySkuForImport.set(String(insertedMaterial.sku).toLowerCase().trim(), insertedMaterial);
@@ -5096,8 +5106,68 @@ export const api = {
           }
         }
 
-        if (error) { failed++; errors.push({ row: row.name, error: error.message }); }
-        else success++;
+        if (error) {
+          failed++;
+          errors.push({ row: row.name, error: error.message });
+        } else {
+          success++;
+          // Jika file Excel menyertakan kolom histori mutasi Agustus 2026, catat ke tabel transactions
+          const histOpen = parseFloat(row.history_opening_qty || 0);
+          const histIn = parseFloat(row.history_in_qty || 0);
+          const histOut = parseFloat(row.history_out_qty || 0);
+          const unitPriceVal = parseFloat(row.price || 0);
+          if (targetMatId && (histOpen > 0 || histIn > 0 || histOut > 0)) {
+            const histTxs = [];
+            if (histOpen > 0) {
+              histTxs.push({
+                tenant_id: tenantId,
+                ...(branchId ? { branch_id: branchId } : {}),
+                date: '2026-08-01',
+                material_id: targetMatId,
+                type: 'IN',
+                location: 'RESTO',
+                qty: histOpen,
+                amount: Math.round(histOpen * unitPriceVal),
+                notes: 'Histori Stok Awal 1 Agustus 2026 (Import Master)',
+                source_module: 'HISTORY_AUG2026_OPENING',
+                is_reversed: false
+              });
+            }
+            if (histIn > 0) {
+              histTxs.push({
+                tenant_id: tenantId,
+                ...(branchId ? { branch_id: branchId } : {}),
+                date: '2026-08-15',
+                material_id: targetMatId,
+                type: 'PURCHASE_IN',
+                location: 'RESTO',
+                qty: histIn,
+                amount: Math.round(histIn * unitPriceVal),
+                notes: 'Histori Akumulasi Barang Masuk Agustus 2026 (Import Master)',
+                source_module: 'HISTORY_AUG2026_PURCHASE',
+                is_reversed: false
+              });
+            }
+            if (histOut > 0) {
+              histTxs.push({
+                tenant_id: tenantId,
+                ...(branchId ? { branch_id: branchId } : {}),
+                date: '2026-08-31',
+                material_id: targetMatId,
+                type: 'OUT',
+                location: 'RESTO',
+                qty: histOut,
+                amount: Math.round(histOut * unitPriceVal),
+                notes: 'Histori Pemakaian Barista Agustus 2026 (Import Master)',
+                source_module: 'HISTORY_AUG2026_USAGE',
+                is_reversed: false
+              });
+            }
+            if (histTxs.length > 0) {
+              await supabase.from('transactions').insert(histTxs).catch(() => {});
+            }
+          }
+        }
       } catch (e) {
         failed++;
         errors.push({ row: row.name, error: e.message });
@@ -5190,7 +5260,8 @@ export const api = {
           subtotal = ingredients.reduce((sum, ing) => {
             const mat = resolveMaterial(ing.item_code, ing.item_name);
             if (mat) {
-              const unit = ing.unit || mat.unit || 'gr';
+              const { contentUnit } = getPackUnitInfo(mat.full_pack, mat.unit);
+              const unit = ing.unit || contentUnit || mat.unit || 'gr';
               return sum + calculateIngredientCost(mat, parseFloat(ing.qty_in_use || 0), unit, unitConversionMap);
             }
             return sum;
@@ -5334,7 +5405,8 @@ export const api = {
             }
 
             if (mat) {
-              const unit = ing.unit || mat.unit || 'gr';
+              const { contentUnit } = getPackUnitInfo(mat.full_pack, mat.unit);
+              const unit = ing.unit || contentUnit || mat.unit || 'gr';
               const unitPrice = parseFloat(mat.new_price ?? mat.price ?? 0);
               const amount = calculateIngredientCost(mat, parseFloat(ing.qty_in_use || 0), unit, unitConversionMap);
 

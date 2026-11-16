@@ -37,7 +37,7 @@ export const DEFAULT_LOCATIONS = [
     name: 'Resto / Bar', 
     shortName: 'Resto',
     roleClassification: 'Bar',
-    allowedCategories: ['Coffee', 'Coffee & Tea', 'Dairy', 'Milk & Dairy', 'Sweetener', 'Syrup', 'Syrup & Sauce', 'Beverage Base', 'Ready to Drink', 'Powder & Topping', 'Fruit & Produce', 'Fresh & Fruit', 'Prep / Bahan Olahan', 'Bahan Olahan / Prep'],
+    allowedCategories: ['Coffee', 'Coffee & Tea', 'Dairy', 'Milk', 'Milk & Dairy', 'Sweetener', 'Syrup', 'Syrup & Sauce', 'Beverage Base', 'Ready to Drink', 'Drink & Beer', 'Powder', 'Powder & Topping', 'Juice', 'Fresh', 'Fresh Fruit', 'Dry Goods', 'Fruit & Produce', 'Fresh & Fruit', 'Garnish', 'Plastic & Paper', 'Others', 'Operational & Prep', 'Batch Prep Barista', 'Prep / Bahan Olahan', 'Bahan Olahan / Prep'],
     isDefault: true, 
     isSystem: true,
     description: 'Area bar, display, dan operasional minuman resto depan' 
@@ -89,7 +89,7 @@ function generateDeterministicOrRandomUuid(seedIndex = 9) {
 
 export const DEFAULT_ROLE_CATEGORY_MAP = {
   Central: [], // Semua kategori
-  Bar: ['Coffee', 'Coffee & Tea', 'Dairy', 'Milk & Dairy', 'Sweetener', 'Syrup', 'Syrup & Sauce', 'Beverage Base', 'Ready to Drink', 'Powder & Topping', 'Fruit & Produce', 'Fresh & Fruit', 'Prep / Bahan Olahan', 'Bahan Olahan / Prep'],
+  Bar: ['Coffee', 'Coffee & Tea', 'Dairy', 'Milk', 'Milk & Dairy', 'Sweetener', 'Syrup', 'Syrup & Sauce', 'Beverage Base', 'Ready to Drink', 'Drink & Beer', 'Powder', 'Powder & Topping', 'Juice', 'Fresh', 'Fresh Fruit', 'Dry Goods', 'Fruit & Produce', 'Fresh & Fruit', 'Garnish', 'Plastic & Paper', 'Others', 'Operational & Prep', 'Batch Prep Barista', 'Prep / Bahan Olahan', 'Bahan Olahan / Prep'],
   Kitchen: ['Kitchen & Cooking', 'Meat & Poultry', 'Fruit & Produce', 'Fresh & Fruit', 'Prep / Bahan Olahan', 'Bahan Olahan / Prep', 'Bahan Baku Dasar', 'Dairy & Cooking', 'Spices & Seasoning'],
   Service: ['Packaging', 'Amenities', 'Consumables', 'Tissue & Cleaning', 'Ready to Drink']
 };

@@ -1051,22 +1051,27 @@ export default function DailyInventory({ category: _category, initialTab }) {
           alert('Tidak ada data rekap untuk tanggal yang dipilih.');
           return;
         }
-        rows = records.map((row, idx) => ({
-          'NO': idx + 1,
-          'NAMA BARANG': row.materials?.name || 'Item Terhapus',
-          'SATUAN': row.materials?.unit || 'unit',
-          'HARGA SATUAN (RP)': Number(row.materials?.price) || 0,
-          'STOK AWAL': row.stok_awal ?? 0,
-          'MASUK OTOMATIS (IN)': row.qty_in ?? 0,
-          'IN TAMBAHAN MANUAL': row.manual_in_qty ?? 0,
-          'KELUAR (OUT MANUAL)': row.qty_out ?? 0,
-          'WASTE / RUSAK': row.waste ?? 0,
-          'FISIK FULL': row.full_qty ?? 0,
-          'FISIK BROKEN': row.broken ?? 0,
-          'STOK AKHIR': row.stok_akhir ?? 0,
-          'QTY TERPAKAI': row.qty_terpakai ?? 0,
-          'NILAI PEMAKAIAN (RP)': Number(row.nilai_rupiah) || 0
-        }));
+        rows = records.map((row, idx) => {
+          const totalIn = Number(row.qty_in) || 0;
+          const manualIn = Number(row.manual_in_qty) || 0;
+          const autoIn = row.auto_in_qty !== undefined ? Number(row.auto_in_qty) : Number(Math.max(0, totalIn - manualIn).toFixed(4));
+          return {
+            'NO': idx + 1,
+            'NAMA BARANG': row.materials?.name || 'Item Terhapus',
+            'SATUAN': row.materials?.unit || 'unit',
+            'HARGA SATUAN (RP)': Number(row.materials?.price) || 0,
+            'STOK AWAL': row.stok_awal ?? 0,
+            'MASUK OTOMATIS (IN)': autoIn,
+            'IN TAMBAHAN MANUAL': manualIn,
+            'KELUAR (OUT MANUAL)': row.qty_out ?? 0,
+            'WASTE / RUSAK': row.waste ?? 0,
+            'FISIK FULL': row.full_qty ?? 0,
+            'FISIK BROKEN': row.broken ?? 0,
+            'STOK AKHIR': row.stok_akhir ?? 0,
+            'QTY TERPAKAI': row.qty_terpakai ?? Number(((Number(row.qty_out) || 0) + (Number(row.waste) || 0)).toFixed(4)),
+            'NILAI PEMAKAIAN (RP)': Number(row.nilai_rupiah) || 0
+          };
+        });
       } else {
         if (!items || items.length === 0) {
           alert('Tidak ada data item untuk diekspor.');
@@ -1077,13 +1082,15 @@ export default function DailyInventory({ category: _category, initialTab }) {
           const fallbackOpening = location === 'CENTRAL' ? item.qty_central : (item.qty_resto ?? item.stock);
           const stokAwal = row.stok_awal !== undefined && row.stok_awal !== '' ? Number(row.stok_awal) : (Number(fallbackOpening) || 0);
           const qtyIn = Number(row.qty_in) || 0;
+          const manualIn = Number(row.manual_in_qty) || 0;
+          const autoIn = Number(Math.max(0, qtyIn - manualIn).toFixed(4));
           const qtyOut = Number(row.qty_out) || 0;
           const waste = Number(row.waste) || 0;
           const broken = Number(row.broken) || 0;
           const metrics = getInventoryRowMetrics(item, { ...row, stok_awal: stokAwal });
           const fullQty = metrics.fullQty == null ? '' : Number(metrics.fullQty);
           const stokAkhir = metrics.closing ?? '';
-          const qtyTerpakai = qtyOut;
+          const qtyTerpakai = Number((qtyOut + waste).toFixed(4));
           const unitPrice = metrics.unitCost;
           const nilaiRupiah = metrics.usageValue;
 
@@ -1093,8 +1100,8 @@ export default function DailyInventory({ category: _category, initialTab }) {
             'SATUAN': item.unit || 'unit',
             'HARGA SATUAN (RP)': unitPrice,
             'STOK AWAL': stokAwal,
-            'MASUK OTOMATIS (IN)': qtyIn,
-            'IN TAMBAHAN MANUAL': Number(row.manual_in_qty) || 0,
+            'MASUK OTOMATIS (IN)': autoIn,
+            'IN TAMBAHAN MANUAL': manualIn,
             'KELUAR (OUT MANUAL)': qtyOut,
             'WASTE / RUSAK': waste,
             'FISIK FULL': fullQty,
@@ -1173,7 +1180,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
           const metrics = getInventoryRowMetrics(item, { ...row, stok_awal: stokAwal });
           const fullQty = metrics.fullQty == null ? '' : Number(metrics.fullQty);
           const stokAkhir = metrics.closing ?? '';
-          const qtyTerpakai = qtyOut;
+          const qtyTerpakai = Number((qtyOut + waste).toFixed(4));
           const unitPrice = metrics.unitCost;
           const nilaiRupiah = metrics.usageValue;
 

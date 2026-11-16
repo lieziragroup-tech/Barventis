@@ -292,6 +292,7 @@ export function computeRecipeCosts({
   subtotal = 0,
   fixCostPct = DEFAULT_FIX_COST_PCT,
   targetFoodCostPct = 0,
+  foodCostPct = 0,
   roundingDirection = DEFAULT_ROUNDING_DIRECTION,
   roundingIncrement = DEFAULT_ROUNDING_INCREMENT,
   priceAdjustment = DEFAULT_PRICE_ADJUSTMENT,
@@ -301,7 +302,7 @@ export function computeRecipeCosts({
   const fixCost = Math.round(sub * fcPct);
   const basicCost = sub + fixCost;
 
-  const targetPct = Number(targetFoodCostPct) || 0;
+  const targetPct = Number(targetFoodCostPct || foodCostPct) || 0;
   const rawSellingPrice = targetPct > 0 && basicCost > 0 ? basicCost / targetPct : 0;
   const roundedSellingPrice = rawSellingPrice > 0
     ? roundSellingPrice(rawSellingPrice, roundingDirection, roundingIncrement)
@@ -315,8 +316,10 @@ export function computeRecipeCosts({
     fixCost,
     basicCost,
     rawSellingPrice,
+    sellingPriceRaw: rawSellingPrice,
     roundedSellingPrice,
     sellingPrice,
+    sellingPriceFinal: sellingPrice,
     actualFoodCostPct,
   };
 }

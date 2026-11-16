@@ -1148,7 +1148,13 @@ function StockLedgerInner() {
           { key: 'full_pack', label: 'Full', required: false, type: 'string', description: 'Isi per pack. Format bebas (1000 gr) untuk kasus sederhana, atau format terstruktur "PackLabel = Qty Satuan" (mis. "Carton = 24 pcs") kalau 1 pack berisi beberapa satuan kecil — sama dengan kolom Konversi Isi di halaman Materials.', sample: 'Carton = 24 pcs' },
           { key: 'price', label: 'Price', required: true, type: 'number', description: 'Harga beli (angka)', sample: 120000 },
           { key: 'min_stock', label: 'Min Stock', required: false, type: 'number', description: 'Batas alert stok minimum', sample: 5 },
-          { key: 'qty_resto', label: 'Stok Awal', required: false, type: 'number', description: 'Stok awal gudang/resto (opsional)', sample: 10 }
+          { key: 'qty_resto', label: 'Stok Awal', labels: ['Stok Awal', 'Stok Akhir Resto 31 Agu'], required: false, type: 'number', description: 'Stok aktif Bar Resto (diisi Stok Akhir 31 Agustus 2026)', sample: 10 },
+          { key: 'qty_central', label: 'Stok Central', labels: ['Stok Central', 'Stok Akhir Central 31 Agu'], required: false, type: 'number', description: 'Stok aktif Gudang Central (opsional)', sample: 5 },
+          { key: 'history_opening_qty', label: 'Histori Stok Awal 1 Agu', required: false, type: 'number', description: 'Riwayat stok awal 1 Agustus 2026 (opsional, dicatat ke ledger histori)', sample: 12 },
+          { key: 'history_in_qty', label: 'Histori Masuk Agu', required: false, type: 'number', description: 'Riwayat total barang masuk Agustus 2026 (opsional)', sample: 5 },
+          { key: 'history_out_qty', label: 'Histori Keluar Agu', required: false, type: 'number', description: 'Riwayat total pemakaian Agustus 2026 (opsional)', sample: 7 },
+          { key: 'history_full_qty', label: 'Histori Fisik Full 31 Agu', required: false, type: 'number', description: 'Riwayat stok fisik utuh 31 Agustus 2026 (opsional)', sample: 9 },
+          { key: 'history_broken_qty', label: 'Histori Fisik Broken 31 Agu', required: false, type: 'number', description: 'Riwayat stok fisik bukaan 31 Agustus 2026 (opsional)', sample: 1 }
         ]}
       />
 

@@ -2029,13 +2029,14 @@ export default function Purchasing() {
           // Owner bisa update detail (kategori, min_stock, dll) nanti di Stock Ledger.
           const created = [];
           for (const item of missingItems) {
+            const u = item.unit || 'pcs';
             const newMat = await api.createMaterial({
               name: item.name,
-              unit: item.unit || 'pcs',
+              unit: u,
               price: item.price || 0,
               category: 'Bahan Baku',
               supplier: '',
-              full_pack: 1,
+              full_pack: `${u} = 1 ${u}`,
               min_stock: 15
             });
             created.push(newMat);
