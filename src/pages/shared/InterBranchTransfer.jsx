@@ -60,7 +60,24 @@ export default function InterBranchTransfer() {
   );
 
   const [selectedMode, setSelectedMode] = useState(null);
-  const transferMode = selectedMode || (activeBranches.length > 1 ? 'INTER_BRANCH' : 'INTERNAL');
+  const transferMode = 'INTERNAL'; // FT-05.1 & FT-05.2: Disatukan menjadi 1 segmen menu Mutasi Gudang terpadu
+  const [filterByRoleUuid, setFilterByRoleUuid] = useState(true);
+  const unifiedEndpoints = useMemo(
+    () => locationService.getUnifiedTransferEndpoints(currentTenant?.id, branches, activeBranchId),
+    [currentTenant?.id, branches, activeBranchId, locations]
+  );
+  const targetEndpointMeta = useMemo(
+    () => unifiedEndpoints.find(ep => ep.name === routeHeader.target_branch) || null,
+    [unifiedEndpoints, routeHeader.target_branch]
+  );
+  const roleFilteredMaterials = useMemo(() => {
+    if (!filterByRoleUuid || !targetEndpointMeta || !Array.isArray(targetEndpointMeta.allowedCategories) || targetEndpointMeta.allowedCategories.length === 0) {
+      return stock || [];
+    }
+    const allowedSet = new Set(targetEndpointMeta.allowedCategories.map(c => c.toLowerCase().trim()));
+    const filtered = (stock || []).filter(m => allowedSet.has(String(m.category || '').toLowerCase().trim()));
+    return filtered.length > 0 ? filtered : (stock || []);
+  }, [stock, filterByRoleUuid, targetEndpointMeta]);
 
   const [locations, setLocations] = useState(() => locationService.getLocations(currentTenant?.id));
   useEffect(() => {
@@ -326,10 +343,29 @@ export default function InterBranchTransfer() {
 
     try {
       const isRequestMode = activeUser?.role === 'Bar';
+      const targetEp = unifiedEndpoints.find(ep => ep.name === routeHeader.target_branch);
+      const sourceEp = unifiedEndpoints.find(ep => ep.name === routeHeader.source_branch);
+      const isCrossBranchRoute =
+        (targetEp?.endpointType === 'BRANCH' && targetEp.branchId && targetEp.branchId !== activeBranchId) ||
+        (sourceEp?.endpointType === 'BRANCH' && sourceEp.branchId && sourceEp.branchId !== activeBranchId);
+
+      if (isCrossBranchRoute && targetEp?.branchId) {
+        await api.dispatchInterBranchShipment({
+          fromBranchId: sourceEp?.branchId || activeBranchId,
+          toBranchId: targetEp.branchId,
+          items: transferCart.map(i => ({
+            material_id: i.material_id,
+            qty: parseFloat(i.qty),
+            notes: i.item_notes || routeHeader.notes || ''
+          })),
+          notes: `[Rute: ${routeHeader.source_branch} -> ${routeHeader.target_branch}] ${routeHeader.notes || ''}`.trim()
+        });
+      }
+
       await Promise.all(
         transferCart.map(item => {
           const combinedNotes = [routeHeader.notes, item.item_notes].filter(Boolean).join(' | ');
-          if (isRequestMode) {
+          if (isRequestMode && !isCrossBranchRoute) {
             return api.createTransferRequest({
               material_id: item.material_id,
               qty: parseFloat(item.qty),
@@ -621,38 +657,45 @@ export default function InterBranchTransfer() {
         </div>
       </div>
 
-      {/* Mode Switcher Tabs (Antar Cabang vs Internal Area) */}
-      {activeBranches.length > 1 && (
-        <div className="flex items-center gap-1.5 p-1 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] w-fit">
-          <button
-            type="button"
-            onClick={() => setSelectedMode('INTER_BRANCH')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all whitespace-nowrap shrink-0 ${
-              transferMode === 'INTER_BRANCH'
-                ? 'bg-[var(--accent)] text-white shadow-sm'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            <Truck size={14} />
-            <span>Antar Cabang</span>
-            {incomingPendingShipments.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white tabular-nums">
-                {incomingPendingShipments.length}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedMode('INTERNAL')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all whitespace-nowrap shrink-0 ${
-              transferMode === 'INTERNAL'
-                ? 'bg-[var(--accent)] text-white shadow-sm'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            <ArrowRightLeft size={14} />
-            <span>Internal Area (Gudang ↔ Bar)</span>
-          </button>
+      {/* Notifikasi Barang Masuk Antar-Cabang pada Layar Mutasi Terpadu (FT-05.1 & FT-05.2) */}
+      {incomingPendingShipments.length > 0 && (
+        <div className="glass-card p-4 space-y-3 border border-amber-500/30">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <ClipboardCheck size={18} className="text-amber-500 shrink-0" />
+              <div>
+                <h3 className="text-sm font-bold m-0 text-[var(--text-primary)]">
+                  Kiriman Masuk Menunggu Diterima ({incomingPendingShipments.length})
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)] m-0">
+                  Verifikasi fisik kiriman dari cabang lain untuk menambah stok otomatis.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {incomingPendingShipments.map(s => {
+              const senderName = branchById.get(s.from_branch_id)?.name || 'Cabang Pengirim';
+              const itemsList = s.inter_branch_transfer_items || [];
+              return (
+                <div key={s.id} className="p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)]/50 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="font-mono text-xs font-bold">{s.transfer_number} • Dari {senderName}</div>
+                    <div className="text-xs text-[var(--text-secondary)]">
+                      {itemsList.map(i => `${i.materials?.name || 'Item'} (${i.qty_dispatched})`).join(', ')}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenReceiveModal(s)}
+                    className="btn btn-primary py-1.5 px-3 text-xs font-bold shrink-0"
+                  >
+                    Terima Barang
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -1464,16 +1507,26 @@ export default function InterBranchTransfer() {
                   <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 items-center">
                     <div className="sm:col-span-2">
                       <label className="text-[11px] text-[var(--text-secondary)] font-medium mb-1 block">
-                        Dari Lokasi (Asal)
+                        Dari Lokasi / Cabang (Asal)
                       </label>
                       <select
                         className="form-control text-xs font-semibold py-2 w-full"
                         value={routeHeader.source_branch}
                         onChange={(e) => setRouteHeader({ ...routeHeader, source_branch: e.target.value })}
                       >
-                        {locations.filter(l => l.code !== 'ALL').map(l => (
-                          <option key={l.code} value={l.name}>{l.name}</option>
-                        ))}
+                        {['Gudang Pusat (Central)', `Area Internal (${activeBranch?.name || 'Cabang Aktif'})`, 'Antar Cabang (Resto Umatis)'].map(grp => {
+                          const grpItems = unifiedEndpoints.filter(ep => ep.group === grp);
+                          if (grpItems.length === 0) return null;
+                          return (
+                            <optgroup key={grp} label={grp}>
+                              {grpItems.map(ep => (
+                                <option key={ep.key} value={ep.name}>
+                                  {ep.displayLabel}
+                                </option>
+                              ))}
+                            </optgroup>
+                          );
+                        })}
                       </select>
                     </div>
 
@@ -1490,28 +1543,55 @@ export default function InterBranchTransfer() {
 
                     <div className="sm:col-span-2">
                       <label className="text-[11px] text-[var(--text-secondary)] font-medium mb-1 block">
-                        Ke Lokasi (Tujuan)
+                        Ke Lokasi / Cabang (Tujuan)
                       </label>
                       <select
                         className="form-control text-xs font-semibold py-2 w-full"
                         value={routeHeader.target_branch}
                         onChange={(e) => setRouteHeader({ ...routeHeader, target_branch: e.target.value })}
                       >
-                        {locations.filter(l => l.code !== 'ALL').map(l => (
-                          <option key={l.code} value={l.name}>{l.name}</option>
-                        ))}
+                        {['Gudang Pusat (Central)', `Area Internal (${activeBranch?.name || 'Cabang Aktif'})`, 'Antar Cabang (Resto Umatis)'].map(grp => {
+                          const grpItems = unifiedEndpoints.filter(ep => ep.group === grp);
+                          if (grpItems.length === 0) return null;
+                          return (
+                            <optgroup key={grp} label={grp}>
+                              {grpItems.map(ep => (
+                                <option key={ep.key} value={ep.name}>
+                                  {ep.displayLabel}
+                                </option>
+                              ))}
+                            </optgroup>
+                          );
+                        })}
                       </select>
                     </div>
                   </div>
+
+                  {targetEndpointMeta && (
+                    <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-[var(--border)]/60 text-[11px]">
+                      <div className="text-[var(--text-secondary)]">
+                        UUID Tujuan: <code className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-primary)] border border-[var(--border)]">{targetEndpointMeta.uuid}</code>
+                        {' '}• Role Klasifikasi: <strong>{targetEndpointMeta.roleClassification || 'All'}</strong>
+                      </div>
+                      <label className="inline-flex items-center gap-1.5 cursor-pointer font-semibold text-indigo-600">
+                        <input
+                          type="checkbox"
+                          checked={filterByRoleUuid}
+                          onChange={e => setFilterByRoleUuid(e.target.checked)}
+                        />
+                        <span>Filter Bahan Sesuai Role Tujuan ({roleFilteredMaterials.length} item)</span>
+                      </label>
+                    </div>
+                  )}
                 </div>
 
-                {/* Step 2: Debounced Search Bar (Setara Pembelian Harian) */}
+                {/* Step 2: Debounced Search Bar Terfilter Sesuai Role & UUID Tempat */}
                 <div className="space-y-1.5">
                   <label className="font-bold text-xs text-[var(--text-primary)] block">
                     2. Pilih Bahan *
                   </label>
                   <MaterialAutocomplete
-                    materials={stock || []}
+                    materials={roleFilteredMaterials}
                     onSelect={handleAddMaterialToCart}
                     clearOnSelect={true}
                     sourceLocation={routeHeader.source_branch}

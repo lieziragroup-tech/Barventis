@@ -124,6 +124,39 @@ function StockLedgerInner() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [dependencyDeleteModal, setDependencyDeleteModal] = useState(null);
+  const [unsavedCloseConfirm, setUnsavedCloseConfirm] = useState(null);
+
+  const isAddModalDirty = Boolean(
+    (newItem.name && newItem.name.trim() !== '') ||
+    (newItem.supplier && newItem.supplier.trim() !== '') ||
+    Number(newItem.price) > 0 ||
+    Number(newItem.initial_qty_resto) > 0 ||
+    Number(newItem.initial_qty_central) > 0
+  );
+
+  const requestCloseAddModal = () => {
+    if (isAddModalDirty) {
+      setUnsavedCloseConfirm({ modalType: 'ADD' });
+    } else {
+      setShowAddModal(false);
+    }
+  };
+
+  const requestCloseEditModal = () => {
+    if (editItem) {
+      setUnsavedCloseConfirm({ modalType: 'EDIT' });
+    } else {
+      setEditItem(null);
+    }
+  };
+
+  const requestCloseAdjustModal = () => {
+    if (adjustQty !== '' || (adjustNotes && adjustNotes.trim() !== '')) {
+      setUnsavedCloseConfirm({ modalType: 'ADJUST' });
+    } else {
+      setAdjustItem(null);
+    }
+  };
   const [newItem, setNewItem] = useState({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15, initial_qty_resto: 0, initial_qty_central: 0, broken_tracking_enabled: true, expiry_tracking_enabled: false });
   const [selectedItems, setSelectedItems] = useState([]);
 
@@ -368,11 +401,23 @@ function StockLedgerInner() {
     }
   };
 
-  // Export to Excel
+  // Export to Excel (FT-02.3: Exports complete material catalog when using default filter)
   const handleExportExcel = async () => {
     try {
       let rowNum = 1;
-      const data = filteredStock.map(item => {
+      let exportSource = filteredStock;
+      const isDefaultFilter = (safeActiveLoc === 'ALL' && catFilter === 'ALL' && supFilter === 'ALL' && alertFilter === 'ALL' && !search.trim());
+      if (isDefaultFilter && typeof api.getAllCatalogMaterialsForExport === 'function') {
+        try {
+          const allCatalog = await api.getAllCatalogMaterialsForExport();
+          if (Array.isArray(allCatalog) && allCatalog.length > exportSource.length) {
+            exportSource = allCatalog;
+          }
+        } catch (e) {
+          console.warn('Export fallback to filteredStock:', e);
+        }
+      }
+      const data = exportSource.map(item => {
         const rQty = item.qty_resto || 0;
         const cQty = item.qty_central || 0;
         const total = rQty + cQty;
@@ -396,7 +441,7 @@ function StockLedgerInner() {
           'STOK CENTRAL': cQty,
           'TOTAL STOK (PACK)': total,
           'SATUAN PACK': item.unit || 'pck',
-          'UKURAN PACK': item.full_pack || '-',
+          'UKURAN PACK': formatCleanFullPackLabel(item.full_pack, item.unit),
           'KONVERSI RESEP': conversionLabel,
           'MINIMUM STOK': minLevel,
           'STATUS STOK': statusLabel,
@@ -645,7 +690,7 @@ function StockLedgerInner() {
                           </span>
                           <div style={{ fontWeight: 600 }}>{item.name}</div>
                         </div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{item.full_pack || item.unit} / {item.unit}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{formatCleanFullPackLabel(item.full_pack, item.unit)}</div>
                       </td>
                       <td><span className="badge badge-info" style={{ fontSize: '0.65rem' }}>{item.category}</span></td>
                       <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{item.supplier}</td>
@@ -815,7 +860,7 @@ function StockLedgerInner() {
 
       {/* Adjust Stock Slide-over Modal */}
       {adjustItem && (
-        <div onClick={() => { setAdjustItem(null); setAdjustQty(''); setAdjustNotes(''); }} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.2s ease' }}>
+        <div onClick={requestCloseAdjustModal} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.2s ease' }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: '400px', background: 'var(--bg-primary)', height: '100vh', padding: '32px 24px', overflowY: 'auto', borderLeft: '1px solid var(--border)', boxShadow: '-10px 0 30px rgba(0,0,0,0.1)', animation: 'slideInRight 0.3s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Koreksi Stok</h3>
@@ -862,7 +907,7 @@ function StockLedgerInner() {
 
       {/* Edit Item Slide-over Modal */}
       {editItem && (
-        <div onClick={() => setEditItem(null)} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.2s ease' }}>
+        <div onClick={requestCloseEditModal} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.2s ease' }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: '450px', background: 'var(--bg-primary)', height: '100vh', padding: '32px 24px', overflowY: 'auto', borderLeft: '1px solid var(--border)', boxShadow: '-10px 0 30px rgba(0,0,0,0.1)', animation: 'slideInRight 0.3s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Edit Bahan</h3>
@@ -977,11 +1022,11 @@ function StockLedgerInner() {
 
       {/* Add New Material Slide-over Modal */}
       {showAddModal && (
-        <div onClick={() => { setShowAddModal(false); setNewItem({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15, initial_qty_resto: 0, initial_qty_central: 0, broken_tracking_enabled: true, expiry_tracking_enabled: false }); }} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.2s ease' }}>
+        <div onClick={requestCloseAddModal} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.2s ease' }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: '450px', background: 'var(--bg-primary)', height: '100vh', padding: '32px 24px', overflowY: 'auto', borderLeft: '1px solid var(--border)', boxShadow: '-10px 0 30px rgba(0,0,0,0.1)', animation: 'slideInRight 0.3s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Tambah Bahan</h3>
-              <button style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => setShowAddModal(false)}><X size={16} /></button>
+              <button style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)' }} onClick={requestCloseAddModal}><X size={16} /></button>
             </div>
             <form onSubmit={handleAddSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="form-group">
@@ -1073,7 +1118,7 @@ function StockLedgerInner() {
               </div>
 
               <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-                <button type="button" className="btn btn-secondary" style={{ flex: 1, padding: '12px' }} onClick={() => setShowAddModal(false)}>Batal</button>
+                <button type="button" className="btn btn-secondary" style={{ flex: 1, padding: '12px' }} onClick={requestCloseAddModal}>Batal</button>
                 <button type="submit" className="btn btn-primary" style={{ flex: 2, padding: '12px', fontWeight: 700 }}>Simpan</button>
               </div>
             </form>
@@ -1106,6 +1151,59 @@ function StockLedgerInner() {
           { key: 'qty_resto', label: 'Stok Awal', required: false, type: 'number', description: 'Stok awal gudang/resto (opsional)', sample: 10 }
         ]}
       />
+
+      {/* Unsaved Input Confirmation Modal (FT-02.2 Safety Guard) */}
+      {unsavedCloseConfirm && (
+        <div
+          className="modal-overlay"
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '16px' }}
+          onClick={() => setUnsavedCloseConfirm(null)}
+        >
+          <div
+            className="glass-card modal-card"
+            style={{ width: '420px', maxWidth: 'calc(100vw - 32px)', padding: '24px', border: '1px solid var(--border)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: '0 0 8px 0', color: 'var(--text-primary)' }}>
+              Data Input Belum Disimpan
+            </h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '0 0 20px 0', lineHeight: 1.5 }}>
+              Kamu sudah mengisi beberapa kolom pada formulir ini. Apakah ingin melanjutkan pengisian atau keluar dari sidebar?
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ flex: 1, minWidth: '140px', padding: '10px 14px', fontWeight: 600 }}
+                onClick={() => {
+                  const type = unsavedCloseConfirm.modalType;
+                  setUnsavedCloseConfirm(null);
+                  if (type === 'ADD') {
+                    setShowAddModal(false);
+                    setNewItem({ name: '', category: 'Coffee & Tea', unit: 'pck', full_pack: '1000 grm', price: 0, new_price: 0, supplier: '', min_stock: 15, initial_qty_resto: 0, initial_qty_central: 0, broken_tracking_enabled: true, expiry_tracking_enabled: false });
+                  } else if (type === 'EDIT') {
+                    setEditItem(null);
+                  } else if (type === 'ADJUST') {
+                    setAdjustItem(null);
+                    setAdjustQty('');
+                    setAdjustNotes('');
+                  }
+                }}
+              >
+                Keluar & Hapus Isian
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ flex: 1, minWidth: '140px', padding: '10px 14px', fontWeight: 700 }}
+                onClick={() => setUnsavedCloseConfirm(null)}
+              >
+                Lanjutkan Input
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Force Delete Dependency Modal */}
       {dependencyDeleteModal && (

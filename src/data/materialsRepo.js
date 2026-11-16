@@ -152,7 +152,34 @@ export const materialsRepo = {
     if (branchId) query = query.eq('branch_id', branchId);
     const { data, error } = await query.order('name');
     if (error) throw error;
-    return mergeShelfLife(tenantId, data);
+
+    // FT-02.3 Fix: Also check unscoped tenant materials (e.g. master materials with branch_id = NULL or created on initial import)
+    // so that if a branch only has a partial subset (like 18 dummy rows), the remaining master catalog items are merged seamlessly.
+    let combined = Array.isArray(data) ? [...data] : [];
+    if (branchId && typeof supabase.unscopedFrom === 'function') {
+      try {
+        const { data: allTenantData } = await supabase
+          .unscopedFrom('materials')
+          .select('*')
+          .eq('tenant_id', tenantId)
+          .eq('is_active', true)
+          .order('name');
+        if (Array.isArray(allTenantData) && allTenantData.length > combined.length) {
+          const seenNames = new Set(combined.map(m => String(m.name || '').toLowerCase().trim()));
+          allTenantData.forEach(m => {
+            const normName = String(m.name || '').toLowerCase().trim();
+            if (normName && !seenNames.has(normName)) {
+              seenNames.add(normName);
+              combined.push(m);
+            }
+          });
+          combined.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+        }
+      } catch (_mergeErr) {
+        // fallback to branch-scoped list if unscoped query fails
+      }
+    }
+    return mergeShelfLife(tenantId, combined);
   },
 
   getPaged: async (tenantId, { page = 1, pageSize = 20, search = '', category = 'ALL', branchId = null } = {}) => {

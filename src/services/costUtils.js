@@ -1,158 +1,152 @@
 // F&B bulk metric conversion utilities (single source of truth — avoids HPP divergence)
 //
-// BUG-FIX 2026-07 (root-cause audit): `material.price` is ALWAYS a per-PACK price
-// (see UI label "Harga/Pack"). Every quantity that gets multiplied by `material.price`
-// MUST first be converted through the pack size, or the result is inflated by the
-// pack-size factor (typically 1000x for gr/ml packs). This file is now the ONLY place
-// that is allowed to read `material.price`/`material.full_pack` and turn them into a
-// per-base-unit price. All other call sites (DailyInventory, POS sync deduction,
-// getCostControlReport, reportGenerator) must import `calculateIngredientCost` /
-// `getUnitPrice` from here instead of doing `qty * material.price` inline.
-//
-// MANUAL UNIT CONVERSION (2026-08): materials.full_pack now supports a structured
-// "PackLabel = Qty Unit" form (e.g. "Carton = 24 pcs"), editable via StockLedger.jsx's
-// "Konversi Satuan" fields, on top of the free-text form ("1000 gr") it already
-// supported. getPackUnitInfo() is the single place that reads which side is the
-// purchase/pack unit vs. the recipe-facing content unit; calculateIngredientCost()
-// and convertQtyToStockUnit() both use it so a recipe can express usage in EITHER
-// unit ("1 Carton" or "24 pcs") and get the same cost / stock deduction either way.
-// Because every call site already reads `full_pack`/`unit` off the material object
-// it's handed (from getMaterials()/getRecipes(), which both select('*')), this reaches
-// Recipe Builder, Cost Control, and Waste (Daily Inventory) with no other wiring.
-//
-// ponytail: extract more domain services from api.js when new code needs them
+// BUG-FIX 2026-11 (FT-03.1 Root-Cause Fix):
+// 1. Strip trailing "/ <packUnit>" suffixes (e.g. "pck = 1000gr / pck" or "1000 gr / pck")
+//    so `parseStructuredFullPack` and `normalizeUnitToken` always resolve the clean base
+//    unit ('gr', 'ml', 'pcs') instead of "gr / pck".
+// 2. When a structured full_pack uses "kg" or "L/liter" on the right-hand side with a small
+//    multiplier (e.g. "pck = 1 kg" or "btl = 1.5 L"), convert to 1000 gr / 1500 ml consistently
+//    with `normalizeUnitToken` so unitPrice never inflates 1000x.
+
+export const normalizeUnitToken = (u) => {
+  let x = (u || '').toString().toLowerCase().trim();
+  if (x.includes('/')) {
+    x = x.split('/')[0].trim();
+  }
+  if (x === 'grm' || x === 'gram' || x === 'grams' || x === 'g') x = 'gr';
+  if (x === 'l' || x === 'liter' || x === 'ltr' || x === 'litre') x = 'ml';
+  if (x === 'pack' || x === 'pak') x = 'pck';
+  if (x === 'botol' || x === 'bottle') x = 'btl';
+  if (x === 'karton' || x === 'ctn' || x === 'crtn' || x === 'dus' || x === 'box') x = 'carton';
+  return x;
+};
+
+// Satuan dasar takaran — gr dan ml adalah SETARA secara F&B (air 1 ml ≈ 1 gr).
+const BASE_WEIGHT_VOL_UNITS = new Set(['gr', 'ml']);
+
+// Satuan kemasan beli — hanya ini yang boleh memicu perkalian packSize.
+const PACKAGE_CONTAINER_UNITS = new Set([
+  'pck', 'pack', 'pak', 'btl', 'botol', 'bottle', 'carton', 'karton', 'crtn', 'ctn',
+  'dus', 'box', 'kaleng', 'can', 'galon', 'jerigen', 'drigen', 'sachet', 'jar',
+]);
 
 /**
- * Parse a pack-size string (e.g. "1000 gr", "1.5 L", "24 pcs") to a numeric value.
- * Returns the value in the smallest unit (gr for weight, ml for volume, pcs for count).
- * Returns 0 if it cannot be parsed with confidence (caller should treat this as an
- * error, not silently fall back to price-as-is — see getUnitPrice()).
+ * Parse a pack-size string (e.g. "1000 gr", "1.5 L", "24 pcs", "pck = 1000gr / pck")
+ * to a numeric value in the base content unit (gr, ml, or pcs).
  */
 export function parsePackSize(fullPack) {
   if (!fullPack) return 0;
-  const str = String(fullPack).toLowerCase().trim();
+  // Strip any trailing "/ pck" display suffix first
+  const cleanStr = String(fullPack).replace(/\/.*$/, '').toLowerCase().trim();
 
-  // 1. New structured format: "Carton = 24 pcs" or "Jerigen = 5000 ml"
-  if (str.includes('=')) {
-    const rightSide = str.split('=')[1].trim();
-    const numMatch = rightSide.match(/^([\d.]+)/);
-    if (numMatch) {
-      const num = parseFloat(numMatch[1]);
-      if (!isNaN(num) && num > 0) return num;
+  // 1. Structured format: "Carton = 24 pcs", "pck = 1000gr", "btl = 1.5 L"
+  if (cleanStr.includes('=')) {
+    const rightSide = cleanStr.split('=')[1].trim();
+    const m = rightSide.match(/^([\d.]+)\s*([a-zA-Z]+)?/);
+    if (m) {
+      const num = parseFloat(m[1]);
+      const rawUnit = (m[2] || '').toLowerCase().trim();
+      if (!isNaN(num) && num > 0) {
+        if (['kg', 'kilogram'].includes(rawUnit) && num <= 50) return num * 1000;
+        if (['l', 'ltr', 'liter', 'litre'].includes(rawUnit) && num <= 50) return num * 1000;
+        return num;
+      }
     }
   }
 
-  // 2. Legacy fallback
-  let grMatch = str.match(/(\d+(?:\.\d+)?)\s*(?:gr|grm|gram)\b/);
+  // 2. Legacy / free-text fallback
+  let grMatch = cleanStr.match(/(\d+(?:\.\d+)?)\s*(?:gr|grm|gram|grams|g)\b/);
   if (grMatch) return parseFloat(grMatch[1]);
 
-  let mlMatch = str.match(/(\d+(?:\.\d+)?)\s*ml\b/);
+  let mlMatch = cleanStr.match(/(\d+(?:\.\d+)?)\s*ml\b/);
   if (mlMatch) return parseFloat(mlMatch[1]);
 
-  let lMatch = str.match(/(\d+(?:\.\d+)?)\s*(?:l|ltr|liter|litre)\b/);
+  let lMatch = cleanStr.match(/(\d+(?:\.\d+)?)\s*(?:l|ltr|liter|litre)\b/);
   if (lMatch) return parseFloat(lMatch[1]) * 1000.0;
 
-  let kgMatch = str.match(/(\d+(?:\.\d+)?)\s*kg\b/);
+  let kgMatch = cleanStr.match(/(\d+(?:\.\d+)?)\s*kg\b/);
   if (kgMatch) return parseFloat(kgMatch[1]) * 1000.0;
 
-  let pcsMatch = str.match(/(\d+(?:\.\d+)?)\s*(?:pcs|pck|pack|btl|dus|carton|karton|ctn|drigen|jerigen|can|kaleng)\b/);
+  let pcsMatch = cleanStr.match(/(\d+(?:\.\d+)?)\s*(?:pcs|pck|pack|btl|dus|carton|karton|ctn|drigen|jerigen|can|kaleng)\b/);
   if (pcsMatch) return parseFloat(pcsMatch[1]);
 
   return 0;
 }
 
 /**
- * Returns true if `fullPack`'s parsed unit is dimensionally compatible with `unit`
- * (both weight/volume-ish in gr/ml, or both count-ish in pcs). Used to catch the
- * "unit says gr but Full Pack says 1 pcs" class of master-data error explicitly,
- * instead of silently producing a wrong number.
+ * Returns true if `fullPack`'s parsed unit is dimensionally compatible with `unit`.
  */
 export function isPackUnitConsistent(unit, fullPack) {
   const u = (unit || '').toLowerCase().trim();
-  const fp = (fullPack || '').toLowerCase().trim();
+  const fp = String(fullPack || '').replace(/\/.*$/, '').toLowerCase().trim();
 
-  if (!fp) return false; // empty full_pack is always inconsistent — can't derive unit price
+  if (!fp) return false;
 
   if (fp.includes('=')) {
-    // Structured "PackLabel = Qty Unit" — always valid; UI enforces correct entry
-    return true;
+    return parsePackSize(fp) > 0;
   }
 
-  const weightVolUnits = ['gr', 'grm', 'gram', 'grams', 'ml', 'kg', 'l', 'ltr', 'liter', 'litre'];
-  const containerUnits = ['pcs', 'pck', 'pack', 'btl', 'botol', 'bottle', 'carton', 'karton', 'crtn', 'ctn', 'dus', 'box', 'kaleng', 'can', 'galon', 'jerigen', 'drigen', 'sachet', 'jar'];
+  const weightVolUnits = ['gr', 'grm', 'gram', 'grams', 'g', 'ml', 'kg', 'l', 'ltr', 'liter', 'litre'];
+  const containerUnits = ['pcs', 'pck', 'pack', 'pak', 'btl', 'botol', 'bottle', 'carton', 'karton', 'crtn', 'ctn', 'dus', 'box', 'kaleng', 'can', 'galon', 'jerigen', 'drigen', 'sachet', 'jar'];
 
   const isWeightVolUnit = weightVolUnits.includes(u);
   const isContainerUnit = containerUnits.includes(u);
 
-  const hasWeightVolInFullPack = /(?<![a-z])(gr|grm|gram|grams|ml|kg|ltr|liter|litre)\b/i.test(fp)
-    || /\bl\b/i.test(fp); // standalone 'l' for liter — separate to avoid matching inside btl/ml
+  const hasWeightVolInFullPack = /(?<![a-z])(gr|grm|gram|grams|g|ml|kg|ltr|liter|litre)\b/i.test(fp)
+    || /\bl\b/i.test(fp);
   const hasCountInFullPack = /(pcs|pck|pack|btl|carton|karton|ctn|dus|box|kaleng|can)\b/i.test(fp);
 
   if (isWeightVolUnit) {
-    // gr/ml material must have a weight/vol full_pack (e.g. "1000 gr", "750 ml")
-    // A full_pack of "1 pcs" for a gr-unit material is invalid (can't derive gr price from pcs count)
     return hasWeightVolInFullPack;
   }
 
   if (isContainerUnit) {
-    // Container-unit material (pck/btl/carton) — full_pack can be weight/vol OR count; both valid
     return hasWeightVolInFullPack || hasCountInFullPack;
   }
 
-  // Unknown unit — accept if full_pack has any numeric content
   return /\d/.test(fp);
 }
-const normalizeUnitToken = (u) => {
-  let x = (u || '').toString().toLowerCase().trim();
-  if (x === 'grm' || x === 'gram' || x === 'grams') x = 'gr';
-  if (x === 'l' || x === 'liter' || x === 'ltr' || x === 'litre') x = 'ml';
-  return x;
-};
-
-// Satuan dasar takaran — gr dan ml adalah SETARA secara F&B (air 1 ml ≈ 1 gr).
-// Jika material.unit dan full_pack sama-sama satuan dasar ini, JANGAN kalikan packSize.
-const BASE_WEIGHT_VOL_UNITS = new Set(['gr', 'ml']);
-
-// Satuan kemasan beli — hanya ini yang boleh memicu perkalian packSize.
-const PACKAGE_CONTAINER_UNITS = new Set([
-  'pck', 'pack', 'btl', 'botol', 'bottle', 'carton', 'karton', 'crtn', 'ctn',
-  'dus', 'box', 'kaleng', 'can', 'galon', 'jerigen', 'drigen', 'sachet', 'jar',
-]);
 
 /**
- * MANUAL UNIT CONVERSION (2026-08): parse the structured "PackLabel = Qty Unit"
- * `full_pack` format (e.g. "Carton = 24 pcs") into its two sides, so callers can
- * tell apart the PURCHASE/pack-level unit ("Carton" — what `materials.unit` is
- * normally set to today) from the CONTENT/base unit recipes actually consume in
- * ("pcs"). Returns null when `fullPack` isn't in the structured form.
+ * Parse the structured "PackLabel = Qty Unit" `full_pack` format (including when
+ * polluted with a trailing "/ pck" suffix like "pck = 1000gr / pck").
  */
 export function parseStructuredFullPack(fullPack) {
   const str = String(fullPack || '').trim();
   if (!str.includes('=')) return null;
   const [left, right] = str.split('=');
-  const packLabel = left.trim();
-  const rightTrim = right.trim();
-  const m = rightTrim.match(/^([\d.]+)\s*(\D+)?/);
+  const packLabel = left.replace(/\/.*$/, '').trim();
+  const rightClean = right.replace(/\/.*$/, '').trim();
+  const m = rightClean.match(/^([\d.]+)\s*([a-zA-Z]+)?/);
   if (!m) return null;
-  const contentQty = parseFloat(m[1]);
+  let contentQty = parseFloat(m[1]);
   if (isNaN(contentQty) || contentQty <= 0) return null;
-  return { packLabel, contentQty, contentUnit: m[2] ? m[2].trim() : '' };
+  const rawUnit = m[2] ? m[2].trim().toLowerCase() : '';
+  let contentUnit = normalizeUnitToken(rawUnit);
+  if (['kg', 'kilogram'].includes(rawUnit)) {
+    if (contentQty <= 50) contentQty = contentQty * 1000;
+    contentUnit = 'gr';
+  } else if (['l', 'ltr', 'liter', 'litre'].includes(rawUnit)) {
+    if (contentQty <= 50) contentQty = contentQty * 1000;
+    contentUnit = 'ml';
+  }
+  return { packLabel, contentQty, contentUnit };
 }
 
 /**
- * MANUAL UNIT CONVERSION (2026-08): resolve, for any material, which unit
- * label is the PACK-level one (what "materials.unit" holds, e.g. "Carton")
- * and which is the CONTENT/base unit recipes should be able to enter usage
- * quantities in (e.g. "pcs") — read from the structured `full_pack` format
- * above when present ("Carton = 24 pcs" -> pack "carton", content "pcs").
- * Falls back to `materialUnit` for both when `full_pack` is the older
- * free-text form ("1000 gr") — matching the app's existing single-unit
- * behavior exactly, so nothing regresses for materials not yet re-entered
- * with the structured format. This is the ONE place that decides what a
- * material's "1 Carton = X pcs"-style conversion means — StockLedger.jsx's
- * Konversi Satuan fields and Recipes.jsx's ingredient-unit dropdown both
- * read it from here so they never disagree.
+ * Format full_pack cleanly for display without duplicating "/ unit" when already structured.
  */
+export function formatCleanFullPackLabel(fullPack, materialUnit) {
+  const fp = String(fullPack || '').replace(/\/.*$/, '').trim();
+  const u = String(materialUnit || 'pck').trim();
+  const structured = parseStructuredFullPack(fp);
+  if (structured) {
+    return `${structured.packLabel || u} = ${structured.contentQty} ${structured.contentUnit || 'gr'}`;
+  }
+  if (!fp) return u;
+  return `${fp} / ${u}`;
+}
+
 export function getPackUnitInfo(fullPack, materialUnit) {
   const structured = parseStructuredFullPack(fullPack);
   if (structured) {
@@ -162,13 +156,11 @@ export function getPackUnitInfo(fullPack, materialUnit) {
     };
   }
   const normMatUnit = normalizeUnitToken(materialUnit);
-  const legacy = String(fullPack || '').trim();
-  const match = legacy.match(/([\d.]+)\s*(gr|grm|gram|grams|kg|ml|l|ltr|liter|litre|pcs|pck|can|btl)\b/i);
+  const legacy = String(fullPack || '').replace(/\/.*$/, '').trim();
+  const match = legacy.match(/([\d.]+)\s*(gr|grm|gram|grams|g|kg|ml|l|ltr|liter|litre|pcs|pck|can|btl)\b/i);
   if (match) {
-    const parsedContentUnit = normalizeUnitToken(match[2]);
-    // Guard: jika material.unit (gr/ml) DAN full_pack juga gr/ml (mis. unit='gr', full_pack='1000 ml'),
-    // keduanya adalah satuan dasar takaran — jangan perlakukan material.unit sebagai satuan kemasan
-    // karena akan menyebabkan qty dikali 1000x (bug HPP meledak).
+    const rawMatched = match[2].toLowerCase();
+    const parsedContentUnit = rawMatched === 'kg' ? 'gr' : normalizeUnitToken(rawMatched);
     if (BASE_WEIGHT_VOL_UNITS.has(normMatUnit) && BASE_WEIGHT_VOL_UNITS.has(parsedContentUnit)) {
       return { packUnitLabel: parsedContentUnit, contentUnit: parsedContentUnit };
     }
@@ -177,10 +169,6 @@ export function getPackUnitInfo(fullPack, materialUnit) {
   return { packUnitLabel: normMatUnit, contentUnit: normMatUnit };
 }
 
-/**
- * Shared helper: resolve full_pack + unit into { size, unit, consistent }.
- * Single source of truth — import this instead of re-defining inline in each component.
- */
 export function resolvePackInfo(fullPack, materialUnit) {
   const size = parsePackSize(fullPack);
   const consistent = isPackUnitConsistent(materialUnit, fullPack);
@@ -188,24 +176,10 @@ export function resolvePackInfo(fullPack, materialUnit) {
   return { size: size > 0 && consistent ? size : 0, unit: contentUnit, consistent };
 }
 
-/**
- * Resolve the price-per-CONTENT-unit for a material, in this priority order:
- *  1. Explicit override from the `unit_conversions` table (unitConversionMap), if supplied.
- *     Kept for callers/tests that already build this map directly; the manual
- *     conversion UI added 2026-08 (StockLedger.jsx "Konversi Satuan") instead writes
- *     the structured `full_pack` format below, since that already reaches every
- *     call site in the app without any extra plumbing.
- *  2. Parsed `full_pack` string (structured "PackLabel = Qty Unit" preferred, legacy
- *     free-text as fallback), only if dimensionally consistent with `material.unit`.
- *  3. Unresolvable -> returns { unitPrice: 0, resolved: false, reason } so callers can
- *     surface a warning instead of silently computing a wrong (or silently zero) cost.
- *
- * @param {object} material - material row (price, full_pack, unit, id)
- * @param {Map<number, number>=} unitConversionMap - optional Map<material_id, factor>
- *        where factor = how many content units are in ONE pack.
- */
 export function getUnitPrice(material, unitConversionMap) {
-  const price = Number(material?.price ?? 0);
+  const price = Number(material?.new_price) > 0
+    ? Number(material.new_price)
+    : Number(material?.price ?? 0);
 
   if (unitConversionMap && material?.id != null && unitConversionMap.has(material.id)) {
     const factor = unitConversionMap.get(material.id);
@@ -216,7 +190,7 @@ export function getUnitPrice(material, unitConversionMap) {
         source: 'unit_conversions',
         packSize: factor,
         packUnitLabel: normalizeUnitToken(material?.unit),
-        contentUnit: null // unknown from a bare factor — pack-vs-content scaling stays off for this path
+        contentUnit: null
       };
     }
   }
@@ -239,32 +213,13 @@ export function getUnitPrice(material, unitConversionMap) {
   };
 }
 
-/**
- * Total cost of using `qtyInUse` of `material` in a recipe/transaction.
- *
- * MANUAL UNIT CONVERSION (2026-08): `recipeUnit` used to be accepted but never
- * actually used — `qtyInUse` was always assumed to already be in the material's
- * CONTENT unit, so picking the PACK-level unit in the ingredient dropdown (e.g.
- * "Carton" instead of "pcs") silently produced a cost far too low. Now, when
- * `recipeUnit` matches the material's pack-level label (from getPackUnitInfo,
- * e.g. materials.full_pack = "Carton = 24 pcs"), qty is scaled up by the pack
- * size first, so "1 Carton" and "24 pcs" of the same ingredient cost the same.
- */
 export function calculateIngredientCost(material, qtyInUse, recipeUnit, unitConversionMap) {
   const { unitPrice, resolved, packSize, packUnitLabel, contentUnit } = getUnitPrice(material, unitConversionMap);
   let qty = Number(qtyInUse ?? 0);
   if (!resolved) {
-    // Never crash a report/import over one bad material — return 0. The
-    // human-readable reason is available via getUnitPrice() directly for
-    // callers that want it; validationService.js's validateMaterialPricing()
-    // is the place that actually surfaces this to the user (BaristaReport.jsx's
-    // "Data Quality Validation" panel), so this silent 0 is no longer a dead end.
     return 0;
   }
   const ru = normalizeUnitToken(recipeUnit);
-  // Hanya kalikan packSize jika resep benar-benar memakai satuan KEMASAN (pck/btl/carton/dsb),
-  // BUKAN satuan dasar (gr/ml). Tanpa guard ini, unit='gr' + full_pack='1000 ml' menyebabkan
-  // qty dikali 1000x karena ru='gr' === packUnitLabel='gr' !== contentUnit='ml'.
   const isRuContainer =
     PACKAGE_CONTAINER_UNITS.has(ru) ||
     (ru === 'pcs' && BASE_WEIGHT_VOL_UNITS.has(contentUnit));
@@ -274,18 +229,6 @@ export function calculateIngredientCost(material, qtyInUse, recipeUnit, unitConv
   return Math.round(qty * unitPrice);
 }
 
-/**
- * MANUAL UNIT CONVERSION (2026-08): convert a usage quantity expressed in
- * `fromUnit` into the unit `material`'s own stock quantity (qty_resto /
- * qty_central) is tracked in — needed when DEDUCTING physical stock (as
- * opposed to calculateIngredientCost(), which only needs a price). Generalizes
- * the old hardcoded "gr/ml usage against a kg/l-tracked material -> divide by
- * 1000" special case (previously duplicated ad-hoc in api.js processPosCheckout)
- * to also cover the new pack/content conversion (e.g. "pcs" usage against a
- * "Carton"-tracked material via full_pack "Carton = 24 pcs" -> divide by 24).
- * Returns `{ qty, resolved }`; `resolved:false` means the units couldn't be
- * related, so the caller should fall back to deducting the raw qty as-is.
- */
 export function convertQtyToStockUnit(material, qty, fromUnit) {
   const q = Number(qty ?? 0);
   const from = normalizeUnitToken(fromUnit);
@@ -327,82 +270,53 @@ export const calculateHppPercentage = (totalPemakaian, totalPenjualan) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════
-// RECIPE PRICING ENGINE (merged from barventis-vercel-repo)
-// Formula: Subtotal -> Fix Cost (per-recipe %) -> Basic Cost ->
-// Selling Price (raw, from target Food Cost %) -> rounded -> + manual
-// adjustment -> Selling Price (final) -> actual Food Cost % at that price.
-// This file is the single source of truth for the whole formula — every
-// place that computes a recipe's Fix Cost/Basic Cost/Selling Price
-// (Recipes.jsx, api.js createRecipe/updateRecipe/bulkImportRecipes/
-// recalcAllRecipeCosts, reportGenerator.js) must call this instead of
-// re-deriving the formula inline.
+// RECIPE PRICING ENGINE
 // ═══════════════════════════════════════════════════════════════════
 
 export const DEFAULT_FIX_COST_PCT = 0.05;
 export const DEFAULT_ROUNDING_DIRECTION = 'down';
-// Whole-rupiah rounding by default (increment=1) — NOT a fixed 500/1000/2000
-// bucket. The increment is still configurable per-recipe for anyone who does
-// want bucketed pricing, but nothing forces it anymore.
 export const DEFAULT_ROUNDING_INCREMENT = 1;
 export const DEFAULT_PRICE_ADJUSTMENT = 0;
 
-/**
- * Round a raw selling price to the nearest `increment`, in the given
- * `direction` ('up' or 'down'). With the default increment of 1, this is
- * just "round to the nearest whole rupiah" (no decimals).
- * roundSellingPrice(39361.45, 'down', 2000) === 38000.
- */
 export function roundSellingPrice(rawPrice, direction = DEFAULT_ROUNDING_DIRECTION, increment = DEFAULT_ROUNDING_INCREMENT) {
-  const price = Number(rawPrice || 0);
-  const inc = Number(increment || DEFAULT_ROUNDING_INCREMENT);
-  if (inc <= 0) return Math.round(price);
-  const steps = price / inc;
-  const roundedSteps = direction === 'up' ? Math.ceil(steps) : Math.floor(steps);
-  return Math.round(roundedSteps * inc);
+  const raw = Number(rawPrice) || 0;
+  if (raw <= 0) return 0;
+  const inc = Number(increment);
+  if (!inc || inc <= 0) return Math.round(raw);
+  if (direction === 'up') return Math.ceil(raw / inc) * inc;
+  if (direction === 'nearest') return Math.round(raw / inc) * inc;
+  return Math.floor(raw / inc) * inc;
 }
 
-/**
- * Full recipe cost/pricing computation:
- *   Subtotal -> Fix Cost -> Basic Cost -> Selling Price (raw) ->
- *   Selling Price (rounded) -> + Penyesuaian Manual -> Selling Price (final)
- *   -> Food Cost % Aktual (basic_cost / Selling Price final)
- *
- * @param {object} params
- * @param {number} params.subtotal - SUM(Amount) of all ingredients
- * @param {number} params.fixCostPct - defaults to DEFAULT_FIX_COST_PCT (5%)
- * @param {number} params.foodCostPct - target Food Cost % (pass 0 explicitly
- *        if not set yet; sellingPriceRaw will come back 0)
- * @param {string} params.roundingDirection - 'up' | 'down', defaults to 'down'
- * @param {number} params.roundingIncrement - defaults to 1 (nearest whole rupiah)
- * @param {number} params.priceAdjustment - optional manual Rp nudge (+/-)
- *        applied after rounding, defaults to 0.
- */
 export function computeRecipeCosts({
-  subtotal,
+  subtotal = 0,
   fixCostPct = DEFAULT_FIX_COST_PCT,
-  foodCostPct = 0,
+  targetFoodCostPct = 0,
   roundingDirection = DEFAULT_ROUNDING_DIRECTION,
   roundingIncrement = DEFAULT_ROUNDING_INCREMENT,
   priceAdjustment = DEFAULT_PRICE_ADJUSTMENT,
-}) {
-  const sub = Math.round(Number(subtotal || 0));
-  const fcPct = Number(fixCostPct ?? DEFAULT_FIX_COST_PCT);
-  const targetPct = Number(foodCostPct || 0);
-  const adjustment = Math.round(Number(priceAdjustment || 0));
-
+} = {}) {
+  const sub = Math.max(0, Math.round(Number(subtotal) || 0));
+  const fcPct = Math.max(0, Number(fixCostPct) || 0);
   const fixCost = Math.round(sub * fcPct);
-  const basicCost = Math.round(sub + fixCost);
-  const sellingPriceRaw = targetPct > 0 ? Math.round(basicCost / targetPct) : 0;
-  const sellingPriceRounded = sellingPriceRaw > 0
-    ? Math.round(roundSellingPrice(sellingPriceRaw, roundingDirection, roundingIncrement))
+  const basicCost = sub + fixCost;
+
+  const targetPct = Number(targetFoodCostPct) || 0;
+  const rawSellingPrice = targetPct > 0 && basicCost > 0 ? basicCost / targetPct : 0;
+  const roundedSellingPrice = rawSellingPrice > 0
+    ? roundSellingPrice(rawSellingPrice, roundingDirection, roundingIncrement)
     : 0;
-  const sellingPriceFinal = sellingPriceRounded > 0 ? Math.round(sellingPriceRounded + adjustment) : 0;
-  // Reality-check ratio using the price actually charged (post-adjustment),
-  // not the pre-adjustment target.
-  const actualFoodCostPctAtFinalPrice = sellingPriceFinal > 0 ? basicCost / sellingPriceFinal : 0;
+  const adj = Math.round(Number(priceAdjustment) || 0);
+  const sellingPrice = roundedSellingPrice > 0 ? Math.max(0, roundedSellingPrice + adj) : 0;
+  const actualFoodCostPct = sellingPrice > 0 ? basicCost / sellingPrice : 0;
 
   return {
-    subtotal: sub, fixCost, basicCost, sellingPriceRaw,
-    sellingPriceRounded, sellingPriceFinal, actualFoodCostPctAtFinalPrice
+    subtotal: sub,
+    fixCost,
+    basicCost,
+    rawSellingPrice,
+    roundedSellingPrice,
+    sellingPrice,
+    actualFoodCostPct,
   };
 }

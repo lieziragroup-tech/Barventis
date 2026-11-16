@@ -97,11 +97,15 @@ const RootRedirect = () => {
   return <Navigate to="/dashboard" replace />;
 };
 
-// Auth Guard Component
+// Auth Guard Component — allows ?invite=<token> links to open AuthScreen even if an Owner session is active (FT-01.2 fix)
 const AuthRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search || '');
+  const hasInviteToken = Boolean(searchParams.get('invite') || searchParams.get('token'));
+
   if (loading) return <LoadingSpinner />;
-  if (isAuthenticated) return <RootRedirect />;
+  if (isAuthenticated && !hasInviteToken) return <RootRedirect />;
   return children;
 };
 
@@ -180,7 +184,7 @@ export default function App() {
 
           {/* [5] Stock Opname & Aset */}
           <Route path="opname-assets" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Bar', 'Barista', 'Kitchen', 'Central', 'Purchasing', 'Staff']}>
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Bar', 'Barista', 'Kitchen', 'Service', 'Central', 'Purchasing', 'Staff']}>
               <RouteErrorBoundary><OpnameAssetsHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
@@ -206,7 +210,7 @@ export default function App() {
           } />
 
           <Route path="transfer" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Central', 'Purchasing', 'Bar', 'Barista', 'Kitchen', 'Staff']}>
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Central', 'Purchasing', 'Bar', 'Barista', 'Kitchen', 'Service', 'Staff']}>
               <RouteErrorBoundary><InterBranchTransfer /></RouteErrorBoundary>
             </ProtectedRoute>
           } />

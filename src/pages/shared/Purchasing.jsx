@@ -75,6 +75,11 @@ export default function Purchasing() {
   // --- CART STATES ---
   const [cart, setCart] = useState([]);
   const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [defaultDestination, setDefaultDestination] = useState('RESTO'); // FT-04.1 & FT-04.2: RESTO vs CENTRAL
+  const [defaultDeliveryNotes, setDefaultDeliveryNotes] = useState('');
+  const [monthlyAverageRows, setMonthlyAverageRows] = useState([]);
+  const [loadingMonthlyAvg, setLoadingMonthlyAvg] = useState(false);
+  const [monthlyAvgSearch, setMonthlyAvgSearch] = useState('');
 
   // Search Autocomplete
   const [searchQuery, setSearchQuery] = useState('');
@@ -456,23 +461,43 @@ export default function Purchasing() {
     }
   };
 
-  const addToCart = (material) => {
+  const addToCart = (material, overrideQty = '', overrideDest = null) => {
+    const matchedSup = suppliers.find(s => (s.name || '').toLowerCase().trim() === String(material.supplier || '').toLowerCase().trim());
     setCart(prev => [...prev, {
       cart_id: Date.now() + Math.random(),
       request_key: `purchase-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
       material_id: material.id,
       name: material.name,
       unit: material.unit,
-      qty: '',
+      qty: overrideQty !== '' ? String(overrideQty) : '1',
       unit_price: material.price || '',
-      supplier_id: material.supplier || '',
+      supplier_id: matchedSup?.id || material.supplier_id || '',
       date: purchaseDate,
-      destination: 'RESTO',
+      destination: overrideDest || defaultDestination || 'RESTO',
+      delivery_notes: defaultDeliveryNotes || '',
       expiry_date: ''
     }]);
     setSearchQuery('');
     setShowSearchDropdown(false);
   };
+
+  useEffect(() => {
+    if (tab !== 'MONTHLY_AVG') return;
+    let active = true;
+    setLoadingMonthlyAvg(true);
+    api.getMonthlyStockAverageFromRealData(period)
+      .then(rows => {
+        if (active) setMonthlyAverageRows(rows || []);
+      })
+      .catch(err => {
+        console.warn('Error computing real monthly stock average:', err);
+        if (active) setMonthlyAverageRows([]);
+      })
+      .finally(() => {
+        if (active) setLoadingMonthlyAvg(false);
+      });
+    return () => { active = false; };
+  }, [tab, period, materials.length]);
 
   const updateCartItem = (cartId, field, value) => {
     setCart(prev => prev.map(item => item.cart_id === cartId ? { ...item, [field]: value } : item));
@@ -510,7 +535,7 @@ export default function Purchasing() {
         qty: parseFloat(item.qty),
         unit: item.unit,
         unit_price: parseFloat(item.unit_price),
-        notes: `Pembelian Multi-Cart by ${activeUser?.name || 'Sistem'}`,
+        notes: `[Tujuan: ${item.destination || defaultDestination || 'RESTO'}] ${item.delivery_notes || defaultDeliveryNotes || ('Pembelian Harian oleh ' + (activeUser?.name || 'Sistem'))}`.trim(),
         destination: item.destination || 'RESTO',
         expiry_date: item.expiry_date || null,
         request_key: item.request_key || String(item.cart_id)
@@ -804,10 +829,11 @@ export default function Purchasing() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-tertiary)', padding: '4px', borderRadius: 'var(--radius-md)', width: 'fit-content', marginBottom: '20px' }}>
-        <button className={`btn ${tab === 'PURCHASES' ? 'btn-primary' : ''}`} style={{ background: tab === 'PURCHASES' ? '' : 'transparent', color: tab === 'PURCHASES' ? '' : 'var(--text-secondary)' }} onClick={() => setTab('PURCHASES')}>Pembelian Harian</button>
-        <button className={`btn ${tab === 'SUPPLIERS' ? 'btn-primary' : ''}`} style={{ background: tab === 'SUPPLIERS' ? '' : 'transparent', color: tab === 'SUPPLIERS' ? '' : 'var(--text-secondary)' }} onClick={() => setTab('SUPPLIERS')}>Daftar Supplier</button>
+      {/* Tabs (FT-04.1, FT-04.2, FT-04.3) */}
+      <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-tertiary)', padding: '4px', borderRadius: 'var(--radius-md)', width: 'fit-content', maxWidth: '100%', overflowX: 'auto', marginBottom: '20px' }}>
+        <button className={`btn ${tab === 'PURCHASES' ? 'btn-primary' : ''}`} style={{ background: tab === 'PURCHASES' ? '' : 'transparent', color: tab === 'PURCHASES' ? '' : 'var(--text-secondary)', whiteSpace: 'nowrap' }} onClick={() => setTab('PURCHASES')}>Pembelian Harian</button>
+        <button className={`btn ${tab === 'MONTHLY_AVG' ? 'btn-primary' : ''}`} style={{ background: tab === 'MONTHLY_AVG' ? '' : 'transparent', color: tab === 'MONTHLY_AVG' ? '' : 'var(--text-secondary)', whiteSpace: 'nowrap' }} onClick={() => setTab('MONTHLY_AVG')}>Acuan Stok 1 Bulan (Average Data Riil)</button>
+        <button className={`btn ${tab === 'SUPPLIERS' ? 'btn-primary' : ''}`} style={{ background: tab === 'SUPPLIERS' ? '' : 'transparent', color: tab === 'SUPPLIERS' ? '' : 'var(--text-secondary)', whiteSpace: 'nowrap' }} onClick={() => setTab('SUPPLIERS')}>Daftar Supplier</button>
       </div>
 
       {tab === 'SUPPLIERS' && (
@@ -991,6 +1017,108 @@ export default function Purchasing() {
         </div>
       )}
 
+      {tab === 'MONTHLY_AVG' && (
+        <div className="glass-card" style={{ padding: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
+            <div>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: '4px', color: 'var(--text-primary)' }}>
+                Acuan Stok 1 Bulan (Otomatis dari Average Data Riil)
+              </h3>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0 }}>
+                Dihitung otomatis dari rata-rata pemakaian dan pembelian riil pada sistem (tanpa perlu input target manual).
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', width: '240px' }}>
+                <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  className="form-control"
+                  style={{ paddingLeft: '34px', fontSize: '0.84rem' }}
+                  placeholder="Cari bahan baku..."
+                  value={monthlyAvgSearch}
+                  onChange={e => setMonthlyAvgSearch(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="table-container">
+            <table className="custom-table">
+              <thead>
+                <tr>
+                  <th>Nama Bahan Baku</th>
+                  <th>Kategori</th>
+                  <th style={{ textAlign: 'right' }}>Total Pemakaian Riil</th>
+                  <th style={{ textAlign: 'right' }}>Rata-rata / Hari (Average)</th>
+                  <th style={{ textAlign: 'right' }}>Acuan Stok 1 Bulan (30 Hari)</th>
+                  <th style={{ textAlign: 'right' }}>Stok Saat Ini (Resto + Central)</th>
+                  <th style={{ textAlign: 'right' }}>Rekomendasi Beli</th>
+                  <th style={{ textAlign: 'center' }}>Aksi Cepat</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loadingMonthlyAvg ? (
+                  <tr>
+                    <td colSpan="8" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
+                      Menghitung rata-rata dari data transaksi riil...
+                    </td>
+                  </tr>
+                ) : (
+                  monthlyAverageRows
+                    .filter(r => !monthlyAvgSearch.trim() || (r.name || '').toLowerCase().includes(monthlyAvgSearch.toLowerCase()))
+                    .map(row => (
+                      <tr key={row.material_id}>
+                        <td style={{ fontWeight: 700 }}>{row.name}</td>
+                        <td><span className="badge badge-info" style={{ fontSize: '0.7rem' }}>{row.category || '-'}</span></td>
+                        <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>
+                          {row.total_real_usage} {row.unit} <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>({row.active_days} hr)</span>
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--accent)', fontFamily: 'monospace' }}>
+                          {row.avg_daily_usage} {row.unit}/hari
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'monospace' }}>
+                          {row.monthly_reference_qty} {row.unit}
+                        </td>
+                        <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>
+                          {row.current_total_stock} {row.unit}
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 700, color: row.suggested_restock_qty > 0 ? 'var(--warning)' : 'var(--success)', fontFamily: 'monospace' }}>
+                          {row.suggested_restock_qty > 0 ? `+${row.suggested_restock_qty} ${row.unit}` : 'Stok Cukup'}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            style={{ padding: '5px 10px', fontSize: '0.75rem', fontWeight: 700 }}
+                            onClick={() => {
+                              const matObj = materials.find(m => m.id === row.material_id) || {
+                                id: row.material_id,
+                                name: row.name,
+                                unit: row.unit,
+                                price: row.price || 0,
+                                supplier: row.supplier || ''
+                              };
+                              addToCart(matObj, Math.max(1, Math.ceil(row.suggested_restock_qty || row.avg_daily_usage || 1)), defaultDestination);
+                              setTab('PURCHASES');
+                              setNotification({
+                                type: 'success',
+                                text: `"${row.name}" dimasukkan ke Keranjang Pembelian Harian berdasarkan acuan average riil.`
+                              });
+                            }}
+                          >
+                            + Masuk Keranjang
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {tab === 'PURCHASES' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
@@ -1008,21 +1136,57 @@ export default function Purchasing() {
                 </button>
               </div>
 
-              {/* Global Cart Info (Date & Recorder) */}
-              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-tertiary)', padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                  <User size={16} style={{ color: 'var(--accent)' }} />
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Oleh: <strong style={{ color: 'var(--text-primary)' }}>{activeUser?.name || '-'}</strong></span>
+              {/* Global Cart Info (Date, Destination RESTO/CENTRAL & Delivery Notes — FT-04.1 & FT-04.2) */}
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', width: '100%', paddingTop: '12px', borderTop: '1px dashed var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-tertiary)', padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+                  <User size={15} style={{ color: 'var(--accent)' }} />
+                  <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Oleh: <strong style={{ color: 'var(--text-primary)' }}>{activeUser?.name || '-'}</strong></span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-tertiary)', padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                  <Calendar size={16} style={{ color: 'var(--accent)' }} />
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Tanggal:</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-tertiary)', padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+                  <Calendar size={15} style={{ color: 'var(--accent)' }} />
+                  <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Tanggal Beli:</span>
                   <input
                     type="date"
                     className="form-control"
-                    style={{ padding: '2px 6px', height: 'auto', background: 'transparent', border: 'none', width: '130px', fontWeight: 600 }}
+                    style={{ padding: '2px 6px', height: 'auto', background: 'transparent', border: 'none', width: '132px', fontWeight: 700, fontSize: '0.82rem' }}
                     value={purchaseDate}
-                    onChange={e => setPurchaseDate(e.target.value)}
+                    onChange={e => {
+                      const nextDate = e.target.value;
+                      setPurchaseDate(nextDate);
+                      setCart(prev => prev.map(it => ({ ...it, date: nextDate })));
+                    }}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--accent-glow)', padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--accent)' }}>
+                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)' }}>Arah Tujuan Kirim:</span>
+                  <select
+                    aria-label="Pilih Tujuan Pengiriman Pembelian Harian"
+                    className="form-control"
+                    style={{ padding: '4px 10px', height: 'auto', width: 'auto', fontWeight: 800, fontSize: '0.82rem', background: 'var(--bg-secondary)', color: 'var(--accent)' }}
+                    value={defaultDestination}
+                    onChange={e => {
+                      const nextDest = e.target.value;
+                      setDefaultDestination(nextDest);
+                      setCart(prev => prev.map(it => ({ ...it, destination: nextDest })));
+                    }}
+                  >
+                    <option value="RESTO">🏪 Kirim ke RESTO (Stok Bar)</option>
+                    <option value="CENTRAL">🏢 Kirim ke CENTRAL (Gudang Pusat)</option>
+                  </select>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 240px', background: 'var(--bg-tertiary)', padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Keterangan Kirim:</span>
+                  <input
+                    type="text"
+                    className="form-control"
+                    style={{ padding: '4px 8px', height: 'auto', background: 'transparent', border: 'none', fontSize: '0.82rem', width: '100%' }}
+                    placeholder="Contoh: Beli harian mendadak kirim ke Bar BSD..."
+                    value={defaultDeliveryNotes}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setDefaultDeliveryNotes(val);
+                      setCart(prev => prev.map(it => ({ ...it, delivery_notes: val })));
+                    }}
                   />
                 </div>
               </div>
@@ -1086,19 +1250,20 @@ export default function Purchasing() {
               )}
             </div>
 
-            {/* Cart Table */}
+            {/* Cart Table — 100% Column-Aligned with Explicit Tujuan Kirim (RESTO vs CENTRAL) & Tanggal (FT-04.1 & FT-04.2) */}
             <div className="table-container" style={{ minHeight: '150px' }}>
               <table className="custom-table">
                 <thead>
                   <tr>
                     <th>Bahan Baku</th>
-                    <th style={{ width: '120px' }}>Supplier</th>
-                    <th style={{ width: '130px' }}>Expired (FEFO)</th>
-                    <th style={{ width: '130px' }}>Tanggal</th>
-                    <th style={{ width: '100px', textAlign: 'right' }}>Qty</th>
-                    <th style={{ width: '60px' }}>Unit</th>
-                    <th style={{ width: '140px', textAlign: 'right' }}>Harga Satuan</th>
-                    <th style={{ width: '140px', textAlign: 'right' }}>Total Harga</th>
+                    <th style={{ width: '135px' }}>Supplier</th>
+                    <th style={{ width: '130px' }}>Tujuan Kirim</th>
+                    <th style={{ width: '125px' }}>Tanggal Beli</th>
+                    <th style={{ width: '125px' }}>Expired (Opsional)</th>
+                    <th style={{ width: '95px', textAlign: 'right' }}>Qty Beli *</th>
+                    <th style={{ width: '60px' }}>Satuan</th>
+                    <th style={{ width: '135px', textAlign: 'right' }}>Harga / Unit (Rp)</th>
+                    <th style={{ width: '135px', textAlign: 'right' }}>Subtotal (Rp)</th>
                     <th style={{ width: '50px', textAlign: 'center' }}>Hapus</th>
                   </tr>
                 </thead>
@@ -1115,25 +1280,48 @@ export default function Purchasing() {
                               value={item.supplier_id}
                               onChange={(e) => updateCartItem(item.cart_id, 'supplier_id', e.target.value)}
                             >
-                              <option value="">(Tunai / Tidak ada)</option>
+                              <option value="">(Tunai / Pasar)</option>
                               {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            </select>
+                          </td>
+                          <td>
+                            <select
+                              className="form-control"
+                              style={{ padding: '6px 8px', fontSize: '0.8rem', fontWeight: 700, color: (item.destination || 'RESTO') === 'CENTRAL' ? '#2563eb' : 'var(--accent)' }}
+                              value={item.destination || defaultDestination || 'RESTO'}
+                              onChange={(e) => updateCartItem(item.cart_id, 'destination', e.target.value)}
+                            >
+                              <option value="RESTO">🏪 RESTO (Bar)</option>
+                              <option value="CENTRAL">🏢 CENTRAL</option>
                             </select>
                           </td>
                           <td>
                             <input
                               type="date"
                               className="form-control"
-                              style={{ padding: '6px 8px', fontSize: '0.8rem', borderColor: !item.expiry_date ? 'var(--danger)' : 'var(--border)' }}
-                              value={item.expiry_date}
+                              style={{ padding: '6px 8px', fontSize: '0.8rem' }}
+                              value={item.date || purchaseDate}
+                              onChange={(e) => updateCartItem(item.cart_id, 'date', e.target.value)}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="date"
+                              className="form-control"
+                              style={{ padding: '6px 8px', fontSize: '0.8rem' }}
+                              value={item.expiry_date || ''}
                               onChange={(e) => updateCartItem(item.cart_id, 'expiry_date', e.target.value)}
                             />
                           </td>
                           <td style={{ textAlign: 'right' }}>
                             <input
                               type="number"
-                              min="0"
+                              inputMode="decimal"
+                              step="any"
+                              min="0.01"
+                              placeholder="0"
                               className="form-control text-right"
-                              style={{ width: '80px', padding: '6px 8px' }}
+                              style={{ width: '85px', padding: '6px 8px', fontWeight: 700 }}
                               value={item.qty === 0 ? '' : item.qty}
                               onChange={(e) => updateCartItem(item.cart_id, 'qty', e.target.value)}
                             />
@@ -1142,43 +1330,56 @@ export default function Purchasing() {
                           <td style={{ textAlign: 'right' }}>
                             <input
                               type="number"
+                              inputMode="decimal"
                               min="0"
+                              placeholder="Harga"
                               className="form-control text-right"
                               style={{ width: '120px', padding: '6px 8px' }}
                               value={item.unit_price === 0 ? '' : item.unit_price}
                               onChange={(e) => updateCartItem(item.cart_id, 'unit_price', e.target.value)}
                             />
                           </td>
-                          <td style={{ textAlign: 'right', fontWeight: 600 }}>
-                            {formatIDR(item.qty * item.unit_price)}
+                          <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                            {formatIDR((parseFloat(item.qty) || 0) * (parseFloat(item.unit_price) || 0))}
                           </td>
                           <td style={{ textAlign: 'center' }}>
-                            <button className="btn" style={{ padding: '4px', color: 'var(--danger)' }} onClick={() => removeFromCart(item.cart_id)}>
+                            <button type="button" className="btn" style={{ padding: '4px', color: 'var(--danger)' }} onClick={() => removeFromCart(item.cart_id)}>
                               <Trash2 size={16} />
                             </button>
                           </td>
                         </tr>
                       ) : (
                         <tr>
-                          <td colSpan="8" style={{ padding: 0 }}>
+                          <td colSpan="10" style={{ padding: 0 }}>
                             <SwipeableItem onDelete={() => removeFromCart(item.cart_id)}>
                               <div className="p-3 bg-white border-b border-gray-100 flex flex-col gap-2">
                                 <div className="flex justify-between items-start">
                                   <div className="font-bold text-sm">{item.name} <span className="font-normal text-xs text-gray-500">({item.unit})</span></div>
-                                  <div className="font-bold text-primary">{formatIDR(item.qty * item.unit_price)}</div>
+                                  <div className="font-bold text-primary">{formatIDR((parseFloat(item.qty) || 0) * (parseFloat(item.unit_price) || 0))}</div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-2 mt-1">
                                   <div>
-                                    <label className="text-[10px] text-gray-500">Qty</label>
-                                    <input type="number" className="form-control text-sm py-1 px-2" value={item.qty} onChange={(e) => updateCartItem(item.cart_id, 'qty', e.target.value)} />
+                                    <label className="text-[10px] text-gray-500 font-semibold">Tujuan Kirim</label>
+                                    <select className="form-control text-xs py-1.5 px-2 font-bold" value={item.destination || defaultDestination || 'RESTO'} onChange={(e) => updateCartItem(item.cart_id, 'destination', e.target.value)}>
+                                      <option value="RESTO">🏪 RESTO (Bar)</option>
+                                      <option value="CENTRAL">🏢 CENTRAL</option>
+                                    </select>
                                   </div>
                                   <div>
-                                    <label className="text-[10px] text-gray-500">Harga Satuan</label>
-                                    <input type="number" className="form-control text-sm py-1 px-2" value={item.unit_price} onChange={(e) => updateCartItem(item.cart_id, 'unit_price', e.target.value)} />
+                                    <label className="text-[10px] text-gray-500 font-semibold">Tanggal Beli</label>
+                                    <input type="date" className="form-control text-xs py-1.5 px-2" value={item.date || purchaseDate} onChange={(e) => updateCartItem(item.cart_id, 'date', e.target.value)} />
+                                  </div>
+                                  <div>
+                                    <label className="text-[10px] text-gray-500 font-semibold">Qty Beli ({item.unit})</label>
+                                    <input type="number" inputMode="decimal" className="form-control text-sm py-1.5 px-2 font-bold" value={item.qty} onChange={(e) => updateCartItem(item.cart_id, 'qty', e.target.value)} />
+                                  </div>
+                                  <div>
+                                    <label className="text-[10px] text-gray-500 font-semibold">Harga Satuan (Rp)</label>
+                                    <input type="number" inputMode="decimal" className="form-control text-sm py-1.5 px-2" value={item.unit_price} onChange={(e) => updateCartItem(item.cart_id, 'unit_price', e.target.value)} />
                                   </div>
                                   <div className="col-span-2">
-                                    <label className="text-[10px] text-red-500 font-bold">Expired Date (FEFO)</label>
-                                    <input type="date" className="form-control text-sm py-1 px-2 border-red-300" value={item.expiry_date} onChange={(e) => updateCartItem(item.cart_id, 'expiry_date', e.target.value)} />
+                                    <label className="text-[10px] text-gray-500">Expired Date (Opsional - FEFO)</label>
+                                    <input type="date" className="form-control text-xs py-1.5 px-2" value={item.expiry_date || ''} onChange={(e) => updateCartItem(item.cart_id, 'expiry_date', e.target.value)} />
                                   </div>
                                 </div>
                               </div>
@@ -1191,9 +1392,9 @@ export default function Purchasing() {
 
                   {cart.length === 0 && (
                     <tr>
-                      <td colSpan="7" style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted)' }}>
+                      <td colSpan="10" style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted)' }}>
                         <ShoppingCart size={32} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
-                        <div>Keranjang kosong. Cari bahan baku di atas.</div>
+                        <div>Keranjang kosong. Cari bahan baku di atas untuk mengatur jumlah, harga, dan arah tujuan (RESTO / CENTRAL).</div>
                       </td>
                     </tr>
                   )}
@@ -1201,7 +1402,7 @@ export default function Purchasing() {
                 {cart.length > 0 && (
                   <tfoot>
                     <tr style={{ background: 'var(--bg-tertiary)' }}>
-                      <td colSpan="5" style={{ textAlign: 'right', fontWeight: 700 }}>Total Estimasi Pembelian:</td>
+                      <td colSpan="8" style={{ textAlign: 'right', fontWeight: 700 }}>Total Estimasi Pembelian:</td>
                       <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--success)', fontSize: '1.1rem' }}>
                         Rp {cartTotal.toLocaleString('id-ID')}
                       </td>

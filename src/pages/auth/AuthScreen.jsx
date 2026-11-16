@@ -103,10 +103,9 @@ export default function AuthScreen() {
       fontFamily: 'var(--font-sans)',
       color: 'var(--text-primary)'
     }}>
-      <div className="glass-panel animate-fade-in" style={{
+      <div className="glass-panel animate-fade-in p-5 sm:p-8" style={{
         maxWidth: mode === 'login' ? '520px' : '440px',
         width: '100%',
-        padding: '36px 32px',
         borderRadius: 'var(--radius-xl)',
         border: '1px solid var(--border-strong)',
         boxShadow: 'var(--card-shadow)',
@@ -288,17 +287,11 @@ export default function AuthScreen() {
                             handleBetaShortcutLogin(preset);
                           }
                         }}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl transition-all"
                         style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: '10px',
-                          padding: '10px 12px',
-                          borderRadius: 'var(--radius-md)',
                           border: isThisLoading ? '1px solid var(--accent)' : '1px solid var(--border)',
                           background: isThisLoading ? 'var(--accent-glow)' : 'var(--bg-secondary)',
-                          cursor: (loading || betaLoadingKey) ? 'wait' : 'pointer',
-                          transition: 'all 0.15s ease'
+                          cursor: (loading || betaLoadingKey) ? 'wait' : 'pointer'
                         }}
                       >
                         <div style={{ minWidth: 0, flex: 1 }}>

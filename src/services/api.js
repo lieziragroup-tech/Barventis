@@ -1668,51 +1668,80 @@ export const api = {
       name: 'Owner Resto Umatis (Beta)',
       role: 'Owner',
       branchCode: 'BSD',
+      areaUuid: '00000000-0000-4000-a000-000000000000',
       badge: 'OWNER • MULTI-CABANG'
     },
     {
       key: 'BARISTA_BSD',
-      label: 'Barista Cabang BSD',
-      sublabel: 'Daily Inventory, SimplePrep & Opname BSD',
+      label: 'Role Bar (Cabang BSD)',
+      sublabel: 'Stok Bar, Olah Bahan Minuman, Mutasi & Opname Bar BSD',
       email: 'barista.bsd@umatis.id',
       password: 'BetaUmatis2026!',
       name: 'Barista Cabang BSD (Beta)',
-      role: 'Barista',
+      role: 'Bar',
       branchCode: 'BSD',
-      badge: 'BARISTA • CABANG BSD'
+      areaUuid: '00000000-0000-4000-a000-000000000002',
+      badge: 'ROLE BAR • CABANG BSD'
     },
     {
       key: 'BARISTA_KASUNA',
-      label: 'Barista Cabang Kasuna',
-      sublabel: 'Daily Inventory, SimplePrep & Opname Kasuna',
+      label: 'Role Bar (Cabang Kasuna)',
+      sublabel: 'Stok Bar, Olah Bahan Minuman, Mutasi & Opname Bar Kasuna',
       email: 'barista.kasuna@umatis.id',
       password: 'BetaUmatis2026!',
       name: 'Barista Cabang Kasuna (Beta)',
-      role: 'Barista',
+      role: 'Bar',
       branchCode: 'KASUNA',
-      badge: 'BARISTA • CABANG KASUNA'
+      areaUuid: '00000000-0000-4000-a000-000000000002',
+      badge: 'ROLE BAR • CABANG KASUNA'
+    },
+    {
+      key: 'KITCHEN_BSD',
+      label: 'Role Kitchen / Dapur (BSD)',
+      sublabel: 'Stok Dapur, Olah Bahan Mentah/Trimming, Mutasi & Opname Kitchen',
+      email: 'kitchen.bsd@umatis.id',
+      password: 'BetaUmatis2026!',
+      name: 'Chef Kitchen BSD (Beta)',
+      role: 'Kitchen',
+      branchCode: 'BSD',
+      areaUuid: '00000000-0000-4000-a000-000000000003',
+      badge: 'ROLE KITCHEN • DAPUR BSD'
+    },
+    {
+      key: 'SERVICE_BSD',
+      label: 'Role Service / Floor (BSD)',
+      sublabel: 'Stok Packaging/Amenities, Kasir POS, Mutasi & Opname Service',
+      email: 'service.bsd@umatis.id',
+      password: 'BetaUmatis2026!',
+      name: 'Staf Service & Floor BSD (Beta)',
+      role: 'Service',
+      branchCode: 'BSD',
+      areaUuid: '00000000-0000-4000-a000-000000000004',
+      badge: 'ROLE SERVICE • FLOOR BSD'
     },
     {
       key: 'PURCHASING_BSD',
-      label: 'Purchasing & Central',
-      sublabel: 'Pembelian Harian (Resto/Central) & Opname Central',
+      label: 'Role Central & Purchasing',
+      sublabel: 'Pembelian Harian (Resto/Central), Acuan 1 Bulan & Gudang Central',
       email: 'purchasing.bsd@umatis.id',
       password: 'BetaUmatis2026!',
       name: 'Purchasing & Central (Beta)',
       role: 'Purchasing',
       branchCode: 'BSD',
-      badge: 'PURCHASING • CENTRAL/RESTO'
+      areaUuid: '00000000-0000-4000-a000-000000000001',
+      badge: 'CENTRAL & PURCHASING'
     },
     {
       key: 'KASIR_BSD',
-      label: 'Kasir POS ESB',
-      sublabel: 'Kasir POS, Upload Penjualan ESB & Rekonsiliasi',
+      label: 'Role Kasir POS ESB',
+      sublabel: 'Terminal Kasir POS, Upload Penjualan ESB & Rekonsiliasi',
       email: 'kasir.bsd@umatis.id',
       password: 'BetaUmatis2026!',
       name: 'Kasir POS ESB (Beta)',
       role: 'Kasir',
       branchCode: 'BSD',
-      badge: 'KASIR • POS ESB'
+      areaUuid: '00000000-0000-4000-a000-000000000004',
+      badge: 'ROLE KASIR • POS ESB'
     }
   ],
 
@@ -1986,6 +2015,86 @@ export const api = {
     if (!tenantId) return []; // H-2: Super Admin / no-tenant — avoid malformed .eq('tenant_id', null) query
     const branchId = await requireBranchId(branchIdArg);
     return await materialsRepo.getAll(tenantId, branchId);
+  },
+
+  // FT-02.3: Fetch complete material catalog across tenant/branch for full Excel export
+  getAllCatalogMaterialsForExport: async (branchIdArg = null) => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return [];
+    const branchId = await requireBranchId(branchIdArg);
+    return await materialsRepo.getAll(tenantId, branchId);
+  },
+
+  // FT-04.3: Compute 1-Month Stock Reference automatically from average of real historical usage/purchase data
+  getMonthlyStockAverageFromRealData: async (period = null, branchIdArg = null) => {
+    const tenantId = await getActiveTenantId();
+    if (!tenantId) return [];
+    const branchId = await requireBranchId(branchIdArg);
+    const materials = await materialsRepo.getAll(tenantId, branchId);
+    if (!Array.isArray(materials) || materials.length === 0) return [];
+
+    let txQuery = supabase
+      .from('transactions')
+      .select('material_id, type, qty, date')
+      .eq('tenant_id', tenantId);
+    if (branchId) txQuery = txQuery.eq('branch_id', branchId);
+    if (period && /^\d{4}-\d{2}$/.test(period)) {
+      txQuery = txQuery.gte('date', `${period}-01`).lte('date', `${period}-31`);
+    }
+    const { data: txs } = await txQuery;
+
+    const usageByMat = new Map();
+    const datesByMat = new Map();
+    const globalActiveDates = new Set();
+
+    (txs || []).forEach(tx => {
+      const mId = Number(tx.material_id);
+      if (!mId) return;
+      const tType = String(tx.type || '').toUpperCase();
+      if (['OUT', 'POS_DEDUCTION', 'DAILY_CHECKOUT', 'WASTE'].includes(tType)) {
+        const usedQty = Math.abs(parseFloat(tx.qty) || 0);
+        if (usedQty > 0) {
+          usageByMat.set(mId, (usageByMat.get(mId) || 0) + usedQty);
+          const dStr = String(tx.date || '').slice(0, 10);
+          if (dStr) {
+            globalActiveDates.add(dStr);
+            if (!datesByMat.has(mId)) datesByMat.set(mId, new Set());
+            datesByMat.get(mId).add(dStr);
+          }
+        }
+      }
+    });
+
+    const fallbackDivisorDays = Math.max(1, globalActiveDates.size || 7);
+
+    return materials.map(m => {
+      const mId = Number(m.id);
+      const rawTotalUsage = usageByMat.get(mId) || 0;
+      const matDates = datesByMat.get(mId);
+      const activeDays = matDates && matDates.size > 0 ? matDates.size : (rawTotalUsage > 0 ? fallbackDivisorDays : 1);
+      // If no usage transactions recorded yet, derive baseline daily usage from min_stock / 7 days
+      const effectiveDailyAvg = rawTotalUsage > 0
+        ? (rawTotalUsage / activeDays)
+        : Math.max(0.2, Number(m.min_stock || 5) / 7);
+      const monthlyRefQty = +(effectiveDailyAvg * 30).toFixed(1);
+      const currentTotalStock = +((Number(m.qty_resto) || 0) + (Number(m.qty_central) || 0)).toFixed(1);
+      const suggestedRestock = Math.max(0, +(monthlyRefQty - currentTotalStock).toFixed(1));
+
+      return {
+        material_id: m.id,
+        name: m.name,
+        category: m.category || 'Umum',
+        unit: m.unit || 'pck',
+        price: Number(m.new_price) > 0 ? Number(m.new_price) : Number(m.price || 0),
+        supplier: m.supplier || '',
+        total_real_usage: +rawTotalUsage.toFixed(2),
+        active_days: rawTotalUsage > 0 ? activeDays : 0,
+        avg_daily_usage: +effectiveDailyAvg.toFixed(2),
+        monthly_reference_qty: monthlyRefQty,
+        current_total_stock: currentTotalStock,
+        suggested_restock_qty: suggestedRestock
+      };
+    });
   },
 
   // Paginated + searchable version for the Stock Ledger table. The full
@@ -6333,14 +6442,63 @@ export const api = {
     const batchNumber = `PREP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
     const timestamp = new Date().toISOString();
 
+    // Helper FT-06.1: Convert File/Blob to compressed WebP/JPEG data URL when Supabase Storage bucket is unavailable
+    const fileToCompressedDataUrl = async (fileObj, fallbackLabel) => {
+      if (!fileObj) return null;
+      if (typeof fileObj === 'string') return fileObj;
+      try {
+        if (typeof window !== 'undefined' && typeof document !== 'undefined' && typeof FileReader !== 'undefined') {
+          const rawDataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(fileObj);
+          });
+          // Compress via offscreen canvas so base64 string stays compact (< 60KB) for PostgreSQL & localStorage
+          if (typeof Image !== 'undefined') {
+            const compressed = await new Promise((resolve) => {
+              const img = new Image();
+              img.onload = () => {
+                try {
+                  const maxDim = 720;
+                  let w = img.width || 640;
+                  let h = img.height || 480;
+                  if (w > maxDim || h > maxDim) {
+                    if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+                    else { w = Math.round((w * maxDim) / h); h = maxDim; }
+                  }
+                  const canvas = document.createElement('canvas');
+                  canvas.width = w;
+                  canvas.height = h;
+                  const ctx = canvas.getContext('2d');
+                  ctx.drawImage(img, 0, 0, w, h);
+                  const webpUrl = canvas.toDataURL('image/webp', 0.72);
+                  resolve(webpUrl && webpUrl.startsWith('data:image') ? webpUrl : rawDataUrl);
+                } catch {
+                  resolve(rawDataUrl);
+                }
+              };
+              img.onerror = () => resolve(rawDataUrl);
+              img.src = rawDataUrl;
+            });
+            return compressed;
+          }
+          return rawDataUrl;
+        }
+      } catch (convErr) {
+        console.warn('Fallback image compression warning:', convErr);
+      }
+      return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="100%" height="100%" fill="%231e293b"/><text x="50%" y="50%" fill="%23e2e8f0" font-family="sans-serif" font-weight="bold" font-size="14" text-anchor="middle">${encodeURIComponent(fallbackLabel)}</text></svg>`;
+    };
+
     // Upload Photo 1: Bahan Mentah (Before)
     let beforePhotoUrl = typeof photo_before === 'string' ? photo_before : null;
     if (photo_before && typeof photo_before !== 'string') {
       try {
         beforePhotoUrl = await api.uploadPhoto(photo_before, 'prep-photos', `before-${Date.now()}.webp`);
       } catch (err) {
-        console.warn("Upload photo_before failed, using placeholder:", err);
-        beforePhotoUrl = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="100%" height="100%" fill="%231e293b"/><text x="50%" y="50%" fill="%23e2e8f0" font-family="sans-serif" font-weight="bold" font-size="14" text-anchor="middle">Foto Bahan Mentah</text></svg>`;
+        console.warn("Upload photo_before to bucket failed, saving compressed photo data URL:", err);
+        beforePhotoUrl = await fileToCompressedDataUrl(photo_before, 'Foto Bahan Mentah');
       }
     }
 
@@ -6351,8 +6509,8 @@ export const api = {
       try {
         cleanPhotoUrl = await api.uploadPhoto(effectiveCleanPhoto, 'prep-photos', `clean-${Date.now()}.webp`);
       } catch (err) {
-        console.warn("Upload photo_clean failed, using placeholder:", err);
-        cleanPhotoUrl = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="100%" height="100%" fill="%23064e3b"/><text x="50%" y="50%" fill="%236ee7b7" font-family="sans-serif" font-weight="bold" font-size="14" text-anchor="middle">Foto Berat Bersih</text></svg>`;
+        console.warn("Upload photo_clean to bucket failed, saving compressed photo data URL:", err);
+        cleanPhotoUrl = await fileToCompressedDataUrl(effectiveCleanPhoto, 'Foto Berat Bersih');
       }
     }
 
@@ -6366,8 +6524,8 @@ export const api = {
         try {
           wastePhotoUrl = await api.uploadPhoto(effectiveWastePhoto, 'prep-photos', `waste-${Date.now()}.webp`);
         } catch (err) {
-          console.warn("Upload photo_waste failed, using placeholder:", err);
-          wastePhotoUrl = cleanPhotoUrl || `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="100%" height="100%" fill="%237f1d1d"/><text x="50%" y="50%" fill="%23fca5a5" font-family="sans-serif" font-weight="bold" font-size="14" text-anchor="middle">Foto Bukti Ampas</text></svg>`;
+          console.warn("Upload photo_waste to bucket failed, saving compressed photo data URL:", err);
+          wastePhotoUrl = (await fileToCompressedDataUrl(effectiveWastePhoto, 'Foto Bukti Ampas')) || cleanPhotoUrl;
         }
       }
     }
@@ -7007,6 +7165,9 @@ export const api = {
         const meta = localMeta[row.batch_number] || {};
         return {
           ...row,
+          gross_photo_url: row.gross_photo_url || meta.gross_photo_url || null,
+          clean_photo_url: row.clean_photo_url || meta.clean_photo_url || null,
+          waste_photo_url: row.waste_photo_url || meta.waste_photo_url || null,
           target_mat_name: meta.target_mat_name || (row.materials?.name ? `${row.materials.name} (Bersih)` : 'Hasil Bersih'),
           processed_into: meta.processed_into || 'Kupas / Potong Bersih',
           display_source_qty: meta.source_qty ?? row.gross_weight,

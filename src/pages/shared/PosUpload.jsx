@@ -106,7 +106,7 @@ export default function PosUpload() {
   const materials = stock; // alias for readability
   const navigate = useNavigate();
   const location = useLocation();
-  const recipesPath = location.pathname.replace(/\/pos$/, '/recipes');
+  const recipesPath = '/dashboard/pricing-cogs?tab=cogs-all';
   const [dragActive, setDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [parsedData, setParsedData] = useState(null);
@@ -403,13 +403,13 @@ export default function PosUpload() {
             const category = config.category || item.category || 'Lainnya';
             const price = config.price != null ? config.price : (item.qty > 0 ? Math.round(item.revenue / item.qty) : 0);
             try {
-              await api.createRecipe({
+              const createdRecipe = await api.createRecipe({
                 menu_name: mName,
                 category,
                 ingredients: [],
                 selling_price: price
               });
-              newRecipeResults.push({ name: mName, category, success: true });
+              newRecipeResults.push({ id: createdRecipe?.id || null, name: mName, category, success: true });
             } catch (e) {
               console.warn('[PosUpload] Gagal buat resep baru untuk:', mName, e);
               newRecipeResults.push({ name: mName, category, success: false, error: e.message });
@@ -514,7 +514,22 @@ export default function PosUpload() {
           <span style={{ flex: 1, minWidth: '240px', fontSize: '0.875rem', color: 'var(--text-primary)' }}>
             {pendingRecipeReview.length} resep baru ({pendingRecipeReview.map(r => r.name).join(', ')}) masih tanpa bahan baku — Food Cost 0% & stok tidak terpotong sampai bahannya diisi.
           </span>
-          <button className="btn btn-secondary" onClick={() => navigate(recipesPath)}>Isi Resep Sekarang</button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ fontWeight: 700, padding: '8px 14px', fontSize: '0.82rem' }}
+            onClick={() => {
+              const firstPending = pendingRecipeReview[0] || {};
+              const params = new URLSearchParams({ tab: 'cogs-all' });
+              if (firstPending.id) params.set('targetRecipeId', String(firstPending.id));
+              if (firstPending.name) params.set('targetRecipeName', String(firstPending.name));
+              navigate(`/dashboard/pricing-cogs?${params.toString()}`, {
+                state: { targetRecipeId: firstPending.id || null, targetRecipeName: firstPending.name || null }
+              });
+            }}
+          >
+            Isi Resep Sekarang
+          </button>
           <button onClick={() => setPendingRecipeReview([])} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={16} /></button>
         </div>
       )}

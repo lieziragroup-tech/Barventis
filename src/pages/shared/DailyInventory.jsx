@@ -4,6 +4,7 @@ import { Calendar, FileText, PlusCircle, Save, Loader2, Lock, Unlock, Info, Pack
 import { useAuth } from '../../contexts/AuthContext';
 import { useData } from '../../contexts/DataContext';
 import { api } from '../../services/api';
+import { locationService } from '../../services/locationService';
 import ExportButton from '../../components/shared/ExportButton';
 import PrintButton from '../../components/shared/PrintButton';
 import { exportWithAudit } from '../../services/export/exportAudit';
@@ -249,7 +250,16 @@ export default function DailyInventory({ category: _category, initialTab }) {
   // users can switch to REKAP whenever they need historical output.
   const [activeTab, setActiveTab] = useState(initialTab || 'EOD');
   const [date, setDate] = useState(() => getLocalDateISO());
-  const [location, setLocation] = useState('RESTO');
+  const userRoleConfig = useMemo(
+    () => locationService.getRoleConfigForUser(activeUser?.tenant_id, activeUser?.role),
+    [activeUser?.tenant_id, activeUser?.role]
+  );
+  const [location, setLocation] = useState(() => {
+    const r = String(activeUser?.role || '').trim();
+    if (r === 'Central' || r === 'Purchasing') return 'CENTRAL';
+    return 'RESTO';
+  });
+  const [roleCategoryFilterActive, setRoleCategoryFilterActive] = useState(true);
   const [showGuide, setShowGuide] = useState(false);
 
   const [loading, setLoading] = useState(false);
@@ -418,7 +428,15 @@ export default function DailyInventory({ category: _category, initialTab }) {
   }, [activeTab, records, items]);
 
   const filteredItems = useMemo(() => {
-    return items.filter(item => {
+    const allowedCats = (roleCategoryFilterActive && Array.isArray(userRoleConfig?.allowedCategories) && userRoleConfig.allowedCategories.length > 0)
+      ? new Set(userRoleConfig.allowedCategories.map(c => c.toLowerCase().trim()))
+      : null;
+    const roleFilteredBase = allowedCats
+      ? items.filter(it => allowedCats.has(String(it.category || '').toLowerCase().trim()))
+      : items;
+    const baseList = (allowedCats && roleFilteredBase.length > 0) ? roleFilteredBase : items;
+
+    return baseList.filter(item => {
       if (debouncedSearch) {
         const matchesSearch = [item.name, item.sku, item.item_code, item.category]
           .some(value => String(value || '').toLowerCase().includes(debouncedSearch));
@@ -1338,14 +1356,27 @@ export default function DailyInventory({ category: _category, initialTab }) {
             <label style={{ fontWeight: 600 }}>Lokasi:</label>
             <select
               className="form-control"
-              style={{ width: 'auto', minWidth: '145px' }}
+              style={{ width: 'auto', minWidth: '165px', fontWeight: 700 }}
               value={location}
               onChange={e => setLocation(e.target.value)}
               disabled={saving || loading}
             >
-              <option value="RESTO">Resto</option>
-              <option value="CENTRAL">Central</option>
+              <option value="RESTO">🏪 Resto (Bar / Kitchen / Service)</option>
+              <option value="CENTRAL">🏢 Central Warehouse</option>
             </select>
+            {userRoleConfig?.allowedCategories?.length > 0 && (
+              <button
+                type="button"
+                className={`btn ${roleCategoryFilterActive ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ padding: '6px 12px', fontSize: '0.78rem', fontWeight: 700 }}
+                onClick={() => setRoleCategoryFilterActive(prev => !prev)}
+                title={`UUID Area: ${userRoleConfig.uuid}`}
+              >
+                {roleCategoryFilterActive
+                  ? `Filter Role: ${userRoleConfig.role} (${filteredItems.length} Bahan)`
+                  : `Semua Kategori (${items.length} Bahan)`}
+              </button>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -2290,7 +2321,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
 
         {/* Sticky Floating Action Bar di Bawah */}
         {activeTab === 'EOD' && !isLocked && (
-          <div className="no-print sticky bottom-3 z-30 mt-4 p-3.5 rounded-2xl border shadow-xl flex flex-wrap items-center justify-between gap-3" style={{ background: 'rgba(255, 255, 255, 0.96)', backdropFilter: 'blur(10px)', borderColor: 'var(--border)' }}>
+          <div className="no-print sticky bottom-[72px] lg:bottom-3 z-30 mt-4 p-3 sm:p-3.5 rounded-2xl border shadow-xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3" style={{ background: 'rgba(255, 255, 255, 0.96)', backdropFilter: 'blur(10px)', borderColor: 'var(--border)' }}>
             <div className="flex items-center gap-2 text-xs">
               {autoSaveStatus === 'saving' && (
                 <span className="flex items-center gap-1.5 text-amber-600 font-semibold">

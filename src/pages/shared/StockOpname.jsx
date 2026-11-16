@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import {
   ClipboardCheck, ArrowRight, ShieldCheck,
-  Palette, UploadCloud
+  Palette, UploadCloud, Search
 } from 'lucide-react';
 import BulkImport from '../../components/BulkImport';
 import { useData } from '../../contexts/DataContext';
@@ -24,18 +24,20 @@ export default function StockOpname({ defaultLocation } = {}) {
     return locationService.subscribe(updateLocs);
   }, [currentTenant]);
 
-  const [location, setLocation] = useState(defaultLocation || 'RESTO'); // RESTO, CENTRAL, KITCHEN, SERVICE, etc.
+  const [location, setLocation] = useState(defaultLocation || 'RESTO');
   const [periodMonth, setPeriodMonth] = useState(() => (new Date().getMonth() + 1).toString());
   const [periodYear, setPeriodYear] = useState(() => new Date().getFullYear().toString());
   const [opnameItems, setOpnameItems] = useState([]);
   const [, setSignatureData] = useState(null);
   const isDrawing = useRef(false);
-  const [activeCategory, setActiveCategory] = useState('');
+  // FT-09.1 Fix: Default to 'ALL' ("Semua Kategori") so user doesn't have to scroll through all categories horizontally
+  const [activeCategory, setActiveCategory] = useState('ALL');
+  const [opnameSearch, setOpnameSearch] = useState('');
   const [showBulkImport, setShowBulkImport] = useState(false);
   
   const canvasRef = useRef(null);
 
-  const categories = useMemo(() => [...new Set(stock.map(item => item.category))], [stock]);
+  const categories = useMemo(() => [...new Set(stock.map(item => item.category).filter(Boolean))], [stock]);
 
   const [isInitializing, setIsInitializing] = useState(false);
 
@@ -43,7 +45,6 @@ export default function StockOpname({ defaultLocation } = {}) {
   const handleStartOpname = async () => {
     setIsInitializing(true);
     try {
-      // Populate items with their real-time book stock at the selected location
       const items = stock.map(item => {
         const bookQty = location === 'RESTO' ? item.qty_resto : item.qty_central;
 
@@ -54,8 +55,6 @@ export default function StockOpname({ defaultLocation } = {}) {
           category: item.category,
           unit: item.unit,
           price: Number(item.new_price) > 0 ? Number(item.new_price) : Number(item.price || 0),
-          // BUG-FIX 2026-08: full_pack wasn't carried over, so valAdjustment below
-          // had no pack-size info to divide by and used the raw per-pack price instead.
           full_pack: item.full_pack,
           book_qty: bookQty || 0,
           physical_qty: '',
@@ -63,11 +62,11 @@ export default function StockOpname({ defaultLocation } = {}) {
         };
       });
 
-      // Sort alphabetically
       items.sort((a, b) => a.name.localeCompare(b.name));
 
       setOpnameItems(items);
-      setActiveCategory(categories[0] || '');
+      setActiveCategory('ALL');
+      setOpnameSearch('');
       setStep(2);
     } catch (error) {
       console.error('Failed to init opname:', error);
@@ -78,19 +77,6 @@ export default function StockOpname({ defaultLocation } = {}) {
   };
 
   // 3. Row Qty updates — supports split Full + Broken input
-  const handlePhysicalQtyChange = (name, val) => {
-    const updated = opnameItems.map(item => {
-      if (item.name === name) {
-        return {
-          ...item,
-          physical_qty: val === '' ? '' : parseFloat(val) || 0
-        };
-      }
-      return item;
-    });
-    setOpnameItems(updated);
-  };
-
   const handleFullBrokenChange = (name, field, val) => {
     const updated = opnameItems.map(item => {
       if (item.name === name) {
@@ -147,10 +133,6 @@ export default function StockOpname({ defaultLocation } = {}) {
     if (!isDrawing.current || !canvasRef.current) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
-
-    // Get mouse/touch position relative to canvas. Pick the touch point when present,
-    // otherwise the mouse event itself — avoids NaN when clientX is a legitimate 0
-    // (left edge) on a mouse event, where the old `||` fell through to undefined. (LOW #17)
     const rect = canvas.getBoundingClientRect();
 
     const clientX = (e.touches && e.touches.length > 0) ? e.touches[0].clientX : e.clientX;
@@ -186,8 +168,6 @@ export default function StockOpname({ defaultLocation } = {}) {
   };
 
   // 5. Complete and Commit Opname
-  // BUG-SO-02: was synchronous — errors from onCompleteOpname were silently swallowed,
-  // and confetti fired before the DB write completed. Now properly async with error guard.
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleCommitOpname = async () => {
@@ -195,14 +175,8 @@ export default function StockOpname({ defaultLocation } = {}) {
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      // Capture the signature synchronously. setSignatureData is async, so reading the
-      // signatureData state in the same tick would return the STALE (null) value — use
-      // the returned dataURL directly instead.
       const currentSignature = saveSignature();
 
-      // BUG-SO-01: physical_qty can be '' when user skips a row. Arithmetic on ''
-      // produces NaN which then crashes .toFixed() in the reconciliation table.
-      // Coerce to a proper number with fallback to book_qty (i.e. no change counted).
       const reconciliation = opnameItems.map(item => {
         const pQty = item.physical_qty === '' || item.physical_qty === null || item.physical_qty === undefined
           ? item.book_qty
@@ -212,8 +186,6 @@ export default function StockOpname({ defaultLocation } = {}) {
           ...item,
           physical_qty: pQty,
           variance,
-          // BUG-FIX 2026-08: was `variance * price` with price as per-pack — route
-          // through the shared calculator (display-only, never persisted; see completeOpname).
           valAdjustment: calculateIngredientCost(item, variance, item.unit, unitConversionMap)
         };
       });
@@ -222,7 +194,6 @@ export default function StockOpname({ defaultLocation } = {}) {
 
       confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
 
-      // Reset wizard back to step 1 only on success
       setStep(1);
       setOpnameItems([]);
       setSignatureData(null);
@@ -234,10 +205,14 @@ export default function StockOpname({ defaultLocation } = {}) {
     }
   };
 
-
-
-
-  const filteredOpnameItems = useMemo(() => opnameItems.filter(item => item.category === activeCategory), [opnameItems, activeCategory]);
+  const filteredOpnameItems = useMemo(() => {
+    return opnameItems.filter(item => {
+      const matchesCat = activeCategory === 'ALL' || item.category === activeCategory;
+      const q = opnameSearch.trim().toLowerCase();
+      const matchesSearch = !q || (item.name || '').toLowerCase().includes(q) || (item.sku || '').toLowerCase().includes(q);
+      return matchesCat && matchesSearch;
+    });
+  }, [opnameItems, activeCategory, opnameSearch]);
   
   const itemsWithVariance = useMemo(() => opnameItems.filter(item => {
     if (item.physical_qty === '' || item.physical_qty === null || item.physical_qty === undefined) return false;
@@ -312,30 +287,57 @@ export default function StockOpname({ defaultLocation } = {}) {
 
       {/* Step 2: Physical Count Input Grid */}
       {step === 2 && (
-        <div className="glass-card" style={{ padding: '28px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
-            <div style={{ minWidth: 0 }}>
-              <span className="badge badge-info" style={{ marginBottom: '6px' }}>Langkah 2: Hitung Fisik</span>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>Opname Stok ({location})</h3>
+        <div className="glass-card" style={{ padding: '24px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ minWidth: 0 }}>
+                <span className="badge badge-info" style={{ marginBottom: '6px' }}>Langkah 2: Hitung Fisik</span>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+                  Opname Stok ({location})
+                </h3>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{ position: 'relative', minWidth: '210px' }}>
+                  <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                  <input
+                    type="text"
+                    className="form-control"
+                    style={{ paddingLeft: '32px', paddingTop: '6px', paddingBottom: '6px', fontSize: '0.82rem' }}
+                    placeholder="Cari bahan baku / SKU..."
+                    value={opnameSearch}
+                    onChange={e => setOpnameSearch(e.target.value)}
+                  />
+                </div>
+                <button 
+                  className="btn btn-secondary" 
+                  style={{ padding: '6px 12px', fontSize: '0.8rem', whiteSpace: 'nowrap', display: 'flex', gap: '6px', alignItems: 'center', borderColor: 'var(--accent)' }} 
+                  onClick={() => setShowBulkImport(true)}
+                >
+                  <UploadCloud size={14} style={{ color: 'var(--accent)' }} /> Import Excel
+                </button>
+              </div>
             </div>
             
-            {/* Category tabs */}
-            <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', maxWidth: '60%' }}>
-              <button 
-                className="btn btn-secondary" 
-                style={{ padding: '6px 12px', fontSize: '0.8rem', whiteSpace: 'nowrap', display: 'flex', gap: '6px', alignItems: 'center', borderColor: 'var(--accent)' }} 
-                onClick={() => setShowBulkImport(true)}
+            {/* Category filter with "Semua Kategori" default (FT-09.1) */}
+            <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px' }}>
+              <button
+                type="button"
+                className={`btn ${activeCategory === 'ALL' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ padding: '6px 14px', fontSize: '0.8rem', whiteSpace: 'nowrap', fontWeight: 700 }}
+                onClick={() => setActiveCategory('ALL')}
               >
-                <UploadCloud size={14} style={{ color: 'var(--accent)' }} /> Import Excel
+                Semua Kategori ({opnameItems.length})
               </button>
               {categories.map(cat => (
                 <button 
-                  key={cat} 
+                  key={cat}
+                  type="button"
                   className={`btn ${activeCategory === cat ? 'btn-primary' : 'btn-secondary'}`}
                   style={{ padding: '6px 12px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
                   onClick={() => setActiveCategory(cat)}
                 >
-                  {cat}
+                  {cat} ({opnameItems.filter(i => i.category === cat).length})
                 </button>
               ))}
             </div>
@@ -370,11 +372,16 @@ export default function StockOpname({ defaultLocation } = {}) {
                   return (
                     <tr key={item.name}>
                       <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                           <span style={{ fontFamily: 'monospace', fontSize: '0.65rem', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
                             {item.sku || ('#MAT-' + String(item.id || '').slice(0, 6).toUpperCase())}
                           </span>
                           <span style={{ fontWeight: 600 }}>{item.name}</span>
+                          {activeCategory === 'ALL' && item.category && (
+                            <span style={{ fontSize: '0.65rem', padding: '1px 6px', borderRadius: '999px', background: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
+                              {item.category}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td style={{ textAlign: 'right', fontWeight: 600 }}>{item.book_qty.toFixed(0)}</td>
@@ -382,6 +389,7 @@ export default function StockOpname({ defaultLocation } = {}) {
                       <td style={{ textAlign: 'right' }}>
                         <input 
                           type="number"
+                          inputMode="decimal"
                           step="any"
                           className="form-control"
                           style={{ padding: '6px 10px', fontSize: '0.85rem', textAlign: 'right', width: '100px', marginLeft: 'auto' }}
@@ -393,6 +401,7 @@ export default function StockOpname({ defaultLocation } = {}) {
                       <td style={{ textAlign: 'right' }}>
                         <input 
                           type="number"
+                          inputMode="decimal"
                           step="any"
                           className="form-control"
                           style={{ padding: '6px 10px', fontSize: '0.85rem', textAlign: 'right', width: '100px', marginLeft: 'auto' }}
@@ -435,7 +444,6 @@ export default function StockOpname({ defaultLocation } = {}) {
             </p>
           </div>
 
-          {/* Table displaying items with discrepancies */}
           <div className="table-container" style={{ maxHeight: 'calc(100vh - 420px)', overflowY: 'auto', marginBottom: '24px' }}>
             <table className="custom-table">
               <thead>
@@ -450,10 +458,8 @@ export default function StockOpname({ defaultLocation } = {}) {
               </thead>
               <tbody>
                 {itemsWithVariance.map(item => {
-                  // BUG-SO-01 (display): Guard against '' before calling .toFixed
                   const pQty = parseFloat(item.physical_qty);
                   const variance = pQty - item.book_qty;
-                  // BUG-FIX 2026-08: same pack-size fix as handleCommitOpname above.
                   const valAdjustment = calculateIngredientCost(item, variance, item.unit, unitConversionMap);
 
                   return (
@@ -498,7 +504,6 @@ export default function StockOpname({ defaultLocation } = {}) {
             </table>
           </div>
 
-          {/* Action Row */}
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <button className="btn btn-secondary" onClick={() => setStep(2)}>Kembali</button>
             <button className="btn btn-primary" onClick={() => setStep(4)}>
@@ -521,7 +526,6 @@ export default function StockOpname({ defaultLocation } = {}) {
             </p>
           </div>
 
-          {/* Drawing Canvas */}
           <div className="signature-canvas-container">
             <canvas
               ref={canvasRef}
@@ -548,7 +552,6 @@ export default function StockOpname({ defaultLocation } = {}) {
             </span>
           </div>
 
-          {/* Action buttons */}
           <div style={{ display: 'flex', gap: '12px' }}>
             <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setStep(3)}>Kembali</button>
             <button className="btn btn-success" style={{ flex: 2, display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }} onClick={handleCommitOpname} disabled={isSubmitting}>

@@ -1076,10 +1076,10 @@ export default function TenantAdminPanel() {
               <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
                 <thead>
                   <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                    <th style={{ padding: '10px 14px' }}>Kode Filter</th>
-                    <th style={{ padding: '10px 14px' }}>Nama Lokasi</th>
+                    <th style={{ padding: '10px 14px' }}>Kode & UUID Tempat</th>
+                    <th style={{ padding: '10px 14px' }}>Nama Lokasi & Role</th>
                     <th style={{ padding: '10px 14px' }}>Tipe</th>
-                    <th style={{ padding: '10px 14px' }}>Deskripsi & Peruntukan</th>
+                    <th style={{ padding: '10px 14px' }}>Filter Kategori Bahan (Role)</th>
                     <th style={{ padding: '10px 14px', textAlign: 'center', width: '100px' }}>Aksi</th>
                   </tr>
                 </thead>
@@ -1087,21 +1087,30 @@ export default function TenantAdminPanel() {
                   {locations.map((loc) => (
                     <tr key={loc.id || loc.code} style={{ borderBottom: '1px solid var(--border)' }}>
                       <td style={{ padding: '10px 14px' }}>
-                        <span style={{ 
-                          fontFamily: 'monospace', 
-                          fontWeight: 700, 
-                          padding: '2px 8px', 
-                          borderRadius: '4px', 
-                          background: 'var(--bg-secondary)', 
-                          border: '1px solid var(--border)',
-                          color: 'var(--accent)',
-                          fontSize: '0.75rem'
-                        }}>
-                          {loc.code}
-                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <span style={{ 
+                            fontFamily: 'monospace', 
+                            fontWeight: 700, 
+                            padding: '2px 8px', 
+                            borderRadius: '4px', 
+                            background: 'var(--bg-secondary)', 
+                            border: '1px solid var(--border)',
+                            color: 'var(--accent)',
+                            fontSize: '0.75rem',
+                            width: 'fit-content'
+                          }}>
+                            {loc.code}
+                          </span>
+                          <span style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                            UUID: {loc.uuid || '00000000-0000-4000-a000-000000000001'}
+                          </span>
+                        </div>
                       </td>
                       <td style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                        {loc.name}
+                        <div>{loc.name}</div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--accent)', fontWeight: 700, marginTop: '2px' }}>
+                          Role: {loc.roleClassification || 'Bar'}
+                        </div>
                       </td>
                       <td style={{ padding: '10px 14px' }}>
                         {loc.isSystem ? (
@@ -1129,7 +1138,10 @@ export default function TenantAdminPanel() {
                         )}
                       </td>
                       <td style={{ padding: '10px 14px', color: 'var(--text-secondary)' }}>
-                        {loc.description || '-'}
+                        <div>{loc.description || '-'}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                          Kategori: {(loc.allowedCategories && loc.allowedCategories.length > 0) ? loc.allowedCategories.join(', ') : 'Semua Kategori Bahan'}
+                        </div>
                       </td>
                       <td style={{ padding: '10px 14px', textAlign: 'center' }}>
                         {loc.isSystem ? (

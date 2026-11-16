@@ -158,14 +158,16 @@ export default function Dashboard() {
 
   return (
     <div className="fade-in">
-      {/* Filters and Tab Switcher */}
-      <div className="glass-card" style={{ marginBottom: '24px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <Calendar size={18} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-          <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Periode:</span>
+      {/* Filters and Tab Switcher (Mobile-Friendly & Comforting) */}
+      <div className="glass-card mb-4 sm:mb-6 p-3.5 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <div className="w-8 h-8 rounded-lg bg-[var(--accent-glow)] text-[var(--accent)] flex items-center justify-center shrink-0">
+            <Calendar size={16} />
+          </div>
+          <span className="text-xs sm:text-sm font-bold text-[var(--text-secondary)] whitespace-nowrap">Periode:</span>
           <select
-            className="form-control"
-            style={{ width: '160px', padding: '6px 12px', fontSize: '0.875rem' }}
+            className="form-control flex-1 sm:w-[180px]"
+            style={{ padding: '7px 12px', fontSize: '0.85rem', fontWeight: 600 }}
             value={period}
             onChange={e => setPeriod(e.target.value)}
           >
@@ -176,24 +178,24 @@ export default function Dashboard() {
         </div>
 
         {canSwitchBranch && branches.length > 1 && (
-          <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)]">
+          <div className="grid grid-cols-2 sm:flex items-center gap-1 p-1 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border)] w-full sm:w-auto">
             <button
               type="button"
               onClick={() => setBranchScope('ACTIVE')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              className={`px-3 py-2 sm:py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap text-center cursor-pointer ${
                 branchScope === 'ACTIVE'
-                  ? 'bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-sm'
+                  ? 'bg-[var(--bg-secondary)] text-[var(--accent)] shadow-xs'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
-              {activeBranch?.name || 'Cabang Aktif'}
+              Cabang {activeBranch?.name || 'Aktif'}
             </button>
             <button
               type="button"
               onClick={() => setBranchScope('ALL')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              className={`px-3 py-2 sm:py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap text-center cursor-pointer ${
                 branchScope === 'ALL'
-                  ? 'bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-sm'
+                  ? 'bg-[var(--bg-secondary)] text-[var(--accent)] shadow-xs'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
@@ -349,7 +351,7 @@ export default function Dashboard() {
           <div className="kpi-footer"><span style={{ color: 'var(--text-secondary)' }}>Resto + Central</span></div>
         </div>
 
-        <div className="glass-card kpi-card" onClick={() => navigate('./stock')} style={{ cursor: 'pointer' }}>
+        <div className="glass-card kpi-card" onClick={() => navigate('/dashboard/sistem?tab=stock-ledger')} style={{ cursor: 'pointer' }}>
           <div className="kpi-header">
             <span className="kpi-title">Stok Menipis</span>
             <div className="kpi-icon-wrap" style={{ background: lowStockItems.length > 0 ? 'var(--danger-glow)' : 'var(--success-glow)', color: lowStockItems.length > 0 ? 'var(--danger)' : 'var(--success)' }}>
@@ -383,11 +385,32 @@ export default function Dashboard() {
                 <ResponsiveContainer width="100%" height={300} minWidth={100} debounce={50}>
                   <LineChart data={trendData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.6} />
-                    <XAxis dataKey="name" stroke="var(--text-muted)" tick={{ fontSize: 11 }} minTickGap={20} interval="preserveStartEnd" />
+                    <XAxis dataKey="name" stroke="var(--text-muted)" tick={{ fontSize: 10 }} minTickGap={28} interval="preserveStartEnd" />
                     <YAxis domain={[0, (dataMax) => Math.max(35, Math.ceil(dataMax + 5))]} stroke="var(--text-muted)" tick={{ fontSize: 11 }} unit="%" />
                     <Tooltip contentStyle={tooltipStyle} />
                     <Legend verticalAlign="top" height={36} />
-                    <Line type="monotone" dataKey="cost" name={'Biaya F&B %'} stroke="var(--accent)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                    <Line
+                      type="monotone"
+                      dataKey="cost"
+                      name={'Biaya F&B %'}
+                      stroke="var(--accent)"
+                      strokeWidth={2.5}
+                      dot={(props) => {
+                        if (!props?.payload || Number(props.payload.cost) <= 0) return null;
+                        return (
+                          <circle
+                            key={`dot-${props.index}`}
+                            cx={props.cx}
+                            cy={props.cy}
+                            r={3.5}
+                            fill="var(--accent)"
+                            stroke="#ffffff"
+                            strokeWidth={1.5}
+                          />
+                        );
+                      }}
+                      activeDot={{ r: 5 }}
+                    />
                     <Line type="monotone" dataKey="target" name="Target" stroke="var(--danger)" strokeDasharray="5 5" strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>

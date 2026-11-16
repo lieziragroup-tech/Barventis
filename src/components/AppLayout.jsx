@@ -147,6 +147,7 @@ export default function DashboardLayout() {
 
   const userMenuRef = useRef(null);
   const notifRef = useRef(null);
+  const betaMenuRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -155,6 +156,9 @@ export default function DashboardLayout() {
       }
       if (notifRef.current && !notifRef.current.contains(event.target)) {
         setShowNotifications(false);
+      }
+      if (betaMenuRef.current && !betaMenuRef.current.contains(event.target)) {
+        setShowBetaMenu(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -388,16 +392,33 @@ export default function DashboardLayout() {
 
                 {/* ROLE: KITCHEN */}
                 {isTenant && role === 'Kitchen' && (
-                  <NavGroup title="Operasional Dapur" isHovered={isHovered} isFirst={!isSuperAdmin}>
+                  <NavGroup title="Operasional Dapur (Kitchen)" isHovered={isHovered} isFirst={!isSuperAdmin}>
                     <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan operasional dapur harian" icon={LayoutDashboard} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Catat stok dan limbah dapur" icon={ClipboardList} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Catat olahan bahan mentah dapur" icon={Scissors} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Catat stok harian dan bahan dapur" icon={ClipboardList} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Trimming & olahan bahan mentah dapur" icon={Scissors} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/opname-assets`} label="Stock Opname" subtitle="Audit fisik stok area dapur" icon={Boxes} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Minta bahan dari Central ke Kitchen" icon={ArrowRightLeft} isHovered={isHovered} />
                     <NavItem to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat limbah dan susut dapur" icon={Trash2} isHovered={isHovered} />
                   </NavGroup>
                 )}
 
-                {/* ROLE: SERVICE / KASIR */}
-                {isTenant && (role === 'Service' || role === 'Kasir') && (
+                {/* ROLE: SERVICE (Floor, Packaging, Amenities & POS) */}
+                {isTenant && role === 'Service' && (
+                  <NavGroup title="Operasional Service & Floor" isHovered={isHovered} isFirst={!isSuperAdmin}>
+                    <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan area service & floor" icon={LayoutDashboard} isHovered={isHovered} />
+                    {currentTenant?.is_pos_enabled && (
+                      <NavItem to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir operasional langsung" icon={MonitorSmartphone} isHovered={isHovered} />
+                    )}
+                    <NavItem to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Unggah dan rekap penjualan POS" icon={UploadCloud} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Catat stok cup, packaging & amenities" icon={ClipboardList} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/opname-assets`} label="Stock Opname" subtitle="Audit fisik packaging & floor" icon={Boxes} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Minta packaging dari Central ke Service" icon={ArrowRightLeft} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat kemasan rusak atau barang pecah" icon={Trash2} isHovered={isHovered} />
+                  </NavGroup>
+                )}
+
+                {/* ROLE: KASIR */}
+                {isTenant && role === 'Kasir' && (
                   <NavGroup title="Kasir & POS" isHovered={isHovered} isFirst={!isSuperAdmin}>
                     <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan pelayanan dan kasir" icon={LayoutDashboard} isHovered={isHovered} />
                     {currentTenant?.is_pos_enabled && (
@@ -588,16 +609,33 @@ export default function DashboardLayout() {
 
             {/* ROLE: KITCHEN */}
             {isTenant && role === 'Kitchen' && (
-              <NavGroup title="Operasional Dapur" isHovered={true} isFirst={!isSuperAdmin}>
+              <NavGroup title="Operasional Dapur (Kitchen)" isHovered={true} isFirst={!isSuperAdmin}>
                 <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan operasional dapur harian" icon={LayoutDashboard} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Catat stok dan limbah dapur" icon={ClipboardList} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Catat olahan bahan mentah dapur" icon={Scissors} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Catat stok harian dan bahan dapur" icon={ClipboardList} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Trimming & olahan bahan mentah dapur" icon={Scissors} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/opname-assets`} label="Stock Opname" subtitle="Audit fisik stok area dapur" icon={Boxes} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Minta bahan dari Central ke Kitchen" icon={ArrowRightLeft} isHovered={true} />
                 <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat limbah dan susut dapur" icon={Trash2} isHovered={true} />
               </NavGroup>
             )}
 
-            {/* ROLE: SERVICE / KASIR */}
-            {isTenant && (role === 'Service' || role === 'Kasir') && (
+            {/* ROLE: SERVICE */}
+            {isTenant && role === 'Service' && (
+              <NavGroup title="Operasional Service & Floor" isHovered={true} isFirst={!isSuperAdmin}>
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan area service & floor" icon={LayoutDashboard} isHovered={true} />
+                {currentTenant?.is_pos_enabled && (
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir operasional langsung" icon={MonitorSmartphone} isHovered={true} />
+                )}
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Unggah dan rekap penjualan POS" icon={UploadCloud} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Catat stok cup, packaging & amenities" icon={ClipboardList} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/opname-assets`} label="Stock Opname" subtitle="Audit fisik packaging & floor" icon={Boxes} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Minta packaging dari Central ke Service" icon={ArrowRightLeft} isHovered={true} />
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat kemasan rusak atau barang pecah" icon={Trash2} isHovered={true} />
+              </NavGroup>
+            )}
+
+            {/* ROLE: KASIR */}
+            {isTenant && role === 'Kasir' && (
               <NavGroup title="Kasir & POS" isHovered={true} isFirst={!isSuperAdmin}>
                 <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan pelayanan dan kasir" icon={LayoutDashboard} isHovered={true} />
                 {currentTenant?.is_pos_enabled && (
@@ -661,331 +699,363 @@ export default function DashboardLayout() {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden bg-[var(--bg-primary)]">
-        <header className="flex flex-row items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--bg-primary)]/80 backdrop-blur-md z-30 shrink-0 px-4 py-3 md:px-8 md:py-4">
-          <div className="header-title-sec flex items-center gap-2 md:gap-4 flex-1 min-w-0">
-            <button
-              className="btn btn-secondary mobile-menu-btn flex lg:hidden items-center justify-center"
-              style={{ padding: '6px', borderRadius: 'var(--radius-sm)' }}
-              onClick={() => setIsSidebarOpen(true)}
-              aria-label="Buka Menu Sidebar"
-            >
-              <Menu size={18} />
-            </button>
-            <div className="min-w-0">
-              <h1 className="text-sm md:text-xl font-bold truncate m-0">
-                {isSuperAdmin && location.pathname === '/superadmin' && "Kelola Tenant"}
-                {isSuperAdmin && location.pathname === '/superadmin/templates' && "Template POS"}
-                {isSuperAdmin && location.pathname === '/superadmin/logs' && "Log Audit Sistem"}
-
-                {isTenant && (
-                  <>
-                    {location.pathname === basePath && "Dashboard"}
-                    {location.pathname === `${basePath}/penjualan` && "Penjualan POS"}
-                    {location.pathname === `${basePath}/daily-inventory` && "Daily Inventory"}
-                    {location.pathname === `${basePath}/olah-bahan` && "Olah Bahan"}
-                    {location.pathname === `${basePath}/procurement` && "Pengadaan & Supplier"}
-                    {location.pathname === `${basePath}/transfer` && "Mutasi Gudang"}
-                    {location.pathname === `${basePath}/pricing-cogs` && "Menu & COGS"}
-                    {location.pathname === `${basePath}/opname-assets` && "Stock Opname & Aset"}
-                    
-                    {location.pathname === `${basePath}/cost-report` && "Cost Control"}
-                    {location.pathname === `${basePath}/sistem` && "Pengaturan Sistem"}
-                  </>
-                )}
-              </h1>
-              <p className="hidden md:block text-xs md:text-sm text-[var(--text-secondary)] truncate">
-                {isSuperAdmin && location.pathname === '/superadmin' && "Kelola database dan lisensi tenant."}
-                {isSuperAdmin && location.pathname === '/superadmin/templates' && "Atur pemetaan format Excel POS."}
-                {isSuperAdmin && location.pathname === '/superadmin/logs' && "Pantau jejak audit keamanan sistem."}
-
-                {isTenant && (
-                  <>
-                    {location.pathname === basePath && "Ringkasan HPP, variansi, dan penjualan."}
-                    {location.pathname === `${basePath}/penjualan` && "Unggah penjualan POS dan resep."}
-                    {location.pathname === `${basePath}/daily-inventory` && "Catat stok harian dan limbah."}
-                    {location.pathname === `${basePath}/olah-bahan` && "Catat olahan bahan mentah."}
-                    {location.pathname === `${basePath}/procurement` && "Katalog bahan, pembelian, dan PO."}
-                    {location.pathname === `${basePath}/transfer` && "Distribusi stok antar cabang dan area."}
-                    {location.pathname === `${basePath}/pricing-cogs` && "Simulasi harga dan resep minuman."}
-                    {location.pathname === `${basePath}/opname-assets` && "Audit fisik stok resto dan central."}
-                    
-                    {location.pathname === `${basePath}/cost-report` && "Laporan variansi dan rasio biaya."}
-                    {location.pathname === `${basePath}/sistem` && "Buku stok, staf, dan cadangan data."}
-                  </>
-                )}
-              </p>
-            </div>
-          </div>
-          <div className="header-actions flex items-center gap-2 shrink-0">
-            {isTenant && activeBranch && (
-              canSwitchBranch ? (
-                <div
-                  className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-2.5 py-1.5 shrink-0"
-                  title="Pilih cabang aktif"
-                >
-                  <Store size={14} className="text-[var(--accent)] shrink-0" />
-                  <span className="hidden lg:inline text-[11px] font-semibold text-[var(--text-muted)] whitespace-nowrap">
-                    {currentTenant?.company_name || 'Resto Umatis'} • Cabang:
-                  </span>
-                  <select
-                    aria-label="Pilih Cabang"
-                    value={activeBranchId || ''}
-                    onChange={(e) => switchBranch(e.target.value)}
-                    disabled={loadingData}
-                    className="bg-transparent text-xs font-semibold text-[var(--text-primary)] outline-none cursor-pointer max-w-[140px] md:max-w-[180px] truncate"
-                  >
-                    {branches.filter(b => b.is_active !== false).map(b => (
-                      <option key={b.id} value={b.id} className="bg-[var(--bg-secondary)] text-[var(--text-primary)]">
-                        {b.name}{b.is_central ? ' (Central)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div
-                  className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] whitespace-nowrap shrink-0"
-                  title="Cabang tugas terkunci"
-                >
-                  <Store size={14} className="text-[var(--text-muted)] shrink-0" />
-                  <span className="max-w-[150px] truncate">{activeBranch.name}</span>
-                </div>
-              )
-            )}
-            {currentTenant?.is_pos_enabled && (
+        <header className="flex flex-col border-b border-[var(--border)] bg-[var(--bg-primary)]/90 backdrop-blur-md z-30 shrink-0 px-3.5 py-2.5 sm:px-6 sm:py-3 md:px-8 md:py-4">
+          {/* BARIS 1: Hamburger + Judul Halaman Utuh (Kiri) & Aksi Primer (Kanan) */}
+          <div className="flex flex-row items-center justify-between gap-2 w-full">
+            <div className="header-title-sec flex items-center gap-2.5 md:gap-4 flex-1 min-w-0">
               <button
-                className="btn hover:opacity-80 transition-opacity flex items-center justify-center gap-1.5"
-                onClick={handleOpenPos}
-                title="Buka POS Terminal"
-                style={{
-                  background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: 'var(--radius-md)',
-                  padding: '6px 10px', color: '#3b82f6',
-                  fontSize: '0.85rem', fontWeight: 600,
-                  flexShrink: 0
-                }}
+                className="btn btn-secondary mobile-menu-btn flex lg:hidden items-center justify-center shrink-0"
+                style={{ width: '38px', height: '38px', minHeight: '38px', padding: 0, borderRadius: '10px' }}
+                onClick={() => setIsSidebarOpen(true)}
+                aria-label="Buka Menu Sidebar"
               >
-                <MonitorSmartphone size={16} /> <span className="hidden md:inline">POS Terminal</span>
+                <Menu size={18} />
               </button>
-            )}
-            {betaPresets.length > 0 && (
-              <div className="relative">
+              <div className="min-w-0 flex-1">
+                <h1 className="text-[15px] sm:text-lg md:text-xl font-extrabold text-[var(--text-primary)] truncate m-0 leading-tight">
+                  {isSuperAdmin && location.pathname === '/superadmin' && "Kelola Tenant"}
+                  {isSuperAdmin && location.pathname === '/superadmin/templates' && "Template POS"}
+                  {isSuperAdmin && location.pathname === '/superadmin/logs' && "Log Audit Sistem"}
+
+                  {isTenant && (
+                    <>
+                      {location.pathname === basePath && "Dashboard"}
+                      {location.pathname === `${basePath}/penjualan` && "Penjualan POS"}
+                      {location.pathname === `${basePath}/daily-inventory` && "Daily Inventory"}
+                      {location.pathname === `${basePath}/olah-bahan` && "Olah Bahan"}
+                      {location.pathname === `${basePath}/procurement` && "Pengadaan & Supplier"}
+                      {location.pathname === `${basePath}/transfer` && "Mutasi Gudang"}
+                      {location.pathname === `${basePath}/pricing-cogs` && "Menu & COGS"}
+                      {location.pathname === `${basePath}/opname-assets` && "Stock Opname & Aset"}
+                      {location.pathname === `${basePath}/cost-report` && "Cost Control"}
+                      {location.pathname === `${basePath}/sistem` && "Pengaturan Sistem"}
+                    </>
+                  )}
+                </h1>
+                <p className="hidden md:block text-xs md:text-sm text-[var(--text-secondary)] truncate m-0 mt-0.5">
+                  {isSuperAdmin && location.pathname === '/superadmin' && "Kelola database dan lisensi tenant."}
+                  {isSuperAdmin && location.pathname === '/superadmin/templates' && "Atur pemetaan format Excel POS."}
+                  {isSuperAdmin && location.pathname === '/superadmin/logs' && "Pantau jejak audit keamanan sistem."}
+
+                  {isTenant && (
+                    <>
+                      {location.pathname === basePath && "Ringkasan HPP, variansi, dan penjualan."}
+                      {location.pathname === `${basePath}/penjualan` && "Unggah penjualan POS dan resep."}
+                      {location.pathname === `${basePath}/daily-inventory` && "Catat stok harian dan limbah."}
+                      {location.pathname === `${basePath}/olah-bahan` && "Catat olahan bahan mentah."}
+                      {location.pathname === `${basePath}/procurement` && "Katalog bahan, pembelian, dan PO."}
+                      {location.pathname === `${basePath}/transfer` && "Distribusi stok antar cabang dan area."}
+                      {location.pathname === `${basePath}/pricing-cogs` && "Simulasi harga dan resep minuman."}
+                      {location.pathname === `${basePath}/opname-assets` && "Audit fisik stok resto dan central."}
+                      {location.pathname === `${basePath}/cost-report` && "Laporan variansi dan rasio biaya."}
+                      {location.pathname === `${basePath}/sistem` && "Buku stok, staf, dan cadangan data."}
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="header-actions flex items-center gap-1.5 sm:gap-2 shrink-0">
+              {/* Pemilih Cabang Desktop/Tablet (>= 640px) */}
+              {isTenant && activeBranch && (
+                canSwitchBranch ? (
+                  <div
+                    className="hidden sm:flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] px-2.5 py-1.5 shrink-0 shadow-2xs"
+                    title="Pilih cabang aktif"
+                  >
+                    <Store size={14} className="text-[var(--accent)] shrink-0" />
+                    <span className="hidden lg:inline text-[11px] font-semibold text-[var(--text-muted)] whitespace-nowrap">
+                      {currentTenant?.company_name || 'Resto Umatis'} • Cabang:
+                    </span>
+                    <select
+                      aria-label="Pilih Cabang"
+                      value={activeBranchId || ''}
+                      onChange={(e) => switchBranch(e.target.value)}
+                      disabled={loadingData}
+                      className="bg-transparent text-xs font-bold text-[var(--text-primary)] outline-none cursor-pointer max-w-[140px] md:max-w-[180px] truncate"
+                    >
+                      {branches.filter(b => b.is_active !== false).map(b => (
+                        <option key={b.id} value={b.id} className="bg-[var(--bg-secondary)] text-[var(--text-primary)]">
+                          {b.name}{b.is_central ? ' (Central)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div
+                    className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] text-xs font-semibold text-[var(--text-secondary)] whitespace-nowrap shrink-0"
+                    title="Cabang tugas aktif"
+                  >
+                    <Store size={14} className="text-[var(--accent)] shrink-0" />
+                    <span className="max-w-[150px] truncate">{activeBranch.name}</span>
+                  </div>
+                )
+              )}
+
+              {/* Tombol POS Terminal Desktop/Tablet (>= 640px) */}
+              {currentTenant?.is_pos_enabled && (
                 <button
-                  type="button"
-                  onClick={() => setShowBetaMenu(!showBetaMenu)}
-                  title="Shortcut Ganti Akun & Data Dummy Beta Testing"
-                  className="btn hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
+                  className="hidden sm:flex btn hover:opacity-85 transition-opacity items-center justify-center gap-1.5"
+                  onClick={handleOpenPos}
+                  title="Buka POS Terminal"
                   style={{
-                    background: 'rgba(16, 185, 129, 0.12)',
-                    border: '1px solid rgba(16, 185, 129, 0.4)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '6px 10px',
-                    color: '#10b981',
-                    fontSize: '0.8rem',
-                    fontWeight: 700,
+                    background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '10px',
+                    padding: '7px 11px', color: '#2563eb',
+                    fontSize: '0.8rem', fontWeight: 600, minHeight: '38px',
                     flexShrink: 0
                   }}
                 >
-                  <Store size={15} /> <span className="hidden sm:inline">Shortcut Beta</span>
+                  <MonitorSmartphone size={16} /> <span className="hidden md:inline">POS Terminal</span>
                 </button>
-                {showBetaMenu && (
-                  <div
-                    className="absolute right-0 mt-2 w-[310px] rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] shadow-2xl p-3 z-50"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-[var(--border)]">
-                      <div>
-                        <div className="text-xs font-extrabold text-[var(--text-primary)] uppercase tracking-wide">
-                          Shortcut Beta Testing
-                        </div>
-                        <div className="text-[11px] text-[var(--text-secondary)]">
-                          Resto Umatis • Cabang BSD & Kasuna
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowBetaMenu(false)}
-                        className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1"
-                      >
-                        <X size={15} />
-                      </button>
-                    </div>
-                    <div className="flex flex-col gap-1.5 max-h-[280px] overflow-y-auto">
-                      {betaPresets.map((p) => {
-                        const isCurrent = activeUser?.email?.toLowerCase() === p.email.toLowerCase();
-                        const isBusy = betaSwitchingKey === p.key;
-                        return (
-                          <button
-                            key={p.key}
-                            type="button"
-                            disabled={Boolean(betaSwitchingKey) || seedingDummy}
-                            onClick={() => handleQuickSwitchBeta(p)}
-                            className={`w-full text-left px-2.5 py-2 rounded-lg border transition-colors flex items-center justify-between gap-2 ${
-                              isCurrent
-                                ? 'border-[var(--accent)] bg-[var(--accent-glow)]'
-                                : 'border-[var(--border)] bg-[var(--bg-primary)] hover:bg-[var(--bg-tertiary)]'
-                            }`}
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="text-xs font-bold text-[var(--text-primary)] truncate">
-                                {p.label}
-                              </div>
-                              <div className="text-[10px] text-[var(--text-secondary)] truncate">
-                                {p.badge} • {p.email}
-                              </div>
-                            </div>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[var(--accent)] text-[var(--text-inverse)] shrink-0">
-                              {isBusy ? 'Masuk...' : isCurrent ? 'Aktif' : 'Masuk'}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div className="mt-2.5 pt-2 border-t border-[var(--border)]">
-                      <button
-                        type="button"
-                        disabled={seedingDummy || Boolean(betaSwitchingKey)}
-                        onClick={handleSeedDummyData}
-                        className="w-full py-2 px-3 rounded-lg text-xs font-bold border border-[var(--accent)] bg-[var(--accent-glow)] text-[var(--accent)] hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
-                      >
-                        <RefreshCw size={13} className={seedingDummy ? 'animate-spin' : ''} />
-                        {seedingDummy ? 'Memuat Data Dummy...' : 'Muat / Reset Data Dummy (BSD & Kasuna)'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-            <button
-              className="btn hover:opacity-80 transition-opacity flex items-center justify-center gap-1.5"
-              onClick={() => setShowGuidebook(true)}
-              title="Buku Panduan Sistem"
-              style={{
-                background: 'var(--accent-glow)', border: '1px solid var(--accent)', borderRadius: 'var(--radius-md)',
-                padding: '6px 10px', color: 'var(--accent)', 
-                fontSize: '0.85rem', fontWeight: 600,
-                flexShrink: 0
-              }}
-            >
-              <BookOpen size={16} /> <span className="hidden md:inline">Panduan</span>
-            </button>
-            
-            {isTenant && (
-              <button
-                className="btn hover:bg-[var(--bg-tertiary)] transition-colors flex items-center justify-center"
-                onClick={refreshData}
-                disabled={loadingData}
-                title="Sinkronisasi ulang data"
-                style={{
-                  background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
-                  padding: '6px 8px', color: 'var(--text-secondary)',
-                  flexShrink: 0
-                }}
-              >
-                <RefreshCw size={16} style={{ animation: loadingData ? 'spin 0.8s linear infinite' : 'none' }} />
-              </button>
-            )}
+              )}
 
-            {/* Bell button + dropdown now share a dedicated `relative` wrapper
-                (with notifRef attached) so the dropdown's `absolute right-0`
-                anchors to this wrapper instead of drifting up to whichever
-                ancestor happens to have positioning — that's what was
-                pinning the panel to the top-right of the whole page. */}
-            <div className="relative" ref={notifRef}>
+              {/* Tombol Shortcut Beta Testing (Viewport-Safe di Mobile & Desktop) */}
+              {betaPresets.length > 0 && (
+                <div className="relative" ref={betaMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowBetaMenu(!showBetaMenu);
+                      setShowNotifications(false);
+                    }}
+                    title="Shortcut Ganti Akun & Data Dummy Beta Testing"
+                    aria-label="Shortcut Beta Testing"
+                    className="btn hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
+                    style={{
+                      background: showBetaMenu ? 'var(--accent)' : 'rgba(16, 185, 129, 0.12)',
+                      border: '1px solid rgba(16, 185, 129, 0.45)',
+                      borderRadius: '10px',
+                      padding: '6px 10px',
+                      minHeight: '38px',
+                      color: showBetaMenu ? '#ffffff' : '#059669',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      flexShrink: 0
+                    }}
+                  >
+                    <Store size={15} />
+                    <span className="inline sm:hidden text-[11px] font-bold">Beta</span>
+                    <span className="hidden sm:inline">Shortcut Beta</span>
+                  </button>
+
+{/* Panel Shortcut Beta Testing dirender di level root agar bebas dari clipping backdrop-blur header (Nia P0 Fix) */}
+                </div>
+              )}
+
+              {/* Tombol Panduan Desktop/Tablet (>= 640px) */}
               <button
-                className="btn hover:bg-[var(--bg-tertiary)] transition-colors flex items-center justify-center relative"
-                onClick={() => setShowNotifications(!showNotifications)}
-                title="Notifikasi Sistem"
+                className="hidden sm:flex btn hover:opacity-85 transition-opacity items-center justify-center gap-1.5"
+                onClick={() => setShowGuidebook(true)}
+                title="Buku Panduan Sistem"
                 style={{
-                  background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
-                  padding: '6px 8px', color: 'var(--text-secondary)',
+                  background: 'var(--accent-glow)', border: '1px solid var(--accent)', borderRadius: '10px',
+                  padding: '6px 10px', color: 'var(--accent)', minHeight: '38px',
+                  fontSize: '0.8rem', fontWeight: 600,
                   flexShrink: 0
                 }}
               >
-                <Bell size={16} />
-                {notifCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-[var(--bg-primary)]"></span>
-                )}
+                <BookOpen size={16} /> <span className="hidden md:inline">Panduan</span>
               </button>
-              <AnimatePresence>
-                {showNotifications && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    transition={{ duration: 0.15 }}
-                    className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden"
-                  >
-                    {/* Header Notifikasi */}
-                    <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
-                      <h3 className="text-sm font-bold text-gray-800">Notifikasi</h3>
-                      {notifCount > 0 && (
-                        <span className="text-xs font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
-                          {notifCount} Baru
-                        </span>
-                      )}
-                    </div>
-                    
-                    {/* Isi List Notifikasi */}
-                    <div className="max-h-[300px] overflow-y-auto">
-                      {isSuperAdmin ? (
-                        adminNotifs.length > 0 ? (
-                          <ul className="divide-y divide-gray-100">
-                            {adminNotifs.map((req) => (
-                              <li key={req.id} className="px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => {
-                                setShowNotifications(false);
-                                navigate('/superadmin/reset-approvals');
-                              }}>
-                                <div className="flex items-start gap-3">
-                                  <div className="mt-0.5 text-amber-500">
-                                    <Bell size={16} />
-                                  </div>
-                                  <div>
-                                    <p className="text-sm text-gray-800 font-medium">Permintaan Reset Data</p>
-                                    <p className="text-xs text-gray-600 mt-1">
-                                      Dari tenant: <span className="font-semibold">{req.tenants?.company_name || req.tenant_id}</span>
-                                    </p>
-                                  </div>
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="px-4 py-8 text-center">
-                            <Bell size={32} className="mx-auto text-gray-300 mb-2" />
-                            <p className="text-sm text-gray-500">Tidak ada permintaan baru</p>
+
+              {isTenant && (
+                <button
+                  className="btn hover:bg-[var(--bg-tertiary)] transition-colors flex items-center justify-center"
+                  onClick={refreshData}
+                  disabled={loadingData}
+                  title="Sinkronisasi ulang data"
+                  aria-label="Sinkronisasi ulang data"
+                  style={{
+                    background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '10px',
+                    width: '38px', height: '38px', minHeight: '38px', padding: 0, color: 'var(--text-secondary)',
+                    flexShrink: 0
+                  }}
+                >
+                  <RefreshCw size={16} style={{ animation: loadingData ? 'spin 0.8s linear infinite' : 'none' }} />
+                </button>
+              )}
+
+              {/* Tombol Notifikasi dengan Popover Aman-Viewport di Mobile */}
+              <div className="relative" ref={notifRef}>
+                <button
+                  className="btn hover:bg-[var(--bg-tertiary)] transition-colors flex items-center justify-center relative"
+                  onClick={() => {
+                    setShowNotifications(!showNotifications);
+                    setShowBetaMenu(false);
+                  }}
+                  title="Notifikasi Sistem"
+                  aria-label="Notifikasi Sistem"
+                  style={{
+                    background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '10px',
+                    width: '38px', height: '38px', minHeight: '38px', padding: 0, color: 'var(--text-secondary)',
+                    flexShrink: 0
+                  }}
+                >
+                  <Bell size={16} />
+                  {notifCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-[var(--bg-primary)]"></span>
+                  )}
+                </button>
+                <AnimatePresence>
+                  {showNotifications && (
+                    <>
+                      <div
+                        className="fixed inset-0 bg-black/25 backdrop-blur-[1px] z-40 sm:hidden"
+                        onClick={() => setShowNotifications(false)}
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                        transition={{ duration: 0.15 }}
+                        className="fixed left-3 right-3 top-[66px] sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-80 max-w-[calc(100vw-24px)] bg-[var(--bg-secondary)] rounded-2xl shadow-2xl border border-[var(--border)] z-50 overflow-hidden"
+                      >
+                        <div className="px-4 py-3 bg-[var(--bg-tertiary)] border-b border-[var(--border)] flex justify-between items-center">
+                          <h3 className="text-sm font-bold text-[var(--text-primary)] m-0">Notifikasi</h3>
+                          <div className="flex items-center gap-2">
+                            {notifCount > 0 && (
+                              <span className="text-xs font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                                {notifCount} Baru
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setShowNotifications(false)}
+                              aria-label="Tutup Notifikasi"
+                              className="w-6 h-6 rounded-md flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                            >
+                              <X size={15} />
+                            </button>
                           </div>
-                        )
-                      ) : (
-                        lowStockItems && lowStockItems.length > 0 ? (
-                          <ul className="divide-y divide-gray-100">
-                            {lowStockItems.map((item) => (
-                              <li key={item.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
-                                <div className="flex items-start gap-3">
-                                  <div className="mt-0.5 text-red-500">
-                                    <Bell size={16} />
-                                  </div>
-                                  <div>
-                                    <p className="text-sm text-gray-800 font-medium">Stok Menipis: {item.name}</p>
-                                    <p className="text-xs text-red-600 mt-1">
-                                      Sisa {item.qty_resto} {item.unit} (Min: {item.min_stock})
-                                    </p>
-                                  </div>
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="px-4 py-8 text-center">
-                            <Bell size={32} className="mx-auto text-gray-300 mb-2" />
-                            <p className="text-sm text-gray-500">Tidak ada notifikasi baru</p>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                        </div>
+
+                        <div className="max-h-[55vh] sm:max-h-[300px] overflow-y-auto">
+                          {isSuperAdmin ? (
+                            adminNotifs.length > 0 ? (
+                              <ul className="divide-y divide-[var(--border)]">
+                                {adminNotifs.map((req) => (
+                                  <li key={req.id} className="px-4 py-3 hover:bg-[var(--bg-tertiary)] transition-colors cursor-pointer" onClick={() => {
+                                    setShowNotifications(false);
+                                    navigate('/superadmin/reset-approvals');
+                                  }}>
+                                    <div className="flex items-start gap-3">
+                                      <div className="mt-0.5 text-amber-500">
+                                        <Bell size={16} />
+                                      </div>
+                                      <div>
+                                        <p className="text-sm text-[var(--text-primary)] font-medium m-0">Permintaan Reset Data</p>
+                                        <p className="text-xs text-[var(--text-secondary)] mt-1 m-0">
+                                          Dari tenant: <span className="font-semibold">{req.tenants?.company_name || req.tenant_id}</span>
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <div className="px-4 py-8 text-center">
+                                <Bell size={32} className="mx-auto text-[var(--text-muted)] opacity-40 mb-2" />
+                                <p className="text-sm text-[var(--text-secondary)] m-0">Tidak ada permintaan baru</p>
+                              </div>
+                            )
+                          ) : (
+                            lowStockItems && lowStockItems.length > 0 ? (
+                              <ul className="divide-y divide-[var(--border)]">
+                                {lowStockItems.map((item) => (
+                                  <li key={item.id} className="px-4 py-3 hover:bg-[var(--bg-tertiary)] transition-colors">
+                                    <div className="flex items-start gap-3">
+                                      <div className="mt-0.5 text-red-500">
+                                        <Bell size={16} />
+                                      </div>
+                                      <div>
+                                        <p className="text-sm text-[var(--text-primary)] font-semibold m-0">Stok Menipis: {item.name}</p>
+                                        <p className="text-xs text-red-600 mt-1 m-0">
+                                          Sisa {item.qty_resto} {item.unit} (Min: {item.min_stock})
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <div className="px-4 py-8 text-center">
+                                <Bell size={32} className="mx-auto text-[var(--text-muted)] opacity-40 mb-2" />
+                                <p className="text-sm text-[var(--text-secondary)] m-0">Tidak ada notifikasi baru</p>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           </div>
+
+          {/* BARIS 2 KHUSUS MOBILE (< 640px): Context Strip Nyaman untuk Cabang Aktif, POS & Panduan */}
+          {isTenant && (
+            <div className="flex sm:hidden items-center justify-between gap-2 pt-2 mt-2 border-t border-[var(--border)]/70">
+              {activeBranch ? (
+                canSwitchBranch ? (
+                  <div className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-2.5 py-1 min-w-0 flex-1">
+                    <Store size={13} className="text-[var(--accent)] shrink-0" />
+                    <span className="text-[11px] font-medium text-[var(--text-muted)] shrink-0">
+                      {currentTenant?.company_name || 'Resto Umatis'} •
+                    </span>
+                    <select
+                      aria-label="Pilih Cabang Mobile Header"
+                      value={activeBranchId || ''}
+                      onChange={(e) => switchBranch(e.target.value)}
+                      disabled={loadingData}
+                      className="bg-transparent text-xs font-bold text-[var(--text-primary)] outline-none cursor-pointer flex-1 min-w-0 truncate"
+                    >
+                      {branches.filter(b => b.is_active !== false).map(b => (
+                        <option key={b.id} value={b.id} className="bg-[var(--bg-secondary)] text-[var(--text-primary)]">
+                          Cabang {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-2.5 py-1 text-xs font-semibold text-[var(--text-secondary)] truncate">
+                    <Store size={13} className="text-[var(--accent)] shrink-0" />
+                    <span className="truncate">{currentTenant?.company_name || 'Resto Umatis'} • Cabang {activeBranch.name}</span>
+                  </div>
+                )
+              ) : <div />}
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                {currentTenant?.is_pos_enabled && (
+                  <button
+                    type="button"
+                    onClick={handleOpenPos}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 border"
+                    style={{
+                      background: 'rgba(59, 130, 246, 0.1)',
+                      borderColor: 'rgba(59, 130, 246, 0.3)',
+                      color: '#2563eb'
+                    }}
+                  >
+                    <MonitorSmartphone size={13} />
+                    <span>POS</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowGuidebook(true)}
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 border"
+                  style={{
+                    background: 'var(--accent-glow)',
+                    borderColor: 'var(--accent)',
+                    color: 'var(--accent)'
+                  }}
+                >
+                  <BookOpen size={13} />
+                  <span>Panduan</span>
+                </button>
+              </div>
+            </div>
+          )}
         </header>
 
         <section className="flex-1 overflow-y-auto relative p-3 md:p-8 pb-32 md:pb-16">
@@ -1006,7 +1076,236 @@ export default function DashboardLayout() {
         </section>
       </main>
 
+      {/* Root-Level Viewport-Safe Shortcut Beta Testing Modal / Bottom Sheet (Nia P0 Fix — Zero Left Clipping) */}
+      {showBetaMenu && betaPresets.length > 0 && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.45)',
+            backdropFilter: 'blur(3px)',
+            zIndex: 9998,
+            display: 'flex',
+            alignItems: isMobile ? 'flex-end' : 'flex-start',
+            justifyContent: isMobile ? 'center' : 'flex-end',
+            padding: isMobile ? '12px 12px 78px 12px' : '68px 24px 24px 24px'
+          }}
+          onClick={() => setShowBetaMenu(false)}
+        >
+          <div
+            ref={betaMenuRef}
+            style={{
+              width: '100%',
+              maxWidth: isMobile ? '440px' : '360px',
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: '20px',
+              boxShadow: '0 24px 48px rgba(0, 0, 0, 0.28)',
+              padding: '16px',
+              zIndex: 9999
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 mb-3 border-b border-[var(--border)]">
+              <div>
+                <div className="text-xs font-extrabold text-[var(--text-primary)] uppercase tracking-wide">
+                  Shortcut Beta Testing
+                </div>
+                <div className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                  Resto Umatis • Cabang BSD & Kasuna
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBetaMenu(false)}
+                aria-label="Tutup Shortcut Beta"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]"
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-2 max-h-[52vh] overflow-y-auto pr-0.5">
+              {betaPresets.map((p) => {
+                const isCurrent = activeUser?.email?.toLowerCase() === p.email.toLowerCase();
+                const isBusy = betaSwitchingKey === p.key;
+                return (
+                  <button
+                    key={p.key}
+                    type="button"
+                    disabled={Boolean(betaSwitchingKey) || seedingDummy}
+                    onClick={() => handleQuickSwitchBeta(p)}
+                    className={`w-full text-left px-3.5 py-2.5 rounded-xl border transition-all flex items-center justify-between gap-2.5 ${
+                      isCurrent
+                        ? 'border-[var(--accent)] bg-[var(--accent-glow)]'
+                        : 'border-[var(--border)] bg-[var(--bg-primary)] hover:bg-[var(--bg-tertiary)]'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs font-bold text-[var(--text-primary)]">
+                          {p.label}
+                        </span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] text-[var(--accent)] border border-[var(--border)]">
+                          {p.branchCode}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-[var(--text-secondary)] truncate mt-0.5">
+                        {p.email}
+                      </div>
+                    </div>
+                    <span className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-[var(--accent)] text-[var(--text-inverse)] shrink-0">
+                      {isBusy ? 'Masuk...' : isCurrent ? 'Aktif' : 'Masuk'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-3 pt-3 border-t border-[var(--border)]">
+              <button
+                type="button"
+                disabled={seedingDummy || Boolean(betaSwitchingKey)}
+                onClick={handleSeedDummyData}
+                className="w-full py-2.5 px-3 rounded-xl text-xs font-bold border border-[var(--accent)] bg-[var(--accent-glow)] text-[var(--accent)] hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
+              >
+                <RefreshCw size={13} className={seedingDummy ? 'animate-spin' : ''} />
+                {seedingDummy ? 'Memuat Data Dummy...' : 'Muat / Reset Data Dummy (BSD & Kasuna)'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ContextualFloatingNav isSidebarOpen={isSidebarOpen} />
+
+      {/* Comforting Mobile Bottom Navigation Bar (< 1024px) */}
+      {isTenant && (
+        <nav
+          aria-label="Navigasi Cepat Mobile"
+          className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-secondary)]/95 backdrop-blur-md border-t border-[var(--border)] px-2 pt-1.5 pb-[calc(6px+env(safe-area-inset-bottom))] shadow-[0_-4px_20px_rgba(45,42,38,0.06)]"
+        >
+          <div className="grid grid-cols-5 gap-1 max-w-md mx-auto">
+            <NavLink
+              to={basePath}
+              end
+              className={({ isActive }) =>
+                `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
+                  isActive ? 'text-[var(--accent)] font-bold bg-[var(--accent-glow)]' : 'text-[var(--text-secondary)] font-medium'
+                }`
+              }
+              style={{ textDecoration: 'none' }}
+            >
+              <LayoutDashboard size={18} strokeWidth={2} />
+              <span className="text-[10px] mt-0.5 leading-tight truncate">Beranda</span>
+            </NavLink>
+
+            {(role === 'Service' || role === 'Kasir') ? (
+              <>
+                <NavLink
+                  to={`${basePath}/pos-terminal`}
+                  className={({ isActive }) =>
+                    `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
+                      isActive ? 'text-[var(--accent)] font-bold bg-[var(--accent-glow)]' : 'text-[var(--text-secondary)] font-medium'
+                    }`
+                  }
+                  style={{ textDecoration: 'none' }}
+                >
+                  <MonitorSmartphone size={18} strokeWidth={2} />
+                  <span className="text-[10px] mt-0.5 leading-tight truncate">Kasir POS</span>
+                </NavLink>
+                <NavLink
+                  to={`${basePath}/penjualan`}
+                  className={({ isActive }) =>
+                    `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
+                      isActive ? 'text-[var(--accent)] font-bold bg-[var(--accent-glow)]' : 'text-[var(--text-secondary)] font-medium'
+                    }`
+                  }
+                  style={{ textDecoration: 'none' }}
+                >
+                  <UploadCloud size={18} strokeWidth={2} />
+                  <span className="text-[10px] mt-0.5 leading-tight truncate">Penjualan</span>
+                </NavLink>
+                <NavLink
+                  to={`${basePath}/daily-inventory?tab=waste`}
+                  className={({ isActive }) =>
+                    `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
+                      isActive ? 'text-[var(--accent)] font-bold bg-[var(--accent-glow)]' : 'text-[var(--text-secondary)] font-medium'
+                    }`
+                  }
+                  style={{ textDecoration: 'none' }}
+                >
+                  <Trash2 size={18} strokeWidth={2} />
+                  <span className="text-[10px] mt-0.5 leading-tight truncate">Limbah</span>
+                </NavLink>
+              </>
+            ) : (
+              <>
+                <NavLink
+                  to={`${basePath}/daily-inventory`}
+                  className={({ isActive }) =>
+                    `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
+                      isActive ? 'text-[var(--accent)] font-bold bg-[var(--accent-glow)]' : 'text-[var(--text-secondary)] font-medium'
+                    }`
+                  }
+                  style={{ textDecoration: 'none' }}
+                >
+                  <ClipboardList size={18} strokeWidth={2} />
+                  <span className="text-[10px] mt-0.5 leading-tight truncate">Stok Harian</span>
+                </NavLink>
+                <NavLink
+                  to={`${basePath}/olah-bahan`}
+                  className={({ isActive }) =>
+                    `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
+                      isActive ? 'text-[var(--accent)] font-bold bg-[var(--accent-glow)]' : 'text-[var(--text-secondary)] font-medium'
+                    }`
+                  }
+                  style={{ textDecoration: 'none' }}
+                >
+                  <Scissors size={18} strokeWidth={2} />
+                  <span className="text-[10px] mt-0.5 leading-tight truncate">Olah Bahan</span>
+                </NavLink>
+                {role === 'Bar' ? (
+                  <NavLink
+                    to={`${basePath}/opname-assets`}
+                    className={({ isActive }) =>
+                      `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
+                        isActive ? 'text-[var(--accent)] font-bold bg-[var(--accent-glow)]' : 'text-[var(--text-secondary)] font-medium'
+                      }`
+                    }
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <Boxes size={18} strokeWidth={2} />
+                    <span className="text-[10px] mt-0.5 leading-tight truncate">Opname</span>
+                  </NavLink>
+                ) : (
+                  <NavLink
+                    to={`${basePath}/procurement`}
+                    className={({ isActive }) =>
+                      `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
+                        isActive ? 'text-[var(--accent)] font-bold bg-[var(--accent-glow)]' : 'text-[var(--text-secondary)] font-medium'
+                      }`
+                    }
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <ShoppingCart size={18} strokeWidth={2} />
+                    <span className="text-[10px] mt-0.5 leading-tight truncate">Belanja</span>
+                  </NavLink>
+                )}
+              </>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setIsSidebarOpen(true)}
+              className="flex flex-col items-center justify-center py-1 rounded-xl text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-medium transition-colors"
+            >
+              <Menu size={18} strokeWidth={2} />
+              <span className="text-[10px] mt-0.5 leading-tight truncate">Menu Lain</span>
+            </button>
+          </div>
+        </nav>
+      )}
 
       {/* Mobile More Menu (Hidden by default, toggled by BottomNav) */}
       <div id="mobile-more-menu" className="hidden lg:hidden fixed inset-0 z-[60] bg-[var(--bg-secondary)] flex-col pt-12 pb-24 px-4 overflow-y-auto" style={{ display: 'none' }}>

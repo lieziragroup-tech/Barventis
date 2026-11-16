@@ -171,13 +171,17 @@ function RecipesInner({ categoryFilter } = {}) {
   useEffect(() => {
     if (recipes.length === 0) return;
     
-    // Check target recipe from searchParams (?targetRecipeId=...) or location.state
+    // Check target recipe from searchParams (?targetRecipeId=... or ?targetRecipeName=...) or location.state
     const targetParamId = searchParams.get('targetRecipeId') || location.state?.targetRecipeId;
-    if (targetParamId) {
-      const target = recipes.find(r => String(r.id) === String(targetParamId));
+    const targetParamName = searchParams.get('targetRecipeName') || location.state?.targetRecipeName;
+    if (targetParamId || targetParamName) {
+      const target = recipes.find(r =>
+        (targetParamId && String(r.id) === String(targetParamId)) ||
+        (targetParamName && String(r.menu_name || '').toLowerCase().trim() === String(targetParamName).toLowerCase().trim())
+      );
       if (target) {
         setTimeout(() => handleSelectRecipe(target), 0);
-        if (location.state?.targetRecipeId) {
+        if (location.state?.targetRecipeId || location.state?.targetRecipeName) {
           window.history.replaceState({}, document.title);
         }
         return;
@@ -483,7 +487,7 @@ function RecipesInner({ categoryFilter } = {}) {
   const getPackLabel = (itemName) => {
     const info = stockMap[itemName];
     if (!info) return '';
-    return `${info.full_pack || ''} / ${(info.unit || 'pck').toUpperCase()}`;
+    return formatCleanFullPackLabel(info.full_pack, info.unit);
   };
 
   return (
