@@ -3881,7 +3881,11 @@ export const api = {
     const m = parseInt(parts[1]);
     const lastDay = new Date(year, m, 0).getDate();
     const endDate = `${month}-${String(lastDay).padStart(2, '0')}`;
-    const unitConversionMap = await api._loadUnitConversionMap(tenantId, branchId);
+    const [unitConversionMap, allMaterialsForCc] = await Promise.all([
+      api._loadUnitConversionMap(tenantId, branchId),
+      api.getMaterials(branchId).catch(() => [])
+    ]);
+    const materialsByIdForCc = Object.fromEntries((allMaterialsForCc || []).map(mat => [mat.id, mat]));
 
     let thisOpnamesQ = supabase
       .from('stock_opnames')
@@ -3922,10 +3926,11 @@ export const api = {
       const opnameIds = thisOpnames.map(o => o.id);
       let opnameItemsQ = supabase
         .from('stock_opname_items')
-        .select('opname_id, physical_qty, book_qty, material_id, unit_cost_snapshot, valuation_snapshot, valuation_is_estimated, materials(name, new_price, price, avg_cost, category, unit, full_pack, supplier)')
+        .select('opname_id, physical_qty, book_qty, material_id, unit_cost_snapshot, valuation_snapshot, valuation_is_estimated')
         .in('opname_id', opnameIds);
       if (branchId) opnameItemsQ = opnameItemsQ.eq('branch_id', branchId);
-      const { data: opnameItems } = await opnameItemsQ;
+      const { data: rawOpnameItems } = await opnameItemsQ;
+      const opnameItems = (rawOpnameItems || []).map(it => ({ ...it, materials: materialsByIdForCc[it.material_id] || null }));
 
       if (opnameItems && opnameItems.length > 0) {
         hasThisMonthOpname = true;
@@ -4017,11 +4022,12 @@ export const api = {
       if (latestEodHeaders.length) {
         let eodItemsQ = supabase
           .from('daily_inventory_items')
-          .select('inventory_id, material_id, closing_qty, book_qty_before_close, out_qty, unit_cost_snapshot, materials(name, category, unit, full_pack, supplier, avg_cost, price)')
+          .select('inventory_id, material_id, closing_qty, book_qty_before_close, out_qty, unit_cost_snapshot')
           .eq('tenant_id', tenantId)
           .in('inventory_id', latestEodHeaders.map(h => h.id));
         if (branchId) eodItemsQ = eodItemsQ.eq('branch_id', branchId);
-        const { data: eodItems, error: eodItemErr } = await eodItemsQ;
+        const { data: rawEodItems, error: eodItemErr } = await eodItemsQ;
+        const eodItems = (rawEodItems || []).map(it => ({ ...it, materials: materialsByIdForCc[it.material_id] || null }));
         if (eodItemErr) throw eodItemErr;
         if (eodItems?.length) {
           hasThisMonthEodClose = true;
@@ -4097,13 +4103,17 @@ export const api = {
     // 2. Query Transactions for calculations
     let txsQ = supabase
       .from('transactions')
-      .select('type, amount, date, notes, material_id, is_reversed, materials(category)')
+      .select('type, amount, date, notes, material_id, is_reversed')
       .eq('tenant_id', tenantId)
       .eq('is_reversed', false)
       .gte('date', startDate)
       .lte('date', endDate);
     if (branchId) txsQ = txsQ.eq('branch_id', branchId);
-    const { data: transactions } = await txsQ;
+    const { data: rawTransactions } = await txsQ;
+    const transactions = (rawTransactions || []).map(tx => ({
+      ...tx,
+      materials: tx.material_id ? { category: materialsByIdForCc[tx.material_id]?.category || 'Lain-lain' } : null
+    }));
 
     let eodHeadersQ = supabase
       .from('daily_inventories')
@@ -4141,12 +4151,13 @@ export const api = {
 
     let expUsageQ = supabase
       .from('expected_usage')
-      .select('material_id, expected_qty, expected_cost_value, unit_cost_snapshot, materials(avg_cost, price)')
+      .select('material_id, expected_qty, expected_cost_value, unit_cost_snapshot')
       .eq('tenant_id', tenantId)
       .lte('week_start', endDate)
       .gte('week_end', startDate);
     if (branchId) expUsageQ = expUsageQ.eq('branch_id', branchId);
-    const { data: expectedUsageRows, error: expectedUsageErr } = await expUsageQ;
+    const { data: rawExpectedUsageRows, error: expectedUsageErr } = await expUsageQ;
+    const expectedUsageRows = (rawExpectedUsageRows || []).map(r => ({ ...r, materials: materialsByIdForCc[r.material_id] || null }));
     if (expectedUsageErr) throw new Error('Gagal memuat theoretical usage: ' + expectedUsageErr.message);
     let theoreticalCogsCost = 0;
     let theoreticalRowsEstimated = 0;
@@ -4212,10 +4223,11 @@ export const api = {
       const prevOpnameIds = prevOpnames.map(o => o.id);
       let prevItemsQ = supabase
         .from('stock_opname_items')
-        .select('opname_id, physical_qty, material_id, unit_cost_snapshot, valuation_snapshot, valuation_is_estimated, materials(new_price, price, avg_cost, unit, full_pack, name)')
+        .select('opname_id, physical_qty, material_id, unit_cost_snapshot, valuation_snapshot, valuation_is_estimated')
         .in('opname_id', prevOpnameIds);
       if (branchId) prevItemsQ = prevItemsQ.eq('branch_id', branchId);
-      const { data: prevOpnameItems, error: prevItemsErr } = await prevItemsQ;
+      const { data: rawPrevOpnameItems, error: prevItemsErr } = await prevItemsQ;
+      const prevOpnameItems = (rawPrevOpnameItems || []).map(it => ({ ...it, materials: materialsByIdForCc[it.material_id] || null }));
       if (prevItemsErr) throw prevItemsErr;
       if (prevOpnameItems?.length) {
         const prevLocationById = Object.fromEntries(prevOpnames.map(o => [o.id, o.location || 'RESTO']));
@@ -4250,11 +4262,12 @@ export const api = {
       if (priorHeaders.length) {
         let priorItemsQ = supabase
           .from('daily_inventory_items')
-          .select('inventory_id, material_id, closing_qty, unit_cost_snapshot, materials(avg_cost, price, unit, full_pack, name)')
+          .select('inventory_id, material_id, closing_qty, unit_cost_snapshot')
           .eq('tenant_id', tenantId)
           .in('inventory_id', priorHeaders.map(h => h.id));
         if (branchId) priorItemsQ = priorItemsQ.eq('branch_id', branchId);
-        const { data: priorItems, error: priorItemsErr } = await priorItemsQ;
+        const { data: rawPriorItems, error: priorItemsErr } = await priorItemsQ;
+        const priorItems = (rawPriorItems || []).map(it => ({ ...it, materials: materialsByIdForCc[it.material_id] || null }));
         if (priorItemsErr) throw priorItemsErr;
         if (priorItems?.length) {
           const locationByHeader = Object.fromEntries(priorHeaders.map(h => [h.id, h.location]));

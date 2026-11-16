@@ -8009,6 +8009,93 @@ EXCEPTION WHEN SQLSTATE '42P13' THEN
   END;
 END $bv_fn_wrap$;
 
+
+-- =====================================================================================
+-- BAGIAN 0: SINKRONISASI FOREIGN KEY POSTGREST (MENGATASI HTTP 400 PGRST200 / PGRST201)
+-- Memastikan tepat 1 Foreign Key bersih antara tabel transaksi/item dengan public.materials,
+-- public.suppliers, public.recipes, public.daily_inventories, dan public.stock_opnames
+-- agar query `.select('..., materials(...)')` di Cost Control & laporan lain berjalan 100%
+-- =====================================================================================
+DO $$
+DECLARE
+  v_rel RECORD;
+  v_dup RECORD;
+  v_keep_conname TEXT;
+BEGIN
+  FOR v_rel IN
+    SELECT * FROM (VALUES
+      ('daily_inventory_items',       'material_id',   'materials',               'id', 'CASCADE',  'daily_inventory_items_material_id_fkey'),
+      ('daily_inventory_items',       'inventory_id',  'daily_inventories',       'id', 'CASCADE',  'daily_inventory_items_inventory_id_fkey'),
+      ('stock_opname_items',          'material_id',   'materials',               'id', 'CASCADE',  'stock_opname_items_material_id_fkey'),
+      ('stock_opname_items',          'opname_id',     'stock_opnames',           'id', 'CASCADE',  'stock_opname_items_opname_id_fkey'),
+      ('recipe_ingredients',          'material_id',   'materials',               'id', 'CASCADE',  'recipe_ingredients_material_id_fkey'),
+      ('recipe_ingredients',          'recipe_id',     'recipes',                 'id', 'CASCADE',  'recipe_ingredients_recipe_id_fkey'),
+      ('purchase_entries',            'material_id',   'materials',               'id', 'CASCADE',  'purchase_entries_material_id_fkey'),
+      ('purchase_entries',            'supplier_id',   'suppliers',               'id', 'SET NULL', 'purchase_entries_supplier_id_fkey'),
+      ('transactions',                'material_id',   'materials',               'id', 'CASCADE',  'transactions_material_id_fkey'),
+      ('expected_usage',              'material_id',   'materials',               'id', 'CASCADE',  'expected_usage_material_id_fkey'),
+      ('invoice_items',               'material_id',   'materials',               'id', 'SET NULL', 'invoice_items_material_id_fkey'),
+      ('invoice_items',               'invoice_id',    'invoices',                'id', 'CASCADE',  'invoice_items_invoice_id_fkey'),
+      ('inter_branch_transfer_items', 'material_id',   'materials',               'id', 'CASCADE',  'inter_branch_transfer_items_material_id_fkey'),
+      ('inter_branch_transfer_items', 'transfer_id',   'inter_branch_transfers',  'id', 'CASCADE',  'inter_branch_transfer_items_transfer_id_fkey'),
+      ('material_batches',            'material_id',   'materials',               'id', 'CASCADE',  'material_batches_material_id_fkey'),
+      ('stock_adjustments',           'material_id',   'materials',               'id', 'CASCADE',  'stock_adjustments_material_id_fkey'),
+      ('physical_check_items',        'material_id',   'materials',               'id', 'CASCADE',  'physical_check_items_material_id_fkey'),
+      ('physical_check_items',        'check_id',      'physical_checks',         'id', 'CASCADE',  'physical_check_items_check_id_fkey'),
+      ('market_list_items',           'material_id',   'materials',               'id', 'CASCADE',  'market_list_items_material_id_fkey'),
+      ('market_list_items',           'market_list_id','market_lists',            'id', 'CASCADE',  'market_list_items_market_list_id_fkey')
+    ) AS t(child_tbl, child_col, parent_tbl, parent_col, on_del, canonical_name)
+  LOOP
+    IF to_regclass('public.' || v_rel.child_tbl) IS NOT NULL
+       AND to_regclass('public.' || v_rel.parent_tbl) IS NOT NULL THEN
+
+      -- 1. Hapus baris yatim (orphan rows) jika ada sebelum memasang FK
+      BEGIN
+        EXECUTE format(
+          'DELETE FROM public.%I WHERE %I IS NOT NULL AND %I NOT IN (SELECT %I FROM public.%I)',
+          v_rel.child_tbl, v_rel.child_col, v_rel.child_col, v_rel.parent_col, v_rel.parent_tbl
+        );
+      EXCEPTION WHEN OTHERS THEN
+        NULL;
+      END;
+
+      -- 2. Hapus semua FK duplikat pada pasangan (child_tbl, child_col -> parent_tbl) selain canonical_name
+      FOR v_dup IN
+        SELECT c.conname
+        FROM pg_constraint c
+        JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
+        WHERE c.contype = 'f'
+          AND c.conrelid = to_regclass('public.' || v_rel.child_tbl)
+          AND c.confrelid = to_regclass('public.' || v_rel.parent_tbl)
+          AND a.attname = v_rel.child_col
+          AND c.conname <> v_rel.canonical_name
+      LOOP
+        BEGIN
+          EXECUTE format('ALTER TABLE public.%I DROP CONSTRAINT IF EXISTS %I', v_rel.child_tbl, v_dup.conname);
+        EXCEPTION WHEN OTHERS THEN
+          NULL;
+        END;
+      END LOOP;
+
+      -- 3. Tambahkan FK kanonik jika belum ada
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = to_regclass('public.' || v_rel.child_tbl)
+          AND conname = v_rel.canonical_name
+      ) THEN
+        BEGIN
+          EXECUTE format(
+            'ALTER TABLE public.%I ADD CONSTRAINT %I FOREIGN KEY (%I) REFERENCES public.%I(%I) ON DELETE %s',
+            v_rel.child_tbl, v_rel.canonical_name, v_rel.child_col, v_rel.parent_tbl, v_rel.parent_col, v_rel.on_del
+          );
+        EXCEPTION WHEN OTHERS THEN
+          RAISE NOTICE 'Lewati penambahan FK % pada %: %', v_rel.canonical_name, v_rel.child_tbl, SQLERRM;
+        END;
+      END IF;
+    END IF;
+  END LOOP;
+END $$;
+
 -- 7E. Fungsi Utama Seed Akun Role/RBAC & Data Riil Umatis Agustus 2026 (Stok Akhir 31 Agu + Histori Lengkap)
 -- =====================================================================================
 -- BARVENTIS PRODUCTION & RBAC SEEDER — UMATIS RESTO & VENUE (AGUSTUS 2026 FULL DATA)
@@ -23506,5 +23593,6 @@ GRANT EXECUTE ON FUNCTION public.seed_beta_testing_dummy_data_v13() TO anon, aut
 SELECT public.seed_beta_testing_dummy_data_v13();
 
 NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload config';
 
 COMMIT;
