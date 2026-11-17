@@ -241,7 +241,7 @@ function RecipesInner({ categoryFilter } = {}) {
     const rows = exportData.map(r => {
       const { liveBasicCost, liveFoodCostPct } = computeLiveRecipeCost(r);
       const row = {
-        'Kode Menu': r.recipe_code || '',
+        'Kode Menu': r.recipe_code || r.pos_code || '',
         'Nama Menu': r.menu_name || '',
         'Kategori': r.category || '',
         'Harga Jual': r.selling_price || 0,

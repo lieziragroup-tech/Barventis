@@ -182,15 +182,19 @@ export function getUnitPrice(material, unitConversionMap) {
     : Number(material?.price ?? 0);
 
   if (unitConversionMap && material?.id != null && unitConversionMap.has(material.id)) {
-    const factor = unitConversionMap.get(material.id);
-    if (factor > 0) {
+    const rawFactor = Number(unitConversionMap.get(material.id));
+    if (rawFactor > 0) {
+      // Auto-guard: jika database menyimpan faktor konversi terbalik (1 / packSize, misal 0.001 untuk 1000 gr),
+      // balikkan kembali menjadi packSize (1000) agar harga tidak membengkak.
+      const factor = rawFactor < 1 ? Math.round(1 / rawFactor) : rawFactor;
+      const { packUnitLabel, contentUnit } = getPackUnitInfo(material?.full_pack, material?.unit);
       return {
         unitPrice: price / factor,
         resolved: true,
         source: 'unit_conversions',
         packSize: factor,
-        packUnitLabel: normalizeUnitToken(material?.unit),
-        contentUnit: null
+        packUnitLabel: packUnitLabel || normalizeUnitToken(material?.unit),
+        contentUnit: contentUnit || null
       };
     }
   }

@@ -12185,7 +12185,7 @@ BEGIN
       m.id,
       lower(trim(regexp_replace(split_part(m.full_pack, '=', 2), '^[0-9]+(\.[0-9]+)?\s*', ''))),
       lower(trim(m.unit)),
-      (1.0 / ((regexp_match(split_part(m.full_pack, '=', 2), '([0-9]+(?:\.[0-9]+)?)'))[1])::numeric)
+      ((regexp_match(split_part(m.full_pack, '=', 2), '([0-9]+(?:\.[0-9]+)?)'))[1])::numeric
     FROM public.materials m
     WHERE m.tenant_id = v_tenant_id AND m.branch_id = v_bsd_id AND m.full_pack LIKE '%=%'
       AND NOT EXISTS (
