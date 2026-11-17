@@ -62,7 +62,8 @@ export default function Invoicing() {
   const [searchParams, setSearchParams] = useSearchParams();
   const rawRole = String(activeUser?.role || '').trim().toLowerCase();
   const isOwner = ['admin / owner', 'admin  owner', 'owner', 'super admin', 'superadmin'].includes(rawRole);
-  const isPurchasing = ['purchasing', 'central'].includes(rawRole);
+  const isPurchasing = rawRole === 'purchasing';
+  const isCentral = rawRole === 'central';
   const userDivisionScope = getUserDivisionScope(activeUser?.role);
 
   // Goods Receipt Modal States (Dual Photo: Physical Goods + Delivery Note / Surat Jalan / Resi)
@@ -98,8 +99,17 @@ export default function Invoicing() {
     loadSuppliers();
   }, [loadSuppliers]);
 
-  // Auto-open Create PO Modal when navigated from "Lapor Stok Habis / Ajukan PO" (?prefillMaterial=...)
+  // Auto-open Create PO Modal when navigated from "Lapor Stok Habis / Ajukan PO" (?prefillMaterial=...) or "+ Buat PO Baru" (?create=1)
   useEffect(() => {
+    const createFlag = searchParams.get('create');
+    if (createFlag === '1' || createFlag === 'true') {
+      setShowCreateModal(true);
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('create');
+      setSearchParams(nextParams, { replace: true });
+      return;
+    }
+
     const prefillName = searchParams.get('prefillMaterial');
     if (prefillName && stock && stock.length > 0) {
       const mat = stock.find(s => (s.name || '').toLowerCase().trim() === prefillName.toLowerCase().trim())
@@ -990,7 +1000,13 @@ Catatan: ${inv.notes || '-'}`,
             </button>
           )}
           <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem', fontWeight: 700 }} onClick={() => setShowCreateModal(true)}>
-            {userDivisionScope !== 'ALL' ? `+ Ajukan Permintaan PO (${userDivisionScope})` : '+ Buat Permintaan PO'}
+            {isPurchasing
+              ? '+ Buat PO Baru'
+              : isCentral
+                ? '+ Buat PO Central'
+                : userDivisionScope !== 'ALL'
+                  ? `+ Ajukan Permintaan PO (${userDivisionScope})`
+                  : '+ Buat Permintaan PO'}
           </button>
         </div>
       </div>

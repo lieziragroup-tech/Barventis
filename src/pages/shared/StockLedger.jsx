@@ -127,6 +127,8 @@ function StockLedgerInner() {
   const [adjustLoc, setAdjustLoc] = useState('RESTO');
   const [adjustType, setAdjustType] = useState('OPNAME_ADJ');
   const [adjustNotes, setAdjustNotes] = useState('');
+  const PAGE_SIZE = 20;
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Auto-populate search debounce & open material detail drawer when navigated from COGS Recipe shortcut (?search=...)
   useEffect(() => {
@@ -275,9 +277,6 @@ function StockLedgerInner() {
 
     return matchesSearch && matchesCat && matchesSup && matchesDivision && matchesAlert && matchesLoc;
   }), [stock, debouncedSearch, catFilter, supFilter, divisionFilter, alertFilter, safeActiveLoc]);
-
-  const PAGE_SIZE = 20;
-  const [currentPage, setCurrentPage] = useState(1);
 
   const paginatedStock = useMemo(() => {
     const start = (currentPage - 1) * 20;
@@ -786,7 +785,7 @@ function StockLedgerInner() {
                           </button>
                           <button
                             className="btn btn-secondary"
-                            style={{ padding: '4px 7px', borderRadius: 'var(--radius-sm)', fontSize: '0.68rem', fontWeight: 700, color: total <= minLevel ? 'var(--warning)' : 'var(--accent)' }}
+                            style={{ padding: '4px 7px', borderRadius: 'var(--radius-sm)', fontSize: '0.68rem', fontWeight: 700, color: total <= min ? 'var(--warning)' : 'var(--accent)' }}
                             title="Lapor Stok Habis / Ajukan Permintaan PO Cabang ke Owner & Purchasing"
                             onClick={() => navigate(`/dashboard/procurement?tab=invoicing&prefillMaterial=${encodeURIComponent(item.name)}`)}
                           >

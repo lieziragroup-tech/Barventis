@@ -16,21 +16,69 @@ import GuidebookModal from './GuidebookModal';
 import WidgetErrorBoundary from './WidgetErrorBoundary';
 import barventisIcon from '../assets/barventis-icon.png';
 
+const DEFAULT_HUB_TABS = {
+  '/dashboard/procurement': 'invoicing',
+  '/dashboard/daily-inventory': 'daily',
+  '/dashboard/pricing-cogs': 'cogs-all',
+  '/dashboard/sistem': 'stock-ledger',
+};
+
+const ROLE_SIDEBAR_CONFIG = {
+  Central: {
+    groupTitle: 'Divisi Central & Logistik',
+    items: (basePath) => [
+      { to: basePath, exact: true, label: 'Dashboard Central', subtitle: 'Arus barang masuk, keluar & tujuan mutasi', icon: LayoutDashboard },
+      { to: `${basePath}/transfer`, label: 'Mutasi ke Cabang', subtitle: 'Distribusi stok dari Central ke cabang tujuan', icon: ArrowRightLeft },
+      { to: `${basePath}/procurement?tab=invoicing`, label: 'PO Central', subtitle: 'Pantau PO Central & penerimaan barang', icon: ShoppingCart },
+      { to: `${basePath}/sistem?tab=stock-ledger`, label: 'Stok', subtitle: 'Pantau stok Central & seluruh cabang', icon: Boxes },
+    ],
+  },
+  Purchasing: {
+    groupTitle: 'Divisi Purchasing & PO',
+    items: (basePath) => [
+      { to: `${basePath}/procurement?tab=invoicing`, label: 'Pembuatan PO', subtitle: 'Buat PO baru, review cabang & ACC Owner', icon: ShoppingCart },
+      { to: basePath, exact: true, label: 'Total PO Bulanan', subtitle: 'Ringkasan total nilai & dokumen PO bulan ini', icon: LayoutDashboard },
+      { to: `${basePath}/procurement?tab=marketlist`, label: 'Komparasi Harga', subtitle: 'Analisis efisiensi harga & kualitas supplier', icon: Tag },
+      { to: `${basePath}/procurement?tab=pembelian`, label: 'Supplier', subtitle: 'Direktori master supplier & pencatatan belanja', icon: Building2 },
+    ],
+  },
+};
+
 const NavItem = ({ to, exact, label, subtitle, icon: Icon, isHovered, onClick }) => {
+  const location = useLocation();
   const tooltipText = subtitle ? `${label} — ${subtitle}` : label;
+
+  const [targetPathname, targetQuery = ''] = String(to || '').split('?');
+  const targetParams = new URLSearchParams(targetQuery);
+  const targetTab = targetParams.get('tab');
+
+  const isQueryMatch = () => {
+    if (!targetTab) {
+      // If link has no ?tab=, avoid matching when current URL explicitly has ?tab=waste on daily-inventory
+      const currentTab = new URLSearchParams(location.search).get('tab');
+      if (targetPathname.endsWith('/daily-inventory') && currentTab === 'waste') {
+        return false;
+      }
+      return true;
+    }
+    const currentTab = new URLSearchParams(location.search).get('tab') || DEFAULT_HUB_TABS[targetPathname] || '';
+    return currentTab === targetTab;
+  };
+
   return (
     <div className="block w-full mb-0.5">
       <NavLink
         to={to}
         end={exact}
         onClick={onClick}
-        className={({ isActive }) =>
-          `group flex items-center px-3 py-2 rounded-lg transition-colors duration-150 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40 ${
-            isActive
+        className={({ isActive }) => {
+          const active = isActive && isQueryMatch();
+          return `group flex items-center px-3 py-2 rounded-lg transition-colors duration-150 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40 ${
+            active
               ? 'bg-[var(--accent-glow)] text-[var(--accent)] font-semibold'
               : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] font-medium'
-          }`
-        }
+          }`;
+        }}
         style={{ textDecoration: 'none' }}
         title={tooltipText}
       >
@@ -120,24 +168,7 @@ export default function DashboardLayout() {
   }, [loadingData, stock, activeUser]);
 
   const [showGuidebook, setShowGuidebook] = useState(false);
-  const [showPosNotif, setShowPosNotif] = useState(false);
 
-  useEffect(() => {
-    if (currentTenant?.is_pos_enabled) {
-      const hasSeenNotif = localStorage.getItem(`pos_notif_${currentTenant.id}`);
-      if (!hasSeenNotif) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setShowPosNotif(true);
-        localStorage.setItem(`pos_notif_${currentTenant.id}`, 'true');
-      }
-    }
-  }, [currentTenant?.is_pos_enabled, currentTenant?.id]);
-  
-  const [showPosSetupModal, setShowPosSetupModal] = useState(false);
-  const [posTaxRate, setPosTaxRate] = useState(11);
-  const [posServiceCharge, setPosServiceCharge] = useState(5);
-  const [isSavingPosSetup, setIsSavingPosSetup] = useState(false);
-  
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [editProfileName, setEditProfileName] = useState('');
@@ -208,6 +239,7 @@ export default function DashboardLayout() {
       await checkCurrentAuth();
       await refreshData();
       setShowBetaMenu(false);
+      navigate('/dashboard');
       showToast(`Berpindah ke akun ${preset.label} (${preset.branchCode})`, 'success');
     } catch (err) {
       showToast(err?.message || 'Gagal berpindah akun Beta Testing', 'error');
@@ -303,36 +335,6 @@ export default function DashboardLayout() {
     }
   };
 
-  // handleOpenPos was referenced by the "Buka POS" button below but its
-  // definition was missing in the original rar codebase (ReferenceError on
-  // click). Restored from barventis-vercel-repo, which has it correctly —
-  // this is a straight logic fix, the surrounding modal/JSX is unchanged.
-  const handleOpenPos = () => {
-    if (currentTenant?.pos_tax_rate === undefined || currentTenant?.pos_tax_rate === null) {
-      setShowPosSetupModal(true);
-    } else {
-      navigate(`/${basePath}/pos-terminal`);
-    }
-  };
-
-  const handleSavePosSetup = async (e) => {
-    e.preventDefault();
-    setIsSavingPosSetup(true);
-    try {
-      await api.updateTenantSettings({ 
-        pos_tax_rate: parseFloat(posTaxRate), 
-        pos_service_charge: parseFloat(posServiceCharge) 
-      });
-      showToast('Pengaturan POS berhasil disimpan', 'success');
-      setShowPosSetupModal(false);
-      refreshData();
-    } catch {
-      showToast('Gagal menyimpan pengaturan', 'error');
-    } finally {
-      setIsSavingPosSetup(false);
-    }
-  };
-
   return (
     <div className="flex h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] overflow-hidden font-sans relative">
       {/* Desktop Sidebar Container (Transparent Spacer) */}
@@ -374,7 +376,6 @@ export default function DashboardLayout() {
                 {isSuperAdmin && (
                   <NavGroup title="Platform" isHovered={isHovered} isFirst={true}>
                     <NavItem to="/superadmin" exact label="Kelola Tenant" subtitle="Kelola database dan lisensi tenant" icon={Building2} isHovered={isHovered} index={1} />
-                    <NavItem to="/superadmin/templates" label="Template POS" subtitle="Atur pemetaan format Excel POS" icon={Layout} isHovered={isHovered} index={2} />
                   </NavGroup>
                 )}
 
@@ -406,7 +407,7 @@ export default function DashboardLayout() {
                   </NavGroup>
                 )}
 
-                {/* ROLE: SERVICE (Fokus Alat, Glassware, Perlengkapan Floor, POS & Ajukan PO Alat) */}
+                {/* ROLE: SERVICE (Fokus Alat, Glassware, Perlengkapan Floor & Ajukan PO Alat — POS Disembunyikan) */}
                 {isTenant && role === 'Service' && (
                   <NavGroup title="Divisi Service & Alat" isHovered={isHovered} isFirst={!isSuperAdmin}>
                     <NavItem to={basePath} exact label="Dashboard Service" subtitle="Ringkasan peralatan & area floor" icon={LayoutDashboard} isHovered={isHovered} />
@@ -414,34 +415,31 @@ export default function DashboardLayout() {
                     <NavItem to={`${basePath}/sistem?tab=stock-ledger`} label="Materials & Alat Service" subtitle="Katalog peralatan, packaging & floor" icon={Settings} isHovered={isHovered} />
                     <NavItem to={`${basePath}/procurement?tab=invoicing`} label="Permintaan PO & Terima" subtitle="Ajukan PO alat & foto terima barang" icon={ShoppingCart} isHovered={isHovered} />
                     <NavItem to={`${basePath}/daily-inventory`} label="Inventaris Service" subtitle="Catat pemakaian amenities & alat" icon={ClipboardList} isHovered={isHovered} />
-                    {currentTenant?.is_pos_enabled && (
-                      <NavItem to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir operasional langsung" icon={MonitorSmartphone} isHovered={isHovered} />
-                    )}
-                    <NavItem to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Unggah dan rekap penjualan POS" icon={UploadCloud} isHovered={isHovered} />
                     <NavItem to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Barang Pecah" subtitle="Catat gelas pecah / alat rusak" icon={Trash2} isHovered={isHovered} />
                   </NavGroup>
                 )}
 
-                {/* ROLE: PURCHASING (Fokus Review PO Cabang, Komparasi Harga Supplier, Ajukan ACC Owner, & Hubungi Supplier) */}
-                {isTenant && (role === 'Purchasing' || role === 'Central') && (
-                  <NavGroup title="Divisi Purchasing & PO" isHovered={isHovered} isFirst={!isSuperAdmin}>
-                    <NavItem to={basePath} exact label="Dashboard Purchasing" subtitle="Ringkasan pengadaan & status PO" icon={LayoutDashboard} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/procurement?tab=invoicing`} label="Antrean PO & ACC Owner" subtitle="Review PO cabang, ACC & hubungi supplier" icon={ShoppingCart} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/procurement?tab=marketlist`} label="Komparasi Harga & Bahan" subtitle="Analisis efisiensi harga & kualitas supplier" icon={Tag} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/procurement?tab=pembelian`} label="Master Supplier & Belanja" subtitle="Direktori supplier & pencatatan belanja" icon={Building2} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/sistem?tab=stock-ledger`} label="Data Materials & Stok" subtitle="Pantau stok seluruh cabang & harga acuan" icon={Boxes} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/transfer`} label="Distribusi Central-Resto" subtitle="Kirim stok dari Central ke Cabang" icon={ArrowRightLeft} isHovered={isHovered} />
+                {/* ROLE: CENTRAL & PURCHASING (Role-Based Configuration) */}
+                {isTenant && ROLE_SIDEBAR_CONFIG[role] && (
+                  <NavGroup title={ROLE_SIDEBAR_CONFIG[role].groupTitle} isHovered={isHovered} isFirst={!isSuperAdmin}>
+                    {ROLE_SIDEBAR_CONFIG[role].items(basePath).map((item) => (
+                      <NavItem
+                        key={item.label}
+                        to={item.to}
+                        exact={item.exact}
+                        label={item.label}
+                        subtitle={item.subtitle}
+                        icon={item.icon}
+                        isHovered={isHovered}
+                      />
+                    ))}
                   </NavGroup>
                 )}
 
-                {/* ROLE: KASIR */}
+                {/* ROLE: KASIR (POS Disembunyikan Sementara) */}
                 {isTenant && role === 'Kasir' && (
-                  <NavGroup title="Kasir & POS" isHovered={isHovered} isFirst={!isSuperAdmin}>
-                    <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan pelayanan dan kasir" icon={LayoutDashboard} isHovered={isHovered} />
-                    {currentTenant?.is_pos_enabled && (
-                      <NavItem to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir operasional langsung" icon={MonitorSmartphone} isHovered={isHovered} />
-                    )}
-                    <NavItem to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Unggah dan rekap penjualan POS" icon={UploadCloud} isHovered={isHovered} />
+                  <NavGroup title="Operasional Layanan" isHovered={isHovered} isFirst={!isSuperAdmin}>
+                    <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan pelayanan harian" icon={LayoutDashboard} isHovered={isHovered} />
                     <NavItem to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat barang pecah atau rusak" icon={Trash2} isHovered={isHovered} />
                   </NavGroup>
                 )}
@@ -450,14 +448,10 @@ export default function DashboardLayout() {
                 {isTenant && !['Bar', 'Kitchen', 'Service', 'Kasir', 'Purchasing', 'Central'].includes(role) && (
                   <>
                     <NavGroup isHovered={isHovered} isFirst={!isSuperAdmin}>
-                      <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan HPP dan penjualan" icon={LayoutDashboard} isHovered={isHovered} />
+                      <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan HPP dan inventaris" icon={LayoutDashboard} isHovered={isHovered} />
                     </NavGroup>
 
                     <NavGroup title="Operasional" isHovered={isHovered}>
-                      {currentTenant?.is_pos_enabled && (
-                        <NavItem to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir operasional langsung" icon={MonitorSmartphone} isHovered={isHovered} />
-                      )}
-                      <NavItem to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Unggah penjualan POS dan resep" icon={UploadCloud} isHovered={isHovered} />
                       <NavItem to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Catat stok harian dan limbah" icon={ClipboardList} isHovered={isHovered} />
                       <NavItem to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Catat olahan bahan mentah" icon={Scissors} isHovered={isHovered} />
                       <NavItem to={`${basePath}/procurement`} label="Pengadaan" subtitle="Katalog bahan, belanja, dan PO" icon={ShoppingCart} isHovered={isHovered} />
@@ -608,7 +602,6 @@ export default function DashboardLayout() {
             {isSuperAdmin && (
               <NavGroup title="Platform" isHovered={true} isFirst={true}>
                 <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin" exact label="Kelola Tenant" subtitle="Kelola database dan lisensi tenant" icon={Building2} isHovered={true} index={6} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to="/superadmin/templates" label="Template POS" subtitle="Atur pemetaan format Excel POS" icon={Layout} isHovered={true} index={7} />
               </NavGroup>
             )}
 
@@ -636,14 +629,10 @@ export default function DashboardLayout() {
               </NavGroup>
             )}
 
-            {/* ROLE: SERVICE */}
+            {/* ROLE: SERVICE (POS Disembunyikan) */}
             {isTenant && role === 'Service' && (
               <NavGroup title="Operasional Service & Floor" isHovered={true} isFirst={!isSuperAdmin}>
                 <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan area service & floor" icon={LayoutDashboard} isHovered={true} />
-                {currentTenant?.is_pos_enabled && (
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir operasional langsung" icon={MonitorSmartphone} isHovered={true} />
-                )}
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Unggah dan rekap penjualan POS" icon={UploadCloud} isHovered={true} />
                 <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Catat stok cup, packaging & amenities" icon={ClipboardList} isHovered={true} />
                 <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/opname-assets`} label="Stock Opname" subtitle="Audit fisik packaging & floor" icon={Boxes} isHovered={true} />
                 <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Minta packaging dari Central ke Service" icon={ArrowRightLeft} isHovered={true} />
@@ -651,30 +640,40 @@ export default function DashboardLayout() {
               </NavGroup>
             )}
 
-            {/* ROLE: KASIR */}
+            {/* ROLE: CENTRAL & PURCHASING (Role-Based Configuration) */}
+            {isTenant && ROLE_SIDEBAR_CONFIG[role] && (
+              <NavGroup title={ROLE_SIDEBAR_CONFIG[role].groupTitle} isHovered={true} isFirst={!isSuperAdmin}>
+                {ROLE_SIDEBAR_CONFIG[role].items(basePath).map((item) => (
+                  <NavItem
+                    key={item.label}
+                    onClick={() => setIsSidebarOpen(false)}
+                    to={item.to}
+                    exact={item.exact}
+                    label={item.label}
+                    subtitle={item.subtitle}
+                    icon={item.icon}
+                    isHovered={true}
+                  />
+                ))}
+              </NavGroup>
+            )}
+
+            {/* ROLE: KASIR (POS Disembunyikan) */}
             {isTenant && role === 'Kasir' && (
-              <NavGroup title="Kasir & POS" isHovered={true} isFirst={!isSuperAdmin}>
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan pelayanan dan kasir" icon={LayoutDashboard} isHovered={true} />
-                {currentTenant?.is_pos_enabled && (
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir operasional langsung" icon={MonitorSmartphone} isHovered={true} />
-                )}
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Unggah dan rekap penjualan POS" icon={UploadCloud} isHovered={true} />
+              <NavGroup title="Operasional Layanan" isHovered={true} isFirst={!isSuperAdmin}>
+                <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan pelayanan harian" icon={LayoutDashboard} isHovered={true} />
                 <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Limbah" subtitle="Catat barang pecah atau rusak" icon={Trash2} isHovered={true} />
               </NavGroup>
             )}
 
-            {/* ROLE: ADMIN / OWNER / SUPERVISOR / CENTRAL / PURCHASING */}
-            {isTenant && role !== 'Bar' && role !== 'Kitchen' && role !== 'Service' && role !== 'Kasir' && (
+            {/* ROLE: ADMIN / OWNER / SUPERVISOR */}
+            {isTenant && !['Bar', 'Kitchen', 'Service', 'Kasir', 'Purchasing', 'Central'].includes(role) && (
               <>
                 <NavGroup isHovered={true} isFirst={!isSuperAdmin}>
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan HPP dan penjualan" icon={LayoutDashboard} isHovered={true} />
+                  <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard" subtitle="Ringkasan HPP dan inventaris" icon={LayoutDashboard} isHovered={true} />
                 </NavGroup>
 
                 <NavGroup title="Operasional" isHovered={true}>
-                  {currentTenant?.is_pos_enabled && (
-                    <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir operasional langsung" icon={MonitorSmartphone} isHovered={true} />
-                  )}
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Unggah penjualan POS dan resep" icon={UploadCloud} isHovered={true} />
                   <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Daily Inventory" subtitle="Catat stok harian dan limbah" icon={ClipboardList} isHovered={true} />
                   <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/olah-bahan`} label="Olah Bahan" subtitle="Catat olahan bahan mentah" icon={Scissors} isHovered={true} />
                   <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/procurement`} label="Pengadaan" subtitle="Katalog bahan, belanja, dan PO" icon={ShoppingCart} isHovered={true} />
@@ -736,32 +735,41 @@ export default function DashboardLayout() {
 
                   {isTenant && (
                     <>
-                      {location.pathname === basePath && "Dashboard"}
-                      {location.pathname === `${basePath}/penjualan` && "Penjualan POS"}
+                      {location.pathname === basePath && (
+                        role === 'Central'
+                          ? "Dashboard Central & Distribusi"
+                          : role === 'Purchasing'
+                            ? "Dashboard Purchasing & PO"
+                            : "Dashboard"
+                      )}
                       {location.pathname === `${basePath}/daily-inventory` && "Daily Inventory"}
                       {location.pathname === `${basePath}/olah-bahan` && "Olah Bahan"}
-                      {location.pathname === `${basePath}/procurement` && "Pengadaan & Supplier"}
-                      {location.pathname === `${basePath}/transfer` && "Mutasi Gudang"}
+                      {location.pathname === `${basePath}/procurement` && (role === 'Central' ? "PO & Penerimaan Central" : "Pengadaan & Supplier")}
+                      {location.pathname === `${basePath}/transfer` && (role === 'Central' ? "Mutasi Central ke Cabang" : "Mutasi Gudang")}
                       {location.pathname === `${basePath}/pricing-cogs` && "Menu & COGS"}
                       {location.pathname === `${basePath}/opname-assets` && "Stock Opname & Aset"}
                       {location.pathname === `${basePath}/cost-report` && "Cost Control"}
-                      {location.pathname === `${basePath}/sistem` && "Pengaturan Sistem"}
+                      {location.pathname === `${basePath}/sistem` && (role === 'Central' || role === 'Purchasing' ? "Data Materials & Stok" : "Pengaturan Sistem")}
                     </>
                   )}
                 </h1>
                 <p className="hidden md:block text-xs md:text-sm text-[var(--text-secondary)] truncate m-0 mt-0.5">
                   {isSuperAdmin && location.pathname === '/superadmin' && "Kelola database dan lisensi tenant."}
-                  {isSuperAdmin && location.pathname === '/superadmin/templates' && "Atur pemetaan format Excel POS."}
                   {isSuperAdmin && location.pathname === '/superadmin/logs' && "Pantau jejak audit keamanan sistem."}
 
                   {isTenant && (
                     <>
-                      {location.pathname === basePath && "Ringkasan HPP, variansi, dan penjualan."}
-                      {location.pathname === `${basePath}/penjualan` && "Unggah penjualan POS dan resep."}
+                      {location.pathname === basePath && (
+                        role === 'Central'
+                          ? "Pantau arus barang masuk, mutasi keluar ke cabang tujuan, dan PO Central."
+                          : role === 'Purchasing'
+                            ? "Fokus pembuatan PO, total nilai PO bulan berjalan, dan performa supplier."
+                            : "Ringkasan HPP, variansi, dan inventaris."
+                      )}
                       {location.pathname === `${basePath}/daily-inventory` && "Catat stok harian dan limbah."}
                       {location.pathname === `${basePath}/olah-bahan` && "Catat olahan bahan mentah."}
                       {location.pathname === `${basePath}/procurement` && "Katalog bahan, pembelian, dan PO."}
-                      {location.pathname === `${basePath}/transfer` && "Distribusi stok antar cabang dan area."}
+                      {location.pathname === `${basePath}/transfer` && "Distribusi stok dari Central ke cabang dan area tujuan."}
                       {location.pathname === `${basePath}/pricing-cogs` && "Simulasi harga dan resep minuman."}
                       {location.pathname === `${basePath}/opname-assets` && "Audit fisik stok resto dan central."}
                       {location.pathname === `${basePath}/cost-report` && "Laporan variansi dan rasio biaya."}
@@ -809,22 +817,6 @@ export default function DashboardLayout() {
                 )
               )}
 
-              {/* Tombol POS Terminal Desktop/Tablet (>= 640px) */}
-              {currentTenant?.is_pos_enabled && (
-                <button
-                  className="hidden sm:flex btn hover:opacity-85 transition-opacity items-center justify-center gap-1.5"
-                  onClick={handleOpenPos}
-                  title="Buka POS Terminal"
-                  style={{
-                    background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '10px',
-                    padding: '7px 11px', color: '#2563eb',
-                    fontSize: '0.8rem', fontWeight: 600, minHeight: '38px',
-                    flexShrink: 0
-                  }}
-                >
-                  <MonitorSmartphone size={16} /> <span className="hidden md:inline">POS Terminal</span>
-                </button>
-              )}
 
               {/* Tombol Shortcut Beta Testing (Viewport-Safe di Mobile & Desktop) */}
               {betaPresets.length > 0 && (
@@ -1042,21 +1034,6 @@ export default function DashboardLayout() {
               ) : <div />}
 
               <div className="flex items-center gap-1.5 shrink-0">
-                {currentTenant?.is_pos_enabled && (
-                  <button
-                    type="button"
-                    onClick={handleOpenPos}
-                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 border"
-                    style={{
-                      background: 'rgba(59, 130, 246, 0.1)',
-                      borderColor: 'rgba(59, 130, 246, 0.3)',
-                      color: '#2563eb'
-                    }}
-                  >
-                    <MonitorSmartphone size={13} />
-                    <span>POS</span>
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={() => setShowGuidebook(true)}
@@ -1144,7 +1121,10 @@ export default function DashboardLayout() {
 
             <div className="flex flex-col gap-2 max-h-[52vh] overflow-y-auto pr-0.5">
               {betaPresets.map((p) => {
-                const isCurrent = activeUser?.email?.toLowerCase() === p.email.toLowerCase();
+                const isCurrent =
+                  activeUser?.preset_key === p.key ||
+                  (activeUser?.email?.toLowerCase() === p.email.toLowerCase() &&
+                    String(activeUser?.role || '').toLowerCase() === String(p.role || '').toLowerCase());
                 const isBusy = betaSwitchingKey === p.key;
                 return (
                   <button
@@ -1167,9 +1147,11 @@ export default function DashboardLayout() {
                           {p.branchCode}
                         </span>
                       </div>
-                      <div className="text-[11px] text-[var(--text-secondary)] truncate mt-0.5">
-                        {p.email}
-                      </div>
+                      {p.sublabel && (
+                        <div className="text-[11px] text-[var(--text-secondary)] truncate mt-0.5">
+                          {p.sublabel}
+                        </div>
+                      )}
                     </div>
                     <span className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-[var(--accent)] text-[var(--text-inverse)] shrink-0">
                       {isBusy ? 'Masuk...' : isCurrent ? 'Aktif' : 'Masuk'}
@@ -1214,13 +1196,15 @@ export default function DashboardLayout() {
               style={{ textDecoration: 'none' }}
             >
               <LayoutDashboard size={18} strokeWidth={2} />
-              <span className="text-[10px] mt-0.5 leading-tight truncate">Beranda</span>
+              <span className="text-[10px] mt-0.5 leading-tight truncate">
+                {role === 'Central' ? 'Dashboard Central' : role === 'Purchasing' ? 'Total PO Bulanan' : 'Beranda'}
+              </span>
             </NavLink>
 
-            {(role === 'Service' || role === 'Kasir') ? (
+            {role === 'Central' ? (
               <>
                 <NavLink
-                  to={`${basePath}/pos-terminal`}
+                  to={`${basePath}/transfer`}
                   className={({ isActive }) =>
                     `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
                       isActive ? 'text-[var(--accent)] font-bold bg-[var(--accent-glow)]' : 'text-[var(--text-secondary)] font-medium'
@@ -1228,11 +1212,11 @@ export default function DashboardLayout() {
                   }
                   style={{ textDecoration: 'none' }}
                 >
-                  <MonitorSmartphone size={18} strokeWidth={2} />
-                  <span className="text-[10px] mt-0.5 leading-tight truncate">Kasir POS</span>
+                  <ArrowRightLeft size={18} strokeWidth={2} />
+                  <span className="text-[10px] mt-0.5 leading-tight truncate">Mutasi ke Cabang</span>
                 </NavLink>
                 <NavLink
-                  to={`${basePath}/penjualan`}
+                  to={`${basePath}/procurement?tab=invoicing`}
                   className={({ isActive }) =>
                     `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
                       isActive ? 'text-[var(--accent)] font-bold bg-[var(--accent-glow)]' : 'text-[var(--text-secondary)] font-medium'
@@ -1240,8 +1224,92 @@ export default function DashboardLayout() {
                   }
                   style={{ textDecoration: 'none' }}
                 >
-                  <UploadCloud size={18} strokeWidth={2} />
-                  <span className="text-[10px] mt-0.5 leading-tight truncate">Penjualan</span>
+                  <ShoppingCart size={18} strokeWidth={2} />
+                  <span className="text-[10px] mt-0.5 leading-tight truncate">PO Central</span>
+                </NavLink>
+                <NavLink
+                  to={`${basePath}/sistem?tab=stock-ledger`}
+                  className={({ isActive }) =>
+                    `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
+                      isActive ? 'text-[var(--accent)] font-bold bg-[var(--accent-glow)]' : 'text-[var(--text-secondary)] font-medium'
+                    }`
+                  }
+                  style={{ textDecoration: 'none' }}
+                >
+                  <Boxes size={18} strokeWidth={2} />
+                  <span className="text-[10px] mt-0.5 leading-tight truncate">Stok</span>
+                </NavLink>
+              </>
+            ) : role === 'Purchasing' ? (
+              <>
+                <NavLink
+                  to={`${basePath}/procurement?tab=invoicing`}
+                  className={({ isActive }) =>
+                    `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
+                      isActive && (new URLSearchParams(location.search).get('tab') || 'invoicing') === 'invoicing'
+                        ? 'text-[var(--accent)] font-bold bg-[var(--accent-glow)]'
+                        : 'text-[var(--text-secondary)] font-medium'
+                    }`
+                  }
+                  style={{ textDecoration: 'none' }}
+                >
+                  <ShoppingCart size={18} strokeWidth={2} />
+                  <span className="text-[10px] mt-0.5 leading-tight truncate">Pembuatan PO</span>
+                </NavLink>
+                <NavLink
+                  to={`${basePath}/procurement?tab=marketlist`}
+                  className={({ isActive }) =>
+                    `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
+                      isActive && new URLSearchParams(location.search).get('tab') === 'marketlist'
+                        ? 'text-[var(--accent)] font-bold bg-[var(--accent-glow)]'
+                        : 'text-[var(--text-secondary)] font-medium'
+                    }`
+                  }
+                  style={{ textDecoration: 'none' }}
+                >
+                  <Tag size={18} strokeWidth={2} />
+                  <span className="text-[10px] mt-0.5 leading-tight truncate">Komparasi Harga</span>
+                </NavLink>
+                <NavLink
+                  to={`${basePath}/procurement?tab=pembelian`}
+                  className={({ isActive }) =>
+                    `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
+                      isActive && new URLSearchParams(location.search).get('tab') === 'pembelian'
+                        ? 'text-[var(--accent)] font-bold bg-[var(--accent-glow)]'
+                        : 'text-[var(--text-secondary)] font-medium'
+                    }`
+                  }
+                  style={{ textDecoration: 'none' }}
+                >
+                  <Building2 size={18} strokeWidth={2} />
+                  <span className="text-[10px] mt-0.5 leading-tight truncate">Supplier</span>
+                </NavLink>
+              </>
+            ) : (role === 'Service' || role === 'Kasir') ? (
+              <>
+                <NavLink
+                  to={`${basePath}/daily-inventory`}
+                  className={({ isActive }) =>
+                    `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
+                      isActive ? 'text-[var(--accent)] font-bold bg-[var(--accent-glow)]' : 'text-[var(--text-secondary)] font-medium'
+                    }`
+                  }
+                  style={{ textDecoration: 'none' }}
+                >
+                  <ClipboardList size={18} strokeWidth={2} />
+                  <span className="text-[10px] mt-0.5 leading-tight truncate">Stok Harian</span>
+                </NavLink>
+                <NavLink
+                  to={`${basePath}/opname-assets`}
+                  className={({ isActive }) =>
+                    `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
+                      isActive ? 'text-[var(--accent)] font-bold bg-[var(--accent-glow)]' : 'text-[var(--text-secondary)] font-medium'
+                    }`
+                  }
+                  style={{ textDecoration: 'none' }}
+                >
+                  <Boxes size={18} strokeWidth={2} />
+                  <span className="text-[10px] mt-0.5 leading-tight truncate">Opname</span>
                 </NavLink>
                 <NavLink
                   to={`${basePath}/daily-inventory?tab=waste`}
@@ -1383,14 +1451,14 @@ export default function DashboardLayout() {
         </button>
         <h2 className="text-xl font-bold mb-6">Menu Lainnya</h2>
         <div className="flex flex-col gap-2">
-          {isTenant && hasAccess(['Owner', 'Bar', 'Kitchen', 'Central', 'Staff']) && (
+          {isTenant && hasAccess(['Owner', 'Bar', 'Kitchen', 'Staff']) && (
             <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/pricing-cogs`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Tag size={20} /> Menu Pricing & COGS</NavLink>
           )}
-          {isTenant && hasAccess(['Owner', 'Bar', 'Kitchen', 'Central', 'Staff']) && (
+          {isTenant && hasAccess(['Owner', 'Bar', 'Kitchen', 'Staff']) && (
             <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/opname-assets`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Boxes size={20} /> Stock Opname & Aset</NavLink>
           )}
           
-          {isTenant && hasAccess(['Owner', 'Central', 'Bar', 'Staff']) && (
+          {isTenant && hasAccess(['Owner', 'Bar', 'Staff']) && (
             <NavLink onClick={() => document.getElementById('mobile-more-menu').classList.add('hidden')} to={`${basePath}/cost-report`} className="p-4 rounded-xl bg-[var(--bg-primary)] flex items-center gap-3"><Calculator size={20} /> Cost Control</NavLink>
           )}
           {isTenant && hasAccess(['Owner']) && (
@@ -1431,33 +1499,6 @@ export default function DashboardLayout() {
       )}
       
       {/* Onboarding Modal for new tenants */}
-      {/* POS Notification Modal */}
-      {showPosNotif && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(6, 9, 19, 0.88)', backdropFilter: 'blur(8px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div className="glass-card animate-slide-up" style={{ width: '100%', maxWidth: '400px', padding: '32px', textAlign: 'center', position: 'relative' }}>
-            <button onClick={() => setShowPosNotif(false)} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-              <X size={20} />
-            </button>
-            <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-              <MonitorSmartphone size={32} />
-            </div>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '12px' }}>POS Terminal Aktif</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: '24px' }}>
-              Kasir POS tersedia di menu kiri.
-            </p>
-            <button 
-              className="btn premium-btn-primary" 
-              style={{ width: '100%', padding: '12px', fontSize: '0.9rem', justifyContent: 'center', color: '#ffffff', borderRadius: 'var(--radius-md)' }}
-              onClick={() => {
-                setShowPosNotif(false);
-                navigate(`/${activeUser?.role === 'Super Admin' ? 'superadmin' : 'dashboard'}/pos-terminal`);
-              }}
-            >
-              Buka Kasir
-            </button>
-          </div>
-        </div>
-      )}
 
       {showOnboarding && (
         <Onboarding
@@ -1469,7 +1510,6 @@ export default function DashboardLayout() {
             if (tab === 'stock') navigate(`${basePath}/sistem?tab=stock-ledger`);
             if (tab === 'recipes') navigate(`${basePath}/pricing-cogs?tab=cogs-beverage`);
             if (tab === 'daily') navigate(`${basePath}/daily-inventory`);
-            if (tab === 'pos') navigate(`${basePath}/penjualan`);
             if (tab === 'cost-report') navigate(`${basePath}/cost-report`);
           }}
           onDismiss={() => {
@@ -1481,86 +1521,6 @@ export default function DashboardLayout() {
 
       {/* Floating AI Assistant */}
       <GuidebookModal isOpen={showGuidebook} onClose={() => setShowGuidebook(false)} />
-
-      {/* POS Setup Modal */}
-      <AnimatePresence>
-        {showPosSetupModal && (
-          <div style={{
-            position: 'fixed', inset: 0, background: 'rgba(26,25,23,0.35)',
-            backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', zIndex: 9999, padding: '16px'
-          }}>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              style={{
-                background: 'var(--bg-primary)',
-                width: '100%', maxWidth: '400px',
-                maxHeight: '90vh', overflowY: 'auto',
-                padding: '24px', borderRadius: 'var(--radius-lg)',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
-                border: '1px solid var(--border)'
-              }}
-            >
-              <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>Pengaturan Awal POS</h3>
-              <p style={{ margin: '0 0 20px 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                Atur tarif pajak dan layanan kasir.
-              </p>
-              
-              <form onSubmit={handleSavePosSetup}>
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>Pajak (Tax) %</label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    value={posTaxRate}
-                    onChange={(e) => setPosTaxRate(e.target.value)}
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    required
-                    style={{ width: '100%' }}
-                  />
-                </div>
-                
-                <div style={{ marginBottom: '24px' }}>
-                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>Service Charge %</label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    value={posServiceCharge}
-                    onChange={(e) => setPosServiceCharge(e.target.value)}
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    required
-                    style={{ width: '100%' }}
-                  />
-                </div>
-                
-                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setShowPosSetupModal(false)}
-                    disabled={isSavingPosSetup}
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    disabled={isSavingPosSetup}
-                  >
-                    {isSavingPosSetup ? 'Menyimpan...' : 'Simpan'}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* Edit Profile Modal */}
       <AnimatePresence>

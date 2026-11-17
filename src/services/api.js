@@ -152,6 +152,51 @@ const deductStockSmart = async (materialId, deductQty, location = 'RESTO') => {
   if (legacyErr) throw legacyErr;
 };
 
+// Helper for encoding/decoding extended PO workflow metadata safely inside notes if DB columns are not yet migrated
+function parsePoMeta(inv) {
+  const rawNotes = String(inv?.notes || '');
+  let meta = {};
+  let cleanNotes = rawNotes;
+  const match = rawNotes.match(/\[PO_META:(\{.*?\})\]/);
+  if (match) {
+    try {
+      meta = JSON.parse(match[1]);
+    } catch {
+      meta = {};
+    }
+    cleanNotes = rawNotes.replace(match[0], '').trim();
+  }
+  const dbStatus = String(inv?.status || 'DRAFT').toUpperCase();
+  let workflowStatus = inv?.approval_status || meta.approval_status || dbStatus;
+  if (dbStatus === 'RECEIVED' || dbStatus === 'GOODS_RECEIVED') workflowStatus = 'RECEIVED';
+  else if (dbStatus === 'SENT') workflowStatus = 'SENT';
+  else if (dbStatus === 'CANCELLED') workflowStatus = 'CANCELLED';
+
+  return {
+    workflow_status: workflowStatus,
+    division: inv?.division || meta.division || 'BAR',
+    original_supplier: inv?.original_supplier || meta.original_supplier || inv?.supplier || '',
+    supplier_change_note: inv?.supplier_change_note || meta.supplier_change_note || '',
+    requested_by_role: inv?.requested_by_role || meta.requested_by_role || '',
+    requested_by_name: inv?.requested_by_name || meta.requested_by_name || '',
+    approved_by_name: inv?.approved_by_name || meta.approved_by_name || '',
+    approved_at: inv?.approved_at || meta.approved_at || null,
+    rejection_reason: inv?.rejection_reason || meta.rejection_reason || '',
+    delivery_note_photo_url: inv?.delivery_note_photo_url || meta.delivery_note_photo_url || null,
+    delivery_note_no: inv?.delivery_note_no || meta.delivery_note_no || '',
+    clean_notes: cleanNotes
+  };
+}
+
+function packPoNotes(cleanNotes, metaObj) {
+  const clean = String(cleanNotes || '').replace(/\[PO_META:\{.*?\}\]/g, '').trim();
+  const compactMeta = {};
+  Object.entries(metaObj || {}).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') compactMeta[k] = v;
+  });
+  return `${clean} [PO_META:${JSON.stringify(compactMeta)}]`.trim();
+}
+
 export const api = {
   // Daily Inventory
   // Get header/items for a given date
@@ -1531,6 +1576,11 @@ export const api = {
     activeWhatsappToken = null;
     activeWhatsappEnabled = false;
 
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem('bv_cached_profile');
+      sessionStorage.removeItem('bv_beta_role_override');
+    }
+
     await supabase.auth.signOut();
     // onAuthStateChange in App.jsx will handle state reset
   },
@@ -1594,7 +1644,30 @@ export const api = {
     let lockedUntilMonth = null;
     let lockedUntilYear = null;
 
-    const roleLower = (userProfile.role || '').toLowerCase().replace(/\s+/g, '');
+    let effectiveRole = userProfile.role;
+    let effectiveName = userProfile.name;
+    let activePresetKey = null;
+
+    if (typeof sessionStorage !== 'undefined') {
+      try {
+        const rawOverride = sessionStorage.getItem('bv_beta_role_override');
+        if (rawOverride) {
+          const parsedOverride = JSON.parse(rawOverride);
+          if (
+            parsedOverride &&
+            String(parsedOverride.email || '').toLowerCase() === String(userProfile.email || '').toLowerCase()
+          ) {
+            if (parsedOverride.role) effectiveRole = parsedOverride.role;
+            if (parsedOverride.name) effectiveName = parsedOverride.name;
+            if (parsedOverride.key) activePresetKey = parsedOverride.key;
+          }
+        }
+      } catch {
+        // ignore parse errors
+      }
+    }
+
+    const roleLower = (effectiveRole || '').toLowerCase().replace(/\s+/g, '');
     const isSuper = roleLower === 'superadmin' || roleLower === 'super admin';
 
     if (isSuper) {
@@ -1626,9 +1699,10 @@ export const api = {
       id: userProfile.id,
       tenant_id: userProfile.tenant_id,
       branch_id: userProfile.branch_id,
-      name: userProfile.name,
+      name: effectiveName,
       email: userProfile.email,
-      role: userProfile.role,
+      role: effectiveRole,
+      preset_key: activePresetKey,
       tenant_name: tenantName,
       company_name: companyName,
       is_pos_enabled: isPosEnabled,
@@ -1644,11 +1718,11 @@ export const api = {
 
     activeTenantId = userProfile.tenant_id ?? null;
     activeUserId = userProfile.id;
-    activeUserRole = userProfile.role || null;
+    activeUserRole = effectiveRole || null;
     if (typeof window !== 'undefined') {
       window.__activeUserRole = activeUserRole;
     }
-    if (userProfile.branch_id && (!activeBranchId || !isAdminRole(userProfile.role))) {
+    if (userProfile.branch_id && (!activeBranchId || !isAdminRole(effectiveRole))) {
       activeBranchId = userProfile.branch_id;
       if (typeof window !== 'undefined') window.__activeBranchId = activeBranchId;
     }
@@ -1714,7 +1788,7 @@ export const api = {
     {
       key: 'SERVICE_BSD',
       label: 'Role Service / Floor (BSD)',
-      sublabel: 'Stok Packaging/Amenities, Kasir POS, Mutasi & Opname Service',
+      sublabel: 'Stok Packaging/Amenities, Alat Floor, Mutasi & Opname Service',
       email: 'service.bsd@umatis.id',
       password: 'BetaUmatis2026!',
       name: 'Staf Service & Floor BSD (Beta)',
@@ -1724,28 +1798,28 @@ export const api = {
       badge: 'ROLE SERVICE • FLOOR BSD'
     },
     {
-      key: 'PURCHASING_BSD',
-      label: 'Role Central & Purchasing',
-      sublabel: 'Pembelian Harian (Resto/Central), Acuan 1 Bulan & Gudang Central',
+      key: 'CENTRAL_BSD',
+      label: 'Role Central (Gudang Pusat)',
+      sublabel: 'Dashboard Central, Mutasi ke Cabang, PO Central & Stok',
       email: 'purchasing.bsd@umatis.id',
       password: 'BetaUmatis2026!',
-      name: 'Purchasing & Central (Beta)',
+      name: 'Staf Gudang Central (Beta)',
+      role: 'Central',
+      branchCode: 'BSD',
+      areaUuid: '00000000-0000-4000-a000-000000000001',
+      badge: 'ROLE CENTRAL • GUDANG PUSAT'
+    },
+    {
+      key: 'PURCHASING_BSD',
+      label: 'Role Purchasing (Pengadaan & PO)',
+      sublabel: 'Pembuatan PO, Total PO Bulanan, Komparasi Harga & Supplier',
+      email: 'purchasing.bsd@umatis.id',
+      password: 'BetaUmatis2026!',
+      name: 'Staf Purchasing & PO (Beta)',
       role: 'Purchasing',
       branchCode: 'BSD',
       areaUuid: '00000000-0000-4000-a000-000000000001',
-      badge: 'CENTRAL & PURCHASING'
-    },
-    {
-      key: 'KASIR_BSD',
-      label: 'Role Kasir POS ESB',
-      sublabel: 'Terminal Kasir POS, Upload Penjualan ESB & Rekonsiliasi',
-      email: 'kasir.bsd@umatis.id',
-      password: 'BetaUmatis2026!',
-      name: 'Kasir POS ESB (Beta)',
-      role: 'Kasir',
-      branchCode: 'BSD',
-      areaUuid: '00000000-0000-4000-a000-000000000004',
-      badge: 'ROLE KASIR • POS ESB'
+      badge: 'ROLE PURCHASING • PO'
     }
   ],
 
@@ -1757,11 +1831,20 @@ export const api = {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem('bv_cached_profile');
       sessionStorage.setItem('bv_preferred_branch_code', preset.branchCode);
+      sessionStorage.setItem('bv_beta_role_override', JSON.stringify({
+        key: preset.key,
+        role: preset.role,
+        name: preset.name,
+        email: preset.email
+      }));
     }
     activeTenantId = null;
     activeUserId = null;
     activeBranchId = null;
     activeUserRole = null;
+
+    // Gunakan key kompatibel RPC v13 (CENTRAL_BSD diikat melalui profil dasar PURCHASING_BSD lalu di-override ke role Central)
+    const rpcPresetKey = preset.key === 'CENTRAL_BSD' ? 'PURCHASING_BSD' : preset.key;
 
     // 1. Coba login langsung ke Supabase Auth (akun sudah di-seed oleh script SQL v13)
     let { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
@@ -1794,7 +1877,7 @@ export const api = {
         try {
           await supabase.rpc('bind_beta_user_profile_v13', {
             p_user_id: signUpData.user.id,
-            p_preset_key: preset.key
+            p_preset_key: rpcPresetKey
           });
         } catch (bindErr) {
           console.warn('[BetaShortcut] bind_beta_user_profile_v13 warning:', bindErr);
@@ -1829,10 +1912,20 @@ export const api = {
     try {
       await supabase.rpc('bind_beta_user_profile_v13', {
         p_user_id: authData.user.id,
-        p_preset_key: preset.key
+        p_preset_key: rpcPresetKey
       });
     } catch {
       // ignore if already bound
+    }
+
+    // 4. Sinkronkan role & nama spesifik preset (membedakan Central vs Purchasing di public.users)
+    try {
+      await supabase
+        .from('users')
+        .update({ role: preset.role, name: preset.name })
+        .eq('id', authData.user.id);
+    } catch {
+      // ignore if RLS blocks direct role update; sessionStorage override handles it
     }
 
     const profile = await api.revalidateProfile();
@@ -3223,75 +3316,47 @@ export const api = {
       .select('*, invoice_items(*, materials(*))')
       .eq('tenant_id', tenantId);
     if (branchId) query = query.eq('branch_id', branchId);
-    const { data, error } = await query;
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) throw new Error("Gagal memuat invoices: " + error.message);
 
-    return data.map(inv => ({
-      id: inv.id,
-      invoice_no: inv.invoice_no,
-      supplier: inv.supplier,
-      date: inv.date,
-      total: parseFloat(inv.total),
-      status: inv.status,
-      location: inv.location,
-      notes: inv.notes,
-      received_date: inv.received_date,
-      items: (inv.invoice_items || []).map(item => ({
-        material_id: item.material_id,
-        item_name: item.materials ? item.materials.name : 'Bahan Terhapus',
-        qty: parseFloat(item.qty),
-        unit_price: parseFloat(item.unit_price),
-        unit: item.materials ? item.materials.unit : 'pck'
-      }))
-    }));
+    return (data || []).map(inv => {
+      const meta = parsePoMeta(inv);
+      return {
+        id: inv.id,
+        branch_id: inv.branch_id,
+        invoice_no: inv.invoice_no,
+        supplier: inv.supplier,
+        original_supplier: meta.original_supplier,
+        supplier_change_note: meta.supplier_change_note,
+        division: meta.division,
+        requested_by_role: meta.requested_by_role,
+        requested_by_name: meta.requested_by_name,
+        approved_by_name: meta.approved_by_name,
+        approved_at: meta.approved_at,
+        rejection_reason: meta.rejection_reason,
+        date: inv.date,
+        created_at: inv.created_at,
+        total: parseFloat(inv.total) || 0,
+        status: inv.status,
+        workflow_status: meta.workflow_status,
+        location: inv.location,
+        notes: meta.clean_notes,
+        raw_notes: inv.notes,
+        received_date: inv.received_date,
+        delivery_note_photo_url: meta.delivery_note_photo_url,
+        delivery_note_no: meta.delivery_note_no,
+        items: (inv.invoice_items || []).map(item => ({
+          id: item.id,
+          material_id: item.material_id,
+          item_name: item.materials ? item.materials.name : 'Bahan Terhapus',
+          qty: parseFloat(item.qty) || 0,
+          unit_price: parseFloat(item.unit_price) || 0,
+          unit: item.materials ? item.materials.unit : 'pck'
+        }))
+      };
+    });
   },
-
-
-// Helper for encoding/decoding extended PO workflow metadata safely inside notes if DB columns are not yet migrated
-function parsePoMeta(inv) {
-  const rawNotes = String(inv?.notes || '');
-  let meta = {};
-  let cleanNotes = rawNotes;
-  const match = rawNotes.match(/\[PO_META:(\{.*?\})\]/);
-  if (match) {
-    try {
-      meta = JSON.parse(match[1]);
-    } catch {
-      meta = {};
-    }
-    cleanNotes = rawNotes.replace(match[0], '').trim();
-  }
-  const dbStatus = String(inv?.status || 'DRAFT').toUpperCase();
-  let workflowStatus = inv?.approval_status || meta.approval_status || dbStatus;
-  if (dbStatus === 'RECEIVED' || dbStatus === 'GOODS_RECEIVED') workflowStatus = 'RECEIVED';
-  else if (dbStatus === 'SENT') workflowStatus = 'SENT';
-  else if (dbStatus === 'CANCELLED') workflowStatus = 'CANCELLED';
-
-  return {
-    workflow_status: workflowStatus,
-    division: inv?.division || meta.division || 'BAR',
-    original_supplier: inv?.original_supplier || meta.original_supplier || inv?.supplier || '',
-    supplier_change_note: inv?.supplier_change_note || meta.supplier_change_note || '',
-    requested_by_role: inv?.requested_by_role || meta.requested_by_role || '',
-    requested_by_name: inv?.requested_by_name || meta.requested_by_name || '',
-    approved_by_name: inv?.approved_by_name || meta.approved_by_name || '',
-    approved_at: inv?.approved_at || meta.approved_at || null,
-    rejection_reason: inv?.rejection_reason || meta.rejection_reason || '',
-    delivery_note_photo_url: inv?.delivery_note_photo_url || meta.delivery_note_photo_url || null,
-    delivery_note_no: inv?.delivery_note_no || meta.delivery_note_no || '',
-    clean_notes: cleanNotes
-  };
-}
-
-function packPoNotes(cleanNotes, metaObj) {
-  const clean = String(cleanNotes || '').replace(/\[PO_META:\{.*?\}\]/g, '').trim();
-  const compactMeta = {};
-  Object.entries(metaObj || {}).forEach(([k, v]) => {
-    if (v !== undefined && v !== null && v !== '') compactMeta[k] = v;
-  });
-  return `${clean} [PO_META:${JSON.stringify(compactMeta)}]`.trim();
-}
 
   getInvoicesPaged: async ({ page = 1, pageSize = 15, search = '', status = 'ALL', branchId: branchIdArg = null } = {}) => {
     const tenantId = await getActiveTenantId();

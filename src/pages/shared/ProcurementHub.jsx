@@ -9,9 +9,13 @@ const Purchasing = lazyWithRetry(() => import('./Purchasing'));
 const Invoicing = lazyWithRetry(() => import('./Invoicing'));
 
 const ALL_TABS = [
-  { key: 'invoicing', label: 'PO & Persetujuan Owner', icon: FileText },
-  { key: 'marketlist', label: 'Katalog Bahan & Komparasi Efisiensi', icon: ClipboardList },
-  { key: 'pembelian', label: 'Pembelian Harian & Master Supplier', icon: ShoppingCart },
+  { key: 'invoicing', label: 'Pembuatan PO & Persetujuan Owner', icon: FileText },
+  { key: 'marketlist', label: 'Komparasi Harga & Efisiensi Bahan', icon: ClipboardList },
+  { key: 'pembelian', label: 'Master Supplier & Belanja Harian', icon: ShoppingCart },
+];
+
+const CENTRAL_TABS = [
+  { key: 'invoicing', label: 'PO Central & Penerimaan Barang (Goods Receipt)', icon: FileText },
 ];
 
 const BRANCH_DIVISION_TABS = [
@@ -27,19 +31,23 @@ const Loading = () => (
 export default function ProcurementHub() {
   const { activeUser } = useAuth();
   const role = String(activeUser?.role || '').trim().toLowerCase();
+  const isCentralRole = role === 'central';
   const isBranchDivisionRole = ['bar', 'barista', 'kitchen', 'service', 'kasir', 'staff'].includes(role);
+  const isSingleInvoicingView = isCentralRole || isBranchDivisionRole;
 
   const visibleTabs = useMemo(() => {
-    return isBranchDivisionRole ? BRANCH_DIVISION_TABS : ALL_TABS;
-  }, [isBranchDivisionRole]);
+    if (isCentralRole) return CENTRAL_TABS;
+    if (isBranchDivisionRole) return BRANCH_DIVISION_TABS;
+    return ALL_TABS;
+  }, [isCentralRole, isBranchDivisionRole]);
 
   return (
     <TabContainer tabs={visibleTabs} defaultTab="invoicing">
       {(activeTab) => (
         <Suspense fallback={<Loading />}>
-          {activeTab === 'marketlist' && !isBranchDivisionRole && <Marketlist />}
-          {activeTab === 'pembelian' && !isBranchDivisionRole && <Purchasing />}
-          {(activeTab === 'invoicing' || isBranchDivisionRole) && <Invoicing />}
+          {activeTab === 'marketlist' && !isSingleInvoicingView && <Marketlist />}
+          {activeTab === 'pembelian' && !isSingleInvoicingView && <Purchasing />}
+          {(activeTab === 'invoicing' || isSingleInvoicingView) && <Invoicing />}
         </Suspense>
       )}
     </TabContainer>

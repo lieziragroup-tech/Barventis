@@ -130,7 +130,7 @@ export default function TenantAdminPanel() {
         confirmChecked: false,
         confirmCode: ''
       });
-      await fetchBranchesList();
+      await fetchBranches();
       if (refreshBranches) await refreshBranches();
       if (refreshData) await refreshData();
     } catch (err) {
