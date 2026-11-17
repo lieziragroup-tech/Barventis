@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { useDebounce } from '../../hooks/useDebounce';
 import {
   Search, Plus, Edit, History, X, Trash2,
   Package, UploadCloud
@@ -14,7 +16,7 @@ import { exportWithAudit } from '../../services/export/exportAudit';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatIDR, parseStructuredFullPack, resolvePackInfo, formatCleanFullPackLabel } from '../../services/costUtils';
 import { api } from '../../services/api';
-import { locationService } from '../../services/locationService';
+import { locationService, getMaterialDivision, getUserDivisionScope } from '../../services/locationService';
 import ErrorBoundary from '../../components/ErrorBoundary';
 
 // MANUAL UNIT CONVERSION (2026-08): lets a user say e.g. "1 Carton = 24 pcs"
@@ -110,7 +112,11 @@ function StockLedgerInner() {
     return locations.some(l => l.code.toUpperCase() === activeLoc.toUpperCase()) ? activeLoc : 'ALL';
   }, [locations, activeLoc]);
 
-  const [search, setSearch] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const userDivisionScope = getUserDivisionScope(profile?.role);
+  const [divisionFilter, setDivisionFilter] = useState(() => userDivisionScope !== 'ALL' ? userDivisionScope : 'ALL');
+  const [search, setSearch] = useState(() => searchParams.get('search') || '');
+  const debouncedSearch = useDebounce(search, 250);
   const [catFilter, setCatFilter] = useState('ALL');
   const [supFilter, setSupFilter] = useState('ALL');
   const [alertFilter, setAlertFilter] = useState('ALL');
@@ -118,8 +124,35 @@ function StockLedgerInner() {
   const [adjustItem, setAdjustItem] = useState(null);
   const [adjustQty, setAdjustQty] = useState('');
   const [adjustLoc, setAdjustLoc] = useState('RESTO');
-  const [adjustType, setAdjustType] = useState('IN');
+  const [adjustType, setAdjustType] = useState('OPNAME_ADJ');
   const [adjustNotes, setAdjustNotes] = useState('');
+
+  // Auto-populate search debounce & open material detail drawer when navigated from COGS Recipe shortcut (?search=...)
+  useEffect(() => {
+    const qSearch = searchParams.get('search');
+    const qDiv = searchParams.get('division');
+    if (qDiv && ['BAR', 'KITCHEN', 'SERVICE', 'ALL'].includes(qDiv.toUpperCase())) {
+      setDivisionFilter(qDiv.toUpperCase());
+    } else if (userDivisionScope !== 'ALL') {
+      setDivisionFilter(userDivisionScope);
+    }
+    if (qSearch !== null && qSearch.trim() !== '') {
+      const cleanQ = qSearch.trim();
+      setSearch(cleanQ);
+      setCatFilter('ALL');
+      setSupFilter('ALL');
+      setAlertFilter('ALL');
+      setActiveLoc('ALL');
+      setCurrentPage(1);
+      if (stock && stock.length > 0) {
+        const exactMatch = stock.find(s => (s.name || '').toLowerCase().trim() === cleanQ.toLowerCase())
+          || stock.find(s => (s.name || '').toLowerCase().includes(cleanQ.toLowerCase()));
+        if (exactMatch) {
+          setSelectedItem(exactMatch);
+        }
+      }
+    }
+  }, [searchParams, stock, userDivisionScope]);
   const [editItem, setEditItem] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
@@ -185,15 +218,18 @@ function StockLedgerInner() {
   const categories = useMemo(() => ['ALL', ...new Set(stock.map(item => item.category))], [stock]);
   const uniqueSuppliersInStock = useMemo(() => ['ALL', ...new Set(stock.map(item => item.supplier).filter(Boolean))], [stock]);
 
-  // Filtered stock with dynamic location awareness
+  // Filtered stock with debounced search & role division separation
   const filteredStock = useMemo(() => stock.filter(item => {
     const rQty = item.qty_resto || 0;
     const cQty = item.qty_central || 0;
     const totalQty = rQty + cQty;
     const minLevel = item.min_stock || 15;
-    const matchesSearch = (item.name || '').toLowerCase().includes(search.toLowerCase()) || (item.supplier || '').toLowerCase().includes(search.toLowerCase());
+    const q = (debouncedSearch || '').toLowerCase().trim();
+    const matchesSearch = !q || (item.name || '').toLowerCase().includes(q) || (item.supplier || '').toLowerCase().includes(q) || (item.code || '').toLowerCase().includes(q);
     const matchesCat = catFilter === 'ALL' || item.category === catFilter;
     const matchesSup = supFilter === 'ALL' || item.supplier === supFilter;
+    const itemDiv = getMaterialDivision(item);
+    const matchesDivision = divisionFilter === 'ALL' || itemDiv === divisionFilter;
 
     // Evaluate stock alerts based on active location view
     let evalQty = totalQty;
@@ -236,8 +272,8 @@ function StockLedgerInner() {
       matchesLoc = loc.includes(target);
     }
 
-    return matchesSearch && matchesCat && matchesSup && matchesAlert && matchesLoc;
-  }), [stock, search, catFilter, supFilter, alertFilter, safeActiveLoc]);
+    return matchesSearch && matchesCat && matchesSup && matchesDivision && matchesAlert && matchesLoc;
+  }), [stock, debouncedSearch, catFilter, supFilter, divisionFilter, alertFilter, safeActiveLoc]);
 
   const PAGE_SIZE = 20;
   const [currentPage, setCurrentPage] = useState(1);
@@ -555,6 +591,18 @@ function StockLedgerInner() {
                   <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                   <input type="text" placeholder="Cari bahan atau supplier..." className="form-control" style={{ paddingLeft: '44px' }} value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} />
                 </div>
+                {userDivisionScope === 'ALL' ? (
+                  <select className="form-control" style={{ width: '165px', fontWeight: 600 }} value={divisionFilter} onChange={e => { setDivisionFilter(e.target.value); setCatFilter('ALL'); setCurrentPage(1); }}>
+                    <option value="ALL">Semua Divisi</option>
+                    <option value="BAR">Divisi Bar</option>
+                    <option value="KITCHEN">Divisi Kitchen</option>
+                    <option value="SERVICE">Divisi Service &amp; Alat</option>
+                  </select>
+                ) : (
+                  <span style={{ padding: '7px 12px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', fontSize: '0.78rem', fontWeight: 700, color: 'var(--accent)' }}>
+                    Divisi: {divisionFilter}
+                  </span>
+                )}
                 <select className="form-control" style={{ width: '170px' }} value={catFilter} onChange={e => { setCatFilter(e.target.value); setCurrentPage(1); }}>
                   {categories.map(cat => <option key={cat} value={cat}>{cat === 'ALL' ? 'Semua Kategori' : cat}</option>)}
                   {!categories.includes('BEER') && <option value="BEER">BEER</option>}
@@ -724,7 +772,15 @@ function StockLedgerInner() {
                           <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)' }} title="Edit Item" onClick={() => setEditItem({ ...item, originalName: item.name })}>
                             <Edit size={13} />
                           </button>
-                          <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)' }} title="Adjust Stock" onClick={() => { setAdjustItem(item); setAdjustLoc(activeLoc !== 'ALL' ? activeLoc : 'RESTO'); }}>
+                          <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)' }} title="Sesuaikan / Ganti Stok" onClick={() => {
+                            const targetLoc = (activeLoc !== 'ALL' && (activeLoc === 'CENTRAL' || activeLoc === 'RESTO')) ? activeLoc : 'RESTO';
+                            const currentVal = targetLoc === 'CENTRAL' ? (item.qty_central || 0) : (item.qty_resto || 0);
+                            setAdjustItem(item);
+                            setAdjustLoc(targetLoc);
+                            setAdjustType('OPNAME_ADJ');
+                            setAdjustQty(String(currentVal));
+                            setAdjustNotes('Koreksi stok awal / penyesuaian stok fisik aktual');
+                          }}>
                             <Package size={13} />
                           </button>
                           <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)' }} title="History" onClick={() => { setSelectedItem(item); setLedgerLocationFilter(safeActiveLoc); }}>
@@ -872,33 +928,74 @@ function StockLedgerInner() {
             </div>
             <form onSubmit={handleAdjustSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="form-group">
-                <label className="form-label">Lokasi</label>
-                <select className="form-control" value={adjustLoc} onChange={e => setAdjustLoc(e.target.value)}>
+                <label className="form-label">Lokasi Gudang</label>
+                <select
+                  className="form-control"
+                  value={adjustLoc}
+                  onChange={e => {
+                    const nextLoc = e.target.value;
+                    setAdjustLoc(nextLoc);
+                    if (adjustType === 'OPNAME_ADJ') {
+                      const cur = nextLoc === 'CENTRAL' ? (adjustItem.qty_central || 0) : (adjustItem.qty_resto || 0);
+                      setAdjustQty(String(cur));
+                    }
+                  }}
+                >
                   {locations.filter(l => l.code !== 'ALL').map(l => (
                     <option key={l.code} value={l.code}>{l.name} ({l.code})</option>
                   ))}
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Jenis Koreksi</label>
-                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "6px" }}>Khusus koreksi stok atau saldo awal.</div>
+                <label className="form-label">Mode Penyesuaian Stok</label>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                  Pilih <strong>Ganti Stok Aktual</strong> untuk menggantikan angka stok yang salah, atau <strong>Tambah Stok</strong> untuk menambah saldo.
+                </div>
                 <select className="form-control" value={adjustType} onChange={e => setAdjustType(e.target.value)}>
-                  <optgroup label="Stok Masuk">
-                    <option value="IN">Koreksi IN / Saldo Awal</option>
-                  </optgroup>
+                  <option value="OPNAME_ADJ">Ganti Stok Aktual / Koreksi Saldo Awal (Set Nilai Baru)</option>
+                  <option value="IN">Tambah Stok Masuk (+ IN)</option>
                 </select>
               </div>
+              {(() => {
+                const currentVal = Number(adjustLoc === 'CENTRAL' ? (adjustItem.qty_central || 0) : (adjustItem.qty_resto || 0));
+                const inputNum = parseFloat(adjustQty);
+                const resultingStock = Number.isFinite(inputNum)
+                  ? (adjustType === 'OPNAME_ADJ' ? Math.max(0, inputNum) : currentVal + Math.abs(inputNum))
+                  : currentVal;
+                const delta = resultingStock - currentVal;
+                return (
+                  <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ color: 'var(--text-muted)' }}>Stok Saat Ini ({adjustLoc}):</div>
+                      <strong style={{ fontSize: '0.95rem', color: 'var(--text-primary)' }}>{currentVal} {adjustItem.unit}</strong>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ color: 'var(--text-muted)' }}>Stok Setelah Simpan:</div>
+                      <strong style={{ fontSize: '0.95rem', color: 'var(--accent)' }}>
+                        {Number(resultingStock.toFixed(4))} {adjustItem.unit}
+                      </strong>
+                      <span style={{ marginLeft: '6px', fontSize: '0.72rem', color: delta >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                        ({delta >= 0 ? `+${Number(delta.toFixed(4))}` : Number(delta.toFixed(4))})
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
               <div className="form-group">
-                <label className="form-label">Jumlah ({adjustItem.unit})</label>
-                <input type="number" step="any" className="form-control" placeholder="Isi jumlah..." required value={adjustQty} onChange={e => setAdjustQty(e.target.value)} />
+                <label className="form-label">
+                  {adjustType === 'OPNAME_ADJ' ? `Stok Aktual Baru (${adjustItem.unit})` : `Jumlah Tambahan (${adjustItem.unit})`}
+                </label>
+                <input type="number" step="any" min="0" className="form-control" placeholder="Isi angka stok..." required value={adjustQty} onChange={e => setAdjustQty(e.target.value)} />
               </div>
               <div className="form-group">
-                <label className="form-label">Catatan *</label>
-                <textarea className="form-control" rows="3" placeholder="Alasan koreksi..." value={adjustNotes} onChange={e => setAdjustNotes(e.target.value)} />
+                <label className="form-label">Catatan Koreksi *</label>
+                <textarea className="form-control" rows="3" placeholder="Alasan koreksi stok awal / fisik..." value={adjustNotes} onChange={e => setAdjustNotes(e.target.value)} />
               </div>
               <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
                 <button type="button" className="btn btn-secondary" style={{ flex: 1, padding: '12px' }} onClick={() => setAdjustItem(null)}>Batal</button>
-                <button type="submit" className="btn btn-primary" style={{ flex: 2, padding: '12px', fontWeight: 700 }}>Simpan</button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 2, padding: '12px', fontWeight: 700 }}>
+                  {adjustType === 'OPNAME_ADJ' ? 'Ganti Stok Sekarang' : 'Tambah Stok'}
+                </button>
               </div>
             </form>
           </div>

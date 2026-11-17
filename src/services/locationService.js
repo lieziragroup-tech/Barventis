@@ -37,7 +37,7 @@ export const DEFAULT_LOCATIONS = [
     name: 'Resto / Bar', 
     shortName: 'Resto',
     roleClassification: 'Bar',
-    allowedCategories: ['Coffee', 'Coffee & Tea', 'Dairy', 'Milk', 'Milk & Dairy', 'Sweetener', 'Syrup', 'Syrup & Sauce', 'Beverage Base', 'Ready to Drink', 'Drink & Beer', 'Powder', 'Powder & Topping', 'Juice', 'Fresh', 'Fresh Fruit', 'Dry Goods', 'Fruit & Produce', 'Fresh & Fruit', 'Garnish', 'Plastic & Paper', 'Others', 'Operational & Prep', 'Batch Prep Barista', 'Prep / Bahan Olahan', 'Bahan Olahan / Prep'],
+    allowedCategories: ['Coffee', 'Coffee & Tea', 'Dairy', 'Milk', 'Milk & Dairy', 'Sweetener', 'Syrup', 'Syrup & Sauce', 'Syrup & Juice', 'Beverage Base', 'Ready to Drink', 'Drink & Beer', 'Frozen Drink', 'Powder', 'Powder & Topping', 'Juice', 'Fresh', 'Fresh Fruit', 'Dry Goods', 'Take Away', 'Fruit & Produce', 'Fresh & Fruit', 'Garnish', 'Plastic & Paper', 'Others', 'Operational & Prep', 'Batch Prep Barista', 'Prep / Bahan Olahan', 'Bahan Olahan / Prep'],
     isDefault: true, 
     isSystem: true,
     description: 'Area bar, display, dan operasional minuman resto depan' 
@@ -89,7 +89,7 @@ function generateDeterministicOrRandomUuid(seedIndex = 9) {
 
 export const DEFAULT_ROLE_CATEGORY_MAP = {
   Central: [], // Semua kategori
-  Bar: ['Coffee', 'Coffee & Tea', 'Dairy', 'Milk', 'Milk & Dairy', 'Sweetener', 'Syrup', 'Syrup & Sauce', 'Beverage Base', 'Ready to Drink', 'Drink & Beer', 'Powder', 'Powder & Topping', 'Juice', 'Fresh', 'Fresh Fruit', 'Dry Goods', 'Fruit & Produce', 'Fresh & Fruit', 'Garnish', 'Plastic & Paper', 'Others', 'Operational & Prep', 'Batch Prep Barista', 'Prep / Bahan Olahan', 'Bahan Olahan / Prep'],
+  Bar: ['Coffee', 'Coffee & Tea', 'Dairy', 'Milk', 'Milk & Dairy', 'Sweetener', 'Syrup', 'Syrup & Sauce', 'Syrup & Juice', 'Beverage Base', 'Ready to Drink', 'Drink & Beer', 'Frozen Drink', 'Powder', 'Powder & Topping', 'Juice', 'Fresh', 'Fresh Fruit', 'Dry Goods', 'Take Away', 'Fruit & Produce', 'Fresh & Fruit', 'Garnish', 'Plastic & Paper', 'Others', 'Operational & Prep', 'Batch Prep Barista', 'Prep / Bahan Olahan', 'Bahan Olahan / Prep'],
   Kitchen: ['Kitchen & Cooking', 'Meat & Poultry', 'Fruit & Produce', 'Fresh & Fruit', 'Prep / Bahan Olahan', 'Bahan Olahan / Prep', 'Bahan Baku Dasar', 'Dairy & Cooking', 'Spices & Seasoning'],
   Service: ['Packaging', 'Amenities', 'Consumables', 'Tissue & Cleaning', 'Ready to Drink']
 };
@@ -167,8 +167,9 @@ export const locationService = {
     try {
       const raw = localStorage.getItem(getRoleMapKey(tenantId));
       if (!raw) return DEFAULT_ROLE_CATEGORY_MAP;
-      const parsed = JSON.parse(raw);
-      return { ...DEFAULT_ROLE_CATEGORY_MAP, ...(parsed || {}) };
+      const parsed = JSON.parse(raw) || {};
+      const mergedBar = Array.from(new Set([...(DEFAULT_ROLE_CATEGORY_MAP.Bar || []), ...(parsed.Bar || [])]));
+      return { ...DEFAULT_ROLE_CATEGORY_MAP, ...parsed, Bar: mergedBar };
     } catch {
       return DEFAULT_ROLE_CATEGORY_MAP;
     }
@@ -205,7 +206,7 @@ export const locationService = {
       uuid: centralLoc.uuid,
       code: 'CENTRAL',
       name: 'Central Warehouse',
-      displayLabel: `🏢 Central Warehouse (Gudang Pusat)`,
+      displayLabel: `Central Warehouse (Gudang Pusat)`,
       group: 'Gudang Pusat (Central)',
       endpointType: 'CENTRAL',
       branchId: activeBranchObj?.id || null,
@@ -220,7 +221,7 @@ export const locationService = {
         uuid: loc.uuid,
         code: loc.code,
         name: loc.name,
-        displayLabel: `🏪 ${loc.name} (${activeBranchObj?.name || 'Cabang Aktif'} • Role: ${loc.roleClassification || 'Bar'})`,
+        displayLabel: `${loc.name} (${activeBranchObj?.name || 'Cabang Aktif'} • Role: ${loc.roleClassification || 'Bar'})`,
         group: `Area Internal (${activeBranchObj?.name || 'Cabang Aktif'})`,
         endpointType: 'INTERNAL_AREA',
         branchId: activeBranchObj?.id || null,
@@ -237,7 +238,7 @@ export const locationService = {
         code: b.code || b.name.toUpperCase(),
         name: `Cabang ${b.name}`,
         branchName: b.name,
-        displayLabel: `🌐 Cabang ${b.name}${b.id === activeBranchId ? ' (Cabang Saat Ini)' : ''}`,
+        displayLabel: `Cabang ${b.name}${b.id === activeBranchId ? ' (Cabang Saat Ini)' : ''}`,
         group: 'Antar Cabang (Resto Umatis)',
         endpointType: 'BRANCH',
         branchId: b.id,
@@ -359,3 +360,61 @@ export const locationService = {
     return () => window.removeEventListener('barventis:locations_updated', handler);
   }
 };
+
+
+// ============================================================================
+// DIVISION / ROLE SEGREGATION HELPERS (BAR vs KITCHEN vs SERVICE)
+// ============================================================================
+const KITCHEN_CATEGORY_SET = new Set([
+  'kitchen & cooking', 'meat & poultry', 'seafood', 'bahan baku dasar',
+  'dairy & cooking', 'spices & seasoning', 'bahan masakan', 'sayuran & bumbu dapur',
+  'kitchen prep', 'saus & bumbu dapur', 'food & kitchen'
+]);
+
+const SERVICE_CATEGORY_SET = new Set([
+  'packaging', 'amenities', 'consumables', 'tissue & cleaning',
+  'alat & glassware', 'aset & inventaris', 'equipment & tools',
+  'dining amenities', 'floor supplies', 'tableware & cutlery'
+]);
+
+const KITCHEN_RECIPE_CATEGORIES = new Set([
+  'makanan', 'main course', 'appetizer', 'snack', 'soup',
+  'pasta & noodle', 'sauce & prep', 'sambal & prep', 'kitchen', 'food'
+]);
+
+export function getMaterialDivision(item) {
+  if (!item) return 'BAR';
+  if (item.division && ['BAR', 'KITCHEN', 'SERVICE'].includes(String(item.division).toUpperCase().trim())) {
+    return String(item.division).toUpperCase().trim();
+  }
+  const sku = String(item.sku || item.item_code || '').toUpperCase().trim();
+  if (sku.startsWith('SKU-UMT-')) return 'BAR';
+  if (sku.startsWith('SKU-KTC-') || sku.startsWith('MAT-KTC-')) return 'KITCHEN';
+  if (sku.startsWith('SKU-SVC-') || sku.startsWith('MAT-SVC-')) return 'SERVICE';
+
+  const cat = String(item.category || '').toLowerCase().trim();
+  if (KITCHEN_CATEGORY_SET.has(cat)) return 'KITCHEN';
+  if (SERVICE_CATEGORY_SET.has(cat)) return 'SERVICE';
+  return 'BAR';
+}
+
+export function getRecipeDivision(recipe) {
+  if (!recipe) return 'BAR';
+  if (recipe.division && ['BAR', 'KITCHEN', 'SERVICE'].includes(String(recipe.division).toUpperCase().trim())) {
+    return String(recipe.division).toUpperCase().trim();
+  }
+  const code = String(recipe.pos_code || recipe.recipe_code || '').toUpperCase().trim();
+  if (code.startsWith('RCP-UMT-')) return 'BAR';
+  if (code.startsWith('RCP-KTC-')) return 'KITCHEN';
+  const cat = String(recipe.category || '').toLowerCase().trim();
+  if (KITCHEN_RECIPE_CATEGORIES.has(cat)) return 'KITCHEN';
+  return 'BAR';
+}
+
+export function getUserDivisionScope(rawRole) {
+  const r = String(rawRole || '').trim().toLowerCase();
+  if (r === 'bar' || r === 'barista') return 'BAR';
+  if (r === 'kitchen') return 'KITCHEN';
+  if (r === 'service') return 'SERVICE';
+  return 'ALL';
+}

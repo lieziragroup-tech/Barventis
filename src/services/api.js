@@ -2169,6 +2169,139 @@ export const api = {
     return data;
   },
 
+  getBranchDeletionSummary: async (branchId) => {
+    const tenantId = await requireTenantId();
+    if (!branchId) throw new Error('ID cabang wajib diisi.');
+    const countRows = async (table) => {
+      try {
+        const { count, error } = await supabase
+          .from(table)
+          .select('id', { count: 'exact', head: true })
+          .eq('tenant_id', tenantId)
+          .eq('branch_id', branchId);
+        if (error) return 0;
+        return count || 0;
+      } catch {
+        return 0;
+      }
+    };
+    const [materialsCount, recipesCount, transactionsCount, purchasesCount, dailyInvCount, opnamesCount, usersCount] = await Promise.all([
+      countRows('materials'),
+      countRows('recipes'),
+      countRows('transactions'),
+      countRows('purchase_entries'),
+      countRows('daily_inventories'),
+      countRows('stock_opnames'),
+      countRows('users'),
+    ]);
+    return {
+      materials: materialsCount,
+      recipes: recipesCount,
+      transactions: transactionsCount + purchasesCount,
+      daily_inventories: dailyInvCount + opnamesCount,
+      users: usersCount,
+    };
+  },
+
+  deleteBranchCascade: async (branchId) => {
+    const tenantId = await requireTenantId();
+    if (!branchId) throw new Error('ID cabang tidak valid.');
+
+    // Try server-side atomic RPC first
+    try {
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('delete_branch_cascade_v16', {
+        p_tenant_id: tenantId,
+        p_branch_id: branchId
+      });
+      if (!rpcErr && rpcRes) {
+        await logAudit('DELETE_BRANCH', `Menghapus cabang ${branchId} beserta seluruh data terkait.`);
+        return rpcRes;
+      }
+    } catch (e) {
+      console.warn('delete_branch_cascade_v16 RPC fallback to client cascade:', e);
+    }
+
+    // Fallback: Find another active branch in tenant to reassign users safely
+    const { data: otherBranches } = await supabase
+      .from('branches')
+      .select('id, is_active')
+      .eq('tenant_id', tenantId)
+      .neq('id', branchId);
+
+    if (!otherBranches || otherBranches.length === 0) {
+      throw new Error('Tidak dapat menghapus satu-satunya cabang di dalam sistem.');
+    }
+    const fallbackBranchId = (otherBranches.find(b => b.is_active !== false) || otherBranches[0]).id;
+
+    await supabase
+      .from('users')
+      .update({ branch_id: fallbackBranchId })
+      .eq('tenant_id', tenantId)
+      .eq('branch_id', branchId);
+
+    // Delete child records in strict FK dependency order
+    const branchScopedTables = [
+      'waste_logs',
+      'production_trimming_batches',
+      'production_run_items',
+      'production_runs',
+      'production_batch_ingredients',
+      'production_batches',
+      'material_lot_movements_v4',
+      'material_open_lot_state',
+      'daily_inventory_items',
+      'daily_inventories',
+      'material_batches',
+      'daily_stock_counts',
+      'inter_branch_transfer_items',
+      'inter_branch_transfers',
+      'stock_adjustments',
+      'usage_variance',
+      'expected_usage',
+      'market_list_items',
+      'market_lists',
+      'invoice_items',
+      'invoices',
+      'physical_check_items',
+      'physical_checks',
+      'pos_transaction_items',
+      'pos_transactions',
+      'pos_daily_aggregates',
+      'recipe_ingredients',
+      'recipes',
+      'stock_opname_items',
+      'stock_opnames',
+      'purchase_entries',
+      'transactions',
+      'material_location_costs',
+      'unit_conversions',
+      'area_role_mappings',
+      'materials',
+      'suppliers'
+    ];
+
+    for (const tbl of branchScopedTables) {
+      try {
+        await supabase.from(tbl).delete().eq('tenant_id', tenantId).eq('branch_id', branchId);
+      } catch (_err) {
+        // Ignore tables without branch_id or already empty
+      }
+    }
+
+    const { error: delBranchErr } = await supabase
+      .from('branches')
+      .delete()
+      .eq('tenant_id', tenantId)
+      .eq('id', branchId);
+
+    if (delBranchErr) {
+      throw new Error('Gagal menghapus cabang: ' + delBranchErr.message);
+    }
+
+    await logAudit('DELETE_BRANCH', `Menghapus cabang ${branchId} beserta seluruh data terkait.`);
+    return { status: 'deleted', branch_id: branchId, fallback_branch_id: fallbackBranchId };
+  },
+
   adjustStock: async (id, arg2, arg3, arg4, arg5) => {
     const tenantId = await requireTenantId();
     const requestedBranchId = arg2 && typeof arg2 === 'object' ? (arg2.branch_id || null) : null;
@@ -2197,8 +2330,9 @@ export const api = {
     const isCentral = String(location).toUpperCase().includes('CENTRAL');
     const safeLocation = isCentral ? 'CENTRAL' : 'RESTO';
 
+    const normalizedType = type === 'SET_STOCK' ? 'OPNAME_ADJ' : type;
     const validTxTypes = ['IN', 'OPNAME_ADJ'];
-    if (!validTxTypes.includes(type)) {
+    if (!validTxTypes.includes(normalizedType)) {
       const routeByType = {
         OUT: 'Daily Inventory (konfirmasi OUT harian)',
         WASTE: 'Catatan Limbah', BREAKAGE: 'Catatan Limbah', EXPIRED: 'Catatan Limbah', COMP: 'Catatan Limbah',
@@ -2206,7 +2340,7 @@ export const api = {
       };
       throw new Error(`Jenis mutasi ${type} tidak boleh dibuat dari Stock Ledger. Gunakan ${routeByType[type] || 'modul transaksi sumber'} agar data tidak ganda.`);
     }
-    const safeType = type;
+    const safeType = normalizedType;
     if (safeType === 'IN' && !String(notes || '').trim()) {
       throw new Error('Koreksi IN harus memiliki catatan alasan. Pembelian barang harus dicatat melalui modul Purchasing.');
     }
@@ -2312,8 +2446,43 @@ export const api = {
       }
     }
 
-    const actionLabel = safeType === 'TRANSFER' ? 'Transfer' : (safeType === 'IN' ? 'Stock In' : (safeType === 'OPNAME_ADJ' ? 'Sisa Fisik' : 'Stock Out'));
-    await logAudit('ADJUST_STOCK', `Menyesuaikan stok (${actionLabel}) sebesar ${qty} di ${safeLocation}. Catatan: "${notes || 'Tidak ada'}".`);
+    // Sync latest Daily Inventory closing snapshot when OPNAME_ADJ replaces stock so EOD & Stock Ledger stay 100% consistent
+    if (safeType === 'OPNAME_ADJ' && updatedMaterial) {
+      try {
+        const finalStockVal = safeLocation === 'CENTRAL'
+          ? parseFloat(updatedMaterial.qty_central ?? qty)
+          : parseFloat(updatedMaterial.qty_resto ?? qty);
+        if (Number.isFinite(finalStockVal) && finalStockVal >= 0) {
+          const fullVal = Math.floor(finalStockVal);
+          const brokenVal = Number((finalStockVal - fullVal).toFixed(4));
+          let diQ = supabase
+            .from('daily_inventory_items')
+            .select('id, inventory_id')
+            .eq('tenant_id', tenantId)
+            .eq('material_id', id)
+            .order('id', { ascending: false })
+            .limit(1);
+          if (branchId) diQ = diQ.eq('branch_id', branchId);
+          const { data: latestDiRows } = await diQ;
+          if (Array.isArray(latestDiRows) && latestDiRows.length > 0) {
+            await supabase
+              .from('daily_inventory_items')
+              .update({
+                closing_qty: finalStockVal,
+                full_qty: fullVal,
+                broken_qty: brokenVal
+              })
+              .eq('id', latestDiRows[0].id)
+              .eq('tenant_id', tenantId);
+          }
+        }
+      } catch (syncErr) {
+        console.warn('Daily inventory snapshot sync warning:', syncErr);
+      }
+    }
+
+    const actionLabel = safeType === 'TRANSFER' ? 'Transfer' : (safeType === 'IN' ? 'Stock In' : (safeType === 'OPNAME_ADJ' ? 'Ganti Stok Aktual / Saldo Awal' : 'Stock Out'));
+    await logAudit('ADJUST_STOCK', `Menyesuaikan stok (${actionLabel}) menjadi/sebesar ${qty} di ${safeLocation}. Catatan: "${notes || 'Tidak ada'}".`);
 
     return updatedMaterial;
   },

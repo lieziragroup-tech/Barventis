@@ -129,7 +129,7 @@ export default function TabContainer({ tabs, children }) {
                     minHeight: '32px'
                   }}
                 >
-                  {Icon && <Icon size={15} style={{ flexShrink: 0 }} />}
+                  {/* Decorative tab icon omitted for cleaner UI */}
                   <span>{tab.label}</span>
                 </button>
               );

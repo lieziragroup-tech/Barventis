@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useLocation, useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import { getRecipeDivision, getUserDivisionScope } from '../../services/locationService';
 import { Search, Plus, Trash2, Save, X, UploadCloud, Coins, AlertTriangle, CheckCircle, ChefHat, RefreshCw, Download, Copy } from 'lucide-react';
 import BulkImport from '../../components/BulkImport';
 import Pagination from '../../components/shared/Pagination';
@@ -16,7 +18,20 @@ const ensureUids = (arr = []) => arr.map(x => ({ ...x, _uid: x._uid ?? rowUid() 
 
 function RecipesInner({ categoryFilter } = {}) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { profile } = useAuth();
+  const userDivisionScope = getUserDivisionScope(profile?.role);
+  const [divisionFilter, setDivisionFilter] = useState(() => (userDivisionScope === 'BAR' || userDivisionScope === 'KITCHEN') ? userDivisionScope : 'ALL');
+
+  useEffect(() => {
+    const qDiv = searchParams.get('division');
+    if (qDiv && ['BAR', 'KITCHEN', 'ALL'].includes(qDiv.toUpperCase())) {
+      setDivisionFilter(qDiv.toUpperCase());
+    } else if (userDivisionScope === 'BAR' || userDivisionScope === 'KITCHEN') {
+      setDivisionFilter(userDivisionScope);
+    }
+  }, [searchParams, userDivisionScope]);
   const {
     stock, recipes, handleSaveRecipe: onSaveRecipe, handleAddRecipe: onAddRecipe,
     handleDeleteRecipe: onDeleteRecipe, refreshData, showToast, unitConversionMap,
@@ -200,20 +215,22 @@ function RecipesInner({ categoryFilter } = {}) {
     return ['ALL', ...Array.from(cats).sort()];
   }, [recipes]);
 
-  // Filter recipe list
+  // Filter recipe list by Role Division (Bar vs Kitchen), Category, and Search
   const filteredRecipes = useMemo(() => {
     return recipes.filter(r => {
-      const matchSearch = r.menu_name.toLowerCase().includes(search.toLowerCase());
+      const matchSearch = (r.menu_name || '').toLowerCase().includes(search.toLowerCase());
       const matchCategory = selectedCategoryFilter === 'ALL' || (r.category || '').toUpperCase() === selectedCategoryFilter.toUpperCase();
-      
+      const recDiv = getRecipeDivision(r);
+      const matchDivision = divisionFilter === 'ALL' || recDiv === divisionFilter;
+
       if (categoryFilter) {
         const cat = (r.category || '').toUpperCase();
         const matchProp = categoryFilter === 'BEER' ? cat === 'BEER' : cat !== 'BEER';
-        return matchSearch && matchCategory && matchProp;
+        return matchSearch && matchCategory && matchDivision && matchProp;
       }
-      return matchSearch && matchCategory;
+      return matchSearch && matchCategory && matchDivision;
     });
-  }, [recipes, search, selectedCategoryFilter, categoryFilter]);
+  }, [recipes, search, selectedCategoryFilter, divisionFilter, categoryFilter]);
 
   const RECIPES_PAGE_SIZE = 15;
   const [recipesPage, setRecipesPage] = useState(1);
@@ -494,8 +511,40 @@ function RecipesInner({ categoryFilter } = {}) {
     <div className="recipes-layout" style={{ display: 'flex', gap: '24px', height: 'calc(100vh - 180px)', fontFamily: 'var(--font-sans)', animation: 'fadeIn 0.3s ease' }}>
       {/* Left: Recipe List */}
       <div className="glass-card recipes-list-panel" style={{ width: '310px', display: 'flex', flexDirection: 'column', padding: '20px', flexShrink: 0, border: '1px solid var(--border)' }}>
-          {/* Search & Category Filter */}
+          {/* Division Scope & Search & Category Filter */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
+            {userDivisionScope === 'ALL' ? (
+              <div style={{ display: 'flex', gap: '4px', padding: '3px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+                {[
+                  { id: 'ALL', label: 'Semua Divisi' },
+                  { id: 'BAR', label: 'Resep Bar' },
+                  { id: 'KITCHEN', label: 'Resep Kitchen' }
+                ].map(d => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => { setDivisionFilter(d.id); setSelectedCategoryFilter('ALL'); setRecipesPage(1); }}
+                    style={{
+                      flex: 1,
+                      padding: '5px 6px',
+                      fontSize: '0.72rem',
+                      fontWeight: divisionFilter === d.id ? 700 : 600,
+                      borderRadius: '6px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: divisionFilter === d.id ? 'var(--accent)' : 'transparent',
+                      color: divisionFilter === d.id ? '#fff' : 'var(--text-secondary)'
+                    }}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div style={{ padding: '6px 10px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent)' }}>
+                Divisi Aktif: {divisionFilter === 'KITCHEN' ? 'Kitchen (Resep & Masakan)' : 'Bar (Minuman & Kopi)'}
+              </div>
+            )}
             <div style={{ position: 'relative' }}>
               <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input 
@@ -513,10 +562,10 @@ function RecipesInner({ categoryFilter } = {}) {
               value={selectedCategoryFilter}
               onChange={e => { setSelectedCategoryFilter(e.target.value); setRecipesPage(1); }}
             >
-              <option value="ALL">📁 Semua Kategori ({recipes.length})</option>
+              <option value="ALL">Semua Kategori ({filteredRecipes.length})</option>
               {availableCategories.filter(c => c !== 'ALL').map(c => (
                 <option key={c} value={c}>
-                  🏷️ {c} ({recipes.filter(r => r.category === c).length})
+                  {c} ({recipes.filter(r => r.category === c && (divisionFilter === 'ALL' || getRecipeDivision(r) === divisionFilter)).length})
                 </option>
               ))}
             </select>
@@ -701,9 +750,7 @@ function RecipesInner({ categoryFilter } = {}) {
                 minWidth: '150px',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
               }}>
-                <div style={{ width: '32px', height: '32px', borderRadius: 'var(--radius-md)', background: 'var(--accent-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>
-                  <Coins size={16} />
-                </div>
+
                 <div>
                   <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>HPP (Basic Cost)</div>
                   <div style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--text-primary)', marginTop: '1px' }}>{formatIDR(basicCost)}</div>
@@ -730,22 +777,7 @@ function RecipesInner({ categoryFilter } = {}) {
                 minWidth: '150px',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
               }}>
-                <div style={{ 
-                  width: '32px', height: '32px', borderRadius: 'var(--radius-md)', 
-                  background: foodCostPct < 0.27 
-                    ? 'rgba(81, 207, 102, 0.1)' 
-                    : foodCostPct <= 0.3 
-                      ? 'rgba(252, 196, 25, 0.1)' 
-                      : 'rgba(255, 107, 107, 0.1)', 
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                  color: foodCostPct < 0.27 
-                    ? 'var(--success)' 
-                    : foodCostPct <= 0.3 
-                      ? 'var(--warning)' 
-                      : 'var(--danger)' 
-                }}>
-                  {foodCostPct < 0.27 ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
-                </div>
+
                 <div>
                   <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>Food Cost %</div>
                   <div style={{ 
@@ -774,12 +806,22 @@ function RecipesInner({ categoryFilter } = {}) {
                 onChange={e => setEditedCategory(e.target.value)}
                 style={{ height: '40px' }}
               >
-                <option value="KOPI">Kopi</option>
-                <option value="NON-KOPI">Non-Kopi</option>
-                <option value="MOCKTAIL">Mocktail</option>
-                <option value="JUICE">Juice</option>
-                <option value="TEA">Tea</option>
-                <option value="BEER">Beer & Alcohol</option>
+                <optgroup label="Menu Bar & Minuman">
+                  <option value="KOPI">Kopi</option>
+                  <option value="NON-KOPI">Non-Kopi</option>
+                  <option value="MOCKTAIL">Mocktail</option>
+                  <option value="JUICE">Juice</option>
+                  <option value="TEA">Tea</option>
+                  <option value="BEER">Beer &amp; Alcohol</option>
+                </optgroup>
+                <optgroup label="Menu Kitchen & Masakan">
+                  <option value="MAIN COURSE">Main Course / Hidangan Utama</option>
+                  <option value="APPETIZER">Appetizer &amp; Snack</option>
+                  <option value="PASTA & NOODLE">Pasta &amp; Noodle</option>
+                  <option value="SOUP & SALAD">Soup &amp; Salad</option>
+                  <option value="DESSERT">Dessert &amp; Pastry</option>
+                  <option value="SAUCE & PREP">Sauce &amp; Bumbu Prep Dapur</option>
+                </optgroup>
               </select>
             </div>
             <div className="form-group" style={{ marginBottom: 0 }}>
@@ -858,22 +900,46 @@ function RecipesInner({ categoryFilter } = {}) {
                   return (
                     <tr key={ing._uid ?? idx} style={unresolved ? { background: 'rgba(224,82,82,0.07)' } : undefined}
                         title={unresolved ? `Bahan "${ing.item_name}" tidak ditemukan di inventory — hapus dari inventory atau periksa nama bahan.` : undefined}>
-                      {/* Item Name with Autocomplete */}
+                      {/* Item Name with Autocomplete + Direct Shortcut to Stock Ledger Debounced Search */}
                       <td style={{ position: 'relative' }}>
-                        <input
-                          type="text"
-                          className="form-control premium-input table-input"
-                          placeholder="Ketik nama bahan..."
-                          value={ing.item_name}
-                          onFocus={() => setOpenDropdown(idx)}
-                          onChange={(e) => {
-                            const updated = [...editedIngredients];
-                            updated[idx] = { ...updated[idx], item_name: e.target.value };
-                            setEditedIngredients(updated);
-                            setOpenDropdown(idx);
-                          }}
-                          onBlur={() => setTimeout(() => setOpenDropdown(null), 250)}
-                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <input
+                            type="text"
+                            className="form-control premium-input table-input"
+                            style={{ flex: 1 }}
+                            placeholder="Ketik nama bahan..."
+                            value={ing.item_name}
+                            onFocus={() => setOpenDropdown(idx)}
+                            onChange={(e) => {
+                              const updated = [...editedIngredients];
+                              updated[idx] = { ...updated[idx], item_name: e.target.value };
+                              setEditedIngredients(updated);
+                              setOpenDropdown(idx);
+                            }}
+                            onBlur={() => setTimeout(() => setOpenDropdown(null), 250)}
+                          />
+                          {ing.item_name && ing.item_name.trim() !== '' && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              style={{
+                                padding: '5px 8px',
+                                fontSize: '0.7rem',
+                                fontWeight: 700,
+                                whiteSpace: 'nowrap',
+                                borderRadius: '6px',
+                                color: 'var(--accent)',
+                                borderColor: 'rgba(16, 185, 129, 0.35)',
+                                background: 'rgba(16, 185, 129, 0.08)',
+                                flexShrink: 0
+                              }}
+                              title={`Lihat detail "${ing.item_name}" di Buku Stok (Stock Ledger)`}
+                              onClick={() => navigate(`/dashboard/sistem?tab=stock-ledger&search=${encodeURIComponent(ing.item_name.trim())}`)}
+                            >
+                              Cek Stok ↗
+                            </button>
+                          )}
+                        </div>
                         {openDropdown === idx && (
                           <ul className="search-results-list glass-scrollbar" style={{ 
                             background: 'var(--bg-secondary)', 

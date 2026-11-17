@@ -29,9 +29,12 @@ export default function SystemAdminHub() {
 
   const rawRole = String(activeUser?.role || '').trim();
   const isOwnerOrAdmin = ['SuperAdmin', 'Super Admin', 'Admin / Owner', 'Admin  Owner', 'Owner'].includes(rawRole);
+  const visibleTabs = isOwnerOrAdmin
+    ? TABS
+    : TABS.filter(t => t.key === 'stock-ledger' || t.key === 'transfer');
 
   return (
-    <TabContainer tabs={TABS}>
+    <TabContainer tabs={visibleTabs}>
       {(activeTab) => (
         <Suspense fallback={<Loading />}>
           {activeTab === 'stock-ledger' && <StockLedger />}

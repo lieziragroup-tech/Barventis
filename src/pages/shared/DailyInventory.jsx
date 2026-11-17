@@ -616,6 +616,78 @@ export default function DailyInventory({ category: _category, initialTab }) {
     }
   }, [activeTab, fetchRecords, fetchEodData]);
 
+  const isOwnerRole = useMemo(() => {
+    const r = String(activeUser?.role || '').toLowerCase().trim();
+    return ['owner', 'admin / owner', 'admin  owner', 'superadmin', 'super admin'].includes(r);
+  }, [activeUser?.role]);
+
+  const [ownerOverrideMap, setOwnerOverrideMap] = useState({});
+  const [savingOwnerOverrideId, setSavingOwnerOverrideId] = useState(null);
+
+  const handleOwnerClosingInputChange = (itemId, rawVal) => {
+    if (!isOwnerRole || isLocked) return;
+    setOwnerOverrideMap(prev => ({ ...prev, [itemId]: rawVal }));
+  };
+
+  const commitOwnerClosingOverride = async (item, rawVal) => {
+    if (!isOwnerRole || isLocked || !item) return;
+    const parsed = parseFloat(rawVal);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      setOwnerOverrideMap(prev => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+      return;
+    }
+    const targetClosing = Number(parsed.toFixed(4));
+    const currentRow = inventory[item.id] || {};
+    const qtyIn = Number(currentRow.qty_in) || 0;
+    const qtyOut = getItemOutStockQty(item);
+    const waste = Number(currentRow.waste) || 0;
+    const newOpening = Math.max(0, Number((targetClosing - qtyIn + qtyOut + waste).toFixed(4)));
+    const newFull = Math.floor(targetClosing);
+    const newBroken = Number((targetClosing - newFull).toFixed(4));
+
+    // Update local EOD state immediately
+    setInventory(prev => {
+      const updated = {
+        ...prev,
+        [item.id]: {
+          ...(prev[item.id] || {}),
+          stok_awal: newOpening,
+          full_qty: newFull,
+          broken: newBroken,
+          closing: targetClosing,
+          out_confirmed: true,
+          zero_activity_confirmed: true
+        }
+      };
+      saveDraftToLocalStorage(updated, date, location);
+      return updated;
+    });
+
+    setSavingOwnerOverrideId(item.id);
+    try {
+      await api.adjustStock(item.id, {
+        location,
+        type: 'OPNAME_ADJ',
+        qty: targetClosing,
+        notes: `Setup awal stok akhir via Daily Inventory (${date}) oleh Owner`
+      });
+      setOwnerOverrideMap(prev => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+    } catch (err) {
+      console.error('Owner closing stock override failed:', err);
+      alert('Gagal menyimpan penyesuaian stok akhir: ' + (err.message || 'Unknown error'));
+    } finally {
+      setSavingOwnerOverrideId(null);
+    }
+  };
+
   const handleChange = (itemId, field, value) => {
     if (isLocked) return;
     const initialItem = items.find(m => m.id === itemId);
@@ -1220,23 +1292,20 @@ export default function DailyInventory({ category: _category, initialTab }) {
   return (
     <div className="fade-in space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 style={{ fontSize: '1.35rem', fontWeight: 800, margin: 0 }}>
-              Daily Inventory
-            </h1>
-            {isLocked && (
-              <span style={{ padding: '2px 8px', background: '#fef3c7', color: '#92400e', borderRadius: '4px', fontSize: '11px', fontWeight: 700 }}>
-                TERKUNCI
-              </span>
-            )}
-          </div>
-          <p className="hidden md:block" style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', margin: '2px 0 0 0' }}>
-            Catat stok akhir hari dan pemakaian.
-          </p>
+        <div className="flex items-center gap-2">
+          {isLocked && (
+            <span style={{ padding: '3px 10px', background: '#fef3c7', color: '#92400e', borderRadius: '6px', fontSize: '11px', fontWeight: 700 }}>
+              TERKUNCI (EOD CLOSED)
+            </span>
+          )}
+          {isOwnerRole && !isLocked && activeTab === 'EOD' && (
+            <span style={{ padding: '3px 10px', background: 'rgba(16, 185, 129, 0.1)', color: '#059669', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '6px', fontSize: '11px', fontWeight: 700 }}>
+              Mode Setup Owner Aktif: Kolom Stok Akhir dapat diedit langsung
+            </span>
+          )}
         </div>
 
-        {/* Action Controls: Compact Mode Switcher + Interactive Guide Button */}
+        {/* Action Controls: Clean Mode Switcher (No duplicate header or duplicate Panduan button) */}
         <div className="no-print flex items-center gap-2 flex-wrap">
           <div style={{ display: 'inline-flex', background: 'var(--bg-tertiary)', padding: '3px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
             <button
@@ -1254,7 +1323,6 @@ export default function DailyInventory({ category: _category, initialTab }) {
               }}
               onClick={() => setActiveTab('REKAP')}
             >
-              <FileText size={14} style={{ marginRight: '5px' }} />
               Rekap Harian
             </button>
             <button
@@ -1272,31 +1340,9 @@ export default function DailyInventory({ category: _category, initialTab }) {
               }}
               onClick={() => setActiveTab('EOD')}
             >
-              <PlusCircle size={14} style={{ marginRight: '5px' }} />
               Input EOD
             </button>
           </div>
-
-          <button
-            type="button"
-            className="btn btn-secondary"
-            style={{
-              padding: '6px 10px',
-              fontSize: '0.78rem',
-              borderRadius: 'var(--radius-sm)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              color: showGuide ? 'var(--accent)' : 'var(--text-secondary)',
-              borderColor: showGuide ? 'var(--accent)' : 'var(--border)'
-            }}
-            onClick={() => setShowGuide(prev => !prev)}
-            title="Tampilkan / Sembunyikan Panduan"
-          >
-            <HelpCircle size={14} />
-            <span>Panduan</span>
-            <ChevronDown size={13} className={`transition-transform duration-200 ${showGuide ? 'rotate-180' : ''}`} />
-          </button>
         </div>
       </div>
 
@@ -1368,8 +1414,16 @@ export default function DailyInventory({ category: _category, initialTab }) {
               onChange={e => setLocation(e.target.value)}
               disabled={saving || loading}
             >
-              <option value="RESTO">🏪 Resto (Bar / Kitchen / Service)</option>
-              <option value="CENTRAL">🏢 Central Warehouse</option>
+              <option value="RESTO">
+                {userRoleConfig?.role === 'Bar'
+                  ? 'Area Bar (Resto)'
+                  : userRoleConfig?.role === 'Kitchen'
+                    ? 'Area Kitchen (Dapur)'
+                    : userRoleConfig?.role === 'Service'
+                      ? 'Area Service (Floor)'
+                      : 'Resto (Operasional Cabang)'}
+              </option>
+              <option value="CENTRAL">Central Warehouse</option>
             </select>
             {userRoleConfig?.allowedCategories?.length > 0 && (
               <button
@@ -1950,8 +2004,8 @@ export default function DailyInventory({ category: _category, initialTab }) {
 
                         {/* Stok Awal */}
                         <td style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', textAlign: 'center' }}>
-                          <span className="font-mono tabular-nums text-xs font-semibold text-gray-600">
-                            {displayOpeningFull}
+                          <span className="font-mono tabular-nums text-xs font-semibold text-gray-600" title={`Stok Awal Buku: ${Number(stokAwal || 0).toLocaleString('id-ID')} ${packUnit}`}>
+                            {Number(Number(stokAwal || 0).toFixed(4)).toLocaleString('id-ID')}
                           </span>
                         </td>
 
@@ -2209,13 +2263,50 @@ export default function DailyInventory({ category: _category, initialTab }) {
                           </span>
                         </td>
 
-                        {/* Stok Akhir */}
+                        {/* Stok Akhir (Editable by Owner for Initial Material & Stock Setup) */}
                         <td
                           className="text-center font-mono tabular-nums font-semibold whitespace-nowrap text-xs"
                           style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', color: metrics.reconciliationRequired ? '#d97706' : '#059669' }}
-                          title={metrics.reconciliationRequired ? (metrics.reconciliationReason || 'Perlu tinjauan rekonsiliasi stok akhir') : `Stok Akhir: ${Number(metrics.bookClosing || 0).toLocaleString('id-ID')} ${packUnit}`}
+                          title={isOwnerRole && !isLocked ? 'Khusus Owner: Klik untuk menyesuaikan Stok Akhir secara langsung (Setup Awal)' : (metrics.reconciliationRequired ? (metrics.reconciliationReason || 'Perlu tinjauan rekonsiliasi stok akhir') : `Stok Akhir: ${Number(metrics.bookClosing || 0).toLocaleString('id-ID')} ${packUnit}`)}
                         >
-                          {stokAkhir === null ? (
+                          {isOwnerRole && !isLocked ? (
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <input
+                                type="number"
+                                step="any"
+                                min="0"
+                                disabled={savingOwnerOverrideId === item.id}
+                                value={
+                                  ownerOverrideMap[item.id] !== undefined
+                                    ? ownerOverrideMap[item.id]
+                                    : (stokAkhir === null ? '' : Number(Number(stokAkhir).toFixed(4)))
+                                }
+                                onChange={(e) => handleOwnerClosingInputChange(item.id, e.target.value)}
+                                onBlur={(e) => {
+                                  if (ownerOverrideMap[item.id] !== undefined) {
+                                    commitOwnerClosingOverride(item, e.target.value);
+                                  }
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.currentTarget.blur();
+                                  }
+                                }}
+                                style={{
+                                  width: '74px',
+                                  height: '28px',
+                                  padding: '2px 6px',
+                                  textAlign: 'center',
+                                  fontSize: '12px',
+                                  fontWeight: 700,
+                                  borderRadius: '6px',
+                                  border: '1px solid rgba(5, 150, 105, 0.45)',
+                                  background: '#ecfdf5',
+                                  color: '#059669'
+                                }}
+                              />
+                            </div>
+                          ) : stokAkhir === null ? (
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold">
                               Tinjau
                             </span>

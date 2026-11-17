@@ -196,9 +196,9 @@ export default function App() {
             </ProtectedRoute>
           } />
 
-          {/* [*] Pengaturan & Sistem (Admin/Owner) */}
+          {/* [*] Pengaturan & Buku Stok (Owner/Admin full access; Bar/Kitchen/Service scoped to Buku Stok & Mutasi) */}
           <Route path="sistem" element={
-            <ProtectedRoute allowedRoles={ADMIN_ROLES}>
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Admin  Owner', 'Owner', 'Supervisor', 'Bar', 'Barista', 'Kitchen', 'Service', 'Central', 'Purchasing']}>
               <RouteErrorBoundary><SystemAdminHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />

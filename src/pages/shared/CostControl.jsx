@@ -341,30 +341,30 @@ export default function CostControl() {
             ))}
           </select>
 
-          {canSwitchBranch && branches.length > 1 && (
-            <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)]">
-              <button
-                type="button"
-                onClick={() => setBranchScope('ACTIVE')}
-                className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                  branchScope === 'ACTIVE'
-                    ? 'bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-sm'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
+          {canSwitchBranch && branches.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontWeight: 600, whiteSpace: 'nowrap', fontSize: '0.875rem' }}>Cabang:</span>
+              <select
+                className="form-control"
+                style={{ minWidth: '220px', padding: '6px 12px', fontSize: '0.875rem', fontWeight: 600 }}
+                value={branchScope === 'ALL' ? 'ALL' : (activeBranch?.id || '')}
+                onChange={e => {
+                  const val = e.target.value;
+                  if (val === 'ALL') {
+                    setBranchScope('ALL');
+                  } else {
+                    setBranchScope('ACTIVE');
+                    switchBranch(val);
+                  }
+                }}
               >
-                {activeBranch?.name || 'Cabang Aktif'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setBranchScope('ALL')}
-                className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                  branchScope === 'ALL'
-                    ? 'bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-sm'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
-              >
-                Semua Cabang
-              </button>
+                <option value="ALL">Semua Cabang (Komparasi &amp; Gabungan)</option>
+                {branches.filter(b => b.is_active !== false).map(b => (
+                  <option key={b.id} value={b.id}>
+                    Cabang {b.name} ({b.code || b.name})
+                  </option>
+                ))}
+              </select>
             </div>
           )}
         </div>
@@ -427,26 +427,53 @@ export default function CostControl() {
                   </tr>
                 </thead>
                 <tbody>
-                  {multiBranchRows.map(row => (
-                    <tr
-                      key={row.branch_id}
-                      className="cursor-pointer hover:bg-[var(--bg-tertiary)]/50"
-                      onClick={() => {
-                        switchBranch(row.branch_id);
-                        setBranchScope('ACTIVE');
-                      }}
-                    >
-                      <td className="font-bold text-[var(--text-primary)]">{row.branch_name}</td>
-                      <td className="text-[var(--text-secondary)]">{row.is_central ? 'Central' : 'Outlet'}</td>
-                      <td className="text-right font-mono tabular-nums">{formatIDR(row.pos_sales || 0)}</td>
-                      <td className="text-right font-mono tabular-nums">{formatIDR(row.actual_cogs || 0)}</td>
-                      <td className="text-right font-mono tabular-nums font-bold" style={{ color: Number(row.food_cost_pct) > 30 ? 'var(--danger)' : 'var(--success)' }}>
-                        {Number(row.food_cost_pct || 0).toFixed(1)}%
-                      </td>
-                      <td className="text-right font-mono tabular-nums">{formatIDR(row.stock_valuation || 0)}</td>
-                    </tr>
-                  ))}
+                  {multiBranchRows.map(row => {
+                    const totalSalesAll = multiBranchRows.reduce((acc, r) => acc + Number(r.pos_sales || 0), 0);
+                    const sharePct = totalSalesAll > 0 ? ((Number(row.pos_sales || 0) / totalSalesAll) * 100).toFixed(1) : '0.0';
+                    return (
+                      <tr
+                        key={row.branch_id}
+                        className="cursor-pointer hover:bg-[var(--bg-tertiary)]/50"
+                        onClick={() => {
+                          switchBranch(row.branch_id);
+                          setBranchScope('ACTIVE');
+                        }}
+                        title="Klik untuk melihat detail Cost Control cabang ini"
+                      >
+                        <td className="font-bold text-[var(--text-primary)]">
+                          {row.branch_name}
+                          <span className="ml-2 text-[10px] font-normal text-[var(--text-muted)]">({sharePct}% omzet)</span>
+                        </td>
+                        <td className="text-[var(--text-secondary)]">{row.is_central ? 'Central' : 'Outlet'}</td>
+                        <td className="text-right font-mono tabular-nums">{formatIDR(row.pos_sales || 0)}</td>
+                        <td className="text-right font-mono tabular-nums">{formatIDR(row.actual_cogs || 0)}</td>
+                        <td className="text-right font-mono tabular-nums font-bold" style={{ color: Number(row.food_cost_pct) > 30 ? 'var(--danger)' : 'var(--success)' }}>
+                          {Number(row.food_cost_pct || 0).toFixed(1)}%
+                        </td>
+                        <td className="text-right font-mono tabular-nums">{formatIDR(row.stock_valuation || 0)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
+                {multiBranchRows.length > 0 && (() => {
+                  const sumSales = multiBranchRows.reduce((a, r) => a + Number(r.pos_sales || 0), 0);
+                  const sumCogs = multiBranchRows.reduce((a, r) => a + Number(r.actual_cogs || 0), 0);
+                  const sumStock = multiBranchRows.reduce((a, r) => a + Number(r.stock_valuation || 0), 0);
+                  const avgPct = sumSales > 0 ? (sumCogs / sumSales) * 100 : 0;
+                  return (
+                    <tfoot>
+                      <tr className="font-bold bg-[var(--bg-secondary)] border-t-2 border-[var(--border)]">
+                        <td colSpan={2} className="text-[var(--text-primary)]">TOTAL / GABUNGAN SELURUH CABANG ({multiBranchRows.length} Cabang)</td>
+                        <td className="text-right font-mono tabular-nums text-[var(--text-primary)]">{formatIDR(sumSales)}</td>
+                        <td className="text-right font-mono tabular-nums text-[var(--accent)]">{formatIDR(sumCogs)}</td>
+                        <td className="text-right font-mono tabular-nums" style={{ color: avgPct > 30 ? 'var(--danger)' : 'var(--success)' }}>
+                          {avgPct.toFixed(1)}%
+                        </td>
+                        <td className="text-right font-mono tabular-nums text-[var(--text-primary)]">{formatIDR(sumStock)}</td>
+                      </tr>
+                    </tfoot>
+                  );
+                })()}
               </table>
             </div>
           )}

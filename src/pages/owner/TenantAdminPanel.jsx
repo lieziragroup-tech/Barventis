@@ -68,6 +68,76 @@ export default function TenantAdminPanel() {
     copyRecipes: true,
     conflictMode: 'SKIP'
   });
+  const [deleteBranchModal, setDeleteBranchModal] = useState({
+    open: false,
+    branch: null,
+    summary: null,
+    loadingSummary: false,
+    deleting: false,
+    confirmChecked: false,
+    confirmCode: ''
+  });
+
+  const openDeleteBranchModal = async (branch) => {
+    if (branchesList.length <= 1) {
+      displayToast('Tidak dapat menghapus satu-satunya cabang aktif di sistem.', 'error');
+      return;
+    }
+    setDeleteBranchModal({
+      open: true,
+      branch,
+      summary: null,
+      loadingSummary: true,
+      deleting: false,
+      confirmChecked: false,
+      confirmCode: ''
+    });
+    try {
+      const summary = await api.getBranchDeletionSummary(branch.id);
+      setDeleteBranchModal(prev => ({ ...prev, summary, loadingSummary: false }));
+    } catch {
+      setDeleteBranchModal(prev => ({
+        ...prev,
+        summary: { materials: 0, recipes: 0, transactions: 0, daily_inventories: 0, users: 0 },
+        loadingSummary: false
+      }));
+    }
+  };
+
+  const handleConfirmDeleteBranch = async (e) => {
+    e.preventDefault();
+    const target = deleteBranchModal.branch;
+    if (!target) return;
+    const expectedCode = String(target.code || target.name || '').trim().toUpperCase();
+    if (!deleteBranchModal.confirmChecked) {
+      displayToast('Centang persetujuan penghapusan data cabang terlebih dahulu.', 'error');
+      return;
+    }
+    if (String(deleteBranchModal.confirmCode || '').trim().toUpperCase() !== expectedCode) {
+      displayToast(`Ketik kode/nama cabang "${expectedCode}" dengan benar untuk konfirmasi.`, 'error');
+      return;
+    }
+    setDeleteBranchModal(prev => ({ ...prev, deleting: true }));
+    try {
+      await api.deleteBranchCascade(target.id);
+      displayToast(`Cabang "${target.name}" beserta seluruh data terkait berhasil dihapus.`, 'success');
+      setDeleteBranchModal({
+        open: false,
+        branch: null,
+        summary: null,
+        loadingSummary: false,
+        deleting: false,
+        confirmChecked: false,
+        confirmCode: ''
+      });
+      await fetchBranchesList();
+      if (refreshBranches) await refreshBranches();
+      if (refreshData) await refreshData();
+    } catch (err) {
+      displayToast(translateDbError(err, 'Gagal menghapus cabang.'), 'error');
+      setDeleteBranchModal(prev => ({ ...prev, deleting: false }));
+    }
+  };
 
   // Helper for Double Confirmation
   const requestConfirmation = (title, message, onConfirm) => {
@@ -534,7 +604,6 @@ export default function TenantAdminPanel() {
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
               }`}
             >
-              <Icon size={14} className={isActive ? 'text-white' : 'text-[var(--text-muted)]'} />
               <span>{item.label}</span>
             </button>
           );
@@ -1243,10 +1312,20 @@ export default function TenantAdminPanel() {
                               <button
                                 className="btn btn-secondary text-xs py-1 px-2.5"
                                 onClick={() => handleToggleBranchStatus(b)}
-                                style={{ color: active ? 'var(--danger)' : 'var(--success)' }}
+                                style={{ color: active ? 'var(--warning)' : 'var(--success)' }}
                               >
                                 {active ? 'Nonaktifkan' : 'Aktifkan'}
                               </button>
+                              {branchesList.length > 1 && (
+                                <button
+                                  className="btn btn-secondary text-xs py-1 px-2.5 flex items-center gap-1"
+                                  onClick={() => openDeleteBranchModal(b)}
+                                  style={{ color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.35)' }}
+                                  title="Hapus cabang beserta seluruh data terkait"
+                                >
+                                  <Trash2 size={12} /> Hapus
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1259,6 +1338,107 @@ export default function TenantAdminPanel() {
           </div>
         )}
       </div>
+
+      {/* Delete Branch Cascade Confirmation Modal */}
+      {deleteBranchModal.open && deleteBranchModal.branch && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[var(--bg-secondary)] border border-red-500/40 rounded-xl w-full max-w-lg overflow-hidden shadow-2xl">
+            <div className="p-5">
+              <div className="flex items-start gap-3 mb-3">
+                <div className="w-9 h-9 rounded-lg bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-500 shrink-0">
+                  <AlertCircle size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-[var(--text-primary)] m-0">
+                    Konfirmasi Hapus Cabang &ldquo;{deleteBranchModal.branch.name}&rdquo;
+                  </h3>
+                  <p className="text-xs text-[var(--text-secondary)] mt-1 m-0">
+                    Tindakan ini bersifat permanen dan akan menghapus seluruh data operasional yang terikat pada cabang <strong>{deleteBranchModal.branch.code || deleteBranchModal.branch.name}</strong>.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-lg bg-[var(--bg-primary)]/70 border border-[var(--border)] mb-4 space-y-2 text-xs">
+                <div className="font-bold text-[var(--text-primary)] mb-1">
+                  Ringkasan Data Terkait yang Akan Dihapus:
+                </div>
+                {deleteBranchModal.loadingSummary ? (
+                  <div className="text-[var(--text-muted)] py-2">Menghitung keterkaitan data cabang...</div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="p-2 rounded bg-[var(--bg-secondary)] border border-[var(--border)] flex justify-between">
+                      <span className="text-[var(--text-secondary)]">Materials &amp; Stok:</span>
+                      <strong className="text-[var(--text-primary)]">{deleteBranchModal.summary?.materials ?? 0} item</strong>
+                    </div>
+                    <div className="p-2 rounded bg-[var(--bg-secondary)] border border-[var(--border)] flex justify-between">
+                      <span className="text-[var(--text-secondary)]">Resep &amp; HPP:</span>
+                      <strong className="text-[var(--text-primary)]">{deleteBranchModal.summary?.recipes ?? 0} menu</strong>
+                    </div>
+                    <div className="p-2 rounded bg-[var(--bg-secondary)] border border-[var(--border)] flex justify-between">
+                      <span className="text-[var(--text-secondary)]">Mutasi &amp; Pembelian:</span>
+                      <strong className="text-[var(--text-primary)]">{deleteBranchModal.summary?.transactions ?? 0} log</strong>
+                    </div>
+                    <div className="p-2 rounded bg-[var(--bg-secondary)] border border-[var(--border)] flex justify-between">
+                      <span className="text-[var(--text-secondary)]">EOD &amp; Stock Opname:</span>
+                      <strong className="text-[var(--text-primary)]">{deleteBranchModal.summary?.daily_inventories ?? 0} sesi</strong>
+                    </div>
+                    <div className="col-span-2 p-2 rounded bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-700">
+                      Staf terdaftar di cabang ini (<strong>{deleteBranchModal.summary?.users ?? 0} akun</strong>) tidak akan dihapus, melainkan dipindahkan otomatis ke cabang aktif utama agar akun login tetap aman.
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <form onSubmit={handleConfirmDeleteBranch} className="space-y-3">
+                <label className="flex items-start gap-2 text-xs text-[var(--text-primary)] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={deleteBranchModal.confirmChecked}
+                    onChange={(e) => setDeleteBranchModal(prev => ({ ...prev, confirmChecked: e.target.checked }))}
+                  />
+                  <span>
+                    Saya memahami bahwa seluruh Materials, Resep, Riwayat Mutasi, Daily Inventory, dan Stock Opname pada cabang <strong>{deleteBranchModal.branch.name}</strong> akan dihapus permanen.
+                  </span>
+                </label>
+
+                <div>
+                  <label className="form-label block mb-1 text-xs font-semibold">
+                    Ketik kode cabang <span className="font-mono text-red-500">{String(deleteBranchModal.branch.code || deleteBranchModal.branch.name).toUpperCase()}</span> untuk konfirmasi:
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control w-full text-xs py-2 px-2.5 font-mono uppercase"
+                    placeholder={String(deleteBranchModal.branch.code || deleteBranchModal.branch.name).toUpperCase()}
+                    value={deleteBranchModal.confirmCode}
+                    onChange={(e) => setDeleteBranchModal(prev => ({ ...prev, confirmCode: e.target.value }))}
+                    required
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    className="btn btn-secondary text-xs py-2 px-3.5"
+                    onClick={() => setDeleteBranchModal({ open: false, branch: null, summary: null, loadingSummary: false, deleting: false, confirmChecked: false, confirmCode: '' })}
+                    disabled={deleteBranchModal.deleting}
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn text-xs py-2 px-4 font-bold text-white"
+                    style={{ background: 'var(--danger)', opacity: (!deleteBranchModal.confirmChecked || deleteBranchModal.deleting) ? 0.6 : 1 }}
+                    disabled={!deleteBranchModal.confirmChecked || deleteBranchModal.deleting}
+                  >
+                    {deleteBranchModal.deleting ? 'Menghapus Cabang...' : 'Hapus Cabang & Data Terkait'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add / Edit Branch Modal */}
       {showBranchModal && (
