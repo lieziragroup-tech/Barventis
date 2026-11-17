@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useDebounce } from '../../hooks/useDebounce';
+import useDebounce from '../../hooks/useDebounce';
 import {
   Search, Plus, Edit, History, X, Trash2,
   Package, UploadCloud
