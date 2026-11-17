@@ -378,44 +378,59 @@ export default function DashboardLayout() {
                   </NavGroup>
                 )}
 
-                {/* ROLE: BARISTA / BAR (Materials Bar 142 Item & 68 Resep Minuman Bar) */}
+                {/* ROLE: BARISTA / BAR (Materials Bar 142 Item & 68 Resep Minuman Bar + Ajukan PO Bar) */}
                 {isTenant && role === 'Bar' && (
                   <NavGroup title="Divisi Bar" isHovered={isHovered} isFirst={!isSuperAdmin}>
                     <NavItem to={basePath} exact label="Dashboard Bar" subtitle="Ringkasan operasional bar harian" icon={LayoutDashboard} isHovered={isHovered} />
                     <NavItem to={`${basePath}/daily-inventory`} label="Inventaris Harian Bar" subtitle="Catat stok harian 142 bahan bar" icon={ClipboardList} isHovered={isHovered} />
                     <NavItem to={`${basePath}/pricing-cogs?tab=cogs-all`} label="Resep & HPP Bar" subtitle="68 resep minuman & COGS bar" icon={Tag} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/sistem?tab=stock-ledger`} label="Materials Bar" subtitle="Buku stok khusus bahan baku bar" icon={Settings} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/sistem?tab=stock-ledger`} label="Materials Bar" subtitle="Buku stok & lapor stok habis bar" icon={Settings} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/procurement?tab=invoicing`} label="Permintaan PO & Terima" subtitle="Ajukan PO bar & foto terima barang" icon={ShoppingCart} isHovered={isHovered} />
                     <NavItem to={`${basePath}/olah-bahan`} label="Batch Prep Bar" subtitle="Produksi sirup, teh base & soda" icon={Scissors} isHovered={isHovered} />
                     <NavItem to={`${basePath}/opname-assets`} label="Stock Opname Bar" subtitle="Audit fisik bulanan stok bar" icon={Boxes} isHovered={isHovered} />
                     <NavItem to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Transfer stok Central dan Bar" icon={ArrowRightLeft} isHovered={isHovered} />
                   </NavGroup>
                 )}
 
-                {/* ROLE: KITCHEN (Fokus Resep Masakan, Bahan Dapur & Trimming) */}
+                {/* ROLE: KITCHEN (Fokus Resep Masakan, Bahan Dapur, Trimming & Ajukan PO Kitchen) */}
                 {isTenant && role === 'Kitchen' && (
                   <NavGroup title="Divisi Kitchen (Dapur)" isHovered={isHovered} isFirst={!isSuperAdmin}>
                     <NavItem to={basePath} exact label="Dashboard Kitchen" subtitle="Ringkasan operasional dapur harian" icon={LayoutDashboard} isHovered={isHovered} />
                     <NavItem to={`${basePath}/pricing-cogs?tab=cogs-all`} label="Resep & Masakan" subtitle="Resep menu masakan & HPP dapur" icon={Tag} isHovered={isHovered} />
                     <NavItem to={`${basePath}/olah-bahan`} label="Trimming & Prep Dapur" subtitle="Potong/trimming daging, ikan & sayur" icon={Scissors} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/sistem?tab=stock-ledger`} label="Materials Kitchen" subtitle="Buku stok khusus bahan masakan" icon={Settings} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/sistem?tab=stock-ledger`} label="Materials Kitchen" subtitle="Buku stok & lapor habis dapur" icon={Settings} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/procurement?tab=invoicing`} label="Permintaan PO & Terima" subtitle="Ajukan PO dapur & foto terima barang" icon={ShoppingCart} isHovered={isHovered} />
                     <NavItem to={`${basePath}/daily-inventory`} label="Inventaris Kitchen" subtitle="Catat pemakaian harian bahan dapur" icon={ClipboardList} isHovered={isHovered} />
                     <NavItem to={`${basePath}/opname-assets`} label="Stock Opname Kitchen" subtitle="Audit fisik stok area dapur" icon={Boxes} isHovered={isHovered} />
                     <NavItem to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Minta bahan dari Central ke Kitchen" icon={ArrowRightLeft} isHovered={isHovered} />
                   </NavGroup>
                 )}
 
-                {/* ROLE: SERVICE (Fokus Alat, Glassware, Perlengkapan Floor & POS) */}
+                {/* ROLE: SERVICE (Fokus Alat, Glassware, Perlengkapan Floor, POS & Ajukan PO Alat) */}
                 {isTenant && role === 'Service' && (
                   <NavGroup title="Divisi Service & Alat" isHovered={isHovered} isFirst={!isSuperAdmin}>
                     <NavItem to={basePath} exact label="Dashboard Service" subtitle="Ringkasan peralatan & area floor" icon={LayoutDashboard} isHovered={isHovered} />
                     <NavItem to={`${basePath}/opname-assets`} label="Alat, Glassware & Aset" subtitle="Inventaris gelas, alat makan & mesin" icon={Boxes} isHovered={isHovered} />
                     <NavItem to={`${basePath}/sistem?tab=stock-ledger`} label="Materials & Alat Service" subtitle="Katalog peralatan, packaging & floor" icon={Settings} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/procurement?tab=invoicing`} label="Permintaan PO & Terima" subtitle="Ajukan PO alat & foto terima barang" icon={ShoppingCart} isHovered={isHovered} />
                     <NavItem to={`${basePath}/daily-inventory`} label="Inventaris Service" subtitle="Catat pemakaian amenities & alat" icon={ClipboardList} isHovered={isHovered} />
                     {currentTenant?.is_pos_enabled && (
                       <NavItem to={`${basePath}/pos-terminal`} label="Kasir POS" subtitle="Terminal kasir operasional langsung" icon={MonitorSmartphone} isHovered={isHovered} />
                     )}
                     <NavItem to={`${basePath}/penjualan`} label="Penjualan POS" subtitle="Unggah dan rekap penjualan POS" icon={UploadCloud} isHovered={isHovered} />
                     <NavItem to={`${basePath}/daily-inventory?tab=waste`} label="Lapor Barang Pecah" subtitle="Catat gelas pecah / alat rusak" icon={Trash2} isHovered={isHovered} />
+                  </NavGroup>
+                )}
+
+                {/* ROLE: PURCHASING (Fokus Review PO Cabang, Komparasi Harga Supplier, Ajukan ACC Owner, & Hubungi Supplier) */}
+                {isTenant && (role === 'Purchasing' || role === 'Central') && (
+                  <NavGroup title="Divisi Purchasing & PO" isHovered={isHovered} isFirst={!isSuperAdmin}>
+                    <NavItem to={basePath} exact label="Dashboard Purchasing" subtitle="Ringkasan pengadaan & status PO" icon={LayoutDashboard} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/procurement?tab=invoicing`} label="Antrean PO & ACC Owner" subtitle="Review PO cabang, ACC & hubungi supplier" icon={ShoppingCart} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/procurement?tab=marketlist`} label="Komparasi Harga & Bahan" subtitle="Analisis efisiensi harga & kualitas supplier" icon={Tag} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/procurement?tab=pembelian`} label="Master Supplier & Belanja" subtitle="Direktori supplier & pencatatan belanja" icon={Building2} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/sistem?tab=stock-ledger`} label="Data Materials & Stok" subtitle="Pantau stok seluruh cabang & harga acuan" icon={Boxes} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/transfer`} label="Distribusi Central-Resto" subtitle="Kirim stok dari Central ke Cabang" icon={ArrowRightLeft} isHovered={isHovered} />
                   </NavGroup>
                 )}
 
@@ -431,8 +446,8 @@ export default function DashboardLayout() {
                   </NavGroup>
                 )}
 
-                {/* ROLE: ADMIN / OWNER / SUPERVISOR / CENTRAL / PURCHASING */}
-                {isTenant && role !== 'Bar' && role !== 'Kitchen' && role !== 'Service' && role !== 'Kasir' && (
+                {/* ROLE: ADMIN / OWNER / SUPERVISOR */}
+                {isTenant && !['Bar', 'Kitchen', 'Service', 'Kasir', 'Purchasing', 'Central'].includes(role) && (
                   <>
                     <NavGroup isHovered={isHovered} isFirst={!isSuperAdmin}>
                       <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan HPP dan penjualan" icon={LayoutDashboard} isHovered={isHovered} />

@@ -77,6 +77,7 @@ export default function Purchasing() {
   const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [defaultDestination, setDefaultDestination] = useState('RESTO'); // FT-04.1 & FT-04.2: RESTO vs CENTRAL
   const [defaultDeliveryNotes, setDefaultDeliveryNotes] = useState('');
+  const [entryCategory, setEntryCategory] = useState('PO_SUPPLIER');
   const [monthlyAverageRows, setMonthlyAverageRows] = useState([]);
   const [loadingMonthlyAvg, setLoadingMonthlyAvg] = useState(false);
   const [monthlyAvgSearch, setMonthlyAvgSearch] = useState('');
@@ -816,12 +817,7 @@ export default function Purchasing() {
 
   return (
     <div className="fade-in">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Pembelian & Supplier</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Catat pembelian dan kelola supplier.</p>
-        </div>
-      </div>
+
 
       {notification && (
         <div style={{ padding: '14px 20px', borderRadius: 'var(--radius-lg)', marginBottom: '20px', background: notification.type === 'success' ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)', border: `1px solid ${notification.type === 'success' ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}` }}>
@@ -1132,18 +1128,16 @@ export default function Purchasing() {
               
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button className="btn btn-secondary" onClick={() => setShowBulkImportPurchases(true)}>
-                  <UploadCloud size={16} style={{ marginRight: '8px' }}/> Import Excel
+                  Import Excel
                 </button>
               </div>
 
-              {/* Global Cart Info (Date, Destination RESTO/CENTRAL & Delivery Notes — FT-04.1 & FT-04.2) */}
+              {/* Global Cart Info (Clean UI without decorative icons + Source Category Tag for Owner/Purchasing) */}
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', width: '100%', paddingTop: '12px', borderTop: '1px dashed var(--border)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-tertiary)', padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                  <User size={15} style={{ color: 'var(--accent)' }} />
                   <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Oleh: <strong style={{ color: 'var(--text-primary)' }}>{activeUser?.name || '-'}</strong></span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-tertiary)', padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                  <Calendar size={15} style={{ color: 'var(--accent)' }} />
                   <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Tanggal Beli:</span>
                   <input
                     type="date"
@@ -1156,6 +1150,20 @@ export default function Purchasing() {
                       setCart(prev => prev.map(it => ({ ...it, date: nextDate })));
                     }}
                   />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-tertiary)', padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)' }}>Jenis Pencatatan:</span>
+                  <select
+                    aria-label="Pilih Jenis Pencatatan Pembelian"
+                    className="form-control"
+                    style={{ padding: '4px 10px', height: 'auto', width: 'auto', fontWeight: 700, fontSize: '0.82rem', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+                    value={entryCategory}
+                    onChange={e => setEntryCategory(e.target.value)}
+                  >
+                    <option value="PO_SUPPLIER">Realisasi PO Supplier</option>
+                    <option value="TRANSFER_CENTRAL">Transfer dari Central ke Resto</option>
+                    <option value="DIRECT_DAILY">Belanja Harian / Operasional</option>
+                  </select>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--accent-glow)', padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--accent)' }}>
                   <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)' }}>Arah Tujuan Kirim:</span>
@@ -1170,17 +1178,17 @@ export default function Purchasing() {
                       setCart(prev => prev.map(it => ({ ...it, destination: nextDest })));
                     }}
                   >
-                    <option value="RESTO">🏪 Kirim ke RESTO (Stok Bar)</option>
-                    <option value="CENTRAL">🏢 Kirim ke CENTRAL (Gudang Pusat)</option>
+                    <option value="RESTO">Kirim ke RESTO (Gudang Cabang)</option>
+                    <option value="CENTRAL">Kirim ke CENTRAL (Gudang Pusat)</option>
                   </select>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 240px', background: 'var(--bg-tertiary)', padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Keterangan Kirim:</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 220px', background: 'var(--bg-tertiary)', padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Keterangan:</span>
                   <input
                     type="text"
                     className="form-control"
                     style={{ padding: '4px 8px', height: 'auto', background: 'transparent', border: 'none', fontSize: '0.82rem', width: '100%' }}
-                    placeholder="Contoh: Beli harian mendadak kirim ke Bar BSD..."
+                    placeholder="Contoh: No PO / Transfer dari Central ke Resto / Belanja mendadak..."
                     value={defaultDeliveryNotes}
                     onChange={e => {
                       const val = e.target.value;
@@ -1291,8 +1299,8 @@ export default function Purchasing() {
                               value={item.destination || defaultDestination || 'RESTO'}
                               onChange={(e) => updateCartItem(item.cart_id, 'destination', e.target.value)}
                             >
-                              <option value="RESTO">🏪 RESTO (Bar)</option>
-                              <option value="CENTRAL">🏢 CENTRAL</option>
+                              <option value="RESTO">RESTO (Cabang)</option>
+                              <option value="CENTRAL">CENTRAL (Pusat)</option>
                             </select>
                           </td>
                           <td>
@@ -1361,8 +1369,8 @@ export default function Purchasing() {
                                   <div>
                                     <label className="text-[10px] text-gray-500 font-semibold">Tujuan Kirim</label>
                                     <select className="form-control text-xs py-1.5 px-2 font-bold" value={item.destination || defaultDestination || 'RESTO'} onChange={(e) => updateCartItem(item.cart_id, 'destination', e.target.value)}>
-                                      <option value="RESTO">🏪 RESTO (Bar)</option>
-                                      <option value="CENTRAL">🏢 CENTRAL</option>
+                                      <option value="RESTO">RESTO (Cabang)</option>
+                                      <option value="CENTRAL">CENTRAL (Pusat)</option>
                                     </select>
                                   </div>
                                   <div>
@@ -1393,7 +1401,6 @@ export default function Purchasing() {
                   {cart.length === 0 && (
                     <tr>
                       <td colSpan="10" style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted)' }}>
-                        <ShoppingCart size={32} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
                         <div>Keranjang kosong. Cari bahan baku di atas untuk mengatur jumlah, harga, dan arah tujuan (RESTO / CENTRAL).</div>
                       </td>
                     </tr>
@@ -1421,7 +1428,7 @@ export default function Purchasing() {
                 onClick={handlePrepareSavePurchases}
                 disabled={loading || cart.length === 0}
               >
-                <ShoppingCart size={18} /> {loading ? 'Menyimpan...' : `Simpan (${cart.length} Item)`}
+                {loading ? 'Menyimpan...' : `Simpan (${cart.length} Item)`}
               </button>
             </div>
           </div>
@@ -1441,7 +1448,6 @@ export default function Purchasing() {
               />
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Calendar size={16} style={{ color: 'var(--accent)' }} />
                   <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Periode:</span>
                   <select
                     className="form-control"

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import useDebounce from '../../hooks/useDebounce';
 import {
   Search, Plus, Edit, History, X, Trash2,
@@ -113,6 +113,7 @@ function StockLedgerInner() {
   }, [locations, activeLoc]);
 
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const userDivisionScope = getUserDivisionScope(profile?.role);
   const [divisionFilter, setDivisionFilter] = useState(() => userDivisionScope !== 'ALL' ? userDivisionScope : 'ALL');
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -782,6 +783,14 @@ function StockLedgerInner() {
                             setAdjustNotes('Koreksi stok awal / penyesuaian stok fisik aktual');
                           }}>
                             <Package size={13} />
+                          </button>
+                          <button
+                            className="btn btn-secondary"
+                            style={{ padding: '4px 7px', borderRadius: 'var(--radius-sm)', fontSize: '0.68rem', fontWeight: 700, color: total <= minLevel ? 'var(--warning)' : 'var(--accent)' }}
+                            title="Lapor Stok Habis / Ajukan Permintaan PO Cabang ke Owner & Purchasing"
+                            onClick={() => navigate(`/dashboard/procurement?tab=invoicing&prefillMaterial=${encodeURIComponent(item.name)}`)}
+                          >
+                            Ajukan PO
                           </button>
                           <button className="btn btn-secondary" style={{ padding: '5px', borderRadius: 'var(--radius-sm)' }} title="History" onClick={() => { setSelectedItem(item); setLedgerLocationFilter(safeActiveLoc); }}>
                             <History size={13} />

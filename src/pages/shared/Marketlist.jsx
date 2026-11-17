@@ -376,8 +376,14 @@ export default function Marketlist() {
                               <div>Rp {activePrice.toLocaleString('id-ID')}</div>
                               <div className="text-[10px] text-[var(--text-muted)]">/ {mat.unit || 'pck'}</div>
                             </div>
-                            <button type="button" className="p-1 text-[var(--accent)] hover:bg-[var(--bg-tertiary)] rounded" onClick={() => setCompareModalItem(mat)}>
-                              <TrendingDown size={14} />
+                            <button
+                              type="button"
+                              className="btn btn-secondary text-[11px] py-1 px-2 font-bold"
+                              style={{ color: 'var(--accent)', borderColor: 'rgba(16, 185, 129, 0.35)' }}
+                              title="Komparasi Harga, Bahan & Kualitas dari Supplier Lain"
+                              onClick={() => setCompareModalItem(mat)}
+                            >
+                              Komparasi
                             </button>
                           </div>
                         )}

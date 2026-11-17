@@ -1,8 +1,8 @@
 -- =====================================================================================
 -- BARVENTIS v16 ARCHITECTURE UPGRADE:
--- 1. Role Division Segregation (`division` column on `materials` & `recipes`: BAR, KITCHEN, SERVICE)
--- 2. Atomic Branch Cascade Deletion RPC (`delete_branch_cascade_v16`)
--- 3. Stock Replacement & EOD Sync in `adjust_material_stock`
+-- 1. Role Division Segregation (division column on materials & recipes: BAR, KITCHEN, SERVICE)
+-- 2. Update area_role_mappings.allowed_categories on role_classification = 'Bar'
+-- 3. Atomic Branch Cascade Deletion RPC (delete_branch_cascade_v16)
 -- =====================================================================================
 
 ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS division text DEFAULT 'BAR';
@@ -23,14 +23,26 @@ SET division = CASE
 END
 WHERE division IS NULL OR division = 'BAR';
 
--- Update default Bar role allowed_categories in area_role_mappings so all 142 Bar items appear
-UPDATE public.area_role_mappings
-SET allowed_categories = ARRAY[
-  'Syrup & Juice', 'Fresh Fruit', 'Dry Goods', 'Coffee & Tea', 'Powder',
-  'Take Away', 'Drink & Beer', 'Frozen Drink', 'Prep / Bahan Olahan', 'Milk',
-  'Asset / Inventory', 'Beverage', 'Packaging', 'Raw Material'
-]
-WHERE LOWER(role_name) = 'bar';
+-- Update default Bar role allowed_categories in area_role_mappings (using role_classification / area_code)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'area_role_mappings' AND column_name = 'role_classification'
+  ) THEN
+    UPDATE public.area_role_mappings
+    SET allowed_categories = ARRAY[
+      'Syrup & Juice', 'Fresh Fruit', 'Dry Goods', 'Coffee & Tea', 'Powder',
+      'Take Away', 'Drink & Beer', 'Frozen Drink', 'Prep / Bahan Olahan', 'Milk',
+      'Asset / Inventory', 'Beverage', 'Packaging', 'Raw Material'
+    ],
+    updated_at = now()
+    WHERE LOWER(COALESCE(role_classification, '')) IN ('bar', 'barista')
+       OR UPPER(COALESCE(area_code, '')) IN ('RESTO', 'BAR');
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Skipped area_role_mappings update: %', SQLERRM;
+END $$;
 
 CREATE OR REPLACE FUNCTION public.delete_branch_cascade_v16(
   p_tenant_id uuid,
@@ -43,6 +55,46 @@ SET search_path = public
 AS $$
 DECLARE
   v_fallback_branch_id uuid;
+  v_tbl text;
+  v_tables text[] := ARRAY[
+    'waste_logs',
+    'production_trimming_batches',
+    'production_run_items',
+    'production_runs',
+    'production_batch_ingredients',
+    'production_batches',
+    'material_lot_movements_v4',
+    'material_open_lot_state',
+    'daily_inventory_items',
+    'daily_inventories',
+    'material_batches',
+    'daily_stock_counts',
+    'inter_branch_transfer_items',
+    'inter_branch_transfers',
+    'stock_adjustments',
+    'usage_variance',
+    'expected_usage',
+    'market_list_items',
+    'market_lists',
+    'invoice_items',
+    'invoices',
+    'physical_check_items',
+    'physical_checks',
+    'pos_transaction_items',
+    'pos_transactions',
+    'pos_daily_aggregates',
+    'recipe_ingredients',
+    'recipes',
+    'stock_opname_items',
+    'stock_opnames',
+    'purchase_entries',
+    'transactions',
+    'material_location_costs',
+    'unit_conversions',
+    'area_role_mappings',
+    'materials',
+    'suppliers'
+  ];
 BEGIN
   SELECT id INTO v_fallback_branch_id
   FROM public.branches
@@ -59,44 +111,26 @@ BEGIN
   SET branch_id = v_fallback_branch_id
   WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
 
-  -- Delete child records in strict FK dependency order
-  DELETE FROM public.waste_logs WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.production_trimming_batches WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.production_run_items WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.production_runs WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.production_batch_ingredients WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.production_batches WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.material_lot_movements_v4 WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.material_open_lot_state WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.daily_inventory_items WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.daily_inventories WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.material_batches WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.daily_stock_counts WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.inter_branch_transfer_items WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.inter_branch_transfers WHERE tenant_id = p_tenant_id AND (from_branch_id = p_branch_id OR to_branch_id = p_branch_id OR branch_id = p_branch_id);
-  DELETE FROM public.stock_adjustments WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.usage_variance WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.expected_usage WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.market_list_items WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.market_lists WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.invoice_items WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.invoices WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.physical_check_items WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.physical_checks WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.pos_transaction_items WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.pos_transactions WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.pos_daily_aggregates WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.recipe_ingredients WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.recipes WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.stock_opname_items WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.stock_opnames WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.purchase_entries WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.transactions WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.material_location_costs WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.unit_conversions WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.area_role_mappings WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.materials WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
-  DELETE FROM public.suppliers WHERE tenant_id = p_tenant_id AND branch_id = p_branch_id;
+  -- Safely delete child records in strict FK dependency order using dynamic schema checks
+  FOREACH v_tbl IN ARRAY v_tables LOOP
+    BEGIN
+      IF v_tbl = 'inter_branch_transfers' THEN
+        EXECUTE 'DELETE FROM public.inter_branch_transfers WHERE tenant_id = $1 AND (branch_id = $2 OR from_branch_id = $2 OR to_branch_id = $2)'
+        USING p_tenant_id, p_branch_id;
+      ELSIF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = v_tbl AND column_name = 'branch_id'
+      ) AND EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = v_tbl AND column_name = 'tenant_id'
+      ) THEN
+        EXECUTE format('DELETE FROM public.%I WHERE tenant_id = $1 AND branch_id = $2', v_tbl)
+        USING p_tenant_id, p_branch_id;
+      END IF;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'Notice while cleaning % for branch %: %', v_tbl, p_branch_id, SQLERRM;
+    END;
+  END LOOP;
 
   DELETE FROM public.branches WHERE tenant_id = p_tenant_id AND id = p_branch_id;
 

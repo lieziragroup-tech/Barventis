@@ -154,57 +154,58 @@ export default function App() {
 
           {/* ====== 7 MODUL OPERASIONAL INTI ====== */}
 
-          {/* [1] Penjualan Beverage (POS) */}
+          {/* [1] Penjualan POS (Khusus Owner & Service/Kasir) */}
           <Route path="penjualan" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Service', 'Kasir', 'Central', 'Purchasing', 'Bar', 'Barista', 'Staff']}>
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Admin  Owner', 'Owner', 'Supervisor', 'Service', 'Kasir']}>
               <RouteErrorBoundary><BeverageSalesHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
-          {/* [2] Daily Inventory & Waste */}
+          {/* [2] Daily Inventory & Waste (Owner, Bar, Kitchen, Service — terfilter per divisi) */}
           <Route path="daily-inventory" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Bar', 'Barista', 'Kitchen', 'Central', 'Service', 'Kasir', 'Purchasing', 'Staff']}>
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Admin  Owner', 'Owner', 'Supervisor', 'Bar', 'Barista', 'Kitchen', 'Service', 'Kasir']}>
               <RouteErrorBoundary><DailyInventoryHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
-          {/* [3] Marketlist & Pembelian */}
+          {/* [3] Pengadaan, PO & Komparasi Supplier (Purchasing & Owner penuh; Bar/Kitchen/Service khusus Permintaan PO & Goods Receipt) */}
           <Route path="procurement" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Central', 'Purchasing', 'Staff']}>
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Admin  Owner', 'Owner', 'Supervisor', 'Purchasing', 'Central', 'Bar', 'Barista', 'Kitchen', 'Service']}>
               <RouteErrorBoundary><ProcurementHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
-          {/* [4] Menu Pricing & COGS */}
+          {/* [4] Menu Pricing & COGS (Khusus Owner, Bar [Minuman], & Kitchen [Masakan]) */}
           <Route path="pricing-cogs" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Bar', 'Barista', 'Kitchen', 'Central', 'Purchasing', 'Staff']}>
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Admin  Owner', 'Owner', 'Supervisor', 'Bar', 'Barista', 'Kitchen']}>
               <RouteErrorBoundary><PricingCogsHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
-          {/* [5] Stock Opname & Aset */}
+          {/* [5] Stock Opname & Aset (Owner, Bar, Kitchen, Service — terfilter per divisi) */}
           <Route path="opname-assets" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Bar', 'Barista', 'Kitchen', 'Service', 'Central', 'Purchasing', 'Staff']}>
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Admin  Owner', 'Owner', 'Supervisor', 'Bar', 'Barista', 'Kitchen', 'Service']}>
               <RouteErrorBoundary><OpnameAssetsHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
-          {/* [7] Cost Control & Laporan */}
+          {/* [7] Cost Control & Laporan (Eksklusif Owner / Finance) */}
           <Route path="cost-report" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Central', 'Purchasing', 'Finance', 'Bar', 'Barista', 'Staff']}>
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Admin  Owner', 'Owner', 'Finance']}>
               <RouteErrorBoundary><CostControlReportHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
-          {/* [*] Pengaturan & Buku Stok (Owner/Admin full access; Bar/Kitchen/Service scoped to Buku Stok & Mutasi) */}
+          {/* [*] Pengaturan & Buku Stok (Owner full access; Bar/Kitchen/Service/Purchasing scoped to Buku Stok & Mutasi) */}
           <Route path="sistem" element={
             <ProtectedRoute allowedRoles={['Admin / Owner', 'Admin  Owner', 'Owner', 'Supervisor', 'Bar', 'Barista', 'Kitchen', 'Service', 'Central', 'Purchasing']}>
               <RouteErrorBoundary><SystemAdminHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
 
+          {/* [8] Olah Bahan & Trimming (Khusus Owner, Bar [Batch Prep], & Kitchen [Trimming & Prep]) */}
           <Route path="olah-bahan" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Owner', 'Supervisor', 'Kitchen', 'Central', 'Purchasing', 'Staff', 'Bar', 'Barista']}>
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Admin  Owner', 'Owner', 'Supervisor', 'Kitchen', 'Bar', 'Barista']}>
               <RouteErrorBoundary><SimplePrep /></RouteErrorBoundary>
             </ProtectedRoute>
           } />

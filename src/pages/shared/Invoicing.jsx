@@ -4,7 +4,10 @@ import {
   Plus, X, FileText, CheckCircle, XCircle, Clock, Package, Search,
   Download, Eye, UploadCloud, Send, Camera, MapPin, ExternalLink
 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
+import { getUserDivisionScope, getMaterialDivision } from '../../services/locationService';
+import ComparePriceModal from '../../components/modals/ComparePriceModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import BulkImport from '../../components/BulkImport';
@@ -56,16 +59,30 @@ export default function Invoicing() {
   const [kpis, setKpis] = useState({ total: 0, pending: 0, received: 0, totalValue: 0 });
   const [loadingList, setLoadingList] = useState(false);
 
-  // Goods Receipt Modal States
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawRole = String(activeUser?.role || '').trim().toLowerCase();
+  const isOwner = ['admin / owner', 'admin  owner', 'owner', 'super admin', 'superadmin'].includes(rawRole);
+  const isPurchasing = ['purchasing', 'central'].includes(rawRole);
+  const userDivisionScope = getUserDivisionScope(activeUser?.role);
+
+  // Goods Receipt Modal States (Dual Photo: Physical Goods + Delivery Note / Surat Jalan / Resi)
   const [showGoodsReceiptModal, setShowGoodsReceiptModal] = useState(null);
   const [receiptPhoto, setReceiptPhoto] = useState(null);
   const [receiptPhotoPreview, setReceiptPhotoPreview] = useState(null);
+  const [deliveryNotePhoto, setDeliveryNotePhoto] = useState(null);
+  const [deliveryNotePhotoPreview, setDeliveryNotePhotoPreview] = useState(null);
+  const [deliveryNoteNo, setDeliveryNoteNo] = useState('');
   const [receiptGps, setReceiptGps] = useState('');
   const [isGettingGps, setIsGettingGps] = useState(false);
   const [isReceiving, setIsReceiving] = useState(false);
   const sigCanvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [poActionDialog, setPoActionDialog] = useState(null);
+
+  // Purchasing Review & Supplier Comparison / Replacement Modal State
+  const [reviewPoModal, setReviewPoModal] = useState(null);
+  const [compareItemForPo, setCompareItemForPo] = useState(null);
+  const [savingReviewPo, setSavingReviewPo] = useState(false);
 
   // Load suppliers list
   const loadSuppliers = useCallback(async () => {
@@ -80,6 +97,35 @@ export default function Invoicing() {
   useEffect(() => {
     loadSuppliers();
   }, [loadSuppliers]);
+
+  // Auto-open Create PO Modal when navigated from "Lapor Stok Habis / Ajukan PO" (?prefillMaterial=...)
+  useEffect(() => {
+    const prefillName = searchParams.get('prefillMaterial');
+    if (prefillName && stock && stock.length > 0) {
+      const mat = stock.find(s => (s.name || '').toLowerCase().trim() === prefillName.toLowerCase().trim())
+        || stock.find(s => (s.name || '').toLowerCase().includes(prefillName.toLowerCase().trim()));
+      if (mat) {
+        const supName = mat.supplier || (suppliersList[0]?.name || 'Supplier Umum');
+        const activePrice = Number(mat.new_price) > 0 ? Number(mat.new_price) : (Number(mat.price) || 0);
+        const suggestedQty = Math.max(1, Number(mat.min_stock || 10) - Number(mat.qty_resto || 0));
+        setInvSupplier(supName);
+        setInvLocation('RESTO');
+        setInvNotes(`Laporan Stok Habis / Menipis dari Divisi ${userDivisionScope !== 'ALL' ? userDivisionScope : 'Cabang'}: ${mat.name}`);
+        setInvItems([{
+          material_id: mat.id,
+          item_name: mat.name,
+          qty: suggestedQty,
+          unit_price: activePrice,
+          unit: mat.unit || 'pck',
+          _uid: rowUid()
+        }]);
+        setShowCreateModal(true);
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete('prefillMaterial');
+        setSearchParams(nextParams, { replace: true });
+      }
+    }
+  }, [searchParams, stock, suppliersList, userDivisionScope, setSearchParams]);
 
   // Load invoices and KPIs
   const reloadInvoices = useCallback(async () => {
@@ -356,7 +402,16 @@ export default function Invoicing() {
     if (!invoiceToSubmit) return;
     try {
       const savedSupplierName = invoiceToSubmit.supplier;
-      await onCreateInvoice(invoiceToSubmit);
+      const enrichedInvoice = {
+        ...invoiceToSubmit,
+        division: userDivisionScope !== 'ALL' ? userDivisionScope : 'BAR',
+        original_supplier: invoiceToSubmit.original_supplier || invoiceToSubmit.supplier,
+        supplier_change_note: invoiceToSubmit.supplier_change_note || '',
+        requested_by_role: activeUser?.role || 'Staff',
+        requested_by_name: activeUser?.name || 'Staf Cabang',
+        workflow_status: isOwner ? 'APPROVED' : (isPurchasing ? 'PENDING_APPROVAL' : 'REQUESTED')
+      };
+      await onCreateInvoice(enrichedInvoice);
       setShowConfirmModal(false);
       setInvSupplier('');
       setInvNotes('');
@@ -429,21 +484,125 @@ export default function Invoicing() {
     }
   };
 
+  // Purchasing Review & Supplier Comparison / Replacement Handlers
+  const openReviewPoModal = (inv) => {
+    setReviewPoModal({
+      ...inv,
+      original_supplier: inv.original_supplier || inv.supplier,
+      supplier: inv.supplier,
+      supplier_change_note: inv.supplier_change_note || '',
+      notes: inv.notes || '',
+      items: (inv.items || []).map(it => ({ ...it }))
+    });
+  };
+
+  const handleSavePurchasingReview = async (e, submitForOwnerAcc = true) => {
+    if (e) e.preventDefault();
+    if (!reviewPoModal) return;
+    const isSupplierChanged = (reviewPoModal.supplier || '').trim().toLowerCase() !== (reviewPoModal.original_supplier || '').trim().toLowerCase();
+    if (isSupplierChanged && !String(reviewPoModal.supplier_change_note || '').trim()) {
+      alert('Karena Supplier diganti dari permintaan awal cabang, mohon isi Catatan Pergantian Supplier agar pembuat PO dan Owner mengetahui alasan efisiensinya.');
+      return;
+    }
+    setSavingReviewPo(true);
+    try {
+      const nextStatus = submitForOwnerAcc ? 'PENDING_APPROVAL' : (reviewPoModal.workflow_status || 'REQUESTED');
+      await api.updatePoWorkflowAndSupplier(reviewPoModal.id, {
+        workflow_status: nextStatus,
+        supplier: reviewPoModal.supplier,
+        original_supplier: reviewPoModal.original_supplier,
+        supplier_change_note: reviewPoModal.supplier_change_note,
+        notes: reviewPoModal.notes,
+        items: reviewPoModal.items
+      });
+      if (toast) {
+        toast(
+          submitForOwnerAcc
+            ? `PO ${reviewPoModal.invoice_no} berhasil diajukan ke Owner untuk di-ACC.`
+            : `Perubahan PO ${reviewPoModal.invoice_no} berhasil disimpan.`,
+          'success'
+        );
+      }
+      setReviewPoModal(null);
+      await reloadInvoices();
+      await refreshData();
+    } catch (err) {
+      if (toast) toast(err.message || 'Gagal menyimpan review PO', 'error');
+      else alert(err.message);
+    } finally {
+      setSavingReviewPo(false);
+    }
+  };
+
+  const handleOwnerDecision = async (inv, decision) => {
+    const isApprove = decision === 'APPROVED';
+    let rejectionReason = '';
+    if (!isApprove) {
+      rejectionReason = window.prompt(`Masukkan catatan revisi / alasan penolakan untuk PO ${inv.invoice_no}:`, inv.rejection_reason || '') || '';
+      if (!rejectionReason.trim()) return;
+    }
+    try {
+      await api.updatePoWorkflowAndSupplier(inv.id, {
+        workflow_status: isApprove ? 'APPROVED' : 'REJECTED',
+        approved_by_name: activeUser?.name || 'Owner',
+        rejection_reason: isApprove ? '' : rejectionReason.trim()
+      });
+      if (toast) {
+        toast(
+          isApprove
+            ? `PO ${inv.invoice_no} telah di-ACC Owner. Purchasing kini dapat menghubungi supplier ${inv.supplier}.`
+            : `PO ${inv.invoice_no} dikembalikan ke Purchasing untuk revisi.`,
+          isApprove ? 'success' : 'info'
+        );
+      }
+      await reloadInvoices();
+      await refreshData();
+    } catch (err) {
+      if (toast) toast(err.message || 'Gagal memproses keputusan Owner', 'error');
+    }
+  };
+
+  const handleContactSupplierWA = (inv) => {
+    const supObj = suppliersList.find(s => (s.name || '').toLowerCase().trim() === (inv.supplier || '').toLowerCase().trim());
+    const rawPhone = String(supObj?.phone || supObj?.contact || '').replace(/[^0-9]/g, '');
+    const waPhone = rawPhone.startsWith('0') ? ('62' + rawPhone.slice(1)) : rawPhone;
+    const itemsLines = (inv.items || [])
+      .map((it, i) => `${i + 1}. ${it.item_name} — ${it.qty} ${it.unit || 'pck'} (@ Rp ${Number(it.unit_price || 0).toLocaleString('id-ID')})`)
+      .join('\n');
+    const msg = `Halo *${inv.supplier}*,\nKami dari bagian Purchasing *Umatis Resto & Venue* ingin memesan Purchase Order yang telah disetujui:\n\n*No. PO:* ${inv.invoice_no}\n*Tanggal:* ${inv.date}\n*Tujuan Kirim:* Gudang ${inv.location || 'RESTO'}\n\n*Rincian Pesanan:*\n${itemsLines}\n\n*Total Nilai PO:* Rp ${Number(inv.total || 0).toLocaleString('id-ID')}\n\nMohon konfirmasi ketersediaan dan jadwal pengiriman beserta Surat Jalan. Terima kasih.`;
+    const waUrl = waPhone
+      ? `https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`
+      : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
+  };
+
   // Open Goods Receipt Modal
   const openReceiveModal = (inv) => {
     setShowGoodsReceiptModal(inv);
     setReceiptPhoto(null);
     setReceiptPhotoPreview(null);
+    setDeliveryNotePhoto(null);
+    setDeliveryNotePhotoPreview(null);
+    setDeliveryNoteNo(inv.delivery_note_no || '');
     setReceiptGps('');
   };
 
-  // Handle Photo & GPS
+  // Handle Photos & GPS
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
       setReceiptPhoto(file);
       const url = URL.createObjectURL(file);
       setReceiptPhotoPreview(url);
+    }
+  };
+
+  const handleDeliveryNotePhotoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setDeliveryNotePhoto(file);
+      const url = URL.createObjectURL(file);
+      setDeliveryNotePhotoPreview(url);
     }
   };
 
@@ -512,50 +671,71 @@ export default function Invoicing() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   };
 
-  // Confirm Receipt
-  const handleConfirmReceipt = async (isQuick = false) => {
+  // Confirm Receipt with Direct Photo of Received Goods + Delivery Note (Surat Jalan / Resi)
+  const handleConfirmReceipt = async () => {
     if (!showGoodsReceiptModal) return;
+    if (!receiptPhoto && !receiptPhotoPreview) {
+      alert('Wajib menyertakan Foto Fisik Barang yang Diterima sebagai bukti Goods Receipt.');
+      return;
+    }
     setIsReceiving(true);
     try {
       let photoUrl = null;
+      let deliveryNotePhotoUrl = null;
       let signatureUrl = null;
 
-      if (!isQuick) {
-        if (receiptPhoto) {
-          try {
-            const photoName = `receipt_${showGoodsReceiptModal.id}_${Date.now()}.jpg`;
-            const { error: photoErr } = await supabase.storage.from('signatures').upload(photoName, receiptPhoto);
-            if (!photoErr) {
-              photoUrl = supabase.storage.from('signatures').getPublicUrl(photoName).data.publicUrl;
-            }
-          } catch (uploadErr) {
-            console.warn('Upload foto receipt warning:', uploadErr);
+      if (receiptPhoto) {
+        try {
+          const photoName = `receipt_goods_${showGoodsReceiptModal.id}_${Date.now()}.jpg`;
+          const { error: photoErr } = await supabase.storage.from('signatures').upload(photoName, receiptPhoto);
+          if (!photoErr) {
+            photoUrl = supabase.storage.from('signatures').getPublicUrl(photoName).data.publicUrl;
+          } else {
+            photoUrl = receiptPhotoPreview;
           }
+        } catch {
+          photoUrl = receiptPhotoPreview;
         }
+      }
 
-        const canvas = sigCanvasRef.current;
-        if (canvas) {
-          try {
-            const sigData = canvas.toDataURL('image/png');
-            const isBlank = !canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some(channel => channel !== 0);
-            if (!isBlank) {
-              const sigBlob = await (await fetch(sigData)).blob();
-              const sigName = `sig_${showGoodsReceiptModal.id}_${Date.now()}.png`;
-              const { error: sigErr } = await supabase.storage.from('signatures').upload(sigName, sigBlob);
-              if (!sigErr) {
-                signatureUrl = supabase.storage.from('signatures').getPublicUrl(sigName).data.publicUrl;
-              } else {
-                signatureUrl = sigData;
-              }
-            }
-          } catch (uploadSigErr) {
-            console.warn('Upload signature warning:', uploadSigErr);
+      if (deliveryNotePhoto) {
+        try {
+          const sjName = `surat_jalan_${showGoodsReceiptModal.id}_${Date.now()}.jpg`;
+          const { error: sjErr } = await supabase.storage.from('signatures').upload(sjName, deliveryNotePhoto);
+          if (!sjErr) {
+            deliveryNotePhotoUrl = supabase.storage.from('signatures').getPublicUrl(sjName).data.publicUrl;
+          } else {
+            deliveryNotePhotoUrl = deliveryNotePhotoPreview;
           }
+        } catch {
+          deliveryNotePhotoUrl = deliveryNotePhotoPreview;
+        }
+      }
+
+      const canvas = sigCanvasRef.current;
+      if (canvas) {
+        try {
+          const sigData = canvas.toDataURL('image/png');
+          const isBlank = !canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some(channel => channel !== 0);
+          if (!isBlank) {
+            const sigBlob = await (await fetch(sigData)).blob();
+            const sigName = `sig_${showGoodsReceiptModal.id}_${Date.now()}.png`;
+            const { error: sigErr } = await supabase.storage.from('signatures').upload(sigName, sigBlob);
+            if (!sigErr) {
+              signatureUrl = supabase.storage.from('signatures').getPublicUrl(sigName).data.publicUrl;
+            } else {
+              signatureUrl = sigData;
+            }
+          }
+        } catch (uploadSigErr) {
+          console.warn('Upload signature warning:', uploadSigErr);
         }
       }
 
       await api.receiveInvoice(showGoodsReceiptModal.id, {
         photoUrl,
+        deliveryNotePhotoUrl,
+        deliveryNoteNo: deliveryNoteNo.trim(),
         signatureUrl,
         gps: receiptGps || null
       });
@@ -575,16 +755,22 @@ export default function Invoicing() {
     }
   };
 
-  // Status badge
-  const statusBadge = (status) => {
+  // Status badge supporting 4-stage PO workflow
+  const statusBadge = (status, workflowStatus) => {
+    const wf = workflowStatus || status;
     const map = {
-      DRAFT: { label: 'DRAFT', bg: 'rgba(100, 116, 139, 0.12)', color: '#475569', border: 'rgba(100, 116, 139, 0.3)' },
-      SENT: { label: 'SENT', bg: 'rgba(59, 130, 246, 0.12)', color: '#2563eb', border: 'rgba(59, 130, 246, 0.3)' },
-      RECEIVED: { label: 'RECEIVED', bg: 'rgba(16, 185, 129, 0.12)', color: '#059669', border: 'rgba(16, 185, 129, 0.3)' },
-      GOODS_RECEIVED: { label: 'RECEIVED', bg: 'rgba(16, 185, 129, 0.12)', color: '#059669', border: 'rgba(16, 185, 129, 0.3)' },
-      CANCELLED: { label: 'CANCELLED', bg: 'rgba(239, 68, 68, 0.12)', color: '#dc2626', border: 'rgba(239, 68, 68, 0.3)' }
+      REQUESTED: { label: 'PERMINTAAN CABANG', bg: 'rgba(100, 116, 139, 0.12)', color: '#475569', border: 'rgba(100, 116, 139, 0.3)' },
+      DRAFT: { label: 'PERMINTAAN CABANG', bg: 'rgba(100, 116, 139, 0.12)', color: '#475569', border: 'rgba(100, 116, 139, 0.3)' },
+      PENDING_APPROVAL: { label: 'MENUNGGU ACC OWNER', bg: 'rgba(245, 158, 11, 0.14)', color: '#d97706', border: 'rgba(245, 158, 11, 0.35)' },
+      APPROVED: { label: 'DI-ACC OWNER (SIAP PESAN)', bg: 'rgba(16, 185, 129, 0.14)', color: '#059669', border: 'rgba(16, 185, 129, 0.35)' },
+      REJECTED: { label: 'REVISI OWNER', bg: 'rgba(239, 68, 68, 0.12)', color: '#dc2626', border: 'rgba(239, 68, 68, 0.3)' },
+      SENT: { label: 'DIPESAN KE SUPPLIER', bg: 'rgba(59, 130, 246, 0.12)', color: '#2563eb', border: 'rgba(59, 130, 246, 0.3)' },
+      RECEIVED: { label: 'GOODS RECEIPT SELESAI', bg: 'rgba(16, 185, 129, 0.12)', color: '#059669', border: 'rgba(16, 185, 129, 0.3)' },
+      GOODS_RECEIVED: { label: 'GOODS RECEIPT SELESAI', bg: 'rgba(16, 185, 129, 0.12)', color: '#059669', border: 'rgba(16, 185, 129, 0.3)' },
+      CANCELLED: { label: 'DIBATALKAN', bg: 'rgba(239, 68, 68, 0.12)', color: '#dc2626', border: 'rgba(239, 68, 68, 0.3)' }
     };
-    const s = map[status] || { label: status, bg: 'rgba(100, 116, 139, 0.12)', color: '#475569', border: 'rgba(100, 116, 139, 0.3)' };
+    const s = map[wf] || map[status] || { label: wf, bg: 'rgba(100, 116, 139, 0.12)', color: '#475569', border: 'rgba(100, 116, 139, 0.3)' };
+    
     return (
       <span style={{
         display: 'inline-flex',
@@ -763,16 +949,6 @@ Catatan: ${inv.notes || '-'}`,
 
   return (
     <div className="fade-in">
-      {/* Page Header */}
-      <div style={{ marginBottom: '20px' }}>
-        <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-          Purchase Order & Invoicing
-        </h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '4px' }}>
-          Buat PO, kirim, dan terima barang.
-        </p>
-      </div>
-
       {/* Controls */}
       <div className="glass-card" style={{ marginBottom: '20px', padding: '16px 20px' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
@@ -789,15 +965,15 @@ Catatan: ${inv.notes || '-'}`,
           </div>
           <select
             className="form-control"
-            style={{ width: '160px' }}
+            style={{ width: '210px', fontWeight: 600 }}
             value={statusFilter}
             onChange={e => { setStatusFilter(e.target.value); setInvoicesPage(1); }}
           >
-            <option value="ALL">Semua Status</option>
-            <option value="DRAFT">DRAFT</option>
-            <option value="SENT">SENT</option>
-            <option value="RECEIVED">RECEIVED</option>
-            <option value="CANCELLED">CANCELLED</option>
+            <option value="ALL">Semua Status PO</option>
+            <option value="DRAFT">Permintaan Cabang &amp; Menunggu ACC</option>
+            <option value="SENT">Sudah Dipesan ke Supplier (SENT)</option>
+            <option value="RECEIVED">Goods Receipt Selesai (RECEIVED)</option>
+            <option value="CANCELLED">Dibatalkan</option>
           </select>
           <ExportButton
             onExportExcel={handleExportExcel}
@@ -808,42 +984,40 @@ Catatan: ${inv.notes || '-'}`,
             currentRole={activeUser?.role}
             title="Cetak daftar Purchase Order"
           />
-          <button className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '0.85rem' }} onClick={() => setShowBulkImport(true)}>
-            <UploadCloud size={15} style={{ marginRight: '6px' }} /> Import PO
-          </button>
-          <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem' }} onClick={() => setShowCreateModal(true)}>
-            <Plus size={15} style={{ marginRight: '6px' }} /> Buat PO
+          {(isOwner || isPurchasing) && (
+            <button className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '0.85rem' }} onClick={() => setShowBulkImport(true)}>
+              Import PO
+            </button>
+          )}
+          <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem', fontWeight: 700 }} onClick={() => setShowCreateModal(true)}>
+            {userDivisionScope !== 'ALL' ? `+ Ajukan Permintaan PO (${userDivisionScope})` : '+ Buat Permintaan PO'}
           </button>
         </div>
       </div>
 
-      {/* Summary KPIs */}
+      {/* Summary KPIs (Clean Typography without Decorative Icon Boxes) */}
       <div className="kpi-grid no-print" style={{ marginBottom: '24px' }}>
         <div className="glass-card kpi-card">
           <div className="kpi-header">
-            <span className="kpi-title">Total PO</span>
-            <div className="kpi-icon-wrap" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}><FileText size={18} /></div>
+            <span className="kpi-title">Total Dokumen PO</span>
           </div>
           <div className="kpi-value">{kpis.total}</div>
         </div>
         <div className="glass-card kpi-card">
           <div className="kpi-header">
-            <span className="kpi-title">Menunggu</span>
-            <div className="kpi-icon-wrap" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#d97706' }}><Clock size={18} /></div>
+            <span className="kpi-title">Permintaan / Proses ACC &amp; Kirim</span>
           </div>
           <div className="kpi-value" style={{ color: '#d97706' }}>{kpis.pending}</div>
         </div>
         <div className="glass-card kpi-card">
           <div className="kpi-header">
-            <span className="kpi-title">Diterima</span>
-            <div className="kpi-icon-wrap" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#059669' }}><CheckCircle size={18} /></div>
+            <span className="kpi-title">Goods Receipt Selesai</span>
           </div>
           <div className="kpi-value" style={{ color: '#059669' }}>{kpis.received}</div>
         </div>
         <div className="glass-card kpi-card">
           <div className="kpi-header">
-            <span className="kpi-title">Total Nilai</span>
-            <div className="kpi-icon-wrap" style={{ background: 'var(--info-glow)', color: 'var(--info)' }}><Package size={18} /></div>
+            <span className="kpi-title">Total Nilai Pengadaan</span>
           </div>
           <div className="kpi-value" style={{ fontSize: '1.25rem' }}>{formatIDR(kpis.totalValue)}</div>
         </div>
@@ -891,89 +1065,153 @@ Catatan: ${inv.notes || '-'}`,
                   ]}
                 />
               ) : (
-                paginatedInvoices.map(inv => (
-                  <tr key={inv.id}>
-                    <td style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.85rem', color: 'var(--accent)' }}>
-                      {inv.invoice_no}
-                    </td>
-                    <td style={{ fontWeight: 500 }}>{inv.supplier}</td>
-                    <td style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{inv.date}</td>
-                    <td style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      <span style={{ padding: '2px 8px', background: 'var(--bg-tertiary)', borderRadius: '6px' }}>
-                        {inv.location || 'CENTRAL'}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'right', fontSize: '0.85rem' }}>{inv.items?.length || 0} bahan</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatIDR(inv.total)}</td>
-                    <td style={{ textAlign: 'center' }}>{statusBadge(inv.status)}</td>
-                    <td style={{ textAlign: 'center' }} className="no-print">
-                      <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
-                        {/* Detail Modal */}
-                        <button
-                          className="btn btn-secondary"
-                          style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)' }}
-                          title="Lihat Rincian PO"
-                          onClick={() => setViewInvoice(inv)}
-                        >
-                          <Eye size={14} />
-                        </button>
-
-                        {/* Cetak PDF */}
-                        <button
-                          className="btn btn-secondary"
-                          style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)' }}
-                          title="Cetak Purchase Order PDF"
-                          onClick={() => handlePrintInvoice(inv)}
-                        >
-                          <Download size={14} />
-                        </button>
-
-                        {/* Status: DRAFT -> Kirim PO */}
-                        {inv.status === 'DRAFT' && (
-                          <button
-                            className="btn btn-primary"
-                            style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            title="Tandai PO Terkirim ke Supplier"
-                            onClick={() => handleKirimPO(inv)}
-                          >
-                            <Send size={12} /> Kirim PO
-                          </button>
-                        )}
-
-                        {/* Status: DRAFT or SENT -> Terima Barang (Goods Receipt) */}
-                        {(inv.status === 'DRAFT' || inv.status === 'SENT') && (
-                          <button
-                            className="btn btn-success"
-                            style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            title="Terima Barang & Tambah Stok Gudang"
-                            onClick={() => openReceiveModal(inv)}
-                          >
-                            <CheckCircle size={12} /> Terima Barang
-                          </button>
-                        )}
-
-                        {/* Status: DRAFT or SENT -> Batalkan PO */}
-                        {(inv.status === 'DRAFT' || inv.status === 'SENT') && (
-                          <button
-                            className="btn btn-secondary"
-                            style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', color: 'var(--danger)' }}
-                            title="Batalkan PO"
-                            onClick={() => handleCancelPO(inv)}
-                          >
-                            <XCircle size={14} />
-                          </button>
-                        )}
-
-                        {/* Status: RECEIVED */}
-                        {(inv.status === 'RECEIVED' || inv.status === 'GOODS_RECEIVED') && (
-                          <span style={{ fontSize: '0.75rem', color: 'var(--success)', fontWeight: 600, padding: '4px 6px' }}>
-                            ✓ Stok Masuk
+                paginatedInvoices
+                  .filter(inv => userDivisionScope === 'ALL' || !inv.division || inv.division === userDivisionScope)
+                  .map(inv => {
+                    const wf = inv.workflow_status || inv.status;
+                    const supplierChanged = inv.original_supplier && inv.original_supplier.toLowerCase().trim() !== (inv.supplier || '').toLowerCase().trim();
+                    return (
+                      <tr key={inv.id}>
+                        <td style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.85rem', color: 'var(--accent)' }}>
+                          <div>{inv.invoice_no}</div>
+                          {inv.division && (
+                            <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '4px', background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', fontFamily: 'var(--font-sans)' }}>
+                              Divisi: {inv.division}
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ fontWeight: 600 }}>
+                          <div>{inv.supplier}</div>
+                          {supplierChanged && (
+                            <div style={{ fontSize: '0.72rem', color: '#d97706', marginTop: '2px' }} title={inv.supplier_change_note || ''}>
+                              Diganti dari <strong>{inv.original_supplier}</strong>
+                              {inv.supplier_change_note ? ` — "${inv.supplier_change_note}"` : ''}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{inv.date}</td>
+                        <td style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          <span style={{ padding: '2px 8px', background: 'var(--bg-tertiary)', borderRadius: '6px', fontWeight: 600 }}>
+                            {inv.location || 'CENTRAL'}
                           </span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                        </td>
+                        <td style={{ textAlign: 'right', fontSize: '0.85rem' }}>{inv.items?.length || 0} bahan</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatIDR(inv.total)}</td>
+                        <td style={{ textAlign: 'center' }}>{statusBadge(inv.status, wf)}</td>
+                        <td style={{ textAlign: 'center' }} className="no-print">
+                          <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+                            {/* Detail Modal */}
+                            <button
+                              className="btn btn-secondary"
+                              style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', fontWeight: 600 }}
+                              title="Lihat Rincian PO & Catatan Supplier"
+                              onClick={() => setViewInvoice(inv)}
+                            >
+                              Detail
+                            </button>
+
+                            {/* Cetak PDF */}
+                            <button
+                              className="btn btn-secondary"
+                              style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', fontWeight: 600 }}
+                              title="Unduh / Cetak PDF PO"
+                              onClick={() => handlePrintInvoice(inv)}
+                            >
+                              PDF
+                            </button>
+
+                            {/* PURCHASING / OWNER: Review, Compare Supplier & Submit for Owner ACC */}
+                            {(isPurchasing || isOwner) && ['DRAFT', 'REQUESTED', 'REJECTED', 'PENDING_APPROVAL'].includes(wf) && inv.status === 'DRAFT' && (
+                              <button
+                                className="btn btn-secondary"
+                                style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700, color: 'var(--accent)', borderColor: 'rgba(16, 185, 129, 0.35)' }}
+                                title="Verifikasi harga/supplier, bandingkan efisiensi supplier lain, dan ajukan ACC ke Owner"
+                                onClick={() => openReviewPoModal(inv)}
+                              >
+                                {wf === 'PENDING_APPROVAL' ? 'Edit Review PO' : 'Review & Ajukan ACC'}
+                              </button>
+                            )}
+
+                            {/* OWNER EXCLUSIVE: ACC / Tolak PO */}
+                            {isOwner && ['REQUESTED', 'DRAFT', 'PENDING_APPROVAL'].includes(wf) && inv.status === 'DRAFT' && (
+                              <>
+                                <button
+                                  className="btn btn-primary"
+                                  style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700, background: '#059669', borderColor: '#059669' }}
+                                  title="Setujui (ACC) PO ini agar Purchasing dapat menghubungi Supplier"
+                                  onClick={() => handleOwnerDecision(inv, 'APPROVED')}
+                                >
+                                  ACC Owner
+                                </button>
+                                <button
+                                  className="btn btn-secondary"
+                                  style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', fontWeight: 600, color: 'var(--danger)' }}
+                                  title="Minta revisi supplier/harga ke Purchasing"
+                                  onClick={() => handleOwnerDecision(inv, 'REJECTED')}
+                                >
+                                  Revisi
+                                </button>
+                              </>
+                            )}
+
+                            {/* PURCHASING / OWNER: After Owner ACC (APPROVED) -> Contact Supplier (WA) & Mark SENT */}
+                            {(isPurchasing || isOwner) && (wf === 'APPROVED' || inv.status === 'SENT') && inv.status !== 'RECEIVED' && (
+                              <button
+                                className="btn btn-secondary"
+                                style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700, color: '#059669', borderColor: 'rgba(16, 185, 129, 0.4)', background: 'rgba(16, 185, 129, 0.08)' }}
+                                title="Hubungi Supplier terkait via WhatsApp dengan daftar pesanan PO resmi"
+                                onClick={() => handleContactSupplierWA(inv)}
+                              >
+                                Hubungi Supplier (WA)
+                              </button>
+                            )}
+
+                            {(isPurchasing || isOwner) && wf === 'APPROVED' && inv.status === 'DRAFT' && (
+                              <button
+                                className="btn btn-primary"
+                                style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700 }}
+                                title="Tandai PO sudah dikirim/dipesan ke Supplier"
+                                onClick={() => handleKirimPO(inv)}
+                              >
+                                Tandai Dipesan (SENT)
+                              </button>
+                            )}
+
+                            {/* GOODS RECEIPT (Saat Barang Tiba di Lokasi: Wajib Foto Barang + Surat Jalan / Resi) */}
+                            {(inv.status === 'SENT' || wf === 'APPROVED') && inv.status !== 'RECEIVED' && (
+                              <button
+                                className="btn btn-success"
+                                style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700 }}
+                                title="Terima Barang di lokasi dengan bukti Foto Fisik Barang & Surat Jalan / Resi Supplier"
+                                onClick={() => openReceiveModal(inv)}
+                              >
+                                Terima Barang (Goods Receipt)
+                              </button>
+                            )}
+
+                            {/* Cancel PO (Owner / Purchasing) */}
+                            {(isOwner || isPurchasing) && (inv.status === 'DRAFT' || inv.status === 'SENT') && (
+                              <button
+                                className="btn btn-secondary"
+                                style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', color: 'var(--danger)' }}
+                                title="Batalkan PO"
+                                onClick={() => handleCancelPO(inv)}
+                              >
+                                Batal
+                              </button>
+                            )}
+
+                            {/* Status: RECEIVED */}
+                            {(inv.status === 'RECEIVED' || inv.status === 'GOODS_RECEIVED') && (
+                              <span style={{ fontSize: '0.74rem', color: 'var(--success)', fontWeight: 700, padding: '4px 6px' }}>
+                                Stok Masuk
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
               )}
 
               {!loadingList && totalInvoices === 0 && (
@@ -1025,6 +1263,32 @@ Catatan: ${inv.notes || '-'}`,
               </div>
             </div>
 
+            {/* Supplier Replacement & Approval Audit Banner */}
+            {viewInvoice.original_supplier && viewInvoice.original_supplier.toLowerCase().trim() !== (viewInvoice.supplier || '').toLowerCase().trim() && (
+              <div style={{ fontSize: '0.82rem', marginBottom: '14px', background: 'rgba(245, 158, 11, 0.08)', padding: '12px 14px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(245, 158, 11, 0.35)' }}>
+                <div style={{ fontWeight: 700, color: '#d97706', marginBottom: '4px' }}>
+                  Pergantian Supplier oleh Purchasing (Efisiensi Harga/Kualitas)
+                </div>
+                <div>Supplier Permintaan Awal Cabang: <strong>{viewInvoice.original_supplier}</strong></div>
+                <div>Supplier Terpilih (Purchasing): <strong style={{ color: 'var(--accent)' }}>{viewInvoice.supplier}</strong></div>
+                {viewInvoice.supplier_change_note && (
+                  <div style={{ marginTop: '4px' }}>Catatan ke Pembuat PO &amp; Owner: <strong>&ldquo;{viewInvoice.supplier_change_note}&rdquo;</strong></div>
+                )}
+              </div>
+            )}
+
+            {viewInvoice.approved_by_name && (
+              <div style={{ fontSize: '0.8rem', marginBottom: '14px', background: 'rgba(16, 185, 129, 0.08)', padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#059669', fontWeight: 600 }}>
+                Telah di-ACC oleh Owner ({viewInvoice.approved_by_name}) {viewInvoice.approved_at ? `pada ${new Date(viewInvoice.approved_at).toLocaleString('id-ID')}` : ''}
+              </div>
+            )}
+
+            {viewInvoice.rejection_reason && (
+              <div style={{ fontSize: '0.8rem', marginBottom: '14px', background: 'rgba(239, 68, 68, 0.08)', padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#dc2626', fontWeight: 600 }}>
+                Catatan Revisi Owner: &ldquo;{viewInvoice.rejection_reason}&rdquo;
+              </div>
+            )}
+
             {/* Notes if any */}
             {viewInvoice.notes && (
               <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '20px', background: 'var(--bg-secondary)', padding: '12px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
@@ -1073,6 +1337,15 @@ Catatan: ${inv.notes || '-'}`,
                 <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <div>Waktu Penerimaan: <strong style={{ color: 'var(--text-primary)' }}>{viewInvoice.received_date || 'Tercatat'}</strong></div>
                   <div>Gudang Penyimpanan: <strong style={{ color: 'var(--text-primary)' }}>{viewInvoice.location || 'CENTRAL'}</strong></div>
+                  {viewInvoice.delivery_note_no && (
+                    <div>No. Surat Jalan / Resi Supplier: <strong style={{ color: 'var(--text-primary)' }}>{viewInvoice.delivery_note_no}</strong></div>
+                  )}
+                  {viewInvoice.delivery_note_photo_url && (
+                    <div style={{ marginTop: '8px' }}>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, marginBottom: '4px' }}>Foto Surat Jalan / Resi Supplier:</div>
+                      <img src={viewInvoice.delivery_note_photo_url} alt="Surat Jalan Supplier" style={{ maxWidth: '240px', borderRadius: '8px', border: '1px solid var(--border)' }} />
+                    </div>
+                  )}
                   {viewInvoice.receipt_gps && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <MapPin size={14} className="text-emerald-600" />
@@ -1702,39 +1975,16 @@ Catatan: ${inv.notes || '-'}`,
               </button>
             </div>
 
-            {/* Quick Receive Banner */}
-            <div style={{ background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', padding: '14px 16px', borderRadius: 'var(--radius-md)', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--success)' }}>Terima Cepat</div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Terima langsung tanpa foto dan TTD.</div>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-success"
-                  style={{ fontSize: '0.8rem', padding: '6px 14px' }}
-                  onClick={() => handleConfirmReceipt(true)}
-                  disabled={isReceiving}
-                >
-                  {isReceiving ? 'Memproses...' : '✓ Terima Cepat'}
-                </button>
-              </div>
+            <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', fontSize: '0.78rem', color: 'var(--text-primary)', marginBottom: '16px' }}>
+              <strong>SOP Penerimaan Barang (Goods Receipt):</strong> Wajib menyertakan foto langsung fisik barang yang tiba di lokasi beserta foto Surat Jalan / Resi dari supplier (jika ada).
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-              <div style={{ flex: 1, height: '1px', background: 'var(--border)' }}></div>
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                Atau Lengkapi Bukti
-              </span>
-              <div style={{ flex: 1, height: '1px', background: 'var(--border)' }}></div>
-            </div>
-
-            {/* Audit Section: Photo, GPS, Signature */}
+            {/* Audit Section: Dual Photo (Goods + Surat Jalan/Resi), GPS, Signature */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* 1. Photo */}
+              {/* 1. Foto Fisik Barang yang Diterima (Wajib) */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '6px' }}>
-                  1. Foto Surat Jalan
+                  1. Foto Langsung Fisik Barang yang Diterima * (Wajib)
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input
@@ -1749,26 +1999,76 @@ Catatan: ${inv.notes || '-'}`,
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    padding: '16px',
+                    padding: '14px',
                     border: '2px dashed var(--border)',
                     borderRadius: 'var(--radius-md)',
                     background: receiptPhotoPreview ? 'rgba(16, 185, 129, 0.05)' : 'var(--bg-secondary)',
-                    minHeight: '100px'
+                    minHeight: '90px'
                   }}>
                     {receiptPhotoPreview ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <img src={receiptPhotoPreview} alt="Preview" style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '4px' }} />
+                        <img src={receiptPhotoPreview} alt="Foto Barang" style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '6px' }} />
                         <div>
-                          <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--success)' }}>Foto Berhasil Dipilih</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Klik untuk ganti foto</div>
+                          <div style={{ fontWeight: 700, fontSize: '0.84rem', color: 'var(--success)' }}>Foto Fisik Barang Tercatat</div>
+                          <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>Klik untuk mengganti foto barang</div>
                         </div>
                       </div>
                     ) : (
-                      <>
-                        <Camera size={24} style={{ color: 'var(--accent)', marginBottom: '6px' }} />
-                        <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>Klik untuk Buka Kamera / Pilih File</span>
-                      </>
+                      <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--accent)' }}>
+                        Klik untuk Ambil Foto Langsung Barang yang Diterima
+                      </span>
                     )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Nomor & Foto Surat Jalan / Resi Supplier */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px', padding: '12px', borderRadius: 'var(--radius-md)', background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '4px' }}>
+                    2. Nomor Surat Jalan / Resi Pengiriman Supplier (Jika Ada)
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    style={{ fontSize: '0.82rem', padding: '7px 10px' }}
+                    placeholder="Contoh: SJ-2026-0891 / Resi Kurir..."
+                    value={deliveryNoteNo}
+                    onChange={e => setDeliveryNoteNo(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '4px' }}>
+                    Foto Surat Jalan dari Supplier / Resi (Jika Ada)
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', zIndex: 10 }}
+                      onChange={handleDeliveryNotePhotoChange}
+                    />
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '12px',
+                      border: '1px dashed var(--border)',
+                      borderRadius: 'var(--radius-sm)',
+                      background: deliveryNotePhotoPreview ? 'rgba(16, 185, 129, 0.05)' : 'var(--bg-primary)'
+                    }}>
+                      {deliveryNotePhotoPreview ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <img src={deliveryNotePhotoPreview} alt="Foto Surat Jalan" style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px' }} />
+                          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--success)' }}>Foto Surat Jalan / Resi Terlampir (Klik untuk ganti)</span>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          Klik untuk Upload / Foto Surat Jalan atau Resi Supplier
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1850,6 +2150,209 @@ Catatan: ${inv.notes || '-'}`,
             </div>
           </div>
         </div>
+      )}
+
+      {/* Purchasing Review, Supplier Comparison & Submit to Owner ACC Modal */}
+      {reviewPoModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)', zIndex: 1150, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+          onClick={() => !savingReviewPo && setReviewPoModal(null)}
+        >
+          <div
+            className="glass-card modal-card"
+            style={{ width: '820px', maxWidth: '100%', maxHeight: '92vh', display: 'flex', flexDirection: 'column', padding: '24px', overflowY: 'auto' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border)', paddingBottom: '14px', marginBottom: '16px' }}>
+              <div>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0 }}>
+                  Review Purchasing &amp; Pengajuan ACC Owner — {reviewPoModal.invoice_no}
+                </h3>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px', marginBottom: 0 }}>
+                  Supplier Awal Permintaan Cabang: <strong>{reviewPoModal.original_supplier || reviewPoModal.supplier}</strong> · Divisi: <strong>{reviewPoModal.division || 'BAR'}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)' }}
+                onClick={() => !savingReviewPo && setReviewPoModal(null)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
+              <div>
+                <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 700 }}>
+                  Supplier Terpilih (Master Supplier Purchasing)
+                </label>
+                <select
+                  className="form-control"
+                  value={reviewPoModal.supplier}
+                  onChange={e => setReviewPoModal(prev => ({ ...prev, supplier: e.target.value }))}
+                >
+                  {suppliersList.map(s => (
+                    <option key={s.id || s.name} value={s.name}>{s.name}</option>
+                  ))}
+                  {!suppliersList.some(s => s.name === reviewPoModal.supplier) && (
+                    <option value={reviewPoModal.supplier}>{reviewPoModal.supplier}</option>
+                  )}
+                </select>
+              </div>
+              <div>
+                <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 700 }}>
+                  Catatan Pergantian Supplier (Wajib diisi jika Supplier diganti)
+                </label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Mis: Diganti ke supplier ini karena lebih hemat Rp 15.000/pck dengan kualitas setara..."
+                  value={reviewPoModal.supplier_change_note || ''}
+                  onChange={e => setReviewPoModal(prev => ({ ...prev, supplier_change_note: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            {(reviewPoModal.supplier || '').trim().toLowerCase() !== (reviewPoModal.original_supplier || '').trim().toLowerCase() && (
+              <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.35)', fontSize: '0.78rem', color: '#d97706', marginBottom: '14px', fontWeight: 600 }}>
+                Perhatian: Supplier diubah dari permintaan awal cabang ({reviewPoModal.original_supplier}) menjadi ({reviewPoModal.supplier}). Catatan pergantian di atas akan ditampilkan kepada pembuat PO cabang dan kepada Owner saat ACC.
+              </div>
+            )}
+
+            <div className="table-container" style={{ marginBottom: '16px', maxHeight: '320px', overflowY: 'auto' }}>
+              <table className="custom-table" style={{ fontSize: '0.82rem' }}>
+                <thead>
+                  <tr>
+                    <th>Bahan Baku</th>
+                    <th style={{ width: '100px', textAlign: 'right' }}>Qty</th>
+                    <th style={{ width: '150px', textAlign: 'right' }}>Harga Beli / Unit (Rp)</th>
+                    <th style={{ width: '130px', textAlign: 'right' }}>Subtotal</th>
+                    <th style={{ width: '140px', textAlign: 'center' }}>Analisis Efisiensi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(reviewPoModal.items || []).map((it, idx) => {
+                    const matObj = (stock || []).find(s => String(s.id) === String(it.material_id) || (s.name || '').toLowerCase() === (it.item_name || '').toLowerCase());
+                    return (
+                      <tr key={idx}>
+                        <td style={{ fontWeight: 600 }}>{it.item_name}</td>
+                        <td>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0.01"
+                            className="form-control text-right"
+                            style={{ padding: '4px 8px', fontSize: '0.8rem' }}
+                            value={it.qty}
+                            onChange={e => {
+                              const nextQty = parseFloat(e.target.value) || 0;
+                              setReviewPoModal(prev => {
+                                const nextItems = [...prev.items];
+                                nextItems[idx] = { ...nextItems[idx], qty: nextQty };
+                                return { ...prev, items: nextItems };
+                              });
+                            }}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            className="form-control text-right font-mono"
+                            style={{ padding: '4px 8px', fontSize: '0.8rem' }}
+                            value={it.unit_price}
+                            onChange={e => {
+                              const nextPrice = parseFloat(e.target.value) || 0;
+                              setReviewPoModal(prev => {
+                                const nextItems = [...prev.items];
+                                nextItems[idx] = { ...nextItems[idx], unit_price: nextPrice };
+                                return { ...prev, items: nextItems };
+                              });
+                            }}
+                          />
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>
+                          {formatIDR((parseFloat(it.qty) || 0) * (parseFloat(it.unit_price) || 0))}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            style={{ padding: '4px 8px', fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent)' }}
+                            onClick={() => setCompareItemForPo({
+                              idx,
+                              material: matObj || { id: it.material_id, name: it.item_name, unit: it.unit || 'pck', price: it.unit_price, supplier: reviewPoModal.supplier }
+                            })}
+                          >
+                            Bandingkan Supplier
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: '14px', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ fontSize: '1.05rem', fontWeight: 800 }}>
+                Total Estimasi PO: <span style={{ color: 'var(--accent)' }}>
+                  {formatIDR((reviewPoModal.items || []).reduce((a, i) => a + ((parseFloat(i.qty) || 0) * (parseFloat(i.unit_price) || 0)), 0))}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setReviewPoModal(null)} disabled={savingReviewPo}>
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={(e) => handleSavePurchasingReview(e, false)}
+                  disabled={savingReviewPo}
+                >
+                  Simpan Draft Review
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ fontWeight: 700 }}
+                  onClick={(e) => handleSavePurchasingReview(e, true)}
+                  disabled={savingReviewPo}
+                >
+                  {savingReviewPo ? 'Memproses...' : 'Ajukan ACC ke Owner'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Multi-Supplier Comparison Modal inside PO Review */}
+      {compareItemForPo && (
+        <ComparePriceModal
+          item={compareItemForPo.material}
+          suppliers={suppliersList}
+          onClose={() => setCompareItemForPo(null)}
+          onSelect={(offer) => {
+            setReviewPoModal(prev => {
+              if (!prev) return prev;
+              const nextItems = [...prev.items];
+              if (nextItems[compareItemForPo.idx]) {
+                nextItems[compareItemForPo.idx] = {
+                  ...nextItems[compareItemForPo.idx],
+                  unit_price: Number(offer.price)
+                };
+              }
+              return {
+                ...prev,
+                supplier: offer.supplier_name || prev.supplier,
+                supplier_change_note: offer.change_note || prev.supplier_change_note,
+                items: nextItems
+              };
+            });
+          }}
+        />
       )}
 
       {/* Bulk Import Modal */}

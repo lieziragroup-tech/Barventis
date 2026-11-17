@@ -3247,6 +3247,52 @@ export const api = {
     }));
   },
 
+
+// Helper for encoding/decoding extended PO workflow metadata safely inside notes if DB columns are not yet migrated
+function parsePoMeta(inv) {
+  const rawNotes = String(inv?.notes || '');
+  let meta = {};
+  let cleanNotes = rawNotes;
+  const match = rawNotes.match(/\[PO_META:(\{.*?\})\]/);
+  if (match) {
+    try {
+      meta = JSON.parse(match[1]);
+    } catch {
+      meta = {};
+    }
+    cleanNotes = rawNotes.replace(match[0], '').trim();
+  }
+  const dbStatus = String(inv?.status || 'DRAFT').toUpperCase();
+  let workflowStatus = inv?.approval_status || meta.approval_status || dbStatus;
+  if (dbStatus === 'RECEIVED' || dbStatus === 'GOODS_RECEIVED') workflowStatus = 'RECEIVED';
+  else if (dbStatus === 'SENT') workflowStatus = 'SENT';
+  else if (dbStatus === 'CANCELLED') workflowStatus = 'CANCELLED';
+
+  return {
+    workflow_status: workflowStatus,
+    division: inv?.division || meta.division || 'BAR',
+    original_supplier: inv?.original_supplier || meta.original_supplier || inv?.supplier || '',
+    supplier_change_note: inv?.supplier_change_note || meta.supplier_change_note || '',
+    requested_by_role: inv?.requested_by_role || meta.requested_by_role || '',
+    requested_by_name: inv?.requested_by_name || meta.requested_by_name || '',
+    approved_by_name: inv?.approved_by_name || meta.approved_by_name || '',
+    approved_at: inv?.approved_at || meta.approved_at || null,
+    rejection_reason: inv?.rejection_reason || meta.rejection_reason || '',
+    delivery_note_photo_url: inv?.delivery_note_photo_url || meta.delivery_note_photo_url || null,
+    delivery_note_no: inv?.delivery_note_no || meta.delivery_note_no || '',
+    clean_notes: cleanNotes
+  };
+}
+
+function packPoNotes(cleanNotes, metaObj) {
+  const clean = String(cleanNotes || '').replace(/\[PO_META:\{.*?\}\]/g, '').trim();
+  const compactMeta = {};
+  Object.entries(metaObj || {}).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') compactMeta[k] = v;
+  });
+  return `${clean} [PO_META:${JSON.stringify(compactMeta)}]`.trim();
+}
+
   getInvoicesPaged: async ({ page = 1, pageSize = 15, search = '', status = 'ALL', branchId: branchIdArg = null } = {}) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { data: [], totalCount: 0 };
@@ -3266,7 +3312,11 @@ export const api = {
     }
 
     if (status && status !== 'ALL') {
-      query = query.eq('status', status);
+      if (['SENT', 'RECEIVED', 'CANCELLED'].includes(status)) {
+        query = query.eq('status', status);
+      } else if (['DRAFT', 'REQUESTED', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED'].includes(status)) {
+        query = query.eq('status', 'DRAFT');
+      }
     }
 
     const { data, error, count } = await query
@@ -3276,27 +3326,44 @@ export const api = {
     if (error) throw new Error("Gagal memuat invoices: " + error.message);
 
     return {
-      data: data.map(inv => ({
-        id: inv.id,
-        invoice_no: inv.invoice_no,
-        supplier: inv.supplier,
-        date: inv.date,
-        total: parseFloat(inv.total),
-        status: inv.status,
-        location: inv.location,
-        notes: inv.notes,
-        received_date: inv.received_date,
-        receipt_photo_url: inv.receipt_photo_url,
-        receipt_signature_url: inv.receipt_signature_url,
-        receipt_gps: inv.receipt_gps,
-        items: (inv.invoice_items || []).map(item => ({
-          material_id: item.material_id,
-          item_name: item.materials ? item.materials.name : 'Bahan Terhapus',
-          qty: parseFloat(item.qty),
-          unit_price: parseFloat(item.unit_price),
-          unit: item.materials ? item.materials.unit : 'pck'
-        }))
-      })),
+      data: data.map(inv => {
+        const meta = parsePoMeta(inv);
+        return {
+          id: inv.id,
+          branch_id: inv.branch_id,
+          invoice_no: inv.invoice_no,
+          supplier: inv.supplier,
+          original_supplier: meta.original_supplier,
+          supplier_change_note: meta.supplier_change_note,
+          division: meta.division,
+          requested_by_role: meta.requested_by_role,
+          requested_by_name: meta.requested_by_name,
+          approved_by_name: meta.approved_by_name,
+          approved_at: meta.approved_at,
+          rejection_reason: meta.rejection_reason,
+          date: inv.date,
+          total: parseFloat(inv.total),
+          status: inv.status,
+          workflow_status: meta.workflow_status,
+          location: inv.location,
+          notes: meta.clean_notes,
+          raw_notes: inv.notes,
+          received_date: inv.received_date,
+          receipt_photo_url: inv.receipt_photo_url,
+          delivery_note_photo_url: meta.delivery_note_photo_url,
+          delivery_note_no: meta.delivery_note_no,
+          receipt_signature_url: inv.receipt_signature_url,
+          receipt_gps: inv.receipt_gps,
+          items: (inv.invoice_items || []).map(item => ({
+            id: item.id,
+            material_id: item.material_id,
+            item_name: item.materials ? item.materials.name : 'Bahan Terhapus',
+            qty: parseFloat(item.qty),
+            unit_price: parseFloat(item.unit_price),
+            unit: item.materials ? item.materials.unit : 'pck'
+          }))
+        };
+      }),
       totalCount: count || 0
     };
   },
@@ -3336,7 +3403,17 @@ export const api = {
       });
     }
 
-    // 3. Create PO Invoice
+    // 3. Create PO Invoice with Workflow Metadata (Branch Request -> Purchasing Review -> Owner ACC)
+    const initialWorkflow = invoiceData.workflow_status || 'REQUESTED';
+    const packedNotes = packPoNotes(invoiceData.notes || '', {
+      approval_status: initialWorkflow,
+      division: invoiceData.division || 'BAR',
+      original_supplier: invoiceData.original_supplier || invoiceData.supplier,
+      supplier_change_note: invoiceData.supplier_change_note || '',
+      requested_by_role: invoiceData.requested_by_role || '',
+      requested_by_name: invoiceData.requested_by_name || ''
+    });
+
     const { data: invoice, error: invErr } = await supabase
       .from('invoices')
       .insert({
@@ -3348,7 +3425,7 @@ export const api = {
         total: parseFloat(total.toFixed(2)),
         status: 'DRAFT',
         location: invoiceData.location || 'CENTRAL',
-        notes: invoiceData.notes || ''
+        notes: packedNotes
       })
       .select('*')
       .single();
@@ -3407,6 +3484,78 @@ export const api = {
     return data;
   },
 
+  updatePoWorkflowAndSupplier: async (id, {
+    workflow_status,
+    supplier,
+    original_supplier,
+    supplier_change_note,
+    notes,
+    items,
+    approved_by_name,
+    rejection_reason,
+    branch_id = null
+  } = {}) => {
+    const tenantId = await requireTenantId();
+    const branchId = await requireBranchId(branch_id);
+    let oldQ = supabase.from('invoices').select('*, invoice_items(*)').eq('id', id).eq('tenant_id', tenantId);
+    if (branchId) oldQ = oldQ.eq('branch_id', branchId);
+    const { data: oldInv, error: fetchErr } = await oldQ.single();
+    if (fetchErr || !oldInv) throw new Error('PO tidak ditemukan: ' + (fetchErr?.message || ''));
+
+    const prevMeta = parsePoMeta(oldInv);
+    const nextWorkflow = workflow_status || prevMeta.workflow_status || 'REQUESTED';
+    const nextSupplier = supplier || oldInv.supplier;
+    const origSup = original_supplier || prevMeta.original_supplier || oldInv.supplier;
+    const nextChangeNote = supplier_change_note !== undefined ? supplier_change_note : prevMeta.supplier_change_note;
+
+    let newTotal = parseFloat(oldInv.total || 0);
+    if (Array.isArray(items) && items.length > 0) {
+      newTotal = items.reduce((acc, it) => acc + ((parseFloat(it.qty) || 0) * (parseFloat(it.unit_price) || 0)), 0);
+      await supabase.from('invoice_items').delete().eq('invoice_id', id).eq('tenant_id', tenantId);
+      const itemsPayload = items.map(it => ({
+        invoice_id: id,
+        tenant_id: tenantId,
+        ...(branchId ? { branch_id: branchId } : {}),
+        material_id: it.material_id,
+        qty: parseFloat(it.qty) || 0,
+        unit_price: parseFloat(it.unit_price) || 0
+      }));
+      await supabase.from('invoice_items').insert(itemsPayload);
+    }
+
+    const dbStatus = ['SENT', 'RECEIVED', 'CANCELLED'].includes(nextWorkflow) ? nextWorkflow : 'DRAFT';
+    const packedNotes = packPoNotes(notes !== undefined ? notes : prevMeta.clean_notes, {
+      approval_status: nextWorkflow,
+      division: prevMeta.division || 'BAR',
+      original_supplier: origSup,
+      supplier_change_note: nextChangeNote,
+      requested_by_role: prevMeta.requested_by_role,
+      requested_by_name: prevMeta.requested_by_name,
+      approved_by_name: approved_by_name || prevMeta.approved_by_name,
+      approved_at: nextWorkflow === 'APPROVED' ? new Date().toISOString() : prevMeta.approved_at,
+      rejection_reason: rejection_reason !== undefined ? rejection_reason : prevMeta.rejection_reason,
+      delivery_note_photo_url: prevMeta.delivery_note_photo_url,
+      delivery_note_no: prevMeta.delivery_note_no
+    });
+
+    let updQ = supabase
+      .from('invoices')
+      .update({
+        supplier: nextSupplier,
+        total: parseFloat(newTotal.toFixed(2)),
+        status: dbStatus,
+        notes: packedNotes
+      })
+      .eq('id', id)
+      .eq('tenant_id', tenantId);
+    if (branchId) updQ = updQ.eq('branch_id', branchId);
+    const { data: updated, error: updErr } = await updQ.select('*').single();
+    if (updErr) throw new Error('Gagal memperbarui PO: ' + updErr.message);
+
+    await logAudit('UPDATE_PO_WORKFLOW', `Memperbarui PO ${updated.invoice_no}: Status=${nextWorkflow}, Supplier=${nextSupplier}${origSup !== nextSupplier ? ` (Diganti dari ${origSup}: ${nextChangeNote})` : ''}.`);
+    return updated;
+  },
+
   receiveInvoice: async (id, payload = {}) => {
     const { photoUrl = null, signatureUrl = null, gps = null } = payload;
     const tenantId = await requireTenantId();
@@ -3431,11 +3580,24 @@ export const api = {
       });
     }
 
-    if (photoUrl || signatureUrl || gps) {
+    const { deliveryNotePhotoUrl = null, deliveryNoteNo = '' } = payload;
+    if (photoUrl || signatureUrl || gps || deliveryNotePhotoUrl || deliveryNoteNo) {
+      let curQ = supabase.from('invoices').select('notes').eq('id', id).eq('tenant_id', tenantId);
+      if (branchId) curQ = curQ.eq('branch_id', branchId);
+      const { data: curInv } = await curQ.maybeSingle();
+      const curMeta = parsePoMeta(curInv || {});
+      const updatedNotes = packPoNotes(curMeta.clean_notes, {
+        ...curMeta,
+        approval_status: 'RECEIVED',
+        delivery_note_photo_url: deliveryNotePhotoUrl || curMeta.delivery_note_photo_url,
+        delivery_note_no: deliveryNoteNo || curMeta.delivery_note_no
+      });
+
       let proofQ = supabase.from('invoices').update({
         receipt_photo_url: photoUrl,
         receipt_signature_url: signatureUrl,
-        receipt_gps: gps
+        receipt_gps: gps,
+        notes: updatedNotes
       }).eq('id', id).eq('tenant_id', tenantId);
       if (branchId) proofQ = proofQ.eq('branch_id', branchId);
       await proofQ;
