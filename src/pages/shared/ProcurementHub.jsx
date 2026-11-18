@@ -32,7 +32,7 @@ export default function ProcurementHub() {
   const { activeUser } = useAuth();
   const role = String(activeUser?.role || '').trim().toLowerCase();
   const isCentralRole = role === 'central';
-  const isBranchDivisionRole = ['bar', 'barista', 'kitchen', 'service', 'kasir', 'staff'].includes(role);
+  const isBranchDivisionRole = ['bar', 'barista', 'head bar', 'rekan bar', 'kitchen', 'service', 'kasir', 'staff'].includes(role);
   const isSingleInvoicingView = isCentralRole || isBranchDivisionRole;
 
   const visibleTabs = useMemo(() => {

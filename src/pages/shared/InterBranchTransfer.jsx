@@ -342,7 +342,7 @@ export default function InterBranchTransfer() {
     setError('');
 
     try {
-      const isRequestMode = activeUser?.role === 'Bar';
+      const isRequestMode = ['Bar', 'Barista', 'Head Bar', 'Rekan Bar'].includes(activeUser?.role);
       const targetEp = unifiedEndpoints.find(ep => ep.name === routeHeader.target_branch);
       const sourceEp = unifiedEndpoints.find(ep => ep.name === routeHeader.source_branch);
       const isCrossBranchRoute =
@@ -651,7 +651,7 @@ export default function InterBranchTransfer() {
               }}
             >
               <Plus size={17} />
-              <span>{activeUser?.role === 'Bar' ? 'Minta Barang' : 'Buat Mutasi'}</span>
+              <span>{['Bar', 'Barista', 'Head Bar', 'Rekan Bar'].includes(activeUser?.role) ? 'Minta Barang' : 'Buat Mutasi'}</span>
             </button>
           )}
         </div>
@@ -1183,7 +1183,7 @@ export default function InterBranchTransfer() {
                       <span>{new Date(r.date).toLocaleDateString('id-ID')}</span>
                     </div>
                     {notes && <div className="text-xs italic text-[var(--text-secondary)]">"{notes}"</div>}
-                    {activeUser?.role !== 'Bar' && (
+                    {!['Bar', 'Barista', 'Head Bar', 'Rekan Bar'].includes(activeUser?.role) && (
                       <div className="flex items-center gap-2 pt-1">
                         <button onClick={() => handleApproveRequest(r.id)} disabled={loading} className="btn btn-primary py-1.5 px-3 text-xs flex-1 justify-center"><Check size={14}/> Setujui</button>
                         <button onClick={() => handleRejectRequest(r.id)} disabled={loading} className="btn btn-secondary py-1.5 px-3 text-xs flex-1 justify-center text-rose-500"><X size={14}/> Tolak</button>
@@ -1223,7 +1223,7 @@ export default function InterBranchTransfer() {
                         </td>
                         <td className="py-3 px-4 text-xs italic text-[var(--text-secondary)]">{notes || '-'}</td>
                         <td className="py-3 px-4 text-center">
-                          {activeUser?.role !== 'Bar' ? (
+                          {!['Bar', 'Barista', 'Head Bar', 'Rekan Bar'].includes(activeUser?.role) ? (
                             <div className="flex items-center justify-center gap-2">
                               <button onClick={() => handleApproveRequest(r.id)} disabled={loading} className="btn btn-primary py-1 px-2 text-xs bg-emerald-500 hover:bg-emerald-600 border-none text-white font-bold"><Check size={14}/> Setuju</button>
                               <button onClick={() => handleRejectRequest(r.id)} disabled={loading} className="btn btn-secondary py-1 px-2 text-xs text-rose-500 hover:bg-rose-50 border-rose-200"><X size={14}/> Tolak</button>
@@ -1406,11 +1406,11 @@ export default function InterBranchTransfer() {
         {filteredTransfers.length > 0 && (
           <div className="pt-2 border-t">
             <Pagination
-              currentPage={page}
-              totalPages={totalPages}
+              page={page}
+              pageSize={itemsPerPage}
+              totalCount={filteredTransfers.length}
               onPageChange={setPage}
-              itemsPerPage={itemsPerPage}
-              totalItems={filteredTransfers.length}
+              itemLabel="mutasi"
             />
           </div>
         )}
@@ -1460,7 +1460,7 @@ export default function InterBranchTransfer() {
                 </div>
                 <div>
                   <h3 className="text-base md:text-lg font-bold m-0 text-[var(--text-primary)]">
-                    {activeUser?.role === 'Bar' ? 'Permintaan Barang' : 'Buat Mutasi Stok'}
+                    {['Bar', 'Barista', 'Head Bar', 'Rekan Bar'].includes(activeUser?.role) ? 'Permintaan Barang' : 'Buat Mutasi Stok'}
                   </h3>
                   <p className="text-xs text-[var(--text-secondary)] m-0">
                     Pilih rute dan daftar bahan transfer.

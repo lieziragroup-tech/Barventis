@@ -189,9 +189,9 @@ export default function App() {
             </ProtectedRoute>
           } />
 
-          {/* [7] Cost Control & Laporan (Eksklusif Owner / Finance) */}
+          {/* [7] Cost Control & Laporan (Owner / Finance / Head Bar) */}
           <Route path="cost-report" element={
-            <ProtectedRoute allowedRoles={['Admin / Owner', 'Admin  Owner', 'Owner', 'Finance']}>
+            <ProtectedRoute allowedRoles={['Admin / Owner', 'Admin  Owner', 'Owner', 'Finance', 'Head Bar', 'Bar']}>
               <RouteErrorBoundary><CostControlReportHub /></RouteErrorBoundary>
             </ProtectedRoute>
           } />

@@ -179,7 +179,7 @@ export function resolvePackInfo(fullPack, materialUnit) {
 export function getUnitPrice(material, unitConversionMap) {
   const price = Number(material?.new_price) > 0
     ? Number(material.new_price)
-    : Number(material?.price ?? 0);
+    : (Number(material?.price) || 0);
 
   if (unitConversionMap && material?.id != null && unitConversionMap.has(material.id)) {
     const rawFactor = Number(unitConversionMap.get(material.id));
@@ -219,7 +219,7 @@ export function getUnitPrice(material, unitConversionMap) {
 
 export function calculateIngredientCost(material, qtyInUse, recipeUnit, unitConversionMap) {
   const { unitPrice, resolved, packSize, packUnitLabel, contentUnit } = getUnitPrice(material, unitConversionMap);
-  let qty = Number(qtyInUse ?? 0);
+  let qty = Number(qtyInUse) || 0;
   if (!resolved) {
     return 0;
   }
@@ -230,7 +230,8 @@ export function calculateIngredientCost(material, qtyInUse, recipeUnit, unitConv
   if (packUnitLabel && contentUnit && ru && ru === packUnitLabel && ru !== contentUnit && isRuContainer) {
     qty = qty * (packSize || 1);
   }
-  return Math.round(qty * unitPrice);
+  const totalCost = Math.round(qty * unitPrice);
+  return Number.isFinite(totalCost) ? totalCost : 0;
 }
 
 export function convertQtyToStockUnit(material, qty, fromUnit) {

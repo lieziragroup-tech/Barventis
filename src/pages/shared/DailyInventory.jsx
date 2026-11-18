@@ -1779,9 +1779,9 @@ export default function DailyInventory({ category: _category, initialTab }) {
                             Rp {(Number(mat.price) || 0).toLocaleString('id-ID')} / {mat.unit || 'unit'}
                           </div>
                         </td>
-                        <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.stok_awal}</td>
-                        <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.qty_in}</td>
-                        <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.qty_out}</td>
+                        <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{Number(row.stok_awal) || 0}</td>
+                        <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{Number(row.qty_in) || 0}</td>
+                        <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{Number(row.qty_out) || 0}</td>
                         <td className="text-center whitespace-nowrap text-xs" style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9' }}>
                           {posComp.status === 'NO_POS' ? (
                             <span className="text-[10px] text-gray-400 font-mono">POS: 0</span>
@@ -1802,12 +1802,12 @@ export default function DailyInventory({ category: _category, initialTab }) {
                             </div>
                           )}
                         </td>
-                        <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9', color: Number(row.waste) > 0 ? '#dc2626' : 'inherit' }}>{row.waste}</td>
-                        <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.full_qty}</td>
-                        <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.broken}</td>
-                        <td className="text-center font-mono tabular-nums whitespace-nowrap font-bold text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.stok_akhir}</td>
-                        <td className="text-center font-mono tabular-nums whitespace-nowrap font-bold text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9', color: row.qty_terpakai < 0 ? '#ef4444' : 'inherit' }}>
-                          {row.qty_terpakai}
+                        <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9', color: Number(row.waste) > 0 ? '#dc2626' : 'inherit' }}>{Number(row.waste) || 0}</td>
+                        <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.full_qty == null || Number.isNaN(Number(row.full_qty)) ? '-' : row.full_qty}</td>
+                        <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.broken == null || Number.isNaN(Number(row.broken)) ? '-' : row.broken}</td>
+                        <td className="text-center font-mono tabular-nums whitespace-nowrap font-bold text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{row.stok_akhir == null || Number.isNaN(Number(row.stok_akhir)) ? '-' : row.stok_akhir}</td>
+                        <td className="text-center font-mono tabular-nums whitespace-nowrap font-bold text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9', color: (Number(row.qty_terpakai) || 0) < 0 ? '#ef4444' : 'inherit' }}>
+                          {Number(row.qty_terpakai) || 0}
                         </td>
                         <td className="text-right font-mono tabular-nums whitespace-nowrap font-semibold text-xs" style={{ padding: '9px 14px', borderBottom: '1px solid #f1f5f9' }}>
                           Rp {Number(row.nilai_rupiah).toLocaleString('id-ID')}
@@ -2279,7 +2279,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
                                 value={
                                   ownerOverrideMap[item.id] !== undefined
                                     ? ownerOverrideMap[item.id]
-                                    : (stokAkhir === null ? '' : Number(Number(stokAkhir).toFixed(4)))
+                                    : (stokAkhir === null || !Number.isFinite(Number(stokAkhir)) ? '' : Number(Number(stokAkhir).toFixed(4)))
                                 }
                                 onChange={(e) => handleOwnerClosingInputChange(item.id, e.target.value)}
                                 onBlur={(e) => {
@@ -2306,7 +2306,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
                                 }}
                               />
                             </div>
-                          ) : stokAkhir === null ? (
+                          ) : stokAkhir === null || !Number.isFinite(Number(stokAkhir)) ? (
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold">
                               Tinjau
                             </span>
@@ -2316,8 +2316,8 @@ export default function DailyInventory({ category: _category, initialTab }) {
                         </td>
 
                         {/* Total Terpakai */}
-                        <td className="text-center font-mono tabular-nums font-semibold whitespace-nowrap text-xs" style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', color: qtyTerpakai < 0 ? '#ef4444' : '#334155' }}>
-                          {qtyTerpakai}
+                        <td className="text-center font-mono tabular-nums font-semibold whitespace-nowrap text-xs" style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9', color: (Number(qtyTerpakai) || 0) < 0 ? '#ef4444' : '#334155' }}>
+                          {Number.isFinite(Number(qtyTerpakai)) ? Number(qtyTerpakai) : 0}
                         </td>
 
                         {/* Biaya HPP */}

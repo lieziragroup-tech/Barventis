@@ -1434,7 +1434,7 @@ Catatan: ${inv.notes || '-'}`,
       {/* Create PO Slide-over Modal */}
       {showCreateModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.2s ease' }} onClick={() => setShowCreateModal(false)}>
-          <div style={{ width: '100%', maxWidth: '780px', background: 'var(--bg-primary)', height: '100vh', padding: '28px 24px', overflowY: 'auto', borderLeft: '1px solid var(--border)', boxShadow: '-10px 0 30px rgba(0,0,0,0.2)', animation: 'slideInRight 0.3s ease' }} onClick={e => e.stopPropagation()}>
+          <div style={{ width: '100%', maxWidth: '880px', background: 'var(--bg-primary)', height: '100vh', padding: '28px 24px', overflowY: 'auto', borderLeft: '1px solid var(--border)', boxShadow: '-10px 0 30px rgba(0,0,0,0.2)', animation: 'slideInRight 0.3s ease' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border)', paddingBottom: '14px' }}>
               <div>
                 <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>Buat Purchase Order</h3>
@@ -1718,14 +1718,14 @@ Catatan: ${inv.notes || '-'}`,
                       </div>
                     )}
 
-                    <table className="custom-table" style={{ background: 'var(--bg-primary)', borderRadius: 'var(--radius-md)' }}>
+                    <table className="custom-table" style={{ background: 'var(--bg-primary)', borderRadius: 'var(--radius-md)', tableLayout: 'fixed', width: '100%' }}>
                       <thead>
                         <tr>
-                          <th style={{ width: '38%' }}>Bahan Baku ({invSupplier})</th>
-                          <th style={{ width: '14%', textAlign: 'right' }}>Qty</th>
-                          <th style={{ width: '10%' }}>Unit</th>
-                          <th style={{ width: '18%', textAlign: 'right' }}>Harga Satuan</th>
-                          <th style={{ width: '16%', textAlign: 'right' }}>Subtotal</th>
+                          <th style={{ width: '34%' }}>Bahan Baku ({invSupplier})</th>
+                          <th style={{ width: '18%', minWidth: '115px', textAlign: 'center' }}>Qty</th>
+                          <th style={{ width: '9%', textAlign: 'center' }}>Unit</th>
+                          <th style={{ width: '20%', minWidth: '135px', textAlign: 'right' }}>Harga Satuan</th>
+                          <th style={{ width: '15%', textAlign: 'right' }}>Subtotal</th>
                           <th style={{ width: '4%' }}></th>
                         </tr>
                       </thead>
@@ -1817,30 +1817,46 @@ Catatan: ${inv.notes || '-'}`,
                                   </ul>
                                 )}
                               </td>
-                              <td>
+                              <td style={{ padding: '10px 8px' }}>
                                 <input
                                   type="number"
                                   step="any"
                                   min="0.01"
-                                  className="form-control"
-                                  style={{ padding: '8px 10px', fontSize: '0.85rem', textAlign: 'right' }}
+                                  className="form-control tabular-nums"
+                                  style={{
+                                    width: '100%',
+                                    minWidth: '96px',
+                                    padding: '8px 12px',
+                                    fontSize: '0.92rem',
+                                    fontWeight: 700,
+                                    textAlign: 'center',
+                                    borderRadius: '10px'
+                                  }}
                                   value={item.qty}
                                   onChange={e => updateLineItem(idx, 'qty', parseFloat(e.target.value) || 0)}
                                 />
                               </td>
-                              <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.unit || 'pck'}</td>
-                              <td>
+                              <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)', textAlign: 'center', fontWeight: 600 }}>{item.unit || 'pck'}</td>
+                              <td style={{ padding: '10px 8px' }}>
                                 <input
                                   type="number"
                                   step="any"
                                   min="0"
-                                  className="form-control"
-                                  style={{ padding: '8px 10px', fontSize: '0.85rem', textAlign: 'right' }}
+                                  className="form-control tabular-nums"
+                                  style={{
+                                    width: '100%',
+                                    minWidth: '120px',
+                                    padding: '8px 12px',
+                                    fontSize: '0.9rem',
+                                    fontWeight: 600,
+                                    textAlign: 'right',
+                                    borderRadius: '10px'
+                                  }}
                                   value={item.unit_price}
                                   onChange={e => updateLineItem(idx, 'unit_price', parseFloat(e.target.value) || 0)}
                                 />
                               </td>
-                              <td style={{ textAlign: 'right', fontWeight: 600, fontSize: '0.85rem' }}>
+                              <td className="tabular-nums" style={{ textAlign: 'right', fontWeight: 700, fontSize: '0.88rem' }}>
                                 {formatIDR(item.qty * item.unit_price)}
                               </td>
                               <td>
@@ -1920,8 +1936,8 @@ Catatan: ${inv.notes || '-'}`,
                 <thead>
                   <tr>
                     <th>Nama Bahan</th>
-                    <th style={{ width: '110px' }}>Kuantitas</th>
-                    <th style={{ width: '160px' }}>Harga Satuan</th>
+                    <th style={{ width: '135px', textAlign: 'center' }}>Kuantitas</th>
+                    <th style={{ width: '170px', textAlign: 'right' }}>Harga Satuan</th>
                     <th style={{ textAlign: 'right' }}>Total (Rp)</th>
                   </tr>
                 </thead>
@@ -1934,8 +1950,8 @@ Catatan: ${inv.notes || '-'}`,
                           type="number"
                           step="any"
                           min="0"
-                          className="form-control"
-                          style={{ padding: '4px 8px' }}
+                          className="form-control tabular-nums"
+                          style={{ width: '100%', minWidth: '100px', padding: '7px 12px', fontSize: '0.9rem', fontWeight: 700, textAlign: 'center' }}
                           value={item.qty}
                           onChange={(e) => {
                             const newQty = parseFloat(e.target.value) || 0;
@@ -2332,8 +2348,8 @@ Catatan: ${inv.notes || '-'}`,
                 <thead>
                   <tr>
                     <th>Bahan Baku</th>
-                    <th style={{ width: '100px', textAlign: 'right' }}>Qty</th>
-                    <th style={{ width: '150px', textAlign: 'right' }}>Harga Beli / Unit (Rp)</th>
+                    <th style={{ width: '130px', textAlign: 'center' }}>Qty</th>
+                    <th style={{ width: '165px', textAlign: 'right' }}>Harga Beli / Unit (Rp)</th>
                     <th style={{ width: '130px', textAlign: 'right' }}>Subtotal</th>
                     <th style={{ width: '140px', textAlign: 'center' }}>Analisis Efisiensi</th>
                   </tr>
@@ -2349,8 +2365,8 @@ Catatan: ${inv.notes || '-'}`,
                             type="number"
                             step="any"
                             min="0.01"
-                            className="form-control text-right"
-                            style={{ padding: '4px 8px', fontSize: '0.8rem' }}
+                            className="form-control tabular-nums"
+                            style={{ width: '100%', minWidth: '96px', padding: '7px 12px', fontSize: '0.88rem', fontWeight: 700, textAlign: 'center' }}
                             value={it.qty}
                             onChange={e => {
                               const nextQty = parseFloat(e.target.value) || 0;

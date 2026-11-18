@@ -23,7 +23,7 @@ export default function Dashboard() {
     ? 'Super Admin'
     : rawRole === 'Admin  Owner'
       ? 'Admin / Owner'
-      : rawRole === 'Barista'
+      : rawRole === 'Barista' || rawRole === 'Head Bar' || rawRole === 'Rekan Bar'
         ? 'Bar'
         : rawRole;
 
@@ -1530,7 +1530,7 @@ export default function Dashboard() {
                       <LineChart data={trendData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.6} />
                         <XAxis dataKey="name" stroke="var(--text-muted)" tick={{ fontSize: 10 }} minTickGap={28} interval="preserveStartEnd" />
-                        <YAxis domain={[0, (dataMax) => Math.max(35, Math.ceil(dataMax + 5))]} stroke="var(--text-muted)" tick={{ fontSize: 11 }} unit="%" />
+                        <YAxis domain={[0, (dataMax) => Math.max(35, Math.ceil((Number.isFinite(Number(dataMax)) ? Number(dataMax) : 0) + 5))]} stroke="var(--text-muted)" tick={{ fontSize: 11 }} unit="%" />
                         <Tooltip contentStyle={tooltipStyle} />
                         <Legend verticalAlign="top" height={36} />
                         <Line

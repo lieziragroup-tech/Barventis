@@ -1,13 +1,27 @@
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 
-export default function Pagination({ page, pageSize, totalCount, onPageChange, itemLabel = 'data', loading = false }) {
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-  const clampedPage = Math.min(Math.max(1, page), totalPages);
+export default function Pagination({
+  page,
+  currentPage,
+  pageSize,
+  itemsPerPage,
+  totalCount,
+  totalItems,
+  onPageChange,
+  itemLabel = 'data',
+  loading = false
+}) {
+  const safeTotalCount = Math.max(0, Number(totalCount ?? totalItems) || 0);
+  const safePageSize = Math.max(1, Number(pageSize ?? itemsPerPage) || 10);
+  const safePage = Math.max(1, Number(page ?? currentPage) || 1);
 
-  if (totalCount === 0) return null;
+  const totalPages = Math.max(1, Math.ceil(safeTotalCount / safePageSize));
+  const clampedPage = Math.min(Math.max(1, safePage), totalPages);
 
-  const from = (clampedPage - 1) * pageSize + 1;
-  const to = Math.min(clampedPage * pageSize, totalCount);
+  if (safeTotalCount === 0) return null;
+
+  const from = (clampedPage - 1) * safePageSize + 1;
+  const to = Math.min(clampedPage * safePageSize, safeTotalCount);
 
   const getPageNumbers = () => {
     const pages = [];
@@ -36,7 +50,7 @@ export default function Pagination({ page, pageSize, totalCount, onPageChange, i
   return (
     <div className="pagination-bar">
       <span className="pagination-info">
-        Menampilkan {from}-{to} dari {totalCount} {itemLabel}
+        Menampilkan {from}-{to} dari {safeTotalCount} {itemLabel}
       </span>
 
       <div className="pagination-controls">
