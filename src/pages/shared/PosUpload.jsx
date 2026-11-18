@@ -205,8 +205,11 @@ export default function PosUpload() {
           colName = lowerRow.indexOf('menu name');
           colQty = lowerRow.indexOf('qty');
 
-          if (lowerRow.includes('total')) colTotal = lowerRow.indexOf('total');
-          else if (lowerRow.includes('subtotal')) colTotal = lowerRow.indexOf('subtotal');
+          // REQ-SH-06: Wajib prioritaskan kolom 'Subtotal' ESB (sebelum Service Charge & Pajak PB1, setelah diskon)
+          if (lowerRow.includes('subtotal')) colTotal = lowerRow.indexOf('subtotal');
+          else if (lowerRow.includes('sub total')) colTotal = lowerRow.indexOf('sub total');
+          else if (lowerRow.includes('net sales')) colTotal = lowerRow.indexOf('net sales');
+          else if (lowerRow.includes('total')) colTotal = lowerRow.indexOf('total');
 
           if (lowerRow.includes('sales date')) colDate = lowerRow.indexOf('sales date');
           if (lowerRow.includes('menu code')) colCode = lowerRow.indexOf('menu code');

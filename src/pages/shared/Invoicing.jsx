@@ -40,7 +40,7 @@ export default function Invoicing() {
   // Create Form State
   const [search, setSearch] = useState('');
   const [invSupplier, setInvSupplier] = useState('');
-  const [invLocation, setInvLocation] = useState('CENTRAL');
+  const [invLocation, setInvLocation] = useState(() => (String(activeUser?.role || '').toLowerCase().includes('central') ? 'CENTRAL' : 'RESTO'));
   const [invNotes, setInvNotes] = useState('');
   const [invItems, setInvItems] = useState([blankLineItem()]);
   const [itemDropdown, setItemDropdown] = useState(null);
@@ -64,6 +64,8 @@ export default function Invoicing() {
   const isOwner = ['admin / owner', 'admin  owner', 'owner', 'super admin', 'superadmin'].includes(rawRole);
   const isPurchasing = rawRole === 'purchasing';
   const isCentral = rawRole === 'central';
+  const isHeadBar = rawRole === 'head bar' || String(activeUser?.name || '').toLowerCase().includes('irpan') || rawRole === 'supervisor';
+  const isRekanBar = rawRole === 'rekan bar' || rawRole === 'bar' || rawRole === 'barista';
   const userDivisionScope = getUserDivisionScope(activeUser?.role);
 
   // Goods Receipt Modal States (Dual Photo: Physical Goods + Delivery Note / Surat Jalan / Resi)
@@ -370,7 +372,7 @@ export default function Invoicing() {
       return !match;
     });
 
-    if (invalidSupplierItem) {
+    if (invalidSupplierItem && invSupplier.trim().toLowerCase() !== 'pasar umum' && !isManualSupplier) {
       if (toast) {
         toast(
           `"${invalidSupplierItem.item_name}" belum terdaftar di "${invSupplier.trim()}".`,
@@ -419,7 +421,7 @@ export default function Invoicing() {
         supplier_change_note: invoiceToSubmit.supplier_change_note || '',
         requested_by_role: activeUser?.role || 'Staff',
         requested_by_name: activeUser?.name || 'Staf Cabang',
-        workflow_status: isOwner ? 'APPROVED' : (isPurchasing ? 'PENDING_APPROVAL' : 'REQUESTED')
+        workflow_status: isOwner ? 'APPROVED' : (isCentral ? 'PENDING_HEADBAR' : (isPurchasing ? 'PENDING_APPROVAL' : 'REQUESTED'))
       };
       await onCreateInvoice(enrichedInvoice);
       setShowConfirmModal(false);
@@ -769,6 +771,7 @@ export default function Invoicing() {
   const statusBadge = (status, workflowStatus) => {
     const wf = workflowStatus || status;
     const map = {
+      PENDING_HEADBAR: { label: 'MENUNGGU ACC HEAD BAR (IRPAN)', bg: 'rgba(139, 92, 246, 0.14)', color: '#7c3aed', border: 'rgba(139, 92, 246, 0.35)' },
       REQUESTED: { label: 'PERMINTAAN CABANG', bg: 'rgba(100, 116, 139, 0.12)', color: '#475569', border: 'rgba(100, 116, 139, 0.3)' },
       DRAFT: { label: 'PERMINTAAN CABANG', bg: 'rgba(100, 116, 139, 0.12)', color: '#475569', border: 'rgba(100, 116, 139, 0.3)' },
       PENDING_APPROVAL: { label: 'MENUNGGU ACC OWNER', bg: 'rgba(245, 158, 11, 0.14)', color: '#d97706', border: 'rgba(245, 158, 11, 0.35)' },
@@ -1135,6 +1138,25 @@ Catatan: ${inv.notes || '-'}`,
                             >
                               PDF
                             </button>
+
+                            {/* HEAD BAR (IRPAN) / OWNER: Verifikasi & ACC Order dari Staf Central */}
+                            {(isHeadBar || isOwner) && wf === 'PENDING_HEADBAR' && inv.status === 'DRAFT' && (
+                              <button
+                                className="btn btn-primary"
+                                style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700, background: '#7c3aed', borderColor: '#7c3aed' }}
+                                title="Head Bar (Irpan) memverifikasi kuantitas order Central sebelum diteruskan ke Purchasing"
+                                onClick={async () => {
+                                  await api.updatePoWorkflowAndSupplier(inv.id, {
+                                    workflow_status: 'REQUESTED',
+                                    notes: `${inv.notes ? inv.notes + ' | ' : ''}Diverifikasi Head Bar (${activeUser?.name || 'Irpan'})`
+                                  });
+                                  if (toast) toast(`Order Central ${inv.invoice_no} telah di-ACC Head Bar dan diteruskan ke Purchasing.`, 'success');
+                                  await reloadInvoices();
+                                }}
+                              >
+                                ACC Head Bar
+                              </button>
+                            )}
 
                             {/* PURCHASING / OWNER: Review, Compare Supplier & Submit for Owner ACC */}
                             {(isPurchasing || isOwner) && ['DRAFT', 'REQUESTED', 'REJECTED', 'PENDING_APPROVAL'].includes(wf) && inv.status === 'DRAFT' && (
@@ -1507,10 +1529,29 @@ Catatan: ${inv.notes || '-'}`,
                   </div>
 
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Tujuan Gudang Masuk</label>
-                    <select className="form-control" value={invLocation} onChange={e => setInvLocation(e.target.value)}>
-                      <option value="CENTRAL">CENTRAL (Gudang Utama)</option>
-                      <option value="RESTO">RESTO (Dapur / Outlet)</option>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <label className="form-label" style={{ marginBottom: 0 }}>Pintu Tujuan Gudang Masuk</label>
+                      <button
+                        type="button"
+                        style={{ fontSize: '0.72rem', background: 'rgba(245,158,11,0.14)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: '6px', color: '#d97706', cursor: 'pointer', padding: '2px 7px', fontWeight: 700 }}
+                        onClick={() => {
+                          setIsManualSupplier(true);
+                          handleSelectSupplierFocus('Pasar Umum');
+                          setInvLocation('RESTO');
+                        }}
+                        title="Gunakan untuk belanja dadakan / Petty Cash Resto (Kelapa, Jeruk Pontianak, Cincau, dll.)"
+                      >
+                        + Supplier Darurat: Pasar Umum
+                      </button>
+                    </div>
+                    <select
+                      className="form-control"
+                      value={isCentral ? 'CENTRAL' : (isRekanBar ? 'RESTO' : invLocation)}
+                      disabled={isCentral || isRekanBar}
+                      onChange={e => setInvLocation(e.target.value)}
+                    >
+                      <option value="RESTO">PINTU PO BAR / RESTO (Stok Masuk Langsung ke Resto)</option>
+                      <option value="CENTRAL">PINTU PO CENTRAL (Stok Masuk ke Gudang Central)</option>
                     </select>
                   </div>
                 </div>
@@ -1994,6 +2035,57 @@ Catatan: ${inv.notes || '-'}`,
             <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', fontSize: '0.78rem', color: 'var(--text-primary)', marginBottom: '16px' }}>
               <strong>SOP Penerimaan Barang (Goods Receipt):</strong> Wajib menyertakan foto langsung fisik barang yang tiba di lokasi beserta foto Surat Jalan / Resi dari supplier (jika ada).
             </div>
+
+            {/* REQ-SH-08: Verifikasi & Edit Harga Satuan Sesuai Bon Fisik saat Barang Tiba (Forward-Only Price Lock) */}
+            {Array.isArray(showGoodsReceiptModal.items) && showGoodsReceiptModal.items.length > 0 && (
+              <div style={{ marginBottom: '16px', padding: '12px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 800, marginBottom: '4px', color: 'var(--text-primary)' }}>
+                  Verifikasi Harga Satuan Sesuai Bon / Nota Fisik (Forward-Only Price Lock)
+                </div>
+                <div style={{ fontSize: '0.73rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                  Jika harga di bon fisik berubah (mis. Jeruk Pontianak naik dari Rp 20.000 ke Rp 35.000/kg), ubah harga di bawah ini sebelum klik Simpan. Perubahan harga hanya berlaku ke depan dan tidak mengubah laporan historis bulan lalu.
+                </div>
+                <table className="custom-table" style={{ fontSize: '0.78rem' }}>
+                  <thead>
+                    <tr>
+                      <th>Nama Barang</th>
+                      <th style={{ textAlign: 'right', width: '75px' }}>Qty</th>
+                      <th style={{ textAlign: 'right', width: '130px' }}>Harga Bon (Rp)</th>
+                      <th style={{ textAlign: 'right', width: '110px' }}>Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {showGoodsReceiptModal.items.map((it, idx) => (
+                      <tr key={idx}>
+                        <td style={{ fontWeight: 600 }}>{it.item_name}</td>
+                        <td style={{ textAlign: 'right' }}>{it.qty} {it.unit}</td>
+                        <td>
+                          <input
+                            type="number"
+                            className="form-control"
+                            style={{ padding: '3px 6px', fontSize: '0.78rem', textAlign: 'right' }}
+                            value={it.unit_price}
+                            onChange={(e) => {
+                              const nextPrice = parseFloat(e.target.value) || 0;
+                              setShowGoodsReceiptModal((prev) => {
+                                if (!prev) return prev;
+                                const nextItems = [...(prev.items || [])];
+                                nextItems[idx] = { ...nextItems[idx], unit_price: nextPrice };
+                                const nextTotal = nextItems.reduce((a, row) => a + (Number(row.qty || 0) * Number(row.unit_price || 0)), 0);
+                                return { ...prev, items: nextItems, total: nextTotal };
+                              });
+                            }}
+                          />
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                          {formatIDR(Number(it.qty || 0) * Number(it.unit_price || 0))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             {/* Audit Section: Dual Photo (Goods + Surat Jalan/Resi), GPS, Signature */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

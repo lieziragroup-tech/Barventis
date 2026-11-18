@@ -9,6 +9,7 @@ import { formatIDR } from '../../services/costUtils';
 import { exportWithAudit } from '../../services/export/exportAudit';
 import { useAuth } from '../../contexts/AuthContext';
 import { useData } from '../../contexts/DataContext';
+import CostControlDualComparison from '../../components/shared/CostControlDualComparison';
 
 export default function CostControl() {
   const { profile } = useAuth();
@@ -402,6 +403,17 @@ export default function CostControl() {
           )}
         </div>
       </div>
+
+      <CostControlDualComparison
+        period={period}
+        openingStock={openingStock}
+        totalPembelian={totalPembelian}
+        closingStock={closingStock}
+        pemakaianByStokan={pemakaianBulan}
+        actualDailyUsageCost={actualDailyUsageCost}
+        theoreticalCogsCost={theoreticalCogsCost}
+        totalSalesBeverage={totalSalesBeverage}
+      />
 
       {canSwitchBranch && branchScope === 'ALL' && (
         <div className="glass-card p-5 mb-6">

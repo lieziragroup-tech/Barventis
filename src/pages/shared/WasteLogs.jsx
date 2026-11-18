@@ -31,6 +31,7 @@ import MaterialAutocomplete from '../../components/shared/MaterialAutocomplete';
 import { formatIDR, calculateIngredientCost } from '../../services/costUtils';
 import { exportToExcel } from '../../services/export/excelExporter';
 import { getBrokenUnitLabel, getLocalDateISO, isBrokenTrackingEnabled } from '../../services/dailyInventoryMath';
+import BeritaAcaraMonthly from './BeritaAcaraMonthly';
 
 const WASTE_TYPES = [
   { value: 'WASTE', label: 'Basi / Kualitas Drop / Spoilage', color: 'bg-red-500/15 text-red-600 border-red-500/20' },
@@ -63,6 +64,7 @@ export default function WasteLogs() {
 
   // Modals
   const [showInputModal, setShowInputModal] = useState(false);
+  const [showBeritaAcaraView, setShowBeritaAcaraView] = useState(false);
   const [selectedDetailLog, setSelectedDetailLog] = useState(null);
   const [logToDelete, setLogToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -84,6 +86,8 @@ export default function WasteLogs() {
     date: new Date().toISOString().split('T')[0],
     reason: '',
     notes: '',
+    staff_responsible_name: '',
+    pack_size_label: '1440 grm',
     photo_evidence: null
   });
   const [photoPreview, setPhotoPreview] = useState(null);
@@ -525,6 +529,14 @@ export default function WasteLogs() {
           </button>
           <button
             type="button"
+            className="btn btn-secondary text-xs md:text-sm flex items-center gap-2 py-2 px-3.5 font-bold"
+            style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+            onClick={() => setShowBeritaAcaraView(!showBeritaAcaraView)}
+          >
+            <span>{showBeritaAcaraView ? 'Tutup Berita Acara' : 'Berita Acara Bulanan (Waste & Gelas Pecah)'}</span>
+          </button>
+          <button
+            type="button"
             className="btn btn-primary text-xs md:text-sm flex items-center gap-2 py-2 px-4 shadow font-bold"
             onClick={() => {
               setError('');
@@ -536,6 +548,8 @@ export default function WasteLogs() {
           </button>
         </div>
       </div>
+
+      {showBeritaAcaraView && <BeritaAcaraMonthly />}
 
       {/* KPI METRIC CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1236,6 +1250,34 @@ export default function WasteLogs() {
                       onChange={(e) => setWasteForm({ ...wasteForm, date: e.target.value })}
                       max={new Date().toISOString().split('T')[0]}
                       required
+                    />
+                  </div>
+                </div>
+
+                {/* Field Tambahan Berita Acara: Nama Karyawan (Gelas Pecah) & Kemasan (Waste) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="font-semibold text-[var(--text-primary)]">
+                      Nama Karyawan / Pihak (Berita Acara Gelas Pecah)
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control text-xs md:text-sm py-2"
+                      placeholder="Mis. ayat, Putri, Ali partime, costumer, fajar..."
+                      value={wasteForm.staff_responsible_name || ''}
+                      onChange={(e) => setWasteForm({ ...wasteForm, staff_responsible_name: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="font-semibold text-[var(--text-primary)]">
+                      Kemasan Barang (Berita Acara Waste)
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control text-xs md:text-sm py-2"
+                      placeholder="Mis. 1440 grm / 1 box / 1 pcs"
+                      value={wasteForm.pack_size_label || ''}
+                      onChange={(e) => setWasteForm({ ...wasteForm, pack_size_label: e.target.value })}
                     />
                   </div>
                 </div>

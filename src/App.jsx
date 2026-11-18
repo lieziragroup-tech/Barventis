@@ -47,7 +47,7 @@ const normalizeAppRole = (rawRole) => {
   const r = String(rawRole || '').trim();
   if (r === 'SuperAdmin' || r === 'Super Admin') return 'Super Admin';
   if (r === 'Admin  Owner' || r === 'Admin / Owner') return 'Admin / Owner';
-  if (r === 'Barista' || r === 'Bar') return 'Bar';
+  if (r === 'Barista' || r === 'Bar' || r === 'Head Bar' || r === 'Rekan Bar') return 'Bar';
   return r;
 };
 
@@ -109,7 +109,7 @@ const AuthRoute = ({ children }) => {
   return children;
 };
 
-const ALL_TENANT = ['Admin / Owner', 'Admin  Owner', 'Owner', 'Supervisor', 'Bar', 'Barista', 'Kitchen', 'Central', 'Service', 'Kasir', 'Purchasing', 'Finance', 'Staff'];
+const ALL_TENANT = ['Admin / Owner', 'Admin  Owner', 'Owner', 'Supervisor', 'Head Bar', 'Rekan Bar', 'Bar', 'Barista', 'Kitchen', 'Central', 'Service', 'Kasir', 'Purchasing', 'Finance', 'Staff'];
 const ADMIN_ROLES = ['Admin / Owner', 'Admin  Owner', 'Owner'];
 
 export default function App() {

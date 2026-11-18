@@ -11,6 +11,7 @@ import { TableSkeletonRows, TableLoadingOverlay } from '../../components/shared/
 import { useAuth } from '../../contexts/AuthContext';
 import { useData } from '../../contexts/DataContext';
 import useIsMobile from '../../hooks/useIsMobile';
+import PurchasingMatrixAndPettyCash from '../../components/shared/PurchasingMatrixAndPettyCash';
 
 const formatIDR = (val) => 'Rp ' + Number(val || 0).toLocaleString('id-ID');
 
@@ -825,12 +826,34 @@ export default function Purchasing() {
         </div>
       )}
 
-      {/* Tabs (FT-04.1, FT-04.2, FT-04.3) */}
+      {/* Tabs (FT-04.1, FT-04.2, FT-04.3 + Stakeholder v3.0 Matrix & Petty Cash Accurate) */}
       <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-tertiary)', padding: '4px', borderRadius: 'var(--radius-md)', width: 'fit-content', maxWidth: '100%', overflowX: 'auto', marginBottom: '20px' }}>
         <button className={`btn ${tab === 'PURCHASES' ? 'btn-primary' : ''}`} style={{ background: tab === 'PURCHASES' ? '' : 'transparent', color: tab === 'PURCHASES' ? '' : 'var(--text-secondary)', whiteSpace: 'nowrap' }} onClick={() => setTab('PURCHASES')}>Pembelian Harian</button>
+        <button className={`btn ${tab === 'MONTHLY_MATRIX' ? 'btn-primary' : ''}`} style={{ background: tab === 'MONTHLY_MATRIX' ? '' : 'transparent', color: tab === 'MONTHLY_MATRIX' ? '' : 'var(--text-secondary)', whiteSpace: 'nowrap' }} onClick={() => setTab('MONTHLY_MATRIX')}>Matriks Rekap Bulanan (Tgl 1–31)</button>
+        <button className={`btn ${tab === 'PETTY_CASH_ACCURATE' ? 'btn-primary' : ''}`} style={{ background: tab === 'PETTY_CASH_ACCURATE' ? '' : 'transparent', color: tab === 'PETTY_CASH_ACCURATE' ? '' : 'var(--text-secondary)', whiteSpace: 'nowrap' }} onClick={() => setTab('PETTY_CASH_ACCURATE')}>Rekap Petty Cash (Accurate) &amp; Tempo</button>
         <button className={`btn ${tab === 'MONTHLY_AVG' ? 'btn-primary' : ''}`} style={{ background: tab === 'MONTHLY_AVG' ? '' : 'transparent', color: tab === 'MONTHLY_AVG' ? '' : 'var(--text-secondary)', whiteSpace: 'nowrap' }} onClick={() => setTab('MONTHLY_AVG')}>Acuan Stok 1 Bulan (Average Data Riil)</button>
         <button className={`btn ${tab === 'SUPPLIERS' ? 'btn-primary' : ''}`} style={{ background: tab === 'SUPPLIERS' ? '' : 'transparent', color: tab === 'SUPPLIERS' ? '' : 'var(--text-secondary)', whiteSpace: 'nowrap' }} onClick={() => setTab('SUPPLIERS')}>Daftar Supplier</button>
       </div>
+
+      {tab === 'MONTHLY_MATRIX' && (
+        <PurchasingMatrixAndPettyCash
+          mode="MATRIX"
+          purchases={purchases}
+          materials={materials}
+          period={period}
+          activeUser={activeUser}
+        />
+      )}
+
+      {tab === 'PETTY_CASH_ACCURATE' && (
+        <PurchasingMatrixAndPettyCash
+          mode="PETTY_CASH"
+          purchases={purchases}
+          materials={materials}
+          period={period}
+          activeUser={activeUser}
+        />
+      )}
 
       {tab === 'SUPPLIERS' && (
         <div className="glass-card" style={{ padding: '24px' }}>

@@ -1480,7 +1480,15 @@ export default function InterBranchTransfer() {
             {/* Modal Form */}
             <form onSubmit={handleTransferSubmit} className="flex flex-col flex-1 overflow-hidden">
               <div className="p-4 md:p-5 space-y-4 overflow-y-auto flex-1">
-                {error && (
+                <div className="glass-card" style={{ padding: '12px 18px', marginBottom: '16px', background: 'rgba(16, 185, 129, 0.07)', border: '1px solid rgba(16, 185, 129, 0.28)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ fontSize: '0.82rem', color: 'var(--text-primary)' }}>
+          <strong>Aturan Akuntansi Mutasi Gudang Central &rarr; Resto/Bar:</strong> Barang yang diminta Bar/Resto dari Gudang Central dicatat dengan <strong>Biaya Belanja Cabang = Rp 0 (Internal Transfer)</strong> agar modal pembelian tidak terhitung ganda (double-counting).
+        </div>
+        <span style={{ fontSize: '0.74rem', fontWeight: 800, padding: '3px 10px', borderRadius: '999px', background: 'rgba(16,185,129,0.16)', color: 'var(--success)' }}>
+          Harga Mutasi Central &rarr; Bar: Rp 0
+        </span>
+      </div>
+      {error && (
                   <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 text-xs flex items-center gap-2">
                     <AlertCircle size={16} className="shrink-0" />
                     <span>{error}</span>

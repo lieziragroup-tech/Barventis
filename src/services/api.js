@@ -1750,16 +1750,28 @@ export const api = {
       badge: 'OWNER • MULTI-CABANG'
     },
     {
-      key: 'BARISTA_BSD',
-      label: 'Role Bar (Cabang BSD)',
-      sublabel: 'Stok Bar, Olah Bahan Minuman, Mutasi & Opname Bar BSD',
+      key: 'HEAD_BAR_BSD',
+      label: 'Head Barista — Irpan (BSD)',
+      sublabel: 'Otorisasi Berita Acara Waste/Gelas Pecah, ACC Order Central & Cost Control Bar',
       email: 'barista.bsd@umatis.id',
       password: 'BetaUmatis2026!',
-      name: 'Barista Cabang BSD (Beta)',
-      role: 'Bar',
+      name: 'Irpan (Head Barista)',
+      role: 'Head Bar',
       branchCode: 'BSD',
       areaUuid: '00000000-0000-4000-a000-000000000002',
-      badge: 'ROLE BAR • CABANG BSD'
+      badge: 'HEAD BAR • IRPAN'
+    },
+    {
+      key: 'BARISTA_BSD',
+      label: 'Rekan Bar — Ayat (Cabang BSD)',
+      sublabel: 'Input Daily Inventory, Permintaan PO Pintu Bar (Resto) & Mutasi dari Central (Rp 0)',
+      email: 'barista.bsd@umatis.id',
+      password: 'BetaUmatis2026!',
+      name: 'Ayat (Rekan Barista)',
+      role: 'Rekan Bar',
+      branchCode: 'BSD',
+      areaUuid: '00000000-0000-4000-a000-000000000002',
+      badge: 'REKAN BAR • AYAT'
     },
     {
       key: 'BARISTA_KASUNA',
@@ -1844,7 +1856,7 @@ export const api = {
     activeUserRole = null;
 
     // Gunakan key kompatibel RPC v13 (CENTRAL_BSD diikat melalui profil dasar PURCHASING_BSD lalu di-override ke role Central)
-    const rpcPresetKey = preset.key === 'CENTRAL_BSD' ? 'PURCHASING_BSD' : preset.key;
+    const rpcPresetKey = preset.key === 'CENTRAL_BSD' ? 'PURCHASING_BSD' : (preset.key === 'HEAD_BAR_BSD' ? 'BARISTA_BSD' : preset.key);
 
     // 1. Coba login langsung ke Supabase Auth (akun sudah di-seed oleh script SQL v13)
     let { data: authData, error: authErr } = await supabase.auth.signInWithPassword({

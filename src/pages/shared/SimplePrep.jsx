@@ -7,6 +7,7 @@ import { OFFICIAL_CATEGORIES } from './Marketlist';
 import { triggerHaptic } from '../../utils/haptics';
 import { formatIDR, calculateIngredientCost } from '../../services/costUtils';
 import { getExpiryColor } from '../../utils/expiryColor';
+import ZeroWasteSplitAndBarcode from '../../components/shared/ZeroWasteSplitAndBarcode';
 
 const COMMON_UNITS = ['gr', 'kg', 'ml', 'L', 'pck', 'pcs', 'btl', 'can'];
 
@@ -44,6 +45,7 @@ export default function SimplePrep() {
   const toast = useToast();
 
   const [loading, setLoading] = useState(false);
+  const [prepSubTab, setPrepSubTab] = useState('TRIMMING'); // 'TRIMMING' | 'ZERO_WASTE_SPLIT' | 'BARCODE_CENTRAL'
   const [historyLoading, setHistoryLoading] = useState(false);
   const [history, setHistory] = useState([]);
   const [selectedPhotoModal, setSelectedPhotoModal] = useState(null);
@@ -462,6 +464,38 @@ export default function SimplePrep() {
           </div>
         </div>
       </div>
+
+      {/* Sub-Navigation Tabs: Trimming Standar vs Split Zero-Waste (Kelapa) vs Barcode Lot Central */}
+      <div style={{ display: 'flex', gap: '6px', background: 'var(--bg-tertiary)', padding: '5px', borderRadius: 'var(--radius-md)', width: 'fit-content', maxWidth: '100%', overflowX: 'auto' }}>
+        <button
+          type="button"
+          className={`btn ${prepSubTab === 'TRIMMING' ? 'btn-primary' : ''}`}
+          style={{ background: prepSubTab === 'TRIMMING' ? '' : 'transparent', color: prepSubTab === 'TRIMMING' ? '' : 'var(--text-secondary)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+          onClick={() => setPrepSubTab('TRIMMING')}
+        >
+          Olah Bahan &amp; Trimming (Dengan Ampas/Susut)
+        </button>
+        <button
+          type="button"
+          className={`btn ${prepSubTab === 'ZERO_WASTE_SPLIT' ? 'btn-primary' : ''}`}
+          style={{ background: prepSubTab === 'ZERO_WASTE_SPLIT' ? '' : 'transparent', color: prepSubTab === 'ZERO_WASTE_SPLIT' ? '' : 'var(--text-secondary)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+          onClick={() => setPrepSubTab('ZERO_WASTE_SPLIT')}
+        >
+          Split Bahan Zero-Waste (Cutting Portion 0% — Kasus Kelapa Urgent)
+        </button>
+        <button
+          type="button"
+          className={`btn ${prepSubTab === 'BARCODE_CENTRAL' ? 'btn-primary' : ''}`}
+          style={{ background: prepSubTab === 'BARCODE_CENTRAL' ? '' : 'transparent', color: prepSubTab === 'BARCODE_CENTRAL' ? '' : 'var(--text-secondary)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+          onClick={() => setPrepSubTab('BARCODE_CENTRAL')}
+        >
+          Cetak &amp; Scan Barcode Lot Gudang Central
+        </button>
+      </div>
+
+      {prepSubTab === 'ZERO_WASTE_SPLIT' && <ZeroWasteSplitAndBarcode mode="SPLIT" />}
+      {prepSubTab === 'BARCODE_CENTRAL' && <ZeroWasteSplitAndBarcode mode="BARCODE" />}
+
 
       {/* Main Dual-Column Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">

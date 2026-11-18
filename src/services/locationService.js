@@ -155,7 +155,7 @@ export const locationService = {
       const cLoc = locs.find(l => l.code === 'CENTRAL') || DEFAULT_LOCATIONS[1];
       return { role: r, defaultLocationCode: 'CENTRAL', uuid: cLoc.uuid, allowedCategories: [] };
     }
-    if (r === 'Bar' || r === 'Barista') {
+    if (r === 'Bar' || r === 'Barista' || r === 'Head Bar' || r === 'Rekan Bar') {
       const bLoc = locs.find(l => l.code === 'RESTO') || DEFAULT_LOCATIONS[2];
       return { role: 'Bar', defaultLocationCode: 'RESTO', uuid: bLoc.uuid, allowedCategories: roleMap.Bar || bLoc.allowedCategories || [] };
     }
@@ -413,7 +413,7 @@ export function getRecipeDivision(recipe) {
 
 export function getUserDivisionScope(rawRole) {
   const r = String(rawRole || '').trim().toLowerCase();
-  if (r === 'bar' || r === 'barista') return 'BAR';
+  if (r === 'bar' || r === 'barista' || r === 'head bar' || r === 'rekan bar') return 'BAR';
   if (r === 'kitchen') return 'KITCHEN';
   if (r === 'service') return 'SERVICE';
   return 'ALL';
