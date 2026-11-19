@@ -842,6 +842,7 @@ export default function Purchasing({ standaloneTab = null } = {}) {
           purchases={purchases}
           materials={materials}
           period={period}
+          onPeriodChange={setPeriod}
           activeUser={activeUser}
         />
       )}

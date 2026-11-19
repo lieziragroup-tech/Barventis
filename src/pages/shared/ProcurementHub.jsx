@@ -31,9 +31,14 @@ const Loading = () => (
 export default function ProcurementHub() {
   const { activeUser } = useAuth();
   const role = String(activeUser?.role || '').trim().toLowerCase();
+  const isPurchasingRole = role === 'purchasing';
   const isCentralRole = role === 'central';
   const isBranchDivisionRole = ['bar', 'barista', 'head bar', 'rekan bar', 'kitchen', 'service', 'kasir', 'staff'].includes(role);
   const isSingleInvoicingView = isCentralRole || isBranchDivisionRole;
+
+  // Hide top sub-menu tabs when all routes are already represented in the left sidebar
+  // (Purchasing sidebar already exposes Pembuatan PO, Komparasi Harga, and Supplier directly)
+  const hideDuplicateSidebarTabs = isPurchasingRole || isSingleInvoicingView;
 
   const visibleTabs = useMemo(() => {
     if (isCentralRole) return CENTRAL_TABS;
@@ -42,7 +47,7 @@ export default function ProcurementHub() {
   }, [isCentralRole, isBranchDivisionRole]);
 
   return (
-    <TabContainer tabs={visibleTabs} defaultTab="invoicing">
+    <TabContainer tabs={visibleTabs} hideTabs={hideDuplicateSidebarTabs} defaultTab="invoicing">
       {(activeTab) => (
         <Suspense fallback={<Loading />}>
           {activeTab === 'marketlist' && !isSingleInvoicingView && <Marketlist />}

@@ -1,7 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { pettyCashService } from '../../services/modules/stakeholderV4Service';
 import useIsMobile from '../../hooks/useIsMobile';
-import { Calendar, FileSpreadsheet, DollarSign, Camera, CheckCircle2, Clock, Search, Plus } from 'lucide-react';
+import { Calendar, FileSpreadsheet, FileText, DollarSign, Camera, CheckCircle2, Clock, Search, Plus } from 'lucide-react';
+import { api } from '../../services/api';
+import { exportToPDF } from '../../services/export/pdfExporter';
 import { formatIDR } from '../../services/costUtils';
 import { exportWithAudit } from '../../services/export/exportAudit';
 
@@ -57,15 +59,82 @@ const DEFAULT_PETTY_CASH_ROWS = [
   }
 ];
 
+const MONTH_OPTIONS = [
+  { value: 1, label: 'Januari' },
+  { value: 2, label: 'Februari' },
+  { value: 3, label: 'Maret' },
+  { value: 4, label: 'April' },
+  { value: 5, label: 'Mei' },
+  { value: 6, label: 'Juni' },
+  { value: 7, label: 'Juli' },
+  { value: 8, label: 'Agustus' },
+  { value: 9, label: 'September' },
+  { value: 10, label: 'Oktober' },
+  { value: 11, label: 'November' },
+  { value: 12, label: 'Desember' }
+];
+
 export default function PurchasingMatrixAndPettyCash({
   mode = 'MATRIX',
   purchases = [],
   materials = [],
-  period = '2026-08',
+  period = '2026-11',
+  onPeriodChange = null,
   activeUser = null
 }) {
   const isMobile = useIsMobile(768);
   const [matrixSearch, setMatrixSearch] = useState('');
+
+  const parsedInitialPeriod = useMemo(() => {
+    const now = new Date();
+    const parts = String(period || '').split('-');
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    return {
+      year: Number.isFinite(y) && y >= 2020 ? y : now.getFullYear(),
+      month: Number.isFinite(m) && m >= 1 && m <= 12 ? m : now.getMonth() + 1
+    };
+  }, [period]);
+
+  const [selectedYear, setSelectedYear] = useState(parsedInitialPeriod.year);
+  const [selectedMonth, setSelectedMonth] = useState(parsedInitialPeriod.month);
+  const [periodPurchases, setPeriodPurchases] = useState(null);
+  const [loadingMatrix, setLoadingMatrix] = useState(false);
+
+  const effectivePeriod = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+  const selectedMonthLabel = MONTH_OPTIONS.find((m) => m.value === selectedMonth)?.label || `Bulan ${selectedMonth}`;
+  const yearOptions = useMemo(() => {
+    const base = new Date().getFullYear();
+    const years = [];
+    for (let y = base - 3; y <= base + 2; y++) years.push(y);
+    if (!years.includes(selectedYear)) years.push(selectedYear);
+    return years.sort((a, b) => b - a);
+  }, [selectedYear]);
+
+  // Fetch ALL purchase entries for the chosen Month & Year so matrix & full export are never truncated by pagination
+  useEffect(() => {
+    if (mode !== 'MATRIX') return;
+    let active = true;
+    setLoadingMatrix(true);
+    api.getPurchaseEntriesPaged({
+      page: 1,
+      pageSize: 100000,
+      search: '',
+      period: effectivePeriod
+    })
+      .then((res) => {
+        if (active && Array.isArray(res?.data)) {
+          setPeriodPurchases(res.data);
+        }
+      })
+      .catch(() => {
+        if (active) setPeriodPurchases(null);
+      })
+      .finally(() => {
+        if (active) setLoadingMatrix(false);
+      });
+    return () => { active = false; };
+  }, [mode, effectivePeriod]);
   const [pettyCashRows, setPettyCashRows] = useState(() => {
     try {
       const raw = localStorage.getItem('bv_petty_cash_accurate_v3');
@@ -99,21 +168,20 @@ export default function PurchasingMatrixAndPettyCash({
     notes: ''
   });
 
-  // Determine number of days in selected period (e.g., 31 for August/October, 30 for September/November)
+  // Determine exact number of days in selected Month & Year (28, 29, 30, or 31)
   const daysInMonth = useMemo(() => {
-    const parts = String(period || '2026-08').split('-');
-    const y = parseInt(parts[0], 10) || 2026;
-    const m = parseInt(parts[1], 10) || 8;
-    return new Date(y, m, 0).getDate();
-  }, [period]);
+    return new Date(selectedYear, selectedMonth, 0).getDate();
+  }, [selectedYear, selectedMonth]);
 
   const dayNumbers = useMemo(() => Array.from({ length: daysInMonth }, (_, i) => i + 1), [daysInMonth]);
 
-  // Build Monthly Purchase Matrix (Rows = Materials, Columns = Day 1..31)
-  const matrixData = useMemo(() => {
+  // Build FULL Monthly Purchase Matrix for the selected Month & Year (unfiltered for complete exports)
+  const allMatrixData = useMemo(() => {
     const mapByMat = new Map();
+    const sourcePurchases = Array.isArray(periodPurchases)
+      ? periodPurchases
+      : (purchases || []).filter((p) => String(p.date || '').startsWith(effectivePeriod));
 
-    // Seed with materials so even materials with daily purchases (like Es Batu) show clearly
     (materials || []).forEach((m) => {
       mapByMat.set(String(m.name || '').toLowerCase().trim(), {
         id: m.id,
@@ -126,10 +194,11 @@ export default function PurchasingMatrixAndPettyCash({
       });
     });
 
-    (purchases || []).forEach((p) => {
+    sourcePurchases.forEach((p) => {
+      const dateStr = String(p.date || '');
+      if (dateStr && !dateStr.startsWith(effectivePeriod)) return;
       const matName = p.materials?.name || p.item_name || p.name || 'Bahan Umum';
       const key = String(matName).toLowerCase().trim();
-      const dateStr = String(p.date || '');
       const dayNum = parseInt(dateStr.split('-')[2], 10);
       const qty = parseFloat(p.qty) || 0;
       const uPrice = parseFloat(p.unit_price) || 0;
@@ -146,41 +215,60 @@ export default function PurchasingMatrixAndPettyCash({
         });
       }
       const entry = mapByMat.get(key);
-      if (dayNum >= 1 && dayNum <= 31) {
+      if (dayNum >= 1 && dayNum <= daysInMonth) {
         entry.days[dayNum] = (entry.days[dayNum] || 0) + qty;
       }
       entry.totalQty += qty;
       entry.totalNominal += qty * uPrice;
     });
 
-    // Ensure "Es Batu Kristal" example from Stakeholder Meeting (Minutes 17:45-19:50) is always demonstrated if not in current page slice
-    const esBatuKey = 'es batu kristal';
-    if (!mapByMat.has(esBatuKey) || mapByMat.get(esBatuKey).totalQty === 0) {
-      const sampleDays = {};
-      let sumQty = 0;
-      for (let d = 1; d <= Math.min(30, daysInMonth); d += 2) {
-        sampleDays[d] = 5;
-        sumQty += 5;
-      }
-      mapByMat.set(esBatuKey, {
-        id: 'es-batu-demo',
-        name: 'Es Batu Kristal (Rekap Harian Tgl 1-30)',
-        unit: 'bal',
-        unit_price: 18000,
-        days: sampleDays,
-        totalQty: sumQty,
-        totalNominal: sumQty * 18000
-      });
-    }
+    return Array.from(mapByMat.values()).sort((a, b) => {
+      if (b.totalNominal !== a.totalNominal) return b.totalNominal - a.totalNominal;
+      if (b.totalQty !== a.totalQty) return b.totalQty - a.totalQty;
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+  }, [materials, purchases, periodPurchases, effectivePeriod, daysInMonth]);
 
+  const matrixData = useMemo(() => {
     const q = matrixSearch.trim().toLowerCase();
-    return Array.from(mapByMat.values())
-      .filter((r) => (q ? r.name.toLowerCase().includes(q) : true))
-      .sort((a, b) => b.totalQty - a.totalQty);
-  }, [materials, purchases, daysInMonth, matrixSearch]);
+    return q ? allMatrixData.filter((r) => String(r.name || '').toLowerCase().includes(q)) : allMatrixData;
+  }, [allMatrixData, matrixSearch]);
+
+  const grandTotals = useMemo(() => {
+    const perDay = {};
+    let totalQty = 0;
+    let totalNominal = 0;
+    let activeMaterials = 0;
+    allMatrixData.forEach((r) => {
+      if (r.totalQty > 0 || r.totalNominal > 0) activeMaterials += 1;
+      totalQty += r.totalQty;
+      totalNominal += r.totalNominal;
+      dayNumbers.forEach((d) => {
+        perDay[d] = (perDay[d] || 0) + (r.days[d] || 0);
+      });
+    });
+    return { perDay, totalQty, totalNominal, activeMaterials, totalMaterials: allMatrixData.length };
+  }, [allMatrixData, dayNumbers]);
+
+  const handleChangeMonth = (nextMonth) => {
+    const m = parseInt(nextMonth, 10);
+    setSelectedMonth(m);
+    if (typeof onPeriodChange === 'function') {
+      onPeriodChange(`${selectedYear}-${String(m).padStart(2, '0')}`);
+    }
+  };
+
+  const handleChangeYear = (nextYear) => {
+    const y = parseInt(nextYear, 10);
+    setSelectedYear(y);
+    if (typeof onPeriodChange === 'function') {
+      onPeriodChange(`${y}-${String(selectedMonth).padStart(2, '0')}`);
+    }
+  };
 
   const handleExportMatrixExcel = async () => {
-    const rows = matrixData.map((r, idx) => {
+    // Export ALL materials (keseluruhan) with daily QTY, Total Qty, Total Belanja, and Grand Total row
+    const rows = allMatrixData.map((r, idx) => {
       const rowObj = {
         NO: idx + 1,
         'NAMA BAHAN BAKU': r.name,
@@ -189,17 +277,81 @@ export default function PurchasingMatrixAndPettyCash({
       dayNumbers.forEach((d) => {
         rowObj[`Tgl ${d}`] = r.days[d] || 0;
       });
-      rowObj['TOTAL QTY SEBULAN'] = r.totalQty;
-      rowObj['TOTAL NOMINAL (RP)'] = r.totalNominal;
+      rowObj['TOTAL QTY'] = r.totalQty;
+      rowObj['TOTAL BELANJA (RP)'] = r.totalNominal;
       return rowObj;
     });
 
+    const grandTotalRow = {
+      NO: '',
+      'NAMA BAHAN BAKU': `TOTAL KESELURUHAN (${selectedMonthLabel} ${selectedYear})`,
+      SATUAN: `${grandTotals.totalMaterials} bahan`
+    };
+    dayNumbers.forEach((d) => {
+      grandTotalRow[`Tgl ${d}`] = grandTotals.perDay[d] || 0;
+    });
+    grandTotalRow['TOTAL QTY'] = grandTotals.totalQty;
+    grandTotalRow['TOTAL BELANJA (RP)'] = grandTotals.totalNominal;
+    rows.push(grandTotalRow);
+
+    const summaryRows = [
+      { Keterangan: 'Periode Rekap', Nilai: `${selectedMonthLabel} ${selectedYear} (Tgl 1 s/d ${daysInMonth})` },
+      { Keterangan: 'Total Jenis Bahan', Nilai: grandTotals.totalMaterials },
+      { Keterangan: 'Bahan Ada Pembelian', Nilai: grandTotals.activeMaterials },
+      { Keterangan: 'Total QTY Keseluruhan', Nilai: grandTotals.totalQty },
+      { Keterangan: 'Total Belanja Keseluruhan (Rp)', Nilai: grandTotals.totalNominal }
+    ];
+
     await exportWithAudit({
       format: 'excel',
-      filename: `Matriks_Pembelian_Bulanan_Tgl_1_${daysInMonth}_${period}`,
-      sheets: [{ name: `Matriks Tgl 1-${daysInMonth}`, rows }],
-      actionName: 'Export Monthly Purchase Matrix',
+      filename: `Rekap_Belanja_Bulanan_${selectedMonthLabel}_${selectedYear}`,
+      sheets: [
+        { name: `Matriks Tgl 1-${daysInMonth}`, rows },
+        { name: 'Ringkasan Keseluruhan', rows: summaryRows }
+      ],
+      actionName: 'Export Monthly Purchase Matrix (Full)',
       role: activeUser?.role || 'Purchasing'
+    });
+  };
+
+  const handleExportMatrixPdf = async () => {
+    const pdfRows = allMatrixData.map((r, idx) => {
+      const activeDaysCount = dayNumbers.filter((d) => (r.days[d] || 0) > 0).length;
+      return {
+        no: idx + 1,
+        name: r.name,
+        unit: r.unit,
+        activeDays: activeDaysCount > 0 ? `${activeDaysCount} hari` : '-',
+        totalQty: `${r.totalQty} ${r.unit}`,
+        totalNominal: formatIDR(r.totalNominal)
+      };
+    });
+
+    pdfRows.push({
+      no: '',
+      name: `TOTAL PEMBELIAN (${grandTotals.totalMaterials} bahan)`,
+      unit: '',
+      activeDays: `${grandTotals.activeMaterials} bahan aktif`,
+      totalQty: String(grandTotals.totalQty),
+      totalNominal: formatIDR(grandTotals.totalNominal)
+    });
+
+    await exportToPDF({
+      filename: `Rekap_Belanja_Bulanan_${selectedMonthLabel}_${selectedYear}`,
+      title: `Rekap Pembelian Bulanan Keseluruhan - ${selectedMonthLabel} ${selectedYear}
+Periode: Tanggal 1 s/d ${daysInMonth} ${selectedMonthLabel} ${selectedYear}
+Total Bahan: ${grandTotals.totalMaterials} jenis (${grandTotals.activeMaterials} ada pembelian) | Total QTY: ${grandTotals.totalQty} | Total Belanja: ${formatIDR(grandTotals.totalNominal)}`,
+      tenantName: 'BARVENTIS - Rekap Pembelian Bulanan',
+      orientation: 'portrait',
+      columns: [
+        { key: 'no', label: '#' },
+        { key: 'name', label: 'Nama Bahan Baku' },
+        { key: 'unit', label: 'Unit' },
+        { key: 'activeDays', label: 'Frekuensi' },
+        { key: 'totalQty', label: 'Total Qty' },
+        { key: 'totalNominal', label: 'Total Belanja (Rp)' }
+      ],
+      rows: pdfRows
     });
   };
 
@@ -492,36 +644,75 @@ export default function PurchasingMatrixAndPettyCash({
     <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
             <Calendar size={20} style={{ color: 'var(--accent)' }} />
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0 }}>
-              Matriks Rekap Pembelian Bulanan per Bahan (Tanggal 1 s/d {daysInMonth})
+            <h3 style={{ fontSize: '1.08rem', fontWeight: 800, margin: 0 }}>
+              Rekap Belanja Bulanan ({selectedMonthLabel} {selectedYear} · Tgl 1–{daysInMonth})
             </h3>
+            {loadingMatrix && (
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Memuat data...</span>
+            )}
           </div>
-          <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: 0 }}>
-            Menampilkan rincian pembelian harian setiap bahan baku dari tanggal 1 sampai {daysInMonth} (seperti <strong>Es Batu Kristal</strong> yang dibeli rutin tanggal 1, 2, 3...{daysInMonth}) beserta akumulasi total kuantitas dan Rupiah selama 1 bulan penuh.
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
+            Rincian belanja harian per bahan beserta total QTY ({grandTotals.totalQty.toLocaleString('id-ID')}) dan total belanja ({formatIDR(grandTotals.totalNominal)}).
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ position: 'relative', width: '240px' }}>
-            <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <select
+            className="form-control"
+            aria-label="Pilih Bulan"
+            value={selectedMonth}
+            onChange={(e) => handleChangeMonth(e.target.value)}
+            style={{ width: '132px', fontSize: '0.82rem', padding: '7px 10px' }}
+          >
+            {MONTH_OPTIONS.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+
+          <select
+            className="form-control"
+            aria-label="Pilih Tahun"
+            value={selectedYear}
+            onChange={(e) => handleChangeYear(e.target.value)}
+            style={{ width: '92px', fontSize: '0.82rem', padding: '7px 10px' }}
+          >
+            {yearOptions.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+
+          <div style={{ position: 'relative', width: '210px' }}>
+            <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
             <input
               type="text"
               className="form-control"
-              style={{ paddingLeft: '34px', fontSize: '0.82rem' }}
-              placeholder="Cari bahan (mis. Es Batu)..."
+              style={{ paddingLeft: '32px', fontSize: '0.82rem' }}
+              placeholder="Cari bahan..."
               value={matrixSearch}
               onChange={(e) => setMatrixSearch(e.target.value)}
             />
           </div>
+
           <button
             type="button"
             className="btn btn-primary"
-            style={{ fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            style={{ fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
             onClick={handleExportMatrixExcel}
+            title="Export semua bahan lengkap dengan QTY harian, Total QTY, dan Total Belanja"
           >
-            <FileSpreadsheet size={15} /> Export Matriks Tgl 1–{daysInMonth} (Excel)
+            <FileSpreadsheet size={15} /> Export Excel
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            onClick={handleExportMatrixPdf}
+            title="Export rekap keseluruhan ke PDF lengkap dengan stempel validasi"
+          >
+            <FileText size={15} /> PDF
           </button>
         </div>
       </div>
@@ -571,7 +762,7 @@ export default function PurchasingMatrixAndPettyCash({
             </tr>
           </thead>
           <tbody>
-            {matrixData.slice(0, 50).map((row) => (
+            {matrixData.map((row) => (
               <tr key={row.id}>
                 <td style={{ position: 'sticky', left: 0, background: 'var(--bg-primary)', zIndex: 4, fontWeight: 700 }}>
                   {row.name}
@@ -603,6 +794,25 @@ export default function PurchasingMatrixAndPettyCash({
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr style={{ background: 'rgba(16,185,129,0.08)', fontWeight: 800 }}>
+              <td style={{ position: 'sticky', left: 0, background: 'var(--bg-secondary)', zIndex: 4, fontWeight: 800 }}>
+                TOTAL KESELURUHAN ({grandTotals.totalMaterials} bahan)
+              </td>
+              <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>-</td>
+              {dayNumbers.map((d) => (
+                <td key={d} style={{ textAlign: 'center', padding: '7px 3px', color: grandTotals.perDay[d] > 0 ? 'var(--accent)' : 'var(--text-muted)' }}>
+                  {grandTotals.perDay[d] > 0 ? grandTotals.perDay[d] : '-'}
+                </td>
+              ))}
+              <td style={{ textAlign: 'right', fontWeight: 800 }}>
+                {grandTotals.totalQty.toLocaleString('id-ID')}
+              </td>
+              <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--accent)' }}>
+                {formatIDR(grandTotals.totalNominal)}
+              </td>
+            </tr>
+          </tfoot>
         </table>
       </div>
       )}
