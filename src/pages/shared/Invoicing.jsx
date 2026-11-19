@@ -86,6 +86,69 @@ export default function Invoicing() {
   const [reviewPoModal, setReviewPoModal] = useState(null);
   const [compareItemForPo, setCompareItemForPo] = useState(null);
   const [savingReviewPo, setSavingReviewPo] = useState(false);
+  const [showQuickAddSupplier, setShowQuickAddSupplier] = useState(false);
+  const [quickSupForm, setQuickSupForm] = useState({ name: '', phone: '', contact_person: '' });
+  const [savingQuickSup, setSavingQuickSup] = useState(false);
+  const [poReminders, setPoReminders] = useState(() => {
+    try {
+      const raw = localStorage.getItem('bv_po_reminders_v4');
+      return raw ? JSON.parse(raw).filter((r) => !r.done) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    const onRemUpdated = () => {
+      try {
+        const raw = localStorage.getItem('bv_po_reminders_v4');
+        setPoReminders(raw ? JSON.parse(raw).filter((r) => !r.done) : []);
+      } catch {
+        setPoReminders([]);
+      }
+    };
+    window.addEventListener('barventis:po_reminders_updated', onRemUpdated);
+    return () => window.removeEventListener('barventis:po_reminders_updated', onRemUpdated);
+  }, []);
+
+  const handleMarkReminderDone = (remId) => {
+    try {
+      const raw = localStorage.getItem('bv_po_reminders_v4');
+      const all = raw ? JSON.parse(raw) : [];
+      const next = all.map((r) => (r.id === remId ? { ...r, done: true } : r));
+      localStorage.setItem('bv_po_reminders_v4', JSON.stringify(next));
+      setPoReminders(next.filter((r) => !r.done));
+    } catch {
+      setPoReminders((prev) => prev.filter((r) => r.id !== remId));
+    }
+  };
+
+  const handleQuickCreateSupplierInReview = async () => {
+    const cleanName = String(quickSupForm.name || '').trim();
+    if (!cleanName) {
+      if (toast) toast('Isi nama supplier dulu.', 'warning');
+      return;
+    }
+    setSavingQuickSup(true);
+    try {
+      const saved = await api.saveSupplier({
+        name: cleanName,
+        phone: String(quickSupForm.phone || '').trim(),
+        contact_person: String(quickSupForm.contact_person || '').trim(),
+        address: ''
+      });
+      await loadSuppliers();
+      const finalName = saved?.name || cleanName;
+      setReviewPoModal((prev) => (prev ? { ...prev, supplier: finalName } : prev));
+      setQuickSupForm({ name: '', phone: '', contact_person: '' });
+      setShowQuickAddSupplier(false);
+      if (toast) toast(`Supplier "${finalName}" berhasil ditambahkan & langsung dipilih.`, 'success');
+    } catch (err) {
+      if (toast) toast(err.message || 'Gagal menambah supplier baru.', 'error');
+    } finally {
+      setSavingQuickSup(false);
+    }
+  };
 
   // Load suppliers list
   const loadSuppliers = useCallback(async () => {
@@ -965,6 +1028,37 @@ Catatan: ${inv.notes || '-'}`,
 
   return (
     <div className="fade-in">
+      {/* Pengingat Jadwal PO Purchasing (dari Kalender Lead Time) */}
+      {poReminders.length > 0 && (
+        <div className="glass-card no-print" style={{ marginBottom: '16px', padding: '12px 16px', borderLeft: '4px solid var(--accent)' }}>
+          <div style={{ fontSize: '0.82rem', fontWeight: 800, marginBottom: '8px', color: 'var(--text-primary)' }}>
+            Pengingat Jadwal PO ({poReminders.length} jadwal aktif)
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {poReminders.slice(0, 5).map((rem) => {
+              const todayISO = new Date().toISOString().split('T')[0];
+              const isDueOrLate = rem.delivery_date && rem.delivery_date <= todayISO;
+              return (
+                <div key={rem.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap', padding: '6px 10px', borderRadius: '8px', background: isDueOrLate ? 'rgba(239,68,68,0.08)' : 'var(--bg-primary)', border: '1px solid var(--border)', fontSize: '0.78rem' }}>
+                  <div>
+                    <strong>{rem.item_name}</strong> · {rem.supplier_name} · Kirim: <strong style={{ color: isDueOrLate ? 'var(--danger)' : 'var(--accent)' }}>{rem.delivery_date} ({rem.h_label})</strong>
+                    {isDueOrLate && <span style={{ marginLeft: '6px', color: 'var(--danger)', fontWeight: 700 }}>• Waktunya PO!</span>}
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ padding: '4px 10px', fontSize: '0.72rem', fontWeight: 700 }}
+                    onClick={() => handleMarkReminderDone(rem.id)}
+                  >
+                    Sudah PO
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Controls */}
       <div className="glass-card" style={{ marginBottom: '20px', padding: '16px 20px' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
@@ -988,7 +1082,7 @@ Catatan: ${inv.notes || '-'}`,
             <option value="ALL">Semua Status PO</option>
             <option value="DRAFT">Permintaan Cabang &amp; Menunggu ACC</option>
             <option value="SENT">Sudah Dipesan ke Supplier (SENT)</option>
-            <option value="RECEIVED">Goods Receipt Selesai (RECEIVED)</option>
+            <option value="RECEIVED">Sudah Diterima (RECEIVED)</option>
             <option value="CANCELLED">Dibatalkan</option>
           </select>
           <ExportButton
@@ -1021,25 +1115,25 @@ Catatan: ${inv.notes || '-'}`,
       <div className="kpi-grid no-print" style={{ marginBottom: '24px' }}>
         <div className="glass-card kpi-card">
           <div className="kpi-header">
-            <span className="kpi-title">Total Dokumen PO</span>
+            <span className="kpi-title">Total PO</span>
           </div>
           <div className="kpi-value">{kpis.total}</div>
         </div>
         <div className="glass-card kpi-card">
           <div className="kpi-header">
-            <span className="kpi-title">Permintaan / Proses ACC &amp; Kirim</span>
+            <span className="kpi-title">Perlu Diproses</span>
           </div>
           <div className="kpi-value" style={{ color: '#d97706' }}>{kpis.pending}</div>
         </div>
         <div className="glass-card kpi-card">
           <div className="kpi-header">
-            <span className="kpi-title">Goods Receipt Selesai</span>
+            <span className="kpi-title">Sudah Diterima</span>
           </div>
           <div className="kpi-value" style={{ color: '#059669' }}>{kpis.received}</div>
         </div>
         <div className="glass-card kpi-card">
           <div className="kpi-header">
-            <span className="kpi-title">Total Nilai Pengadaan</span>
+            <span className="kpi-title">Total Belanja</span>
           </div>
           <div className="kpi-value" style={{ fontSize: '1.25rem' }}>{formatIDR(kpis.totalValue)}</div>
         </div>
@@ -1169,7 +1263,7 @@ Catatan: ${inv.notes || '-'}`,
                                 title="Verifikasi/ganti supplier (termasuk Pasar Umum), cek harga, dan proses PO ke supplier"
                                 onClick={() => openReviewPoModal(inv)}
                               >
-                                'Proses / Ganti Supplier'
+                                'Proses PO'
                               </button>
                             )}
 
@@ -1203,7 +1297,7 @@ Catatan: ${inv.notes || '-'}`,
                                 title="Hubungi Supplier terkait via WhatsApp dengan daftar pesanan PO resmi"
                                 onClick={() => handleContactSupplierWA(inv)}
                               >
-                                Hubungi Supplier (WA)
+                                Chat WA
                               </button>
                             )}
 
@@ -1214,7 +1308,7 @@ Catatan: ${inv.notes || '-'}`,
                                 title="Tandai PO sudah dikirim/dipesan ke Supplier"
                                 onClick={() => handleKirimPO(inv)}
                               >
-                                Tandai Dipesan (SENT)
+                                Sudah Dipesan
                               </button>
                             )}
 
@@ -1226,7 +1320,7 @@ Catatan: ${inv.notes || '-'}`,
                                 title="Terima Barang di lokasi dengan bukti Foto Fisik Barang & Surat Jalan / Resi Supplier"
                                 onClick={() => openReceiveModal(inv)}
                               >
-                                Terima Barang (Goods Receipt)
+                                Terima Barang
                               </button>
                             )}
 
@@ -2307,10 +2401,10 @@ Catatan: ${inv.notes || '-'}`,
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border)', paddingBottom: '14px', marginBottom: '16px' }}>
               <div>
                 <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0 }}>
-                  Proses PO Purchasing &amp; Pemilihan Supplier — {reviewPoModal.invoice_no}
+                  Proses PO — {reviewPoModal.invoice_no}
                 </h3>
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px', marginBottom: 0 }}>
-                  Supplier Awal Permintaan Cabang: <strong>{reviewPoModal.original_supplier || reviewPoModal.supplier}</strong> · Divisi: <strong>{reviewPoModal.division || 'BAR'}</strong>
+                  Supplier awal: <strong>{reviewPoModal.original_supplier || reviewPoModal.supplier}</strong> · Divisi: <strong>{reviewPoModal.division || 'BAR'}</strong>
                 </p>
               </div>
               <button
@@ -2324,30 +2418,89 @@ Catatan: ${inv.notes || '-'}`,
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', marginBottom: '16px' }}>
               <div>
-                <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 700 }}>
-                  Supplier Terpilih (Master Supplier Purchasing)
-                </label>
-                <select
-                  className="form-control"
-                  value={reviewPoModal.supplier}
-                  onChange={e => setReviewPoModal(prev => ({ ...prev, supplier: e.target.value }))}
-                >
-                  {suppliersList.map(s => (
-                    <option key={s.id || s.name} value={s.name}>{s.name}</option>
-                  ))}
-                  {!suppliersList.some(s => s.name === reviewPoModal.supplier) && (
-                    <option value={reviewPoModal.supplier}>{reviewPoModal.supplier}</option>
-                  )}
-                </select>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', gap: '8px' }}>
+                  <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 700, marginBottom: 0 }}>
+                    Supplier
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickAddSupplier((prev) => !prev)}
+                    style={{
+                      fontSize: '0.73rem',
+                      fontWeight: 700,
+                      color: 'var(--accent)',
+                      background: 'rgba(16,185,129,0.1)',
+                      border: '1px solid rgba(16,185,129,0.35)',
+                      borderRadius: '6px',
+                      padding: '2px 8px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {showQuickAddSupplier ? 'Tutup' : '+ Supplier Baru'}
+                  </button>
+                </div>
+
+                {showQuickAddSupplier ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--accent)' }}>
+                    <input
+                      type="text"
+                      className="form-control"
+                      style={{ fontSize: '0.8rem', padding: '6px 10px' }}
+                      placeholder="Nama supplier baru *"
+                      value={quickSupForm.name}
+                      onChange={(e) => setQuickSupForm((p) => ({ ...p, name: e.target.value }))}
+                    />
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '6px' }}>
+                      <input
+                        type="text"
+                        className="form-control"
+                        style={{ fontSize: '0.78rem', padding: '6px 10px' }}
+                        placeholder="No. WA / HP"
+                        value={quickSupForm.phone}
+                        onChange={(e) => setQuickSupForm((p) => ({ ...p, phone: e.target.value }))}
+                      />
+                      <input
+                        type="text"
+                        className="form-control"
+                        style={{ fontSize: '0.78rem', padding: '6px 10px' }}
+                        placeholder="Nama kontak"
+                        value={quickSupForm.contact_person}
+                        onChange={(e) => setQuickSupForm((p) => ({ ...p, contact_person: e.target.value }))}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ padding: '6px 12px', fontSize: '0.78rem', fontWeight: 700 }}
+                      onClick={handleQuickCreateSupplierInReview}
+                      disabled={savingQuickSup}
+                    >
+                      {savingQuickSup ? 'Menyimpan...' : 'Simpan & Pakai Supplier'}
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    className="form-control"
+                    value={reviewPoModal.supplier}
+                    onChange={e => setReviewPoModal(prev => ({ ...prev, supplier: e.target.value }))}
+                  >
+                    {suppliersList.map(s => (
+                      <option key={s.id || s.name} value={s.name}>{s.name}</option>
+                    ))}
+                    {!suppliersList.some(s => s.name === reviewPoModal.supplier) && (
+                      <option value={reviewPoModal.supplier}>{reviewPoModal.supplier}</option>
+                    )}
+                  </select>
+                )}
               </div>
               <div>
                 <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 700 }}>
-                  Catatan Pergantian Supplier (Wajib diisi jika Supplier diganti)
+                  Alasan ganti supplier (jika diganti)
                 </label>
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="Mis: Diganti ke supplier ini karena lebih hemat Rp 15.000/pck dengan kualitas setara..."
+                  placeholder="Mis. lebih murah atau stok lama kosong"
                   value={reviewPoModal.supplier_change_note || ''}
                   onChange={e => setReviewPoModal(prev => ({ ...prev, supplier_change_note: e.target.value }))}
                 />
@@ -2368,7 +2521,7 @@ Catatan: ${inv.notes || '-'}`,
                     <th style={{ width: '130px', textAlign: 'center' }}>Qty</th>
                     <th style={{ width: '165px', textAlign: 'right' }}>Harga Beli / Unit (Rp)</th>
                     <th style={{ width: '130px', textAlign: 'right' }}>Subtotal</th>
-                    <th style={{ width: '140px', textAlign: 'center' }}>Analisis Efisiensi</th>
+                    <th style={{ width: '140px', textAlign: 'center' }}>Bandingkan</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2426,7 +2579,7 @@ Catatan: ${inv.notes || '-'}`,
                               material: matObj || { id: it.material_id, name: it.item_name, unit: it.unit || 'pck', price: it.unit_price, supplier: reviewPoModal.supplier }
                             })}
                           >
-                            Bandingkan Supplier
+                            Bandingkan
                           </button>
                         </td>
                       </tr>
@@ -2452,7 +2605,7 @@ Catatan: ${inv.notes || '-'}`,
                   onClick={(e) => handleSavePurchasingReview(e, false)}
                   disabled={savingReviewPo}
                 >
-                  Simpan Draft Review
+                  Simpan Draft
                 </button>
                 <button
                   type="button"
@@ -2461,7 +2614,7 @@ Catatan: ${inv.notes || '-'}`,
                   onClick={(e) => handleSavePurchasingReview(e, true)}
                   disabled={savingReviewPo}
                 >
-                  {savingReviewPo ? 'Memproses...' : 'Simpan & Siap Pesan ke Supplier'}
+                  {savingReviewPo ? 'Memproses...' : 'Simpan & Pesan'}
                 </button>
               </div>
             </div>
