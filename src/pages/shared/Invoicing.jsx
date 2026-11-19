@@ -840,7 +840,8 @@ Status: ${inv.status}
 Catatan: ${inv.notes || '-'}`,
         tenantName: 'BARVENTIS - Sistem Manajemen Purchasing & Invoicing',
         columns,
-        rows
+        rows,
+        orientation: 'portrait'
       });
     } catch (err) {
       console.error(err);
@@ -1293,7 +1294,21 @@ Catatan: ${inv.notes || '-'}`,
                   Tujuan Gudang: <strong style={{ color: 'var(--text-primary)' }}>{viewInvoice.location || 'CENTRAL'}</strong>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                {viewInvoice.status !== 'RECEIVED' && viewInvoice.status !== 'GOODS_RECEIVED' && viewInvoice.status !== 'CANCELLED' && (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ padding: '6px 12px', fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}
+                    onClick={() => {
+                      const targetPo = viewInvoice;
+                      setViewInvoice(null);
+                      openReviewPoModal(targetPo);
+                    }}
+                  >
+                    Edit PO
+                  </button>
+                )}
                 <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => handlePrintInvoice(viewInvoice)}>
                   <Download size={14} /> Cetak / PDF
                 </button>
