@@ -1,3 +1,4 @@
+import { drawPdfBrandHeaderLogo, drawPdfValidationFooter } from './pdfBrandingService';
 /**
  * Report Generator for Barista/Beverage Reports
  * Generates 13 sheets matching "Pendataan yang ingin dicapai" folder structure
@@ -202,22 +203,32 @@ export async function generatePDF(salesData, dbData, unitConversionMap = new Map
     if (!firstPage) doc.addPage();
     firstPage = false;
     const pw = doc.internal.pageSize.getWidth();
+    const brandMeta = drawPdfBrandHeaderLogo(doc, { marginX: 14, topY: 7, maxWidthMm: 16, maxHeightMm: 11 });
+    const titleX = brandMeta.textOffsetX;
+    const lineY = brandMeta.logoRendered ? 20 : 17.5;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(13);
     doc.setTextColor(15, 23, 42);
-    doc.text(title, 14, 14);
+    doc.text(title, titleX, 13.5);
+    if (brandMeta.logoRendered && brandMeta.validationLabel) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(15, 118, 110);
+      doc.text(`Validasi Resmi: ${brandMeta.validationLabel}`, titleX, 17.5);
+    }
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(100, 116, 139);
     doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 14, 14, { align: 'right' });
     doc.setDrawColor(203, 213, 225);
     doc.setLineWidth(0.3);
-    doc.line(14, 17.5, pw - 14, 17.5);
+    doc.line(14, lineY, pw - 14, lineY);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10.5);
     doc.setTextColor(30, 41, 59);
-    doc.text(sectionTitle, 14, 23.5);
-    return 28;
+    doc.text(sectionTitle, 14, lineY + 6);
+    drawPdfValidationFooter(doc, 14);
+    return lineY + 10.5;
   };
 
   // 1. Penjualan Beverage Summary

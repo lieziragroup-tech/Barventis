@@ -1,3 +1,9 @@
+import {
+  drawPdfBrandHeaderLogo,
+  drawPdfValidationFooter,
+  drawPdfValidationSealBlock
+} from '../pdfBrandingService';
+
 export async function exportToPDF({ filename, title, tenantName, columns, rows, orientation = 'landscape' }) {
   const { default: jsPDF } = await import('jspdf');
   const { default: autoTable } = await import('jspdf-autotable');
@@ -7,11 +13,29 @@ export async function exportToPDF({ filename, title, tenantName, columns, rows, 
   const marginX = 14;
   const maxTextWidth = pageWidth - marginX * 2;
 
+  // Optional Owner Validation Photo / Logo (Top-Left) — shifts brand title automatically to prevent overlap
+  const brandMeta = drawPdfBrandHeaderLogo(doc, {
+    marginX,
+    topY: 7.5,
+    maxWidthMm: 18,
+    maxHeightMm: 13
+  });
+
+  const brandTextX = brandMeta.textOffsetX;
+  const headerBottomY = brandMeta.headerBottomY;
+
   // Header Brand (Left) & Print Metadata (Right) — zero overlap
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(15, 23, 42);
-  doc.text(String(tenantName || 'BARVENTIS - Sistem Manajemen Gudang'), marginX, 14);
+  doc.text(String(tenantName || 'BARVENTIS - Sistem Manajemen Gudang'), brandTextX, 13.5);
+
+  if (brandMeta.logoRendered && brandMeta.validationLabel) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(15, 118, 110);
+    doc.text(`Validasi Resmi: ${brandMeta.validationLabel}`, brandTextX, 18.2);
+  }
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
@@ -22,7 +46,7 @@ export async function exportToPDF({ filename, title, tenantName, columns, rows, 
   // Subtle divider line
   doc.setDrawColor(203, 213, 225);
   doc.setLineWidth(0.35);
-  doc.line(marginX, 20.5, pageWidth - marginX, 20.5);
+  doc.line(marginX, headerBottomY, pageWidth - marginX, headerBottomY);
 
   // Dynamic multi-line title & metadata block
   const rawLines = String(title || '')
@@ -30,7 +54,7 @@ export async function exportToPDF({ filename, title, tenantName, columns, rows, 
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
-  let cursorY = 27;
+  let cursorY = headerBottomY + 6.5;
   if (rawLines.length > 0) {
     // First line as bold document heading
     doc.setFont('helvetica', 'bold');
@@ -40,7 +64,7 @@ export async function exportToPDF({ filename, title, tenantName, columns, rows, 
     doc.text(wrappedHeading, marginX, cursorY);
     cursorY += wrappedHeading.length * 5.5 + 1.5;
 
-    // Subsequent lines as structured metadata (Tanggal, Supplier, Lokasi, Status, Catatan)
+    // Subsequent lines as structured metadata (Tanggal, Tanggal Kirim, Supplier, Lokasi, Status, Catatan)
     if (rawLines.length > 1) {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9.5);
@@ -53,11 +77,11 @@ export async function exportToPDF({ filename, title, tenantName, columns, rows, 
     }
   }
 
-  const startY = Math.max(32, cursorY + 4);
+  const startY = Math.max(headerBottomY + 12, cursorY + 4);
 
   autoTable(doc, {
     startY,
-    margin: { left: marginX, right: marginX },
+    margin: { left: marginX, right: marginX, bottom: 18 },
     head: [columns.map((c) => c.label)],
     body: rows.map((r) => columns.map((c) => r[c.key] ?? '')),
     styles: {
@@ -88,16 +112,12 @@ export async function exportToPDF({ filename, title, tenantName, columns, rows, 
       }
     },
     didDrawPage: (data) => {
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(100, 116, 139);
-      doc.text(
-        `Halaman ${doc.internal.getNumberOfPages()}`,
-        data.settings.margin.left,
-        doc.internal.pageSize.getHeight() - 10
-      );
+      drawPdfValidationFooter(doc, data.settings.margin.left);
     }
   });
+
+  // Render official Umatis validation seal block below the table if Owner uploaded a validation photo
+  drawPdfValidationSealBlock(doc, { marginX });
 
   doc.save(`${filename}_${new Date().toISOString().split('T')[0]}.pdf`);
 }

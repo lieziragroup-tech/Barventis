@@ -1,3 +1,4 @@
+import { drawPdfBrandHeaderLogo, drawPdfValidationFooter, drawPdfValidationSealBlock } from '../../services/pdfBrandingService';
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
@@ -194,13 +195,23 @@ export default function PosTerminal() {
     import('jspdf').then(({ default: jsPDF }) => {
       import('jspdf-autotable').then(({ default: autoTable }) => {
         const doc = new jsPDF();
-        doc.setFontSize(16);
-        doc.text('RESI PEMBAYARAN - POS TERMINAL', 14, 20);
+        const brandMeta = drawPdfBrandHeaderLogo(doc, { marginX: 14, topY: 9, maxWidthMm: 18, maxHeightMm: 13 });
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(14);
+        doc.text('RESI PEMBAYARAN - POS TERMINAL', brandMeta.textOffsetX, 15.5);
+        if (brandMeta.logoRendered && brandMeta.validationLabel) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(15, 118, 110);
+          doc.text(`Validasi Resmi: ${brandMeta.validationLabel}`, brandMeta.textOffsetX, 20.2);
+          doc.setTextColor(15, 23, 42);
+        }
+        doc.setFont('helvetica', 'normal');
         doc.setFontSize(10);
-        doc.text(`No. Order: ${order.order_no}`, 14, 28);
-        doc.text(`Tanggal: ${new Date(order.created_at).toLocaleString('id-ID')}`, 14, 34);
-        if (order.customer_name) doc.text(`Pelanggan: ${order.customer_name}`, 14, 40);
-        doc.text(`Pembayaran: ${order.payment_method}`, 14, order.customer_name ? 46 : 40);
+        doc.text(`No. Order: ${order.order_no}`, 14, 29);
+        doc.text(`Tanggal: ${new Date(order.created_at).toLocaleString('id-ID')}`, 14, 35);
+        if (order.customer_name) doc.text(`Pelanggan: ${order.customer_name}`, 14, 41);
+        doc.text(`Pembayaran: ${order.payment_method}`, 14, order.customer_name ? 47 : 41);
 
         const tableData = items.map(item => [
           item.recipes?.menu_name || 'Menu',
@@ -229,6 +240,8 @@ export default function PosTerminal() {
         });
 
         
+        drawPdfValidationSealBlock(doc, { marginX: 14 });
+        drawPdfValidationFooter(doc, 14);
         doc.save(`Resi_${order.order_no}.pdf`);
       });
     });

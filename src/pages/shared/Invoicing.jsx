@@ -8,6 +8,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
 import { getUserDivisionScope, getMaterialDivision } from '../../services/locationService';
 import ComparePriceModal from '../../components/modals/ComparePriceModal';
+import CreatePoSlideOver from '../../components/modals/CreatePoSlideOver';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import BulkImport from '../../components/BulkImport';
@@ -895,13 +896,13 @@ export default function Invoicing() {
       await exportToPDF({
         filename: `PO_${inv.invoice_no}`,
         title: `Purchase Order - ${inv.invoice_no}
-Tanggal: ${inv.date}
+Tanggal PO: ${inv.date || '-'}
+Tanggal Kirim: ${inv.due_date || inv.delivery_date || (String(inv.notes || '').match(/Jadwal Kirim:\s*([^|]+)/)?.[1]?.trim()) || '-'}
 Supplier: ${inv.supplier}
-Lokasi Gudang: ${inv.location || 'CENTRAL'}
+Gudang Tujuan: ${inv.location || 'CENTRAL'}
 Status: ${inv.status}
-
 Catatan: ${inv.notes || '-'}`,
-        tenantName: 'BARVENTIS - Sistem Manajemen Purchasing & Invoicing',
+        tenantName: 'BARVENTIS - Purchasing & Invoicing',
         columns,
         rows,
         orientation: 'portrait'
@@ -1385,7 +1386,7 @@ Catatan: ${inv.notes || '-'}`,
                   Supplier: <strong style={{ color: 'var(--text-primary)' }}>{viewInvoice.supplier}</strong> · Tanggal: {viewInvoice.date}
                 </div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  Tujuan Gudang: <strong style={{ color: 'var(--text-primary)' }}>{viewInvoice.location || 'CENTRAL'}</strong>
+                  Gudang Tujuan: <strong style={{ color: 'var(--text-primary)' }}>{viewInvoice.location || 'CENTRAL'}</strong> · Tanggal Kirim: <strong style={{ color: 'var(--accent)' }}>{viewInvoice.due_date || viewInvoice.delivery_date || (String(viewInvoice.notes || '').match(/Jadwal Kirim:\s*([^|]+)/)?.[1]?.trim()) || '-'}</strong>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1542,496 +1543,24 @@ Catatan: ${inv.notes || '-'}`,
         </div>
       )}
 
-      {/* Create PO Slide-over Modal */}
-      {showCreateModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end', animation: 'fadeIn 0.2s ease' }} onClick={() => setShowCreateModal(false)}>
-          <div style={{ width: '100%', maxWidth: '880px', background: 'var(--bg-primary)', height: '100vh', padding: '28px 24px', overflowY: 'auto', borderLeft: '1px solid var(--border)', boxShadow: '-10px 0 30px rgba(0,0,0,0.2)', animation: 'slideInRight 0.3s ease' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border)', paddingBottom: '14px' }}>
-              <div>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>Buat Purchase Order</h3>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
-                  Pilih supplier lalu rincian bahan PO.
-                </p>
-              </div>
-              <button style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => setShowCreateModal(false)}>
-                <X size={16} />
-              </button>
-            </div>
-
-            <form onSubmit={handlePrepareSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-              {/* Session Progress Banner when creating multiple POs sequentially */}
-              {completedSuppliersSession.length > 0 && (
-                <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
-                  <div>
-                    <strong style={{ color: 'var(--success)' }}>✓ Selesai ({completedSuppliersSession.length}):</strong>{' '}
-                    <span style={{ color: 'var(--text-secondary)' }}>{completedSuppliersSession.join(', ')}</span>
-                  </div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Pilih supplier berikutnya</span>
-                </div>
-              )}
-
-              {/* Step 1: Supplier & Warehouse Focus Section */}
-              <div style={{ border: '1px solid var(--border)', padding: '14px 16px', borderRadius: 'var(--radius-lg)', background: normalizedActiveSupplier ? 'rgba(5, 150, 105, 0.04)' : 'var(--bg-secondary)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-                  <div style={{ fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: normalizedActiveSupplier ? 'var(--accent)' : 'var(--text-secondary)' }}>
-                    1. Pilih Supplier
-                  </div>
-                  {normalizedActiveSupplier && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent)' }}>
-                        {supplierMaterials.length} Bahan
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleResetSupplierFocus}
-                        style={{ fontSize: '0.74rem', padding: '3px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-primary)', color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 600 }}
-                      >
-                        Ganti
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <label className="form-label" style={{ marginBottom: 0 }}>Supplier *</label>
-                      <button
-                        type="button"
-                        style={{ fontSize: '0.75rem', background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
-                        onClick={() => {
-                          setIsManualSupplier(!isManualSupplier);
-                          handleSelectSupplierFocus('');
-                        }}
-                      >
-                        {isManualSupplier ? '← Pilih dari Daftar Supplier' : '+ Input Supplier Manual'}
-                      </button>
-                    </div>
-                    {isManualSupplier ? (
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="Ketik nama supplier..."
-                        value={invSupplier}
-                        onChange={e => handleSelectSupplierFocus(e.target.value)}
-                        required
-                      />
-                    ) : (
-                      <select
-                        className="form-control"
-                        value={invSupplier}
-                        onChange={e => handleSelectSupplierFocus(e.target.value)}
-                        required
-                      >
-                        <option value="">-- Pilih Supplier Master --</option>
-                        {suppliersList.map(s => {
-                          const matCount = (stock || []).filter(
-                            m => (m.supplier || '').trim().toLowerCase() === (s.name || '').trim().toLowerCase()
-                          ).length;
-                          const isDoneInSession = completedSuppliersSession.includes(s.name);
-                          return (
-                            <option key={s.id || s.name} value={s.name}>
-                              {isDoneInSession ? '✓ ' : ''}{s.name} ({matCount} bahan)
-                            </option>
-                          );
-                        })}
-                      </select>
-                    )}
-                  </div>
-
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <label className="form-label" style={{ marginBottom: 0 }}>Pintu Tujuan Gudang Masuk</label>
-                      <button
-                        type="button"
-                        style={{ fontSize: '0.72rem', background: 'rgba(245,158,11,0.14)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: '6px', color: '#d97706', cursor: 'pointer', padding: '2px 7px', fontWeight: 700 }}
-                        onClick={() => {
-                          setIsManualSupplier(true);
-                          handleSelectSupplierFocus('Pasar Umum');
-                          setInvLocation('RESTO');
-                        }}
-                        title="Gunakan untuk belanja dadakan / Petty Cash Resto (Kelapa, Jeruk Pontianak, Cincau, dll.)"
-                      >
-                        + Supplier Darurat: Pasar Umum
-                      </button>
-                    </div>
-                    <select
-                      className="form-control"
-                      value={isCentral ? 'CENTRAL' : (isRekanBar ? 'RESTO' : invLocation)}
-                      disabled={isCentral || isRekanBar}
-                      onChange={e => setInvLocation(e.target.value)}
-                    >
-                      <option value="RESTO">PINTU PO BAR / RESTO (Stok Masuk Langsung ke Resto)</option>
-                      <option value="CENTRAL">PINTU PO CENTRAL (Stok Masuk ke Gudang Central)</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Step 2: Line Items Table (Strictly Bounded by Selected Supplier) */}
-              <div style={{ border: '1px solid var(--border)', padding: '16px', borderRadius: 'var(--radius-lg)', background: 'var(--bg-secondary)', opacity: normalizedActiveSupplier ? 1 : 0.65 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-                  <div>
-                    <h4 style={{ fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)', margin: 0 }}>
-                      2. Daftar Bahan {normalizedActiveSupplier ? `(${invSupplier})` : ''}
-                    </h4>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      {normalizedActiveSupplier
-                        ? `Bahan milik ${invSupplier} (${invItems.filter(i => i.material_id || i.item_name).length}/${supplierMaterials.length}).`
-                        : 'Pilih supplier di atas terlebih dahulu.'}
-                    </div>
-                  </div>
-
-                  {normalizedActiveSupplier && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      {supplierMaterials.length > 1 && invItems.length < supplierMaterials.length && (
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          style={{ padding: '6px 10px', fontSize: '0.76rem', background: 'var(--bg-primary)' }}
-                          onClick={handleFillAllSupplierMaterials}
-                          title="Masukkan semua bahan supplier ini"
-                        >
-                          Muat Semua ({supplierMaterials.length})
-                        </button>
-                      )}
-
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        style={{
-                          padding: '6px 12px',
-                          fontSize: '0.78rem',
-                          background: showAssignPanel ? 'var(--accent-glow)' : 'var(--bg-primary)',
-                          color: 'var(--accent)',
-                          borderColor: 'var(--accent)',
-                          fontWeight: 600
-                        }}
-                        onClick={() => setShowAssignPanel(!showAssignPanel)}
-                        title="Tambah bahan lain ke supplier ini"
-                      >
-                        <Plus size={13} style={{ marginRight: '4px' }} />
-                        + Bahan Supplier
-                      </button>
-
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        style={{
-                          padding: '6px 12px',
-                          fontSize: '0.8rem',
-                          background: 'var(--bg-primary)',
-                          opacity: canAddMoreSupplierItems ? 1 : 0.5,
-                          cursor: canAddMoreSupplierItems ? 'pointer' : 'not-allowed'
-                        }}
-                        disabled={!canAddMoreSupplierItems}
-                        onClick={addLineItem}
-                        title={
-                          supplierMaterials.length === 0
-                            ? 'Supplier belum memiliki bahan'
-                            : canAddMoreSupplierItems
-                            ? `Tambah baris bahan`
-                            : `Semua bahan ${invSupplier} sudah dipilih`
-                        }
-                      >
-                        <Plus size={14} style={{ marginRight: '4px' }} /> Tambah Baris ({invItems.length}/{supplierMaterials.length})
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Trigger Panel: Assign / Link Material from Master Stock into Current Supplier */}
-                {normalizedActiveSupplier && showAssignPanel && (
-                  <div style={{ marginBottom: '14px', padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--bg-primary)', border: '1px solid var(--accent)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <div>
-                        <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          Tambah Bahan ke &ldquo;{invSupplier}&rdquo;
-                        </div>
-                        <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
-                          Pilih bahan untuk ditambahkan ke supplier ini.
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowAssignPanel(false)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
-                      >
-                        <X size={15} />
-                      </button>
-                    </div>
-
-                    <input
-                      type="text"
-                      className="form-control"
-                      style={{ padding: '7px 10px', fontSize: '0.82rem', marginBottom: '8px' }}
-                      placeholder="Cari bahan..."
-                      value={assignSearch}
-                      onChange={e => setAssignSearch(e.target.value)}
-                    />
-
-                    <div style={{ maxHeight: '165px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      {otherMaterials
-                        .filter(m => (m.name || '').toLowerCase().includes((assignSearch || '').toLowerCase()))
-                        .slice(0, 12)
-                        .map(mat => (
-                          <div
-                            key={mat.id}
-                            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', borderRadius: '6px', background: 'var(--bg-secondary)', fontSize: '0.8rem' }}
-                          >
-                            <div>
-                              <span style={{ fontWeight: 600 }}>{mat.name}</span>{' '}
-                              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                                ({mat.unit} · {formatIDR(mat.new_price || mat.price || 0)} · {mat.supplier && mat.supplier !== '-' ? mat.supplier : 'Tanpa supplier'})
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              className="btn btn-primary"
-                              style={{ padding: '4px 10px', fontSize: '0.74rem', fontWeight: 600 }}
-                              disabled={assigningMaterialId === mat.id}
-                              onClick={() => handleAssignMaterialToSupplier(mat)}
-                            >
-                              {assigningMaterialId === mat.id ? 'Menyimpan...' : '+ Tambah'}
-                            </button>
-                          </div>
-                        ))}
-                      {otherMaterials.filter(m => (m.name || '').toLowerCase().includes((assignSearch || '').toLowerCase())).length === 0 && (
-                        <div style={{ padding: '8px', textAlign: 'center', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                          Tidak ada bahan yang cocok.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {!normalizedActiveSupplier ? (
-                  <div style={{ padding: '28px 16px', textAlign: 'center', background: 'var(--bg-primary)', borderRadius: 'var(--radius-md)', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                    Pilih supplier pada langkah 1.
-                  </div>
-                ) : (
-                  <>
-                    {supplierMaterials.length === 0 && (
-                      <div style={{ padding: '14px 16px', marginBottom: '12px', borderRadius: 'var(--radius-md)', background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.3)', fontSize: '0.8rem', color: '#b45309', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                        <span>
-                          Belum ada bahan di supplier <strong>{invSupplier}</strong>.
-                        </span>
-                        {!showAssignPanel && (
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            style={{ padding: '4px 10px', fontSize: '0.75rem', fontWeight: 600 }}
-                            onClick={() => setShowAssignPanel(true)}
-                          >
-                            + Bahan Supplier
-                          </button>
-                        )}
-                      </div>
-                    )}
-
-                    <table className="custom-table" style={{ background: 'var(--bg-primary)', borderRadius: 'var(--radius-md)', tableLayout: 'fixed', width: '100%' }}>
-                      <thead>
-                        <tr>
-                          <th style={{ width: '34%' }}>Bahan Baku ({invSupplier})</th>
-                          <th style={{ width: '18%', minWidth: '115px', textAlign: 'center' }}>Qty</th>
-                          <th style={{ width: '9%', textAlign: 'center' }}>Unit</th>
-                          <th style={{ width: '20%', minWidth: '135px', textAlign: 'right' }}>Harga Satuan</th>
-                          <th style={{ width: '15%', textAlign: 'right' }}>Subtotal</th>
-                          <th style={{ width: '4%' }}></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {invItems.map((item, idx) => {
-                          const queryText = (item.item_name || '').toLowerCase().trim();
-                          // Materials belonging to this supplier (excluding ones already chosen in other rows)
-                          const availableSupplierMatches = supplierMaterials.filter(s => {
-                            const isSelectedElsewhere =
-                              selectedMaterialIds.has(String(s.id)) && String(item.material_id) !== String(s.id);
-                            if (isSelectedElsewhere) return false;
-                            return (s.name || '').toLowerCase().includes(queryText);
-                          });
-
-                          // Trigger candidates from other materials when user types a name not in this supplier
-                          const triggerOtherMatches = queryText.length > 0
-                            ? otherMaterials
-                                .filter(s => (s.name || '').toLowerCase().includes(queryText))
-                                .slice(0, 4)
-                            : [];
-
-                          return (
-                            <tr key={item._uid ?? idx}>
-                              <td style={{ position: 'relative' }}>
-                                <input
-                                  type="text"
-                                  className="form-control"
-                                  style={{ padding: '8px 10px', fontSize: '0.85rem' }}
-                                  placeholder={`Pilih bahan dari ${invSupplier}...`}
-                                  value={item.item_name}
-                                  onFocus={() => setItemDropdown(idx)}
-                                  onChange={e => {
-                                    const updated = [...invItems];
-                                    updated[idx] = { ...updated[idx], material_id: null, item_name: e.target.value };
-                                    setInvItems(updated);
-                                    setItemDropdown(idx);
-                                  }}
-                                  onBlur={() => setTimeout(() => setItemDropdown(null), 220)}
-                                />
-                                {itemDropdown === idx && (
-                                  <ul className="search-results-list" style={{ zIndex: 2000, maxHeight: '240px', overflowY: 'auto' }}>
-                                    {availableSupplierMatches.slice(0, 10).map(s => (
-                                      <li
-                                        key={s.id || s.name}
-                                        className="search-results-item"
-                                        onMouseDown={() => selectStockItem(idx, s)}
-                                        style={{ padding: '8px 12px', cursor: 'pointer' }}
-                                      >
-                                        <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{s.name}</div>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                          Unit: {s.unit} · Harga: {formatIDR(s.new_price || s.price || 0)}
-                                        </div>
-                                      </li>
-                                    ))}
-                                    {availableSupplierMatches.length === 0 && (
-                                      <li style={{ padding: '10px 12px', color: 'var(--text-muted)', fontSize: '0.78rem' }}>
-                                        Tidak ada bahan tambahan milik supplier <strong>{invSupplier}</strong> yang cocok.
-                                      </li>
-                                    )}
-
-                                    {/* Inline Trigger to assign a searched material to this supplier */}
-                                    {triggerOtherMatches.length > 0 && (
-                                      <>
-                                        <li style={{ padding: '6px 12px', background: 'var(--bg-secondary)', fontSize: '0.7rem', fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', borderTop: '1px solid var(--border)' }}>
-                                          Bahan di Luar Supplier Ini (Klik untuk Daftarkan ke {invSupplier}):
-                                        </li>
-                                        {triggerOtherMatches.map(otherMat => (
-                                          <li
-                                            key={`assign-${otherMat.id}`}
-                                            className="search-results-item"
-                                            onMouseDown={() => handleAssignMaterialToSupplier(otherMat, idx)}
-                                            style={{ padding: '8px 12px', cursor: 'pointer', background: 'rgba(5, 150, 105, 0.04)' }}
-                                          >
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                                              <div>
-                                                <div style={{ fontWeight: 600, fontSize: '0.82rem' }}>{otherMat.name}</div>
-                                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                                                  Supplier saat ini: {otherMat.supplier && otherMat.supplier !== '-' ? otherMat.supplier : 'Belum ada'} · {formatIDR(otherMat.new_price || otherMat.price || 0)}
-                                                </div>
-                                              </div>
-                                              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent)', whiteSpace: 'nowrap' }}>
-                                                + Masukkan ke {invSupplier}
-                                              </span>
-                                            </div>
-                                          </li>
-                                        ))}
-                                      </>
-                                    )}
-                                  </ul>
-                                )}
-                              </td>
-                              <td style={{ padding: '10px 8px' }}>
-                                <input
-                                  type="number"
-                                  step="any"
-                                  min="0.01"
-                                  className="form-control tabular-nums"
-                                  style={{
-                                    width: '100%',
-                                    minWidth: '96px',
-                                    padding: '8px 12px',
-                                    fontSize: '0.92rem',
-                                    fontWeight: 700,
-                                    textAlign: 'center',
-                                    borderRadius: '10px'
-                                  }}
-                                  value={item.qty}
-                                  onChange={e => updateLineItem(idx, 'qty', parseFloat(e.target.value) || 0)}
-                                />
-                              </td>
-                              <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)', textAlign: 'center', fontWeight: 600 }}>{item.unit || 'pck'}</td>
-                              <td style={{ padding: '10px 8px' }}>
-                                <input
-                                  type="number"
-                                  step="any"
-                                  min="0"
-                                  className="form-control tabular-nums"
-                                  style={{
-                                    width: '100%',
-                                    minWidth: '120px',
-                                    padding: '8px 12px',
-                                    fontSize: '0.9rem',
-                                    fontWeight: 600,
-                                    textAlign: 'right',
-                                    borderRadius: '10px'
-                                  }}
-                                  value={item.unit_price}
-                                  onChange={e => updateLineItem(idx, 'unit_price', parseFloat(e.target.value) || 0)}
-                                />
-                              </td>
-                              <td className="tabular-nums" style={{ textAlign: 'right', fontWeight: 700, fontSize: '0.88rem' }}>
-                                {formatIDR(item.qty * item.unit_price)}
-                              </td>
-                              <td>
-                                {invItems.length > 1 && (
-                                  <button
-                                    type="button"
-                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: '4px' }}
-                                    onClick={() => removeLineItem(idx)}
-                                    title="Hapus bahan"
-                                  >
-                                    <X size={14} />
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-
-                    <div style={{ textAlign: 'right', marginTop: '16px', fontSize: '1.15rem', fontWeight: 800 }}>
-                      Total Estimasi: <span style={{ color: 'var(--accent)', marginLeft: '12px' }}>{formatIDR(invTotal)}</span>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Notes */}
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Catatan PO (Opsional)</label>
-                <textarea
-                  className="form-control"
-                  rows="2"
-                  placeholder="Catatan pengiriman atau instruksi khusus untuk supplier..."
-                  value={invNotes}
-                  onChange={e => setInvNotes(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  style={{ flex: 1, padding: '12px' }}
-                  onClick={() => {
-                    setShowCreateModal(false);
-                    setCompletedSuppliersSession([]);
-                  }}
-                >
-                  Tutup
-                </button>
-                <button
-                  type="submit"
-                  disabled={!normalizedActiveSupplier}
-                  className="btn btn-primary"
-                  style={{ flex: 2, padding: '12px', fontWeight: 700, opacity: normalizedActiveSupplier ? 1 : 0.5 }}
-                >
-                  Review PO
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Create PO Slide-over Modal (Material-First: Pilih Bahan -> Bandingkan Supplier & Shortcut Harga -> Tanggal Kirim) */}
+      <CreatePoSlideOver
+        open={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        stock={stock}
+        suppliersList={suppliersList}
+        isCentral={isCentral}
+        isRekanBar={isRekanBar}
+        activeUser={activeUser}
+        onSuppliersUpdated={loadSuppliers}
+        onMaterialPriceUpdated={refreshData}
+        toast={toast}
+        onSubmitPo={(invoiceObj) => {
+          setInvoiceToSubmit(invoiceObj);
+          setShowCreateModal(false);
+          setShowConfirmModal(true);
+        }}
+      />
 
       {/* Confirmation Modal */}
       {showConfirmModal && invoiceToSubmit && (

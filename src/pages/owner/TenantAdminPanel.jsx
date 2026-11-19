@@ -7,6 +7,8 @@ import {
   Users, Building, Link as LinkIcon, Trash2, Copy, Clock, CheckCircle, XCircle, Store, MapPin, Plus, RotateCcw, AlertCircle
 } from 'lucide-react';
 import { locationService } from '../../services/locationService';
+import { hydrateBrandingFromTenantRecord, savePdfBranding, compressBrandImageFile } from '../../services/pdfBrandingService';
+import { Image as ImageIcon, Upload, ShieldCheck } from 'lucide-react';
 
 export default function TenantAdminPanel() {
   const { currentTenant, sessionUser, showToast: displayToast, refreshBranches, refreshData } = useData();
@@ -17,6 +19,13 @@ export default function TenantAdminPanel() {
   const [companyName, setCompanyName] = useState('');
   const [isPosEnabled, setIsPosEnabled] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Foto / Logo Validasi Umatis untuk semua Export PDF
+  const [pdfBrandEnabled, setPdfBrandEnabled] = useState(true);
+  const [pdfBrandLogo, setPdfBrandLogo] = useState('');
+  const [pdfBrandLabel, setPdfBrandLabel] = useState('Umatis Resto & Venue');
+  const [pdfBrandMeta, setPdfBrandMeta] = useState({ width: 0, height: 0 });
+  const [savingPdfBrand, setSavingPdfBrand] = useState(false);
 
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetOptions, setResetOptions] = useState({
@@ -157,6 +166,11 @@ export default function TenantAdminPanel() {
     if (currentTenant) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCompanyName(currentTenant.company_name || '');
+      const hydrated = hydrateBrandingFromTenantRecord(currentTenant);
+      setPdfBrandEnabled(hydrated.enabled !== false);
+      setPdfBrandLogo(hydrated.logoDataUrl || '');
+      setPdfBrandLabel(hydrated.validationLabel || currentTenant.company_name || 'Umatis Resto & Venue');
+      setPdfBrandMeta({ width: hydrated.logoWidth || 0, height: hydrated.logoHeight || 0 });
       setIsPosEnabled(!!currentTenant.is_pos_enabled);
     }
     fetchUsers();
@@ -491,6 +505,68 @@ export default function TenantAdminPanel() {
         }
       }
     );
+  };
+
+  const handleUploadPdfBrandPhoto = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setSavingPdfBrand(true);
+      const { dataUrl, width, height } = await compressBrandImageFile(file, 480);
+      setPdfBrandLogo(dataUrl);
+      setPdfBrandMeta({ width, height });
+      setPdfBrandEnabled(true);
+      await savePdfBranding(currentTenant?.id, {
+        enabled: true,
+        logoDataUrl: dataUrl,
+        logoWidth: width,
+        logoHeight: height,
+        validationLabel: pdfBrandLabel || currentTenant?.company_name || 'Umatis Resto & Venue'
+      });
+      displayToast('Foto validasi Umatis tersimpan dan langsung aktif di semua Export PDF.', 'success');
+    } catch (err) {
+      displayToast(err.message || 'Gagal memproses foto validasi.', 'error');
+    } finally {
+      setSavingPdfBrand(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleSavePdfBrandingSettings = async () => {
+    try {
+      setSavingPdfBrand(true);
+      await savePdfBranding(currentTenant?.id, {
+        enabled: pdfBrandEnabled,
+        logoDataUrl: pdfBrandLogo,
+        logoWidth: pdfBrandMeta.width,
+        logoHeight: pdfBrandMeta.height,
+        validationLabel: pdfBrandLabel || currentTenant?.company_name || 'Umatis Resto & Venue'
+      });
+      displayToast('Setelan foto validasi Export PDF berhasil disimpan.', 'success');
+    } catch (err) {
+      displayToast('Gagal menyimpan setelan PDF: ' + err.message, 'error');
+    } finally {
+      setSavingPdfBrand(false);
+    }
+  };
+
+  const handleRemovePdfBrandPhoto = async () => {
+    try {
+      setSavingPdfBrand(true);
+      setPdfBrandLogo('');
+      setPdfBrandMeta({ width: 0, height: 0 });
+      await savePdfBranding(currentTenant?.id, {
+        enabled: false,
+        logoDataUrl: '',
+        logoWidth: 0,
+        logoHeight: 0,
+        validationLabel: pdfBrandLabel || currentTenant?.company_name || 'Umatis Resto & Venue'
+      });
+      setPdfBrandEnabled(false);
+      displayToast('Foto validasi PDF dihapus.', 'info');
+    } finally {
+      setSavingPdfBrand(false);
+    }
   };
 
   const handleSaveProfile = async (e) => {
@@ -910,7 +986,7 @@ export default function TenantAdminPanel() {
         )}
 
         {tab === 'profile' && (
-          <div style={{ maxWidth: '400px' }}>
+          <div style={{ maxWidth: '580px' }}>
             <h3 style={{ margin: '0 0 16px 0', color: 'var(--text-primary)', fontSize: '1rem', fontWeight: 700 }}>Profil Restoran</h3>
             <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
@@ -982,6 +1058,115 @@ export default function TenantAdminPanel() {
                       }}></span>
                     </span>
                   </label>
+                </div>
+              </div>
+
+              <div style={{ marginTop: '4px', padding: '16px', background: 'rgba(13, 148, 136, 0.05)', border: '1px solid rgba(13, 148, 136, 0.25)', borderRadius: 'var(--radius-md)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '12px' }}>
+                  <div>
+                    <h4 style={{ margin: '0 0 4px 0', fontSize: '0.9rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <ShieldCheck size={16} style={{ color: '#0d9488' }} /> Foto Validasi Umatis (Export PDF)
+                    </h4>
+                    <p style={{ margin: 0, fontSize: '0.76rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+                      Pasang logo atau foto resmi Umatis supaya otomatis muncul di kop, stempel, dan footer setiap file PDF yang diexport sebagai bukti berkas resmi.
+                    </p>
+                  </div>
+                  <label className="toggle-switch" style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', flexShrink: 0 }}>
+                    <input
+                      type="checkbox"
+                      checked={pdfBrandEnabled}
+                      onChange={async (e) => {
+                        const nextVal = e.target.checked;
+                        setPdfBrandEnabled(nextVal);
+                        await savePdfBranding(currentTenant?.id, {
+                          enabled: nextVal,
+                          logoDataUrl: pdfBrandLogo,
+                          logoWidth: pdfBrandMeta.width,
+                          logoHeight: pdfBrandMeta.height,
+                          validationLabel: pdfBrandLabel
+                        });
+                        displayToast(`Foto validasi PDF ${nextVal ? 'diaktifkan' : 'dimatikan'}.`, 'info');
+                      }}
+                      style={{ opacity: 0, width: 0, height: 0 }}
+                    />
+                    <span style={{
+                      position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
+                      backgroundColor: pdfBrandEnabled ? '#0d9488' : 'var(--surface-active)', border: '1px solid ' + (pdfBrandEnabled ? '#0d9488' : 'var(--border)'), transition: '.3s', borderRadius: '34px'
+                    }}>
+                      <span style={{
+                        position: 'absolute', height: '18px', width: '18px', left: '2px', bottom: '2px',
+                        backgroundColor: pdfBrandEnabled ? '#ffffff' : 'var(--text-muted)', transition: '.3s', borderRadius: '50%', boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                        transform: pdfBrandEnabled ? 'translateX(20px)' : 'translateX(0)'
+                      }}></span>
+                    </span>
+                  </label>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                  <div style={{
+                    width: '76px', height: '76px', borderRadius: '10px',
+                    border: '1px dashed var(--border)', background: '#ffffff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0
+                  }}>
+                    {pdfBrandLogo ? (
+                      <img src={pdfBrandLogo} alt="Foto Validasi Umatis" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', padding: '4px' }} />
+                    ) : (
+                      <ImageIcon size={24} style={{ color: 'var(--text-muted)' }} />
+                    )}
+                  </div>
+                  <div style={{ flex: 1, minWidth: '200px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <label className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.78rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', margin: 0 }}>
+                        <Upload size={13} /> {pdfBrandLogo ? 'Ganti Foto Umatis' : 'Upload Foto Umatis'}
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          onChange={handleUploadPdfBrandPhoto}
+                          disabled={savingPdfBrand}
+                          style={{ display: 'none' }}
+                        />
+                      </label>
+                      {pdfBrandLogo && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={handleRemovePdfBrandPhoto}
+                          disabled={savingPdfBrand}
+                          style={{ padding: '6px 10px', fontSize: '0.76rem', color: 'var(--danger-text)', borderColor: 'var(--danger)' }}
+                        >
+                          <Trash2 size={12} style={{ marginRight: '4px' }} /> Hapus
+                        </button>
+                      )}
+                    </div>
+                    <small style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                      Format PNG/JPG/WebP (maks 5 MB). Disarankan logo Umatis berlatar bersih agar tajam saat dicetak.
+                    </small>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: '200px' }}>
+                    <label className="form-label" style={{ display: 'block', marginBottom: '4px', color: 'var(--text-secondary)', fontSize: '0.74rem' }}>
+                      Nama Validasi di Stempel PDF
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={pdfBrandLabel}
+                      onChange={(e) => setPdfBrandLabel(e.target.value)}
+                      placeholder="Contoh: Umatis Resto & Venue"
+                      style={{ width: '100%', padding: '7px 10px', fontSize: '0.8rem' }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={handleSavePdfBrandingSettings}
+                    disabled={savingPdfBrand}
+                    style={{ padding: '7px 12px', fontSize: '0.78rem', fontWeight: 600 }}
+                  >
+                    {savingPdfBrand ? 'Menyimpan...' : 'Simpan Label'}
+                  </button>
                 </div>
               </div>
 
