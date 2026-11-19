@@ -1758,7 +1758,8 @@ export const api = {
       email: 'barista.bsd@umatis.id',
       password: 'BetaUmatis2026!',
       name: 'Irpan (Head Barista)',
-      role: 'Head Bar',
+      role: 'Bar',
+      subRole: 'HEAD_BAR',
       branchCode: 'BSD',
       areaUuid: '00000000-0000-4000-a000-000000000002',
       badge: 'HEAD BAR • IRPAN'
@@ -1770,7 +1771,8 @@ export const api = {
       email: 'barista.bsd@umatis.id',
       password: 'BetaUmatis2026!',
       name: 'Ayat (Rekan Barista)',
-      role: 'Rekan Bar',
+      role: 'Bar',
+      subRole: 'REKAN_BAR',
       branchCode: 'BSD',
       areaUuid: '00000000-0000-4000-a000-000000000002',
       badge: 'REKAN BAR • AYAT'

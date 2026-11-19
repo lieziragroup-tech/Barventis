@@ -245,7 +245,7 @@ export default function TenantAdminPanel() {
         await navigator.clipboard.writeText(inviteUrl);
         displayToast(`Link undangan ${role} disalin.`, 'success');
       } catch {
-        'Revisi sesuai catatan review';
+        displayToast(`Salin link undangan secara manual: ${inviteUrl}`, 'info');
       }
       fetchInvitations();
     } catch (err) {

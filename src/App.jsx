@@ -37,6 +37,9 @@ const AuditLogs = lazyWithRetry(() => import('./pages/shared/AuditLogs'));
 const BackupCenter = lazyWithRetry(() => import('./pages/shared/BackupCenter'));
 const InterBranchTransfer = lazyWithRetry(() => import('./pages/shared/InterBranchTransfer'));
 const WasteLogs = lazyWithRetry(() => import('./pages/shared/WasteLogs'));
+const UsageRecap = lazyWithRetry(() => import('./pages/shared/UsageRecap'));
+const BeritaAcaraMonthly = lazyWithRetry(() => import('./pages/shared/BeritaAcaraMonthly'));
+const ZeroWasteSplitAndBarcode = lazyWithRetry(() => import('./components/shared/ZeroWasteSplitAndBarcode'));
 const SuperAdminPanel = lazyWithRetry(() => import('./pages/superadmin/SuperAdminPanel'));
 const TenantAdminPanel = lazyWithRetry(() => import('./pages/owner/TenantAdminPanel'));
 const PosTerminal = lazyWithRetry(() => import('./pages/pos/PosTerminal'));
@@ -215,6 +218,24 @@ export default function App() {
               <RouteErrorBoundary><InterBranchTransfer /></RouteErrorBoundary>
             </ProtectedRoute>
           } />
+
+                    {/* ====== STANDALONE EXCEL-TAB ROUTES KHUSUS HEAD BAR (ZERO SUB-MENU) ====== */}
+          <Route path="excel-marketlist" element={<ProtectedRoute allowedRoles={ALL_TENANT}><RouteErrorBoundary><Marketlist /></RouteErrorBoundary></ProtectedRoute>} />
+          <Route path="excel-pembelian-harian" element={<ProtectedRoute allowedRoles={ALL_TENANT}><RouteErrorBoundary><Purchasing standaloneTab="PURCHASES" /></RouteErrorBoundary></ProtectedRoute>} />
+          <Route path="excel-pemakaian-harian" element={<ProtectedRoute allowedRoles={ALL_TENANT}><RouteErrorBoundary><UsageRecap /></RouteErrorBoundary></ProtectedRoute>} />
+          <Route path="excel-daily-bahan" element={<ProtectedRoute allowedRoles={ALL_TENANT}><RouteErrorBoundary><DailyInventory category="NON_BEER" standaloneEodOnly={true} sheetTitle="Daily Iventory Bahan" /></RouteErrorBoundary></ProtectedRoute>} />
+          <Route path="excel-daily-beer" element={<ProtectedRoute allowedRoles={ALL_TENANT}><RouteErrorBoundary><DailyInventory category="BEER_ONLY" standaloneEodOnly={true} sheetTitle="Daily Iventory Beer" /></RouteErrorBoundary></ProtectedRoute>} />
+          <Route path="excel-so-glass-tool" element={<ProtectedRoute allowedRoles={ALL_TENANT}><RouteErrorBoundary><PhysicalCheck /></RouteErrorBoundary></ProtectedRoute>} />
+          <Route path="excel-so-resto" element={<ProtectedRoute allowedRoles={ALL_TENANT}><RouteErrorBoundary><StockOpname defaultLocation="RESTO" /></RouteErrorBoundary></ProtectedRoute>} />
+          <Route path="excel-so-central" element={<ProtectedRoute allowedRoles={ALL_TENANT}><RouteErrorBoundary><StockOpname defaultLocation="CENTRAL" /></RouteErrorBoundary></ProtectedRoute>} />
+          <Route path="excel-proses-produksi" element={<ProtectedRoute allowedRoles={ALL_TENANT}><RouteErrorBoundary><SimplePrep standaloneMode="TRIMMING" /></RouteErrorBoundary></ProtectedRoute>} />
+          <Route path="excel-menu-pricing" element={<ProtectedRoute allowedRoles={ALL_TENANT}><RouteErrorBoundary><MenuPricing /></RouteErrorBoundary></ProtectedRoute>} />
+          <Route path="excel-cogs-beverage" element={<ProtectedRoute allowedRoles={ALL_TENANT}><RouteErrorBoundary><Recipes /></RouteErrorBoundary></ProtectedRoute>} />
+          <Route path="excel-cost-control" element={<ProtectedRoute allowedRoles={ALL_TENANT}><RouteErrorBoundary><CostControl /></RouteErrorBoundary></ProtectedRoute>} />
+          <Route path="excel-berita-acara" element={<ProtectedRoute allowedRoles={ALL_TENANT}><RouteErrorBoundary><BeritaAcaraMonthly /></RouteErrorBoundary></ProtectedRoute>} />
+          <Route path="excel-split-bahan" element={<ProtectedRoute allowedRoles={ALL_TENANT}><RouteErrorBoundary><ZeroWasteSplitAndBarcode mode="SPLIT" /></RouteErrorBoundary></ProtectedRoute>} />
+          <Route path="excel-barcode-central" element={<ProtectedRoute allowedRoles={ALL_TENANT}><RouteErrorBoundary><ZeroWasteSplitAndBarcode mode="BARCODE" /></RouteErrorBoundary></ProtectedRoute>} />
+          <Route path="excel-po-bar" element={<ProtectedRoute allowedRoles={ALL_TENANT}><RouteErrorBoundary><Invoicing /></RouteErrorBoundary></ProtectedRoute>} />
 
           {/* ====== BACKWARD COMPATIBILITY REDIRECTS ====== */}
 

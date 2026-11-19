@@ -17,11 +17,12 @@ const formatIDR = (val) => 'Rp ' + Number(val || 0).toLocaleString('id-ID');
 
 const PAGE_SIZE = 15;
 
-export default function Purchasing() {
+export default function Purchasing({ standaloneTab = null } = {}) {
   const { activeUser } = useAuth();
   const { refreshData, activeBranchId } = useData();
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('PURCHASES'); // 'PURCHASES', 'SUPPLIERS'
+  const [tab, setTab] = useState(standaloneTab || 'PURCHASES');
+  useEffect(() => { if (standaloneTab) setTab(standaloneTab); }, [standaloneTab]);
 
   // Supplier State
   const [suppliers, setSuppliers] = useState([]);

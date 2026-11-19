@@ -141,7 +141,7 @@ export default function DashboardLayout() {
   const navigate = useNavigate();
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
+  const [isHovered, setIsHovered] = useState(true);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
@@ -217,15 +217,18 @@ export default function DashboardLayout() {
   // 'Staff', 'Admin / Owner', or 'Super Admin' / 'SuperAdmin' — so exact
   // match here is not a behavior regression, it's the bug fix.
   const rawRole = String(activeUser?.role || '').trim();
-  const role = rawRole === 'SuperAdmin'
+  const rawRoleLower = rawRole.toLowerCase();
+  const isRekanBarExplicit = rawRoleLower === 'rekan bar' || activeUser?.sub_role === 'REKAN_BAR' || activeUser?.preset_key === 'BARISTA_BSD' || String(activeUser?.name || '').toLowerCase().includes('ayat');
+  const isHeadBarUser = !isRekanBarExplicit && (rawRoleLower.includes('bar') || activeUser?.sub_role === 'HEAD_BAR' || String(activeUser?.name || '').toLowerCase().includes('irpan'));
+  const role = (rawRole === 'SuperAdmin' || rawRoleLower === 'super admin')
     ? 'Super Admin'
-    : rawRole === 'Admin  Owner'
+    : (rawRole === 'Admin  Owner' || rawRoleLower.includes('owner'))
       ? 'Admin / Owner'
-      : rawRole === 'Barista' || rawRole === 'Head Bar' || rawRole === 'Rekan Bar'
+      : (rawRoleLower === 'barista' || rawRoleLower === 'bar' || rawRoleLower === 'head bar' || rawRoleLower === 'rekan bar')
         ? 'Bar'
         : rawRole;
   const isSuperAdmin = role === 'Super Admin';
-  const isTenant = ['Admin / Owner', 'Owner', 'Supervisor', 'Staff', 'Bar', 'Barista', 'Head Bar', 'Rekan Bar', 'Kitchen', 'Central', 'Service', 'Kasir', 'Purchasing', 'Finance'].includes(role);
+  const isTenant = Boolean(role && role !== 'Super Admin' && role !== 'SuperAdmin');
 
   const hasAccess = (allowedRoles) => allowedRoles.includes(role) || allowedRoles.includes(rawRole);
 
@@ -340,9 +343,9 @@ export default function DashboardLayout() {
       {/* Desktop Sidebar Container (Transparent Spacer) */}
       <div 
         className="hidden lg:block relative z-50 flex-shrink-0"
-        style={{ width: '72px' }}
+        style={{ width: '244px' }}
         onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        onMouseLeave={() => setIsHovered(true)}
       >
         {/* Clipping Mask (Absolute) */}
         <motion.div 
@@ -379,21 +382,43 @@ export default function DashboardLayout() {
                   </NavGroup>
                 )}
 
-                {/* ROLE: BARISTA / HEAD BAR / REKAN BAR */}
-                {isTenant && role === 'Bar' && (
-                  <NavGroup title={rawRole === 'Head Bar' ? 'Divisi Bar (Head Bar)' : 'Divisi Bar'} isHovered={isHovered} isFirst={!isSuperAdmin}>
+                                {/* ROLE: HEAD BAR (IRPAN) — 12 Sheet Excel SO BARISTA 2026 Tanpa Sub-Menu */}
+                {isTenant && role === 'Bar' && isHeadBarUser && (
+                  <>
+                    <NavGroup title="Head Bar (Sheet Excel SO Barista)" isHovered={isHovered} isFirst={!isSuperAdmin}>
+                      <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan eksekutif Head Barista" icon={LayoutDashboard} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/excel-marketlist`} label="MARKETLIST" subtitle="Master database bahan baku & harga standar vendor" icon={FileSpreadsheet} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/excel-pembelian-harian`} label="Pembelian Harian" subtitle="Log faktur pengadaan harian & buffer bulanan" icon={ShoppingCart} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/excel-pemakaian-harian`} label="Pemakaian Harian" subtitle="Rekap biaya pemakaian bahan & bir harian (Tgl 1-31)" icon={Clock} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/excel-daily-bahan`} label="Daily Iventory Bahan" subtitle="Closing shift EOD bahan racikan non-bir" icon={ClipboardList} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/excel-daily-beer`} label="Daily Iventory Beer" subtitle="Rekapitulasi fisik bir harian" icon={Package} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/excel-so-glass-tool`} label="SO Glass & Tool" subtitle="Audit fisik bulanan aset mesin & gelas" icon={Wrench} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/excel-so-resto`} label="STOCK OPNAME RESTO" subtitle="Sensus fisik sisa bahan meja & chiller bar" icon={Boxes} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/excel-so-central`} label="STOCK OPNAME CENTRAL" subtitle="Sensus fisik sisa bahan grosir di gudang pusat" icon={Warehouse} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/excel-proses-produksi`} label="Proses Produksi Bahan" subtitle="Neraca susut buah (trimming) & resep batching bar" icon={Scissors} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/excel-menu-pricing`} label="MENU PRICING" subtitle="Penetapan harga jual komersial kasir" icon={Tag} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/excel-cogs-beverage`} label="COGS All Beverage" subtitle="Buku resep standar minuman (Bill of Materials)" icon={BookOpen} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/excel-cost-control`} label="COST CONTROL" subtitle="Konsolidasi HPP, komparasi stokan vs harian & rasio <= 27%" icon={Calculator} isHovered={isHovered} />
+                    </NavGroup>
+                    <NavGroup title="Otorisasi & Logistik Head Bar" isHovered={isHovered}>
+                      <NavItem to={`${basePath}/excel-berita-acara`} label="Berita Acara Waste & Pecah" subtitle="Berita Acara bulanan kadaluarsa/waste & gelas pecah" icon={Trash2} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/excel-split-bahan`} label="Split Bahan (Kelapa 0%)" subtitle="Pecah 1 bahan induk jadi 2+ stok tanpa waste" icon={Box} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/excel-po-bar`} label="PO & ACC Order Central" subtitle="Verifikasi order Central & penerimaan barang" icon={ShoppingCart} isHovered={isHovered} />
+                      <NavItem to={`${basePath}/transfer`} label="Mutasi Gudang (Rp 0)" subtitle="Mutasi stok Central ke Resto/Bar (Rp 0)" icon={ArrowRightLeft} isHovered={isHovered} />
+                    </NavGroup>
+                  </>
+                )}
+
+                {/* ROLE: REKAN BAR (AYAT) */}
+                {isTenant && role === 'Bar' && !isHeadBarUser && (
+                  <NavGroup title="Divisi Rekan Bar" isHovered={isHovered} isFirst={!isSuperAdmin}>
                     <NavItem to={basePath} exact label="Dashboard Bar" subtitle="Ringkasan operasional bar harian" icon={LayoutDashboard} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/daily-inventory`} label="Inventaris Harian Bar" subtitle="Catat stok harian bahan & sirup bar" icon={ClipboardList} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/daily-inventory?tab=berita-acara`} label="Berita Acara Waste & Pecah" subtitle="Form bulanan waste, tumpah & barang pecah" icon={FileSpreadsheet} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/pricing-cogs?tab=cogs-all`} label="Resep & HPP Bar" subtitle="Resep minuman, sub-resep sirup & COGS bar" icon={Tag} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/sistem?tab=stock-ledger`} label="Materials Bar" subtitle="Buku stok & lapor stok habis bar" icon={Settings} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/procurement?tab=invoicing`} label="Permintaan PO & Terima" subtitle="Ajukan PO bar & foto terima barang" icon={ShoppingCart} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/olah-bahan`} label="Batch Prep Bar" subtitle="Produksi sirup, teh base & soda" icon={Scissors} isHovered={isHovered} />
-                    <NavItem to={`${basePath}/opname-assets`} label="Stock Opname Bar" subtitle="Audit fisik bulanan stok bar" icon={Boxes} isHovered={isHovered} />
-                    {rawRole === 'Head Bar' && (
-                      <NavItem to={`${basePath}/cost-report`} label="Cost Control Bar" subtitle="Evaluasi beverage cost & variansi bar" icon={Calculator} isHovered={isHovered} />
-                    )}
-                    <NavItem to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Transfer stok Central dan Bar" icon={ArrowRightLeft} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/excel-daily-bahan`} label="Daily Iventory Bahan" subtitle="Catat stok harian bahan bar" icon={ClipboardList} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/excel-daily-beer`} label="Daily Iventory Beer" subtitle="Catat stok harian bir" icon={Package} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/excel-proses-produksi`} label="Proses Produksi Bahan" subtitle="Produksi sirup, teh base & trimming" icon={Scissors} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/excel-split-bahan`} label="Split Bahan (Kelapa 0%)" subtitle="Pecah Kelapa Urgent jadi Air + Daging (Waste 0%)" icon={Box} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/excel-po-bar`} label="Permintaan PO Bar (Resto)" subtitle="Ajukan PO pintu Bar & foto terima barang" icon={ShoppingCart} isHovered={isHovered} />
+                    <NavItem to={`${basePath}/transfer`} label="Minta Barang Central (Rp 0)" subtitle="Request mutasi stok dari Central ke Bar" icon={ArrowRightLeft} isHovered={isHovered} />
                   </NavGroup>
                 )}
 
@@ -609,23 +634,45 @@ export default function DashboardLayout() {
               </NavGroup>
             )}
 
-            {/* ROLE: BARISTA / HEAD BAR / REKAN BAR */}
-            {isTenant && role === 'Bar' && (
-              <NavGroup title={rawRole === 'Head Bar' ? 'Operasional Bar (Head Bar)' : 'Operasional Bar'} isHovered={true} isFirst={!isSuperAdmin}>
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={basePath} exact label="Dashboard Bar" subtitle="Ringkasan operasional bar harian" icon={LayoutDashboard} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory`} label="Inventaris Harian Bar" subtitle="Catat stok dan limbah bar" icon={ClipboardList} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/daily-inventory?tab=berita-acara`} label="Berita Acara Waste & Pecah" subtitle="Form bulanan waste, tumpah & barang pecah" icon={FileSpreadsheet} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/pricing-cogs?tab=cogs-all`} label="Resep & HPP Bar" subtitle="Resep minuman & sub-resep sirup" icon={Tag} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/sistem?tab=stock-ledger`} label="Materials Bar" subtitle="Buku stok & lapor stok habis bar" icon={Settings} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/procurement?tab=invoicing`} label="Permintaan PO & Terima" subtitle="Ajukan PO bar & foto terima barang" icon={ShoppingCart} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/olah-bahan`} label="Batch Prep Bar" subtitle="Catat olahan bahan mentah bar" icon={Scissors} isHovered={true} />
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/opname-assets`} label="Stock Opname Bar" subtitle="Audit fisik stok bar" icon={Boxes} isHovered={true} />
-                {rawRole === 'Head Bar' && (
-                  <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/cost-report`} label="Cost Control Bar" subtitle="Evaluasi beverage cost & variansi bar" icon={Calculator} isHovered={true} />
+                            {/* ROLE: HEAD BAR (IRPAN) — 12 Sheet Excel SO BARISTA 2026 Tanpa Sub-Menu */}
+                {isTenant && role === 'Bar' && isHeadBarUser && (
+                  <>
+                    <NavGroup title="Head Bar (Sheet Excel SO Barista)" onClick={() => setIsSidebarOpen(false)} isHovered={true} isFirst={!isSuperAdmin}>
+                      <NavItem to={basePath} exact label="Dashboard" subtitle="Ringkasan eksekutif Head Barista" icon={LayoutDashboard} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                      <NavItem to={`${basePath}/excel-marketlist`} label="MARKETLIST" subtitle="Master database bahan baku & harga standar vendor" icon={FileSpreadsheet} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                      <NavItem to={`${basePath}/excel-pembelian-harian`} label="Pembelian Harian" subtitle="Log faktur pengadaan harian & buffer bulanan" icon={ShoppingCart} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                      <NavItem to={`${basePath}/excel-pemakaian-harian`} label="Pemakaian Harian" subtitle="Rekap biaya pemakaian bahan & bir harian (Tgl 1-31)" icon={Clock} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                      <NavItem to={`${basePath}/excel-daily-bahan`} label="Daily Iventory Bahan" subtitle="Closing shift EOD bahan racikan non-bir" icon={ClipboardList} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                      <NavItem to={`${basePath}/excel-daily-beer`} label="Daily Iventory Beer" subtitle="Rekapitulasi fisik bir harian" icon={Package} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                      <NavItem to={`${basePath}/excel-so-glass-tool`} label="SO Glass & Tool" subtitle="Audit fisik bulanan aset mesin & gelas" icon={Wrench} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                      <NavItem to={`${basePath}/excel-so-resto`} label="STOCK OPNAME RESTO" subtitle="Sensus fisik sisa bahan meja & chiller bar" icon={Boxes} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                      <NavItem to={`${basePath}/excel-so-central`} label="STOCK OPNAME CENTRAL" subtitle="Sensus fisik sisa bahan grosir di gudang pusat" icon={Warehouse} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                      <NavItem to={`${basePath}/excel-proses-produksi`} label="Proses Produksi Bahan" subtitle="Neraca susut buah (trimming) & resep batching bar" icon={Scissors} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                      <NavItem to={`${basePath}/excel-menu-pricing`} label="MENU PRICING" subtitle="Penetapan harga jual komersial kasir" icon={Tag} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                      <NavItem to={`${basePath}/excel-cogs-beverage`} label="COGS All Beverage" subtitle="Buku resep standar minuman (Bill of Materials)" icon={BookOpen} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                      <NavItem to={`${basePath}/excel-cost-control`} label="COST CONTROL" subtitle="Konsolidasi HPP, komparasi stokan vs harian & rasio <= 27%" icon={Calculator} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                    </NavGroup>
+                    <NavGroup title="Otorisasi & Logistik Head Bar" onClick={() => setIsSidebarOpen(false)} isHovered={true}>
+                      <NavItem to={`${basePath}/excel-berita-acara`} label="Berita Acara Waste & Pecah" subtitle="Berita Acara bulanan kadaluarsa/waste & gelas pecah" icon={Trash2} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                      <NavItem to={`${basePath}/excel-split-bahan`} label="Split Bahan (Kelapa 0%)" subtitle="Pecah 1 bahan induk jadi 2+ stok tanpa waste" icon={Box} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                      <NavItem to={`${basePath}/excel-po-bar`} label="PO & ACC Order Central" subtitle="Verifikasi order Central & penerimaan barang" icon={ShoppingCart} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                      <NavItem to={`${basePath}/transfer`} label="Mutasi Gudang (Rp 0)" subtitle="Mutasi stok Central ke Resto/Bar (Rp 0)" icon={ArrowRightLeft} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                    </NavGroup>
+                  </>
                 )}
-                <NavItem onClick={() => setIsSidebarOpen(false)} to={`${basePath}/transfer`} label="Mutasi Gudang" subtitle="Transfer stok antar gudang" icon={ArrowRightLeft} isHovered={true} />
-              </NavGroup>
-            )}
+
+                {/* ROLE: REKAN BAR (AYAT) */}
+                {isTenant && role === 'Bar' && !isHeadBarUser && (
+                  <NavGroup title="Divisi Rekan Bar" onClick={() => setIsSidebarOpen(false)} isHovered={true} isFirst={!isSuperAdmin}>
+                    <NavItem to={basePath} exact label="Dashboard Bar" subtitle="Ringkasan operasional bar harian" icon={LayoutDashboard} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                    <NavItem to={`${basePath}/excel-daily-bahan`} label="Daily Iventory Bahan" subtitle="Catat stok harian bahan bar" icon={ClipboardList} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                    <NavItem to={`${basePath}/excel-daily-beer`} label="Daily Iventory Beer" subtitle="Catat stok harian bir" icon={Package} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                    <NavItem to={`${basePath}/excel-proses-produksi`} label="Proses Produksi Bahan" subtitle="Produksi sirup, teh base & trimming" icon={Scissors} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                    <NavItem to={`${basePath}/excel-split-bahan`} label="Split Bahan (Kelapa 0%)" subtitle="Pecah Kelapa Urgent jadi Air + Daging (Waste 0%)" icon={Box} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                    <NavItem to={`${basePath}/excel-po-bar`} label="Permintaan PO Bar (Resto)" subtitle="Ajukan PO pintu Bar & foto terima barang" icon={ShoppingCart} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                    <NavItem to={`${basePath}/transfer`} label="Minta Barang Central (Rp 0)" subtitle="Request mutasi stok dari Central ke Bar" icon={ArrowRightLeft} onClick={() => setIsSidebarOpen(false)} isHovered={true} />
+                  </NavGroup>
+                )}
 
             {/* ROLE: KITCHEN */}
             {isTenant && role === 'Kitchen' && (

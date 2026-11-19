@@ -264,7 +264,7 @@ export default function SuperAdminPanel({ tab }) {
         await navigator.clipboard.writeText(inviteUrl);
         displayToast('Link OTP/Undangan disalin! (Berlaku 24 Jam)', 'success');
       } catch {
-        'Revisi sesuai catatan review'. Salin teks di bawah ini:', inviteUrl);
+        displayToast(`Salin link undangan secara manual: ${inviteUrl}`, 'info');
       }
     } catch (err) {
       displayToast(err.message, 'error');

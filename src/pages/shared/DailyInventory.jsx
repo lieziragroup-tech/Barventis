@@ -13,6 +13,14 @@ import PhotoUploaderModal from '../../components/shared/PhotoUploaderModal';
 import { calculateDailyInventoryMetrics, calculateInferredFullFromBroken, convertQtyToStockUnit, getBrokenUnitLabel, isBrokenTrackingEnabled, getLocalDateISO, manualInDeltaFromTotal } from '../../services/dailyInventoryMath';
 import { parseTwoTierConfig } from '../../components/shared/TwoTierConversionEditor';
 
+export function isBeerMaterialItem(item) {
+  if (!item) return false;
+  const cat = String(item.category || '').toLowerCase();
+  const name = String(item.name || '').toLowerCase();
+  if (cat.includes('beer') || cat.includes('bir')) return true;
+  return ['beer', 'bintang', 'bali hai', 'guinness', 'heineken', 'prost', 'kura', 'island brewing', 'soju', 'draft beer'].some(k => name.includes(k));
+}
+
 export function isPrepOutputMaterial(item) {
   if (!item) return false;
   if (item.is_prep_output === true) return true;
@@ -243,7 +251,7 @@ export function getInventoryRowMetrics(item, row = {}, strict = false) {
   };
 }
 
-export default function DailyInventory({ category: _category, initialTab }) {
+export default function DailyInventory({ category: _category, initialTab, standaloneEodOnly = false, sheetTitle = null }) {
   const { activeUser } = useAuth();
   const { activeBranchId } = useData();
   // Daily Inventory is primarily an input workflow. Open the editable EOD form by default;
@@ -437,6 +445,8 @@ export default function DailyInventory({ category: _category, initialTab }) {
     const baseList = (allowedCats && roleFilteredBase.length > 0) ? roleFilteredBase : items;
 
     return baseList.filter(item => {
+      if (_category === 'BEER_ONLY' && !isBeerMaterialItem(item)) return false;
+      if (_category === 'NON_BEER' && isBeerMaterialItem(item)) return false;
       if (debouncedSearch) {
         const matchesSearch = [item.name, item.sku, item.item_code, item.category]
           .some(value => String(value || '').toLowerCase().includes(debouncedSearch));

@@ -39,13 +39,14 @@ function convertBetweenUnits(value, fromUnit, toUnit) {
   return val;
 }
 
-export default function SimplePrep() {
+export default function SimplePrep({ standaloneMode = null } = {}) {
   const { stock: rawStock, refreshData, activeBranchId } = useData();
   const materials = useMemo(() => rawStock || [], [rawStock]);
   const toast = useToast();
 
   const [loading, setLoading] = useState(false);
-  const [prepSubTab, setPrepSubTab] = useState('TRIMMING'); // 'TRIMMING' | 'ZERO_WASTE_SPLIT' | 'BARCODE_CENTRAL'
+  const [prepSubTab, setPrepSubTab] = useState(standaloneMode || 'TRIMMING');
+  useEffect(() => { if (standaloneMode) setPrepSubTab(standaloneMode); }, [standaloneMode]); // 'TRIMMING' | 'ZERO_WASTE_SPLIT' | 'BARCODE_CENTRAL'
   const [historyLoading, setHistoryLoading] = useState(false);
   const [history, setHistory] = useState([]);
   const [selectedPhotoModal, setSelectedPhotoModal] = useState(null);
