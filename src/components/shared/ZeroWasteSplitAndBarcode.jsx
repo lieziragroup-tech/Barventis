@@ -514,7 +514,7 @@ export default function ZeroWasteSplitAndBarcode({ mode = 'SPLIT' }) {
       </div>
 
       <form onSubmit={handleSubmitZeroWasteSplit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '14px', padding: '16px', borderRadius: '12px', background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', padding: '16px', borderRadius: '12px', background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
           <div>
             <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 700 }}>
               1. Pilih Bahan Induk yang Dipecah (Stok Resto/Bar) *

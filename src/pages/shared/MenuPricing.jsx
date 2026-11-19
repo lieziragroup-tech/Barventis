@@ -199,7 +199,7 @@ export default function MenuPricing() {
 
         <div className="table-container" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
           <table className="custom-table">
-            <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-secondary)', boxShadow: '0 1px 0 var(--border)' }}>
               <tr>
                 <th>Nama Menu</th>
                 <th style={{ width: '100px' }}>Kategori</th>

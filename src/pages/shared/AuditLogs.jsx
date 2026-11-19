@@ -557,7 +557,7 @@ export default function AuditLogs() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
                 <div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>Pelaksana</div>
                   <div style={{ fontSize: '0.9rem', fontWeight: '600' }}>{selectedLog.username}</div>
@@ -575,7 +575,7 @@ export default function AuditLogs() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
                 <div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>IP Address</div>
                   <div style={{ fontSize: '0.9rem', fontFamily: 'monospace', color: 'var(--text-secondary)', fontWeight: '600' }}>

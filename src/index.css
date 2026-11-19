@@ -2428,3 +2428,24 @@ dialog::backdrop {
     -webkit-overflow-scrolling: touch;
   }
 }
+
+
+/* BARVENTIS v4.0 OVERLAP & PRINT GUARDRAILS */
+@media (max-width: 1024px) {
+  .stock-ledger-detail-panel {
+    width: 100% !important;
+    position: static !important;
+  }
+}
+
+@media print {
+  .custom-table thead th,
+  .custom-table tbody td {
+    position: static !important;
+  }
+  .print-header {
+    margin-bottom: 14px !important;
+    padding-bottom: 8px !important;
+    border-bottom: 1px solid #cbd5e1 !important;
+  }
+}

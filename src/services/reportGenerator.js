@@ -190,7 +190,7 @@ export function buildIndividualWorkbooks(sheets, XLSX) {
 // ── Generate PDF from sheets data ──
 export async function generatePDF(salesData, dbData, unitConversionMap = new Map()) {
   const { default: jsPDF } = await import('jspdf');
-  await import('jspdf-autotable');
+  const { default: autoTable } = await import('jspdf-autotable');
 
   const { period } = dbData;
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -201,10 +201,22 @@ export async function generatePDF(salesData, dbData, unitConversionMap = new Map
   const addPage = (sectionTitle) => {
     if (!firstPage) doc.addPage();
     firstPage = false;
-    doc.setFontSize(14);
-    doc.text(title, 14, 15);
-    doc.setFontSize(11);
-    doc.text(sectionTitle, 14, 22);
+    const pw = doc.internal.pageSize.getWidth();
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.setTextColor(15, 23, 42);
+    doc.text(title, 14, 14);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}`, pw - 14, 14, { align: 'right' });
+    doc.setDrawColor(203, 213, 225);
+    doc.setLineWidth(0.3);
+    doc.line(14, 17.5, pw - 14, 17.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text(sectionTitle, 14, 23.5);
     return 28;
   };
 
@@ -220,7 +232,7 @@ export async function generatePDF(salesData, dbData, unitConversionMap = new Map
     const grandTotal = salesData.sales.reduce((s, i) => s + i.subtotal, 0);
     rows.push(['TOTAL', salesData.sales.reduce((s, i) => s + i.qty, 0), fmtNum(grandTotal)]);
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['Tanggal', 'Total Qty', 'Total Penjualan']],
       body: rows,
@@ -235,7 +247,7 @@ export async function generatePDF(salesData, dbData, unitConversionMap = new Map
     const rows = dbData.materials.map((m, i) => [
       i + 1, m.name, m.unit, m.full_pack, fmtNum(m.price), fmtNum(m.new_price || 0), m.supplier
     ]);
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['No', 'Nama Item', 'Unit', 'Full Pack', 'Price', 'New Price', 'Supplier']],
       body: rows,
@@ -251,7 +263,7 @@ export async function generatePDF(salesData, dbData, unitConversionMap = new Map
       i + 1, r.menu_name, fmtNum(r.basic_cost), `${((r.food_cost_pct || 0) * 100).toFixed(1)}%`,
       fmtNum(r.selling_price), fmtNum(r.selling_price)
     ]);
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['No', 'Nama Menu', 'COGS', 'Cost %', 'Selling Price', 'Selling Price (Final)']],
       body: rows,
@@ -269,7 +281,7 @@ export async function generatePDF(salesData, dbData, unitConversionMap = new Map
       fmtNum(item.materials?.price || 0), item.physical_qty ?? item.book_qty ?? 0,
       fmtNum((item.physical_qty ?? item.book_qty ?? 0) * (item.materials?.price || 0))
     ]);
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['No', 'Name Of Item', 'Unit', 'Harga', 'Sisa Stok', 'Total Price']],
       body: rows,
@@ -287,7 +299,7 @@ export async function generatePDF(salesData, dbData, unitConversionMap = new Map
       fmtNum(item.materials?.price || 0), item.physical_qty ?? item.book_qty ?? 0,
       fmtNum((item.physical_qty ?? item.book_qty ?? 0) * (item.materials?.price || 0))
     ]);
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['No', 'Name Of Item', 'Unit', 'Harga', 'Sisa Stok', 'Total Price']],
       body: rows,
@@ -303,7 +315,7 @@ export async function generatePDF(salesData, dbData, unitConversionMap = new Map
       p.date, p.materials?.name || '', p.qty, p.unit,
       fmtNum(p.unit_price), p.suppliers?.name || '', fmtNum(p.qty * p.unit_price)
     ]);
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['Tanggal', 'Nama Item', 'QTY', 'Unit', 'Harga', 'Supplier', 'Total']],
       body: rows,
@@ -324,7 +336,7 @@ export async function generatePDF(salesData, dbData, unitConversionMap = new Map
     }), { bahan: 0, beer: 0 });
     rows.push(['TOTAL', fmtNum(totals.bahan), fmtNum(totals.beer), fmtNum(totals.bahan + totals.beer)]);
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['Tanggal', 'Pemakaian Bahan', 'Pemakaian Beer', 'Total Pemakaian']],
       body: rows,
@@ -346,7 +358,7 @@ export async function generatePDF(salesData, dbData, unitConversionMap = new Map
         fmtNum(r.selling_price)
       ];
     });
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['Menu', 'Category', 'Subtotal', 'Fix Cost', 'Basic Cost', 'Food Cost %', 'Selling Price']],
       body: rows,
@@ -371,7 +383,7 @@ export async function generatePDF(salesData, dbData, unitConversionMap = new Map
       const pct = salesAmt > 0 ? (purchaseAmt / salesAmt * 100).toFixed(2) + '%' : '-';
       return [date, fmtNum(purchaseAmt), fmtNum(salesAmt), pct];
     });
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['Tanggal', 'Pembelian Harian', 'Total Penjualan Beverage', 'Presentase %']],
       body: rows,
@@ -403,7 +415,7 @@ export async function generatePDF(salesData, dbData, unitConversionMap = new Map
         it.in_qty || 0, it.out_qty || 0, it.full_qty || 0,
         it.broken_qty || 0, it.waste_qty || 0, it.terpakai_qty || 0
       ]);
-      doc.autoTable({
+      autoTable(doc, {
         startY: y + 10,
         head: [['No', 'Item', 'Unit', 'IN', 'OUT', 'FULL', 'BROKEN', 'WASTE', 'TERPAKAI']],
         body: rows,
@@ -430,7 +442,7 @@ export async function generatePDF(salesData, dbData, unitConversionMap = new Map
     const rows = Object.entries(beerByName).map(([name, d], i) => [
       i + 1, name, d.total, fmtNum(d.totalAmt)
     ]);
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['No', 'Nama Beer', 'Total Qty', 'Total Penjualan']],
       body: rows,

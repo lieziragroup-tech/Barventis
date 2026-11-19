@@ -1036,7 +1036,7 @@ function StockLedgerInner() {
                   {suppliers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                 </datalist>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
                 <div className="form-group">
                   <label className="form-label">Satuan Pack</label>
                   <input
@@ -1090,7 +1090,7 @@ function StockLedgerInner() {
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
                   Mengubah angka ini mencatat koreksi stok.
                 </p>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
                   <div className="form-group mb-0">
                     <label className="form-label" style={{fontSize: '0.75rem'}}>Stok Resto Bar</label>
                     <input type="number" step="any" className="form-control" 
@@ -1106,7 +1106,7 @@ function StockLedgerInner() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginTop: '16px' }}>
                 <div className="form-group">
                   <label className="form-label">Harga Lama (IDR)</label>
                   <input type="number" className="form-control" value={editItem.price || 0} readOnly style={{ color: 'var(--text-muted)' }} />
@@ -1151,7 +1151,7 @@ function StockLedgerInner() {
                   {suppliers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                 </datalist>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
                 <div className="form-group">
                   <label className="form-label">Satuan Pack</label>
                   <input
@@ -1193,7 +1193,7 @@ function StockLedgerInner() {
                   <span><strong className="block text-sm">Lacak kedaluwarsa (FEFO)</strong><small style={{ color: 'var(--text-muted)' }}>Lacak batch dan tanggal kedaluwarsa.</small></span>
                 </label>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
                 <div className="form-group">
                   <label className="form-label">Stok Minimum</label>
                   <input type="number" className="form-control" value={newItem.min_stock} onChange={e => setNewItem({ ...newItem, min_stock: parseInt(e.target.value) || 15 })} />
@@ -1206,7 +1206,7 @@ function StockLedgerInner() {
 
               <div style={{ padding: '16px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
                 <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '12px', color: 'var(--text-primary)' }}>Stok Awal (Opsional)</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
                   <div className="form-group mb-0">
                     <label className="form-label" style={{fontSize: '0.75rem'}}>Stok Resto Bar</label>
                     <input type="number" step="any" className="form-control"

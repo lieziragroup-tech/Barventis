@@ -1542,7 +1542,7 @@ export default function SuperAdminPanel({ tab }) {
               </div>
 
               {/* Row 2: Financial & Rates */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '8px' }}>
                 <div style={{ background: 'rgba(130,81,0,0.02)', padding: '8px', borderRadius: '6px', border: `1px solid ${colors.borderLight}` }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginBottom: '2px' }}>
                     <Percent size={11} style={{ color: colors.tertiary }} />
@@ -1577,7 +1577,7 @@ export default function SuperAdminPanel({ tab }) {
               </div>
 
               {/* Row 3: Stats (Materials & Recipes) */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '8px' }}>
                 <div style={{ background: 'rgba(26,25,23,0.01)', padding: '8px', borderRadius: '6px', border: `1px solid ${colors.borderLight}` }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginBottom: '2px' }}>
                     <Database size={11} style={{ color: colors.primary }} />

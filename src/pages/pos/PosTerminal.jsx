@@ -192,7 +192,7 @@ export default function PosTerminal() {
 
   const handlePrintReceipt = (order, items) => {
     import('jspdf').then(({ default: jsPDF }) => {
-      import('jspdf-autotable').then(() => {
+      import('jspdf-autotable').then(({ default: autoTable }) => {
         const doc = new jsPDF();
         doc.setFontSize(16);
         doc.text('RESI PEMBAYARAN - POS TERMINAL', 14, 20);
@@ -214,8 +214,8 @@ export default function PosTerminal() {
         const total = order.total_amount;
         const taxAndService = total - subtotal;
 
-        doc.autoTable({
-          startY: 50,
+        autoTable(doc, {
+          startY: order.customer_name ? 54 : 48,
           head: [['Menu', 'Qty', 'Harga', 'Subtotal']],
           body: tableData,
           foot: [

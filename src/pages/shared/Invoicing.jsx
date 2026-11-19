@@ -1418,7 +1418,7 @@ Catatan: ${inv.notes || '-'}`,
                 </div>
 
                 {/* Photo & Signature Preview if available */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '14px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px', marginTop: '14px' }}>
                   {viewInvoice.receipt_photo_url && (
                     <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '8px', background: 'var(--bg-primary)' }}>
                       <div style={{ fontSize: '0.75rem', fontWeight: 600, marginBottom: '6px', color: 'var(--text-secondary)' }}>Foto Bukti / Surat Jalan:</div>
@@ -1498,7 +1498,7 @@ Catatan: ${inv.notes || '-'}`,
                   )}
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                       <label className="form-label" style={{ marginBottom: 0 }}>Supplier *</label>
@@ -2322,7 +2322,7 @@ Catatan: ${inv.notes || '-'}`,
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', marginBottom: '16px' }}>
               <div>
                 <label className="form-label" style={{ fontSize: '0.78rem', fontWeight: 700 }}>
                   Supplier Terpilih (Master Supplier Purchasing)

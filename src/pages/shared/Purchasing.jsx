@@ -1635,7 +1635,7 @@ export default function Purchasing({ standaloneTab = null } = {}) {
               {editingPurchase.name} ({editingPurchase.unit})
             </p>
             <form onSubmit={handleSaveEditHistory} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Kuantitas ({editingPurchase.unit}) *</label>
                   <input
@@ -1975,7 +1975,7 @@ export default function Purchasing({ standaloneTab = null } = {}) {
                   <option value="Lainnya">Lainnya</option>
                 </select>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
                 <div className="form-group">
                   <label className="form-label">Satuan (Unit)</label>
                   <input type="text" required className="form-control" placeholder="Contoh: pcs, kg, ltr" value={newMaterialData.unit} onChange={e => setNewMaterialData({...newMaterialData, unit: e.target.value})} />
@@ -2362,7 +2362,7 @@ export default function Purchasing({ standaloneTab = null } = {}) {
                 </div>
               </div>
 
-              <div style={{ background: 'var(--bg-tertiary)', padding: '12px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.84rem' }}>
+              <div style={{ background: 'var(--bg-tertiary)', padding: '12px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '8px', fontSize: '0.84rem' }}>
                 <div>
                   <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.74rem' }}>Contact Person</span>
                   <strong>{supplierDrawer.contact_person || '-'}</strong>
