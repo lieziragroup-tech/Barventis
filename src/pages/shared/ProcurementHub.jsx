@@ -9,7 +9,7 @@ const Purchasing = lazyWithRetry(() => import('./Purchasing'));
 const Invoicing = lazyWithRetry(() => import('./Invoicing'));
 
 const ALL_TABS = [
-  { key: 'invoicing', label: 'Pembuatan PO & Persetujuan Owner', icon: FileText },
+  { key: 'invoicing', label: 'Pembuatan PO & Penerimaan', icon: FileText },
   { key: 'marketlist', label: 'Komparasi Harga & Efisiensi Bahan', icon: ClipboardList },
   { key: 'pembelian', label: 'Master Supplier & Belanja Harian', icon: ShoppingCart },
 ];

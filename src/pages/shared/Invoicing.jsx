@@ -518,7 +518,7 @@ export default function Invoicing() {
     }
     setSavingReviewPo(true);
     try {
-      const nextStatus = submitForOwnerAcc ? 'PENDING_APPROVAL' : (reviewPoModal.workflow_status || 'REQUESTED');
+      const nextStatus = submitForOwnerAcc ? 'APPROVED' : (reviewPoModal.workflow_status || 'REQUESTED');
       await api.updatePoWorkflowAndSupplier(reviewPoModal.id, {
         workflow_status: nextStatus,
         supplier: reviewPoModal.supplier,
@@ -530,7 +530,7 @@ export default function Invoicing() {
       if (toast) {
         toast(
           submitForOwnerAcc
-            ? `PO ${reviewPoModal.invoice_no} berhasil diajukan ke Owner untuk di-ACC.`
+            ? `PO ${reviewPoModal.invoice_no} siap dipesan ke supplier ${reviewPoModal.supplier}.`
             : `Perubahan PO ${reviewPoModal.invoice_no} berhasil disimpan.`,
           'success'
         );
@@ -776,8 +776,8 @@ export default function Invoicing() {
       PENDING_HEADBAR: { label: 'MENUNGGU ACC HEAD BAR (IRPAN)', bg: 'rgba(139, 92, 246, 0.14)', color: '#7c3aed', border: 'rgba(139, 92, 246, 0.35)' },
       REQUESTED: { label: 'PERMINTAAN CABANG', bg: 'rgba(100, 116, 139, 0.12)', color: '#475569', border: 'rgba(100, 116, 139, 0.3)' },
       DRAFT: { label: 'PERMINTAAN CABANG', bg: 'rgba(100, 116, 139, 0.12)', color: '#475569', border: 'rgba(100, 116, 139, 0.3)' },
-      PENDING_APPROVAL: { label: 'MENUNGGU ACC OWNER', bg: 'rgba(245, 158, 11, 0.14)', color: '#d97706', border: 'rgba(245, 158, 11, 0.35)' },
-      APPROVED: { label: 'DI-ACC OWNER (SIAP PESAN)', bg: 'rgba(16, 185, 129, 0.14)', color: '#059669', border: 'rgba(16, 185, 129, 0.35)' },
+      PENDING_APPROVAL: { label: 'SIAP DIPROSES PURCHASING', bg: 'rgba(245, 158, 11, 0.14)', color: '#d97706', border: 'rgba(245, 158, 11, 0.35)' },
+      APPROVED: { label: 'SIAP PESAN KE SUPPLIER', bg: 'rgba(16, 185, 129, 0.14)', color: '#059669', border: 'rgba(16, 185, 129, 0.35)' },
       REJECTED: { label: 'REVISI OWNER', bg: 'rgba(239, 68, 68, 0.12)', color: '#dc2626', border: 'rgba(239, 68, 68, 0.3)' },
       SENT: { label: 'DIPESAN KE SUPPLIER', bg: 'rgba(59, 130, 246, 0.12)', color: '#2563eb', border: 'rgba(59, 130, 246, 0.3)' },
       RECEIVED: { label: 'GOODS RECEIPT SELESAI', bg: 'rgba(16, 185, 129, 0.12)', color: '#059669', border: 'rgba(16, 185, 129, 0.3)' },
@@ -1165,10 +1165,10 @@ Catatan: ${inv.notes || '-'}`,
                               <button
                                 className="btn btn-secondary"
                                 style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700, color: 'var(--accent)', borderColor: 'rgba(16, 185, 129, 0.35)' }}
-                                title="Verifikasi harga/supplier, bandingkan efisiensi supplier lain, dan ajukan ACC ke Owner"
+                                title="Verifikasi/ganti supplier (termasuk Pasar Umum), cek harga, dan proses PO ke supplier"
                                 onClick={() => openReviewPoModal(inv)}
                               >
-                                {wf === 'PENDING_APPROVAL' ? 'Edit Review PO' : 'Review & Ajukan ACC'}
+                                'Proses / Ganti Supplier'
                               </button>
                             )}
 
@@ -1195,7 +1195,7 @@ Catatan: ${inv.notes || '-'}`,
                             )}
 
                             {/* PURCHASING / OWNER: After Owner ACC (APPROVED) -> Contact Supplier (WA) & Mark SENT */}
-                            {(isPurchasing || isOwner) && (wf === 'APPROVED' || inv.status === 'SENT') && inv.status !== 'RECEIVED' && (
+                            {(isPurchasing || isOwner) && wf !== 'PENDING_HEADBAR' && inv.status !== 'RECEIVED' && inv.status !== 'CANCELLED' && (
                               <button
                                 className="btn btn-secondary"
                                 style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700, color: '#059669', borderColor: 'rgba(16, 185, 129, 0.4)', background: 'rgba(16, 185, 129, 0.08)' }}
@@ -1206,7 +1206,7 @@ Catatan: ${inv.notes || '-'}`,
                               </button>
                             )}
 
-                            {(isPurchasing || isOwner) && wf === 'APPROVED' && inv.status === 'DRAFT' && (
+                            {(isPurchasing || isOwner) && wf !== 'PENDING_HEADBAR' && inv.status === 'DRAFT' && (
                               <button
                                 className="btn btn-primary"
                                 style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700 }}
@@ -2292,7 +2292,7 @@ Catatan: ${inv.notes || '-'}`,
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border)', paddingBottom: '14px', marginBottom: '16px' }}>
               <div>
                 <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0 }}>
-                  Review Purchasing &amp; Pengajuan ACC Owner — {reviewPoModal.invoice_no}
+                  Proses PO Purchasing &amp; Pemilihan Supplier — {reviewPoModal.invoice_no}
                 </h3>
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px', marginBottom: 0 }}>
                   Supplier Awal Permintaan Cabang: <strong>{reviewPoModal.original_supplier || reviewPoModal.supplier}</strong> · Divisi: <strong>{reviewPoModal.division || 'BAR'}</strong>
@@ -2446,7 +2446,7 @@ Catatan: ${inv.notes || '-'}`,
                   onClick={(e) => handleSavePurchasingReview(e, true)}
                   disabled={savingReviewPo}
                 >
-                  {savingReviewPo ? 'Memproses...' : 'Ajukan ACC ke Owner'}
+                  {savingReviewPo ? 'Memproses...' : 'Simpan & Siap Pesan ke Supplier'}
                 </button>
               </div>
             </div>
