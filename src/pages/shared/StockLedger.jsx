@@ -300,7 +300,7 @@ function StockLedgerInner() {
       if (err.hasDependencies) {
         setDependencyDeleteModal({ name: itemName, count: err.dependencyCount });
       } else {
-        alert(err.message);
+        window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: err.message, type: 'warning' } }));
       }
     }
   };
@@ -311,7 +311,7 @@ function StockLedgerInner() {
       await onDeleteItem(dependencyDeleteModal.name, true);
       setDependencyDeleteModal(null);
     } catch (err) {
-      alert(err.message);
+      window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: err.message, type: 'warning' } }));
     }
   };
 
@@ -331,9 +331,9 @@ function StockLedgerInner() {
     }
     
     if (failedCount > 0) {
-      alert(`Berhasil menghapus ${selectedItems.length - failedCount} bahan. ${failedCount} bahan gagal dihapus karena masih digunakan di resep.`);
+      window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: `Berhasil menghapus ${selectedItems.length - failedCount} bahan. ${failedCount} bahan gagal dihapus karena masih digunakan di resep.`, type: 'warning' } }));
     } else {
-      alert(`Berhasil menghapus ${selectedItems.length} bahan.`);
+      window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: `Berhasil menghapus ${selectedItems.length} bahan.`, type: 'warning' } }));
     }
     
     setSelectedItems(prev => prev.filter(name => failedNames.includes(name)));
@@ -344,7 +344,7 @@ function StockLedgerInner() {
     e.preventDefault();
     if (!adjustItem || !adjustQty || isNaN(adjustQty)) return;
     if (!adjustNotes.trim()) {
-      alert('Alasan penyesuaian wajib diisi.');
+      window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Alasan penyesuaian wajib diisi.', type: 'warning' } }));
       return;
     }
     if (!window.confirm(`Simpan penyesuaian stok ${adjustItem.name}?`)) return;
@@ -352,7 +352,7 @@ function StockLedgerInner() {
       await onAdjustStock(adjustItem.name, adjustLoc, adjustType, parseFloat(adjustQty), adjustNotes);
       setAdjustItem(null); setAdjustQty(''); setAdjustNotes('');
     } catch (err) {
-      alert("Gagal menyimpan penyesuaian stok: " + err.message);
+      window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: "Gagal menyimpan penyesuaian stok: " + err.message, type: 'warning' } }));
     }
   };
 
@@ -391,7 +391,7 @@ function StockLedgerInner() {
       await onUpdateItem(updatePayload);
       setEditItem(null);
     } catch (err) {
-      alert("Gagal menyimpan: " + err.message);
+      window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: "Gagal menyimpan: " + err.message, type: 'warning' } }));
     }
   };
 
@@ -405,7 +405,7 @@ function StockLedgerInner() {
       item => item.name.trim().toLowerCase() === newItem.name.trim().toLowerCase()
     );
     if (isDuplicate) {
-      alert(`Bahan "${newItem.name}" sudah ada.`);
+      window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: `Bahan "${newItem.name}" sudah ada.`, type: 'warning' } }));
       return;
     }
 
@@ -430,9 +430,9 @@ function StockLedgerInner() {
     } catch (err) {
       // Friendly message for DB-level duplicate (race condition edge case)
       if (err.message?.includes('duplicate key') || err.message?.includes('unique constraint')) {
-        alert(`Bahan "${newItem.name}" sudah ada di inventory. Gunakan nama yang berbeda.`);
+        window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: `Bahan "${newItem.name}" sudah ada di inventory. Gunakan nama yang berbeda.`, type: 'warning' } }));
       } else {
-        alert("Gagal menambahkan bahan: " + err.message);
+        window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: "Gagal menambahkan bahan: " + err.message, type: 'warning' } }));
       }
     }
   };
@@ -498,7 +498,7 @@ function StockLedgerInner() {
       });
     } catch (err) {
       console.error('Export failed', err);
-      alert('Gagal mengekspor data: ' + err.message);
+      window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Gagal mengekspor data: ' + err.message, type: 'warning' } }));
     }
   };
   
@@ -554,7 +554,7 @@ function StockLedgerInner() {
       });
     } catch (err) {
       console.error('Export PDF failed', err);
-      alert('Gagal mengekspor PDF: ' + err.message);
+      window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Gagal mengekspor PDF: ' + err.message, type: 'warning' } }));
     }
   };
 

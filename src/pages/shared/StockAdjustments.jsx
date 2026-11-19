@@ -34,7 +34,7 @@ export default function StockAdjustments() {
   };
 
   const handleReject = async (id) => {
-    const notes = window.prompt('Alasan penolakan:');
+    const notes = 'Revisi sesuai catatan review';
     if (notes === null) return;
     try {
       await adjustmentApi.rejectAdjustment(id, notes);

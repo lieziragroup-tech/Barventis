@@ -764,7 +764,7 @@ export default function Purchasing() {
       });
     } catch (err) {
       console.error(err);
-      alert('Gagal mengekspor data pembelian');
+      window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Gagal mengekspor data pembelian', type: 'warning' } }));
     }
   };
 
@@ -802,7 +802,7 @@ export default function Purchasing() {
       });
     } catch (err) {
       console.error(err);
-      alert('Gagal mengekspor PDF pembelian');
+      window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Gagal mengekspor PDF pembelian', type: 'warning' } }));
     }
   };
 

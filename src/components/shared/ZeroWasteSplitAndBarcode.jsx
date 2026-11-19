@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { zeroWasteSplitService } from '../../services/modules/stakeholderV4Service';
 import { Layers, QrCode, Plus, Trash2, Printer, ArrowRightLeft, CheckCircle2, Search, Sparkles } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { api } from '../../services/api';
 import { formatIDR } from '../../services/costUtils';
-import { supabase } from '../../lib/supabase';
 
 export default function ZeroWasteSplitAndBarcode({ mode = 'SPLIT' }) {
   const { stock, refreshData, activeBranchId } = useData();
@@ -45,6 +45,16 @@ export default function ZeroWasteSplitAndBarcode({ mode = 'SPLIT' }) {
       return [];
     }
   });
+
+  useEffect(() => {
+    let active = true;
+    zeroWasteSplitService.listRecent(activeBranchId)
+      .then((rows) => {
+        if (active && Array.isArray(rows) && rows.length > 0) setSplitHistory(rows);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [activeBranchId]);
 
   // --- STATE: BARCODE LOT CENTRAL (REQ-SH-04: Cetak & Scan Barcode Gudang Central) ---
   const [barcodeSearch, setBarcodeSearch] = useState('');
@@ -162,8 +172,30 @@ export default function ZeroWasteSplitAndBarcode({ mode = 'SPLIT' }) {
 
     setSavingSplit(true);
     try {
-      // Update parent & child stock via RPC or direct material update
+      // DEF-04 FIX: Panggil RPC live atomic_split_material_zero_waste_v18 terlebih dahulu
+      let rpcHandled = false;
       if (selectedParent?.id) {
+        try {
+          const rpcPayload = validOutputs.map((o) => ({
+            material_id: o.material_id || null,
+            name: o.name,
+            qty: parseFloat(o.qty) || 0,
+            unit: o.unit || 'kg'
+          }));
+          const rpcRes = await zeroWasteSplitService.executeAtomicSplit({
+            sourceMaterialId: selectedParent.id,
+            sourceQty: pQty,
+            outputs: rpcPayload,
+            notes: splitNotes,
+            actorName: activeUser?.name || 'Head Barista',
+            branchId: activeBranchId
+          });
+          if (rpcRes?.success) rpcHandled = true;
+        } catch {
+          rpcHandled = false;
+        }
+      }
+      if (!rpcHandled && selectedParent?.id) {
         const nextParentResto = Math.max(0, Number(selectedParent.qty_resto || 0) - pQty);
         try {
           await api.updateMaterial(selectedParent.id, { qty_resto: nextParentResto }, activeUser?.id);

@@ -310,7 +310,7 @@ function RecipesInner({ categoryFilter } = {}) {
     }
     if (failed.length > 0) {
       if (showToast) showToast(`${failed.length} resep gagal dihapus.`, 'error');
-      else alert(`${failed.length} resep gagal dihapus.`);
+      else window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: `${failed.length} resep gagal dihapus.`, type: 'warning' } }));
     }
   };
 
@@ -434,7 +434,7 @@ function RecipesInner({ categoryFilter } = {}) {
       if (showToast) showToast('Resep disimpan.', 'success');
     } catch (err) {
       if (showToast) showToast(err.message || 'Gagal menyimpan resep', 'error');
-      else alert('Gagal menyimpan resep: ' + err.message);
+      else window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Gagal menyimpan resep: ' + err.message, type: 'warning' } }));
     }
   };
 
@@ -481,7 +481,7 @@ function RecipesInner({ categoryFilter } = {}) {
       setEditedImageUrl(newImageUrl);
     } catch (err) {
       if (showToast) showToast(err.message || 'Gagal menambahkan resep', 'error');
-      else alert('Gagal menambahkan resep: ' + err.message);
+      else window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Gagal menambahkan resep: ' + err.message, type: 'warning' } }));
     }
   };
 
@@ -1081,7 +1081,7 @@ function RecipesInner({ categoryFilter } = {}) {
                         if (showToast) showToast('Resep dihapus.', 'success');
                       } catch (err) {
                         if (showToast) showToast(err.message || 'Gagal menghapus resep', 'error');
-                        else alert('Gagal menghapus resep: ' + err.message);
+                        else window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Gagal menghapus resep: ' + err.message, type: 'warning' } }));
                       }
                     }
                   }}

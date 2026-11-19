@@ -227,7 +227,7 @@ export default function SuperAdminPanel({ tab }) {
     }
     
     // Konfirmasi ganda
-    const confirmName = window.prompt(`PERINGATAN!\nMenghapus tenant ini akan MENGHAPUS SEMUA transaksi, material, dan resep milik "${tenant.company_name}".\nKetik "${tenant.name}" untuk melanjutkan:`);
+    const confirmName = 'Revisi sesuai catatan review';
     
     if (confirmName !== tenant.name) {
       if (confirmName !== null) displayToast('Penghapusan dibatalkan: Nama tenant tidak cocok.', 'error');
@@ -264,7 +264,7 @@ export default function SuperAdminPanel({ tab }) {
         await navigator.clipboard.writeText(inviteUrl);
         displayToast('Link OTP/Undangan disalin! (Berlaku 24 Jam)', 'success');
       } catch {
-        window.prompt('Link Undangan (Berlaku 24 Jam). Salin teks di bawah ini:', inviteUrl);
+        'Revisi sesuai catatan review'. Salin teks di bawah ini:', inviteUrl);
       }
     } catch (err) {
       displayToast(err.message, 'error');
@@ -457,9 +457,7 @@ export default function SuperAdminPanel({ tab }) {
   // (typed tenant name) rather than a plain window.confirm.
   const handleApproveReset = async (request) => {
     const tenantLabel = request.tenants?.company_name || request.tenants?.name || request.tenant_id;
-    const typed = window.prompt(
-      `Anda akan MENYETUJUI penghapusan data untuk resto "${tenantLabel}". Tindakan ini PERMANEN dan TIDAK BISA dibatalkan.\n\nKetik ulang nama resto di atas untuk melanjutkan:`
-    );
+    const typed = 'Revisi sesuai catatan review';
     if (typed === null) return; // cancelled
     if (typed.trim() !== tenantLabel) {
       displayToast('Nama resto tidak cocok — persetujuan dibatalkan demi keamanan.', 'error');

@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { costControlAdjustmentService } from '../../services/modules/stakeholderV4Service';
 import { Scale, Plus, Trash2, Info, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { formatIDR } from '../../services/costUtils';
 
@@ -51,6 +52,16 @@ export default function CostControlDualComparison({
     }
   });
 
+  useEffect(() => {
+    let active = true;
+    costControlAdjustmentService.listByPeriod(period)
+      .then((rows) => {
+        if (active && Array.isArray(rows) && rows.length > 0) setAdjustments(rows);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [period]);
+
   const [newAdj, setNewAdj] = useState({
     type: 'BUFFET',
     title: '',
@@ -87,7 +98,7 @@ export default function CostControlDualComparison({
   const stokanRawCostPct = totalSalesBeverage > 0 ? (effectiveStokanUsage / totalSalesBeverage) * 100 : 27.1;
   const stokanAdjustedCostPct = totalSalesBeverage > 0 ? (netStokanForRegularPos / totalSalesBeverage) * 100 : 24.8;
 
-  const handleAddAdjustment = (e) => {
+  const handleAddAdjustment = async (e) => {
     e.preventDefault();
     if (!newAdj.title.trim()) return;
     const item = {
@@ -96,7 +107,14 @@ export default function CostControlDualComparison({
       pax_or_qty: Number(newAdj.pax_or_qty) || 1,
       estimated_cost: Number(newAdj.estimated_cost) || 0
     };
-    const next = [item, ...adjustments];
+    let savedItem = item;
+    try {
+      const dbRow = await costControlAdjustmentService.create(period, item);
+      if (dbRow) savedItem = dbRow;
+    } catch {
+      // fallback to local cache if offline
+    }
+    const next = [savedItem, ...adjustments];
     setAdjustments(next);
     try {
       localStorage.setItem(`bv_cc_adj_${period}`, JSON.stringify(next));
@@ -106,7 +124,8 @@ export default function CostControlDualComparison({
     setNewAdj((prev) => ({ ...prev, title: '', notes: '' }));
   };
 
-  const handleRemoveAdjustment = (id) => {
+  const handleRemoveAdjustment = async (id) => {
+    if (id && !String(id).startsWith('adj-')) { try { await costControlAdjustmentService.remove(id); } catch {} }
     const next = adjustments.filter((a) => a.id !== id);
     setAdjustments(next);
     try {

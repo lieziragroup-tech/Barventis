@@ -273,7 +273,7 @@ export default function CostControl() {
       setShowExportMenu(false);
     } catch (err) {
       console.error(err);
-      alert('Gagal mengekspor file');
+      window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Gagal mengekspor file', type: 'warning' } }));
     }
   };
 
@@ -317,7 +317,7 @@ export default function CostControl() {
       setShowExportMenu(false);
     } catch (err) {
       console.error(err);
-      alert('Gagal mengekspor PDF');
+      window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Gagal mengekspor PDF', type: 'warning' } }));
     }
   };
 

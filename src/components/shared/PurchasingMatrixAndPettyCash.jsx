@@ -1,4 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { pettyCashService } from '../../services/modules/stakeholderV4Service';
+import useIsMobile from '../../hooks/useIsMobile';
 import { Calendar, FileSpreadsheet, DollarSign, Camera, CheckCircle2, Clock, Search, Plus } from 'lucide-react';
 import { formatIDR } from '../../services/costUtils';
 import { exportWithAudit } from '../../services/export/exportAudit';
@@ -62,6 +64,7 @@ export default function PurchasingMatrixAndPettyCash({
   period = '2026-08',
   activeUser = null
 }) {
+  const isMobile = useIsMobile(768);
   const [matrixSearch, setMatrixSearch] = useState('');
   const [pettyCashRows, setPettyCashRows] = useState(() => {
     try {
@@ -72,6 +75,17 @@ export default function PurchasingMatrixAndPettyCash({
     }
   });
   const [paymentFilter, setPaymentFilter] = useState('ALL');
+
+  useEffect(() => {
+    if (mode !== 'PETTY_CASH') return;
+    let active = true;
+    pettyCashService.listEntries(period)
+      .then((rows) => {
+        if (active && Array.isArray(rows) && rows.length > 0) setPettyCashRows(rows);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [mode, period]);
   const [newPcRow, setNewPcRow] = useState({
     date: new Date().toISOString().split('T')[0],
     item_name: '',
@@ -190,6 +204,8 @@ export default function PurchasingMatrixAndPettyCash({
   };
 
   const handleTogglePaymentStatus = (rowId) => {
+    const target = pettyCashRows.find((r) => r.id === rowId);
+    if (target) pettyCashService.updatePaymentState(rowId, { payment_status: target.payment_status === 'PAID' ? 'UNPAID' : 'PAID', payment_proof_url: target.proof_photo }).catch(() => {});
     const updated = pettyCashRows.map((r) =>
       r.id === rowId
         ? { ...r, payment_status: r.payment_status === 'PAID' ? 'UNPAID' : 'PAID' }
@@ -510,6 +526,33 @@ export default function PurchasingMatrixAndPettyCash({
         </div>
       </div>
 
+      {isMobile ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {matrixData.slice(0, 40).map((row) => {
+            const activeDays = dayNumbers.filter((d) => (row.days[d] || 0) > 0);
+            return (
+              <div key={row.id} style={{ padding: '14px', borderRadius: '12px', border: '1px solid var(--border)', background: 'var(--bg-primary)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.9rem', minWidth: 0 }}>{row.name}</div>
+                  <span style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--accent)', whiteSpace: 'nowrap' }}>{formatIDR(row.totalNominal)}</span>
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                  Total Sebulan: <strong>{row.totalQty} {row.unit}</strong> ({activeDays.length} hari belanja)
+                </div>
+                {activeDays.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {activeDays.map((d) => (
+                      <span key={d} style={{ fontSize: '0.72rem', fontWeight: 700, padding: '3px 8px', borderRadius: '6px', background: 'rgba(16,185,129,0.1)', color: 'var(--accent)' }}>
+                        Tgl {d}: {row.days[d]}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
       <div className="table-container" style={{ overflowX: 'auto', maxWidth: '100%' }}>
         <table className="custom-table" style={{ fontSize: '0.76rem', minWidth: '1400px' }}>
           <thead>
@@ -562,6 +605,7 @@ export default function PurchasingMatrixAndPettyCash({
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

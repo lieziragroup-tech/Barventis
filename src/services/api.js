@@ -1627,7 +1627,7 @@ export const api = {
     // 1. Ambil profil user murni tanpa JOIN relasional yang berisiko 400 Bad Request
     const { data: userProfile, error } = await supabase
       .from('users')
-      .select('id, tenant_id, branch_id, name, email, role')
+      .select('id, tenant_id, branch_id, name, email, role, sub_role, nip')
       .eq('id', session.user.id)
       .maybeSingle();
 
@@ -1702,6 +1702,8 @@ export const api = {
       name: effectiveName,
       email: userProfile.email,
       role: effectiveRole,
+      sub_role: userProfile.sub_role || null,
+      nip: userProfile.nip || '-',
       preset_key: activePresetKey,
       tenant_name: tenantName,
       company_name: companyName,
@@ -3638,6 +3640,30 @@ export const api = {
     const tenantId = await requireTenantId();
     const branchId = await requireBranchId(payload?.branch_id || null);
     const userId = await getActiveUserId();
+
+    // DEF-01 FIX: Jika harga satuan bon fisik diedit saat Goods Receipt, simpan terlebih dahulu ke invoice_items & invoices
+    if (Array.isArray(payload.items) && payload.items.length > 0 && payload.priceAdjustedOnReceipt) {
+      let adjustedTotal = 0;
+      for (const it of payload.items) {
+        const qtyNum = Number(it.qty) || 0;
+        const priceNum = Number(it.unit_price) || 0;
+        adjustedTotal += qtyNum * priceNum;
+        if (it.id) {
+          await supabase.from('invoice_items').update({ unit_price: priceNum }).eq('id', it.id).eq('tenant_id', tenantId);
+        } else if (it.material_id) {
+          await supabase.from('invoice_items').update({ unit_price: priceNum }).eq('invoice_id', id).eq('material_id', it.material_id).eq('tenant_id', tenantId);
+        }
+        // Forward-Only Price Lock: perbarui new_price di master bahan tanpa menyentuh unit_cost_snapshot historis
+        if (it.material_id && priceNum > 0) {
+          await supabase.from('materials').update({ new_price: priceNum, updated_at: new Date().toISOString() }).eq('id', it.material_id).eq('tenant_id', tenantId);
+        }
+      }
+      await supabase.from('invoices').update({
+        total: adjustedTotal,
+        actual_receipt_total: adjustedTotal,
+        price_adjusted_on_receipt: true
+      }).eq('id', id).eq('tenant_id', tenantId);
+    }
 
     const receivedDate = payload.received_date || getLocalDateISO();
     const { data: receiveResult, error: rpcErr } = await supabase.rpc('atomic_receive_invoice_wac_v3', {

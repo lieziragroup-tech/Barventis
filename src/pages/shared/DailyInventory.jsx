@@ -682,7 +682,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
       });
     } catch (err) {
       console.error('Owner closing stock override failed:', err);
-      alert('Gagal menyimpan penyesuaian stok akhir: ' + (err.message || 'Unknown error'));
+      window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Gagal menyimpan penyesuaian stok akhir: ' + (err.message || 'Unknown error'), type: 'warning' } }));
     } finally {
       setSavingOwnerOverrideId(null);
     }
@@ -1120,7 +1120,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
       let rows = [];
       if (activeTab === 'REKAP') {
         if (!records || records.length === 0) {
-          alert('Tidak ada data rekap untuk tanggal yang dipilih.');
+          window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Tidak ada data rekap untuk tanggal yang dipilih.', type: 'warning' } }));
           return;
         }
         rows = records.map((row, idx) => {
@@ -1146,7 +1146,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
         });
       } else {
         if (!items || items.length === 0) {
-          alert('Tidak ada data item untuk diekspor.');
+          window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Tidak ada data item untuk diekspor.', type: 'warning' } }));
           return;
         }
         rows = items.map((item, idx) => {
@@ -1197,7 +1197,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
       });
     } catch (err) {
       console.error('Export Excel failed:', err);
-      alert('Gagal mengekspor data: ' + err.message);
+      window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Gagal mengekspor data: ' + err.message, type: 'warning' } }));
     }
   };
 
@@ -1220,7 +1220,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
 
       if (activeTab === 'REKAP') {
         if (!records || records.length === 0) {
-          alert('Tidak ada data rekap untuk tanggal yang dipilih.');
+          window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Tidak ada data rekap untuk tanggal yang dipilih.', type: 'warning' } }));
           return;
         }
         rows = records.map((row, idx) => ({
@@ -1238,7 +1238,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
         }));
       } else {
         if (!items || items.length === 0) {
-          alert('Tidak ada data item untuk diekspor.');
+          window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Tidak ada data item untuk diekspor.', type: 'warning' } }));
           return;
         }
         rows = items.map((item, idx) => {
@@ -1285,7 +1285,7 @@ export default function DailyInventory({ category: _category, initialTab }) {
       });
     } catch (err) {
       console.error('Export PDF failed:', err);
-      alert('Gagal mengekspor PDF: ' + err.message);
+      window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Gagal mengekspor PDF: ' + err.message, type: 'warning' } }));
     }
   };
 

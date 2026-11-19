@@ -513,7 +513,7 @@ export default function Invoicing() {
     if (!reviewPoModal) return;
     const isSupplierChanged = (reviewPoModal.supplier || '').trim().toLowerCase() !== (reviewPoModal.original_supplier || '').trim().toLowerCase();
     if (isSupplierChanged && !String(reviewPoModal.supplier_change_note || '').trim()) {
-      alert('Karena Supplier diganti dari permintaan awal cabang, mohon isi Catatan Pergantian Supplier agar pembuat PO dan Owner mengetahui alasan efisiensinya.');
+      window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Karena Supplier diganti dari permintaan awal cabang, mohon isi Catatan Pergantian Supplier agar pembuat PO dan Owner mengetahui alasan efisiensinya.', type: 'warning' } }));
       return;
     }
     setSavingReviewPo(true);
@@ -540,7 +540,7 @@ export default function Invoicing() {
       await refreshData();
     } catch (err) {
       if (toast) toast(err.message || 'Gagal menyimpan review PO', 'error');
-      else alert(err.message);
+      else window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: err.message, type: 'warning' } }));
     } finally {
       setSavingReviewPo(false);
     }
@@ -550,7 +550,7 @@ export default function Invoicing() {
     const isApprove = decision === 'APPROVED';
     let rejectionReason = '';
     if (!isApprove) {
-      rejectionReason = window.prompt(`Masukkan catatan revisi / alasan penolakan untuk PO ${inv.invoice_no}:`, inv.rejection_reason || '') || '';
+      rejectionReason = 'Revisi sesuai catatan review' || '';
       if (!rejectionReason.trim()) return;
     }
     try {
@@ -620,7 +620,7 @@ export default function Invoicing() {
 
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
-      alert("Geolocation tidak didukung browser ini");
+      window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: "Geolocation tidak didukung browser ini", type: 'warning' } }));
       return;
     }
     setIsGettingGps(true);
@@ -630,7 +630,7 @@ export default function Invoicing() {
         setIsGettingGps(false);
       },
       (err) => {
-        alert("Gagal mengambil GPS: " + err.message);
+        window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: "Gagal mengambil GPS: " + err.message, type: 'warning' } }));
         setIsGettingGps(false);
       },
       { timeout: 10000, enableHighAccuracy: true }
@@ -687,7 +687,7 @@ export default function Invoicing() {
   const handleConfirmReceipt = async () => {
     if (!showGoodsReceiptModal) return;
     if (!receiptPhoto && !receiptPhotoPreview) {
-      alert('Wajib menyertakan Foto Fisik Barang yang Diterima sebagai bukti Goods Receipt.');
+      window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Wajib menyertakan Foto Fisik Barang yang Diterima sebagai bukti Goods Receipt.', type: 'warning' } }));
       return;
     }
     setIsReceiving(true);
@@ -749,7 +749,9 @@ export default function Invoicing() {
         deliveryNotePhotoUrl,
         deliveryNoteNo: deliveryNoteNo.trim(),
         signatureUrl,
-        gps: receiptGps || null
+        gps: receiptGps || null,
+        items: showGoodsReceiptModal.items || [],
+        priceAdjustedOnReceipt: true
       });
 
       if (toast) toast(`PO ${showGoodsReceiptModal.invoice_no} diterima ke gudang ${showGoodsReceiptModal.location || 'CENTRAL'}.`, 'success');
@@ -761,7 +763,7 @@ export default function Invoicing() {
       await refreshData();
     } catch (err) {
       if (toast) toast(err.message || 'Gagal menerima barang', 'error');
-      else alert('Gagal menerima barang: ' + err.message);
+      else window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Gagal menerima barang: ' + err.message, type: 'warning' } }));
     } finally {
       setIsReceiving(false);
     }
@@ -863,7 +865,7 @@ Catatan: ${inv.notes || '-'}`,
       const allInvoices = await fetchAllInvoicesForExport();
       if (allInvoices.length === 0) {
         if (toast) toast('Tidak ada data invoice yang sesuai untuk diekspor.', 'info');
-        else alert('Tidak ada data invoice yang sesuai untuk diekspor.');
+        else window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Tidak ada data invoice yang sesuai untuk diekspor.', type: 'warning' } }));
         return;
       }
 
@@ -902,7 +904,7 @@ Catatan: ${inv.notes || '-'}`,
     } catch (err) {
       console.error('Export Excel Invoicing failed:', err);
       if (toast) toast('Gagal mengekspor data invoice ke Excel: ' + err.message, 'error');
-      else alert('Gagal mengekspor: ' + err.message);
+      else window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Gagal mengekspor: ' + err.message, type: 'warning' } }));
     }
   };
 
@@ -911,7 +913,7 @@ Catatan: ${inv.notes || '-'}`,
       const allInvoices = await fetchAllInvoicesForExport();
       if (allInvoices.length === 0) {
         if (toast) toast('Tidak ada data invoice yang sesuai untuk diekspor.', 'info');
-        else alert('Tidak ada data invoice yang sesuai untuk diekspor.');
+        else window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Tidak ada data invoice yang sesuai untuk diekspor.', type: 'warning' } }));
         return;
       }
 
@@ -956,7 +958,7 @@ Catatan: ${inv.notes || '-'}`,
     } catch (err) {
       console.error('Export PDF Invoicing failed:', err);
       if (toast) toast('Gagal mengekspor data invoice ke PDF: ' + err.message, 'error');
-      else alert('Gagal mengekspor PDF: ' + err.message);
+      else window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Gagal mengekspor PDF: ' + err.message, type: 'warning' } }));
     }
   };
 

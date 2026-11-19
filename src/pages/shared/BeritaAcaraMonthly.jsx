@@ -8,7 +8,7 @@ import { useData } from '../../contexts/DataContext';
 import { useToast } from '../../contexts/ToastContext';
 import { api } from '../../services/api';
 import { formatIDR } from '../../services/costUtils';
-import { supabase } from '../../lib/supabase';
+import { beritaAcaraService } from '../../services/modules/stakeholderV4Service';
 
 const DEFAULT_WASTE_ROWS_OCT_2026 = [
   {
@@ -88,15 +88,8 @@ export default function BeritaAcaraMonthly() {
   const loadSavedBaDocument = useCallback(async (targetPeriod) => {
     const localKey = `bv_ba_doc_${targetPeriod}_${activeBranchId || 'default'}`;
     try {
-      const { data, error } = await supabase
-        .from('berita_acara_documents')
-        .select('*')
-        .eq('period_month', targetPeriod)
-        .order('updated_at', { ascending: false })
-        .limit(1);
-
-      if (!error && Array.isArray(data) && data.length > 0) {
-        const doc = data[0];
+      const doc = await beritaAcaraService.getByPeriod(targetPeriod, activeBranchId);
+      if (doc) {
         setDocumentDate(doc.document_date || `${targetPeriod}-22`);
         setLocationDivision(doc.location_division || 'Resto - Central');
         setSubmitterName(doc.submitter_name || 'Irpan');
@@ -357,39 +350,14 @@ export default function BeritaAcaraMonthly() {
     }
 
     try {
-      const { data: userRes } = await supabase.auth.getUser();
-      const userId = userRes?.user?.id || null;
-      const { data: userProfile } = userId
-        ? await supabase.from('users').select('tenant_id').eq('id', userId).maybeSingle()
-        : { data: null };
-
-      if (userProfile?.tenant_id) {
-        await supabase.from('berita_acara_documents').upsert({
-          tenant_id: userProfile.tenant_id,
-          branch_id: activeBranchId || null,
-          period_month: periodMonth,
-          document_date: documentDate,
-          location_division: locationDivision,
-          submitter_name: submitterName,
-          submitter_nip: submitterNip,
-          submitter_title: submitterTitle,
-          intro_statement: introStatement,
-          approver_name: approverName,
-          approver_title: approverTitle,
-          disposition_statement: dispositionStatement,
-          closing_statement: closingStatement,
-          sign_city: signCity,
-          waste_items: wasteItems,
-          breakage_items: breakageItems,
-          total_waste_amount: totalWasteNominal,
-          total_breakage_amount: totalBreakageNominal,
-          disposal_photo_urls: disposalPhotos,
-          status: nextStatus
-        });
-      }
+      await beritaAcaraService.saveDocument({
+        ...payload,
+        totalWasteAmount: totalWasteNominal,
+        totalBreakageAmount: totalBreakageNominal
+      }, activeBranchId);
       setStatus(nextStatus);
       if (toast?.showSuccess) {
-        toast.showSuccess(`Berita Acara periode ${periodMonth} berhasil disimpan (${nextStatus}).`);
+        toast.showSuccess(`Berita Acara periode ${periodMonth} tersimpan aman di Supabase tanpa duplikasi (${nextStatus}).`);
       }
     } catch {
       setStatus(nextStatus);
