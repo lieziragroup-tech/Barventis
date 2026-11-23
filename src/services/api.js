@@ -1648,23 +1648,10 @@ export const api = {
     let effectiveName = userProfile.name;
     let activePresetKey = null;
 
+    // v4.3: Tidak ada lagi spoofing role via sessionStorage; role, sub_role, dan branch_id
+    // selalu dibaca murni dari akun Supabase Auth & public.users masing-masing.
     if (typeof sessionStorage !== 'undefined') {
-      try {
-        const rawOverride = sessionStorage.getItem('bv_beta_role_override');
-        if (rawOverride) {
-          const parsedOverride = JSON.parse(rawOverride);
-          if (
-            parsedOverride &&
-            String(parsedOverride.email || '').toLowerCase() === String(userProfile.email || '').toLowerCase()
-          ) {
-            if (parsedOverride.role) effectiveRole = parsedOverride.role;
-            if (parsedOverride.name) effectiveName = parsedOverride.name;
-            if (parsedOverride.key) activePresetKey = parsedOverride.key;
-          }
-        }
-      } catch {
-        // ignore parse errors
-      }
+      sessionStorage.removeItem('bv_beta_role_override');
     }
 
     const roleLower = (effectiveRole || '').toLowerCase().replace(/\s+/g, '');
@@ -1740,141 +1727,121 @@ export const api = {
   // --- BETA TESTING SHORTCUTS & DUMMY SEEDER (RESTO UMATIS: BSD & KASUNA) ---
   getBetaTestingPresets: () => [
     {
-      key: 'OWNER_BSD',
+      key: 'OWNER_UMATIS',
       label: 'Owner Resto Umatis',
-      sublabel: 'Akses Penuh Multi-Cabang (BSD & Kasuna)',
-      email: 'owner.beta@umatis.id',
-      password: 'BetaUmatis2026!',
-      name: 'Owner Resto Umatis (Beta)',
+      sublabel: 'Akses Penuh Multi-Cabang (BSD, Kasuna & Central)',
+      email: 'owner.umatis@umatis.id',
+      password: 'UmatisTrial2026!',
+      name: 'Owner Resto Umatis',
       role: 'Owner',
+      subRole: 'OWNER',
       branchCode: 'BSD',
-      areaUuid: '00000000-0000-4000-a000-000000000000',
       badge: 'OWNER • MULTI-CABANG'
     },
     {
+      key: 'CENTRAL_UMATIS',
+      label: 'Gudang Central Umatis',
+      sublabel: 'Dashboard Central, Mutasi ke Cabang (Rp 0), PO Central & Stok',
+      email: 'central.umatis@umatis.id',
+      password: 'UmatisTrial2026!',
+      name: 'Staf Gudang Central',
+      role: 'Central',
+      subRole: 'CENTRAL',
+      branchCode: 'CENTRAL',
+      badge: 'CENTRAL • GUDANG PUSAT'
+    },
+    {
+      key: 'PURCHASING_UMATIS',
+      label: 'Purchasing & PO Umatis',
+      sublabel: 'Pembuatan PO, Komparasi Harga, Matriks Tgl 1–31 & Supplier',
+      email: 'purchasing.umatis@umatis.id',
+      password: 'UmatisTrial2026!',
+      name: 'Staf Purchasing & PO',
+      role: 'Purchasing',
+      subRole: 'PURCHASING',
+      branchCode: 'BSD',
+      badge: 'PURCHASING • PO'
+    },
+    {
       key: 'HEAD_BAR_BSD',
-      label: 'Head Barista — Irpan (BSD)',
-      sublabel: 'Otorisasi Berita Acara Waste/Gelas Pecah, ACC Order Central & Cost Control Bar',
-      email: 'barista.bsd@umatis.id',
-      password: 'BetaUmatis2026!',
-      name: 'Irpan (Head Barista)',
+      label: 'Head Bar BSD (Irpan)',
+      sublabel: 'Daily Inventory, Stock Opname, ACC Order Central, Cost Control & BA',
+      email: 'headbar.bsd@umatis.id',
+      password: 'UmatisTrial2026!',
+      name: 'Irpan (Head Bar BSD)',
       role: 'Bar',
       subRole: 'HEAD_BAR',
       branchCode: 'BSD',
-      areaUuid: '00000000-0000-4000-a000-000000000002',
-      badge: 'HEAD BAR • IRPAN'
+      badge: 'HEAD BAR • BSD'
     },
     {
-      key: 'BARISTA_BSD',
-      label: 'Rekan Bar — Ayat (Cabang BSD)',
-      sublabel: 'Input Daily Inventory, Permintaan PO Pintu Bar (Resto) & Mutasi dari Central (Rp 0)',
-      email: 'barista.bsd@umatis.id',
-      password: 'BetaUmatis2026!',
-      name: 'Ayat (Rekan Barista)',
+      key: 'BAR_BSD',
+      label: 'Bar BSD (Ayat)',
+      sublabel: 'Daily Inventory Bahan & Beer, Produksi, PO Bar & Minta Central (Rp 0)',
+      email: 'bar.bsd@umatis.id',
+      password: 'UmatisTrial2026!',
+      name: 'Ayat (Bar BSD)',
       role: 'Bar',
       subRole: 'REKAN_BAR',
       branchCode: 'BSD',
-      areaUuid: '00000000-0000-4000-a000-000000000002',
-      badge: 'REKAN BAR • AYAT'
+      badge: 'BAR • BSD'
     },
     {
-      key: 'BARISTA_KASUNA',
-      label: 'Role Bar (Cabang Kasuna)',
-      sublabel: 'Stok Bar, Olah Bahan Minuman, Mutasi & Opname Bar Kasuna',
-      email: 'barista.kasuna@umatis.id',
-      password: 'BetaUmatis2026!',
-      name: 'Barista Cabang Kasuna (Beta)',
+      key: 'HEAD_BAR_KASUNA',
+      label: 'Head Bar Kasuna',
+      sublabel: 'Operasional Head Bar, Opname, Cost Control & BA Cabang Kasuna',
+      email: 'headbar.kasuna@umatis.id',
+      password: 'UmatisTrial2026!',
+      name: 'Head Bar Kasuna',
       role: 'Bar',
+      subRole: 'HEAD_BAR',
       branchCode: 'KASUNA',
-      areaUuid: '00000000-0000-4000-a000-000000000002',
-      badge: 'ROLE BAR • CABANG KASUNA'
+      badge: 'HEAD BAR • KASUNA'
     },
     {
-      key: 'KITCHEN_BSD',
-      label: 'Role Kitchen / Dapur (BSD)',
-      sublabel: 'Stok Dapur, Olah Bahan Mentah/Trimming, Mutasi & Opname Kitchen',
-      email: 'kitchen.bsd@umatis.id',
-      password: 'BetaUmatis2026!',
-      name: 'Chef Kitchen BSD (Beta)',
-      role: 'Kitchen',
-      branchCode: 'BSD',
-      areaUuid: '00000000-0000-4000-a000-000000000003',
-      badge: 'ROLE KITCHEN • DAPUR BSD'
-    },
-    {
-      key: 'SERVICE_BSD',
-      label: 'Role Service / Floor (BSD)',
-      sublabel: 'Stok Packaging/Amenities, Alat Floor, Mutasi & Opname Service',
-      email: 'service.bsd@umatis.id',
-      password: 'BetaUmatis2026!',
-      name: 'Staf Service & Floor BSD (Beta)',
-      role: 'Service',
-      branchCode: 'BSD',
-      areaUuid: '00000000-0000-4000-a000-000000000004',
-      badge: 'ROLE SERVICE • FLOOR BSD'
-    },
-    {
-      key: 'CENTRAL_BSD',
-      label: 'Role Central (Gudang Pusat)',
-      sublabel: 'Dashboard Central, Mutasi ke Cabang, PO Central & Stok',
-      email: 'purchasing.bsd@umatis.id',
-      password: 'BetaUmatis2026!',
-      name: 'Staf Gudang Central (Beta)',
-      role: 'Central',
-      branchCode: 'BSD',
-      areaUuid: '00000000-0000-4000-a000-000000000001',
-      badge: 'ROLE CENTRAL • GUDANG PUSAT'
-    },
-    {
-      key: 'PURCHASING_BSD',
-      label: 'Role Purchasing (Pengadaan & PO)',
-      sublabel: 'Pembuatan PO, Total PO Bulanan, Komparasi Harga & Supplier',
-      email: 'purchasing.bsd@umatis.id',
-      password: 'BetaUmatis2026!',
-      name: 'Staf Purchasing & PO (Beta)',
-      role: 'Purchasing',
-      branchCode: 'BSD',
-      areaUuid: '00000000-0000-4000-a000-000000000001',
-      badge: 'ROLE PURCHASING • PO'
+      key: 'BAR_KASUNA',
+      label: 'Bar Kasuna',
+      sublabel: 'Daily Inventory, Produksi, PO Bar & Mutasi Cabang Kasuna',
+      email: 'bar.kasuna@umatis.id',
+      password: 'UmatisTrial2026!',
+      name: 'Bar Kasuna',
+      role: 'Bar',
+      subRole: 'REKAN_BAR',
+      branchCode: 'KASUNA',
+      badge: 'BAR • KASUNA'
     }
   ],
 
   loginWithBetaShortcut: async (presetKey) => {
     const presets = api.getBetaTestingPresets();
     const preset = presets.find(p => p.key === presetKey) || presets[0];
-    if (!preset) throw new Error('Preset akun Beta Testing tidak ditemukan.');
+    if (!preset) throw new Error('Preset akun trial tidak ditemukan.');
 
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem('bv_cached_profile');
+      sessionStorage.removeItem('bv_beta_role_override');
       sessionStorage.setItem('bv_preferred_branch_code', preset.branchCode);
-      sessionStorage.setItem('bv_beta_role_override', JSON.stringify({
-        key: preset.key,
-        role: preset.role,
-        name: preset.name,
-        email: preset.email
-      }));
     }
     activeTenantId = null;
     activeUserId = null;
     activeBranchId = null;
     activeUserRole = null;
 
-    // Gunakan key kompatibel RPC v13 (CENTRAL_BSD diikat melalui profil dasar PURCHASING_BSD lalu di-override ke role Central)
-    const rpcPresetKey = preset.key === 'CENTRAL_BSD' ? 'PURCHASING_BSD' : (preset.key === 'HEAD_BAR_BSD' ? 'BARISTA_BSD' : preset.key);
+    // Bersihkan sesi akun sebelumnya agar benar-benar login sebagai user_id terpisah
+    await supabase.auth.signOut().catch(() => {});
 
-    // 1. Coba login langsung ke Supabase Auth (akun sudah di-seed oleh script SQL v13)
+    // 1. Login langsung ke akun Supabase Auth masing-masing
     let { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
       email: preset.email,
       password: preset.password
     });
 
-    // 2. Self-healing fallback: jika GoTrue menolak hash SQL atau akun belum terdaftar di GoTrue,
-    //    bersihkan baris auth lama via RPC, lakukan signUp native GoTrue, lalu ikat profil ke Resto Umatis
+    // 2. Self-healing provisioning via RPC v19 jika akun belum dibuat di Supabase Auth
     if (authErr || !authData?.user) {
       try {
-        await supabase.rpc('prepare_beta_signup_v13', { p_email: preset.email });
+        await supabase.rpc('prepare_trial_signup_v19', { p_email: preset.email });
       } catch {
-        // ignore if RPC not installed yet
+        // Fallback jika RPC belum dijalankan
       }
 
       const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
@@ -1884,6 +1851,7 @@ export const api = {
           data: {
             name: preset.name,
             role: preset.role,
+            sub_role: preset.subRole,
             company_name: 'Resto Umatis'
           }
         }
@@ -1891,12 +1859,14 @@ export const api = {
 
       if (signUpData?.user?.id) {
         try {
-          await supabase.rpc('bind_beta_user_profile_v13', {
+          await supabase.rpc('bind_trial_user_profile_v19', {
             p_user_id: signUpData.user.id,
-            p_preset_key: rpcPresetKey
+            p_preset_key: preset.key,
+            p_email: preset.email,
+            p_name: preset.name
           });
         } catch (bindErr) {
-          console.warn('[BetaShortcut] bind_beta_user_profile_v13 warning:', bindErr);
+          console.warn('[TrialShortcut] bind_trial_user_profile_v19 warning:', bindErr);
         }
       }
 
@@ -1912,16 +1882,28 @@ export const api = {
         authErr = retry.error;
         if (authErr && signUpErr) {
           throw new Error(
-            'Gagal masuk akun Beta Testing (' + preset.email + '): ' +
+            'Gagal masuk akun trial (' + preset.email + '): ' +
             (authErr.message || signUpErr.message) +
-            '. Pastikan Anda sudah menjalankan Barventis_Final_Consolidated_Database.sql di Supabase SQL Editor.'
+            '. Jalankan file Barventis_v4.3_Trial_Accounts_RPC.sql di Supabase SQL Editor terlebih dahulu.'
           );
         }
+      }
+    } else if (authData?.user?.id) {
+      // Pastikan profil public.users selalu sinkron dengan role, sub_role, dan branch_id asli
+      try {
+        await supabase.rpc('bind_trial_user_profile_v19', {
+          p_user_id: authData.user.id,
+          p_preset_key: preset.key,
+          p_email: preset.email,
+          p_name: preset.name
+        });
+      } catch {
+        // Ignore if already bound
       }
     }
 
     if (!authData?.user?.id) {
-      throw new Error('Gagal menginisialisasi sesi Beta Testing. Jalankan file SQL konsolidasi v13 terlebih dahulu.');
+      throw new Error('Gagal menginisialisasi sesi akun trial. Jalankan Barventis_v4.3_Trial_Accounts_RPC.sql terlebih dahulu.');
     }
 
     // 3. Pastikan profil di public.users terikat ke Resto Umatis dan cabang yang tepat (BSD / Kasuna)

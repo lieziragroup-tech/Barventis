@@ -13,6 +13,7 @@ import { api } from '../services/api';
 import Onboarding from './Onboarding';
 import ContextualFloatingNav from './ContextualFloatingNav';
 import GuidebookModal from './GuidebookModal';
+import RoleSpotlightGuide from './RoleSpotlightGuide';
 import WidgetErrorBoundary from './WidgetErrorBoundary';
 import barventisIcon from '../assets/barventis-icon.png';
 
@@ -158,16 +159,21 @@ export default function DashboardLayout() {
     // (lowercase) — actual role values are 'Admin / Owner' / 'Staff' / etc,
     // so that comparison never matched anything and onboarding never showed
     // for anyone. Fixed to match barventis-vercel-repo's working logic.
-    if (!loadingData && activeUser?.role !== 'Super Admin' && activeUser?.role !== 'SuperAdmin') {
-      const hasDismissed = sessionStorage.getItem('barventis_onboarding_dismissed') === 'true';
-      if (stock.length === 0 && !hasDismissed) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setShowOnboarding(true);
+    // Auto-open RoleSpotlightGuide 1x saat user baru pertama kali masuk (dilacak per activeUser.id)
+    if (!loadingData && activeUser?.id && activeUser?.role !== 'Super Admin' && activeUser?.role !== 'SuperAdmin') {
+      try {
+        const seenKey = `barventis_spotlight_done_${activeUser.id}`;
+        if (localStorage.getItem(seenKey) !== 'true') {
+          setSpotlightMode((prev) => (prev === 'idle' ? 'prompt' : prev));
+        }
+      } catch {
+        // ignore storage errors
       }
     }
   }, [loadingData, stock, activeUser]);
 
   const [showGuidebook, setShowGuidebook] = useState(false);
+  const [spotlightMode, setSpotlightMode] = useState('idle');
 
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -374,7 +380,7 @@ export default function DashboardLayout() {
                 </span>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto overflow-x-hidden px-2 scrollbar-hide">
+            <div data-tour="main-workspace" className="flex-1 overflow-y-auto overflow-x-hidden px-2 scrollbar-hide">
               <div className="flex flex-col gap-0.5">
                 {isSuperAdmin && (
                   <NavGroup title="Platform" isHovered={isHovered} isFirst={true}>
@@ -772,7 +778,7 @@ export default function DashboardLayout() {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden bg-[var(--bg-primary)]">
-        <header className="flex flex-col border-b border-[var(--border)] bg-[var(--bg-primary)]/90 backdrop-blur-md z-30 shrink-0 px-3.5 py-2.5 sm:px-6 sm:py-3 md:px-8 md:py-4">
+        <header data-tour="header-bar" className="flex flex-col border-b border-[var(--border)] bg-[var(--bg-primary)]/90 backdrop-blur-md z-30 shrink-0 px-3.5 py-2.5 sm:px-6 sm:py-3 md:px-8 md:py-4">
           {/* BARIS 1: Hamburger + Judul Halaman Utuh (Kiri) & Aksi Primer (Kanan) */}
           <div className="flex flex-row items-center justify-between gap-2 w-full">
             <div className="header-title-sec flex items-center gap-2.5 md:gap-4 flex-1 min-w-0">
@@ -911,7 +917,7 @@ export default function DashboardLayout() {
               {/* Tombol Panduan Desktop/Tablet (>= 640px) */}
               <button
                 className="hidden sm:flex btn hover:opacity-85 transition-opacity items-center justify-center gap-1.5"
-                onClick={() => setShowGuidebook(true)}
+                onClick={() => setSpotlightMode('prompt')}
                 title="Buku Panduan Sistem"
                 style={{
                   background: 'var(--accent-glow)', border: '1px solid var(--accent)', borderRadius: '10px',
@@ -1093,7 +1099,7 @@ export default function DashboardLayout() {
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setShowGuidebook(true)}
+                  onClick={() => setSpotlightMode('prompt')}
                   className="px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 border"
                   style={{
                     background: 'var(--accent-glow)',
@@ -1578,6 +1584,27 @@ export default function DashboardLayout() {
 
       {/* Floating AI Assistant */}
       <GuidebookModal isOpen={showGuidebook} onClose={() => setShowGuidebook(false)} />
+      <RoleSpotlightGuide
+        mode={spotlightMode}
+        role={role}
+        isHeadBarUser={isHeadBarUser}
+        basePath={basePath}
+        currentLocation={`${location.pathname}${location.search}`}
+        onNavigateRoute={(route) => navigate(route)}
+        onAcceptTour={() => setSpotlightMode('tour')}
+        onDismiss={() => {
+          setSpotlightMode('idle');
+          try {
+            if (activeUser?.id) localStorage.setItem(`barventis_spotlight_done_${activeUser.id}`, 'true');
+          } catch {}
+        }}
+        onComplete={() => {
+          setSpotlightMode('idle');
+          try {
+            if (activeUser?.id) localStorage.setItem(`barventis_spotlight_done_${activeUser.id}`, 'true');
+          } catch {}
+        }}
+      />
 
       {/* Edit Profile Modal */}
       <AnimatePresence>

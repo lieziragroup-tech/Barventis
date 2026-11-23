@@ -1100,7 +1100,7 @@ Catatan: ${inv.notes || '-'}`,
               Import PO
             </button>
           )}
-          <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem', fontWeight: 700 }} onClick={() => setShowCreateModal(true)}>
+          <button className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem', fontWeight: 700 }} data-tour="po-create-btn" onClick={() => setShowCreateModal(true)}>
             {isPurchasing
               ? '+ Buat PO Baru'
               : isCentral
@@ -1216,7 +1216,7 @@ Catatan: ${inv.notes || '-'}`,
                         <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatIDR(inv.total)}</td>
                         <td style={{ textAlign: 'center' }}>{statusBadge(inv.status, wf)}</td>
                         <td style={{ textAlign: 'center' }} className="no-print">
-                          <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+                          <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'nowrap', whiteSpace: 'nowrap', justifyContent: 'center' }}>
                             {/* Detail Modal */}
                             <button
                               className="btn btn-secondary"
@@ -1227,28 +1227,18 @@ Catatan: ${inv.notes || '-'}`,
                               Detail
                             </button>
 
-                            {/* Cetak PDF */}
-                            <button
-                              className="btn btn-secondary"
-                              style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', fontWeight: 600 }}
-                              title="Unduh / Cetak PDF PO"
-                              onClick={() => handlePrintInvoice(inv)}
-                            >
-                              PDF
-                            </button>
-
-                            {/* HEAD BAR (IRPAN) / OWNER: Verifikasi & ACC Order dari Staf Central */}
+                            {/* 1 Tombol Aksi Utama Sesuai Tahap PO (Ketat 1 Baris, Tidak Tumpang Tindih) */}
                             {(isHeadBar || isOwner) && wf === 'PENDING_HEADBAR' && inv.status === 'DRAFT' && (
                               <button
                                 className="btn btn-primary"
-                                style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700, background: '#7c3aed', borderColor: '#7c3aed' }}
-                                title="Head Bar (Irpan) memverifikasi kuantitas order Central sebelum diteruskan ke Purchasing"
+                                style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700, background: '#7c3aed', borderColor: '#7c3aed', whiteSpace: 'nowrap' }}
+                                title="Verifikasi kuantitas order Central sebelum diteruskan ke Purchasing"
                                 onClick={async () => {
                                   await api.updatePoWorkflowAndSupplier(inv.id, {
                                     workflow_status: 'REQUESTED',
-                                    notes: `${inv.notes ? inv.notes + ' | ' : ''}Diverifikasi Head Bar (${activeUser?.name || 'Irpan'})`
+                                    notes: `${inv.notes ? inv.notes + ' | ' : ''}Diverifikasi Head Bar (${activeUser?.name || 'Head Bar'})`
                                   });
-                                  if (toast) toast(`Order Central ${inv.invoice_no} telah di-ACC Head Bar dan diteruskan ke Purchasing.`, 'success');
+                                  if (toast) toast(`Order Central ${inv.invoice_no} sudah di-ACC Head Bar dan diteruskan ke Purchasing.`, 'success');
                                   await reloadInvoices();
                                 }}
                               >
@@ -1256,80 +1246,43 @@ Catatan: ${inv.notes || '-'}`,
                               </button>
                             )}
 
-                            {/* PURCHASING / OWNER: Review, Compare Supplier & Submit for Owner ACC */}
-                            {(isPurchasing || isOwner) && ['DRAFT', 'REQUESTED', 'REJECTED', 'PENDING_APPROVAL'].includes(wf) && inv.status === 'DRAFT' && (
-                              <button
-                                className="btn btn-secondary"
-                                style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700, color: 'var(--accent)', borderColor: 'rgba(16, 185, 129, 0.35)' }}
-                                title="Verifikasi/ganti supplier (termasuk Pasar Umum), cek harga, dan proses PO ke supplier"
-                                onClick={() => openReviewPoModal(inv)}
-                              >
-                                'Proses PO'
-                              </button>
-                            )}
-
-                            {/* OWNER EXCLUSIVE: ACC / Tolak PO */}
-                            {isOwner && ['REQUESTED', 'DRAFT', 'PENDING_APPROVAL'].includes(wf) && inv.status === 'DRAFT' && (
-                              <>
-                                <button
-                                  className="btn btn-primary"
-                                  style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700, background: '#059669', borderColor: '#059669' }}
-                                  title="Setujui (ACC) PO ini agar Purchasing dapat menghubungi Supplier"
-                                  onClick={() => handleOwnerDecision(inv, 'APPROVED')}
-                                >
-                                  ACC Owner
-                                </button>
-                                <button
-                                  className="btn btn-secondary"
-                                  style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', fontWeight: 600, color: 'var(--danger)' }}
-                                  title="Minta revisi supplier/harga ke Purchasing"
-                                  onClick={() => handleOwnerDecision(inv, 'REJECTED')}
-                                >
-                                  Revisi
-                                </button>
-                              </>
-                            )}
-
-                            {/* PURCHASING / OWNER: After Owner ACC (APPROVED) -> Contact Supplier (WA) & Mark SENT */}
-                            {(isPurchasing || isOwner) && wf !== 'PENDING_HEADBAR' && inv.status !== 'RECEIVED' && inv.status !== 'CANCELLED' && (
-                              <button
-                                className="btn btn-secondary"
-                                style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700, color: '#059669', borderColor: 'rgba(16, 185, 129, 0.4)', background: 'rgba(16, 185, 129, 0.08)' }}
-                                title="Hubungi Supplier terkait via WhatsApp dengan daftar pesanan PO resmi"
-                                onClick={() => handleContactSupplierWA(inv)}
-                              >
-                                Chat WA
-                              </button>
-                            )}
-
                             {(isPurchasing || isOwner) && wf !== 'PENDING_HEADBAR' && inv.status === 'DRAFT' && (
                               <button
                                 className="btn btn-primary"
-                                style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700 }}
-                                title="Tandai PO sudah dikirim/dipesan ke Supplier"
-                                onClick={() => handleKirimPO(inv)}
+                                style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700, whiteSpace: 'nowrap' }}
+                                title="Edit supplier/harga, bandingkan harga, lalu simpan atau pesan ke supplier"
+                                onClick={() => openReviewPoModal(inv)}
                               >
-                                Sudah Dipesan
+                                Proses PO
                               </button>
                             )}
 
-                            {/* GOODS RECEIPT (Saat Barang Tiba di Lokasi: Wajib Foto Barang + Surat Jalan / Resi) */}
-                            {(inv.status === 'SENT' || wf === 'APPROVED') && inv.status !== 'RECEIVED' && (
+                            {(inv.status === 'SENT' || wf === 'APPROVED') && inv.status !== 'RECEIVED' && inv.status !== 'CANCELLED' && (
                               <button
                                 className="btn btn-success"
-                                style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700 }}
-                                title="Terima Barang di lokasi dengan bukti Foto Fisik Barang & Surat Jalan / Resi Supplier"
+                                style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700, whiteSpace: 'nowrap' }}
+                                title="Konfirmasi barang tiba dengan foto barang & surat jalan"
                                 onClick={() => openReceiveModal(inv)}
                               >
                                 Terima Barang
                               </button>
                             )}
 
-                            {/* Cancel PO (Owner / Purchasing) */}
+                            {/* Unduh PDF Cepat */}
+                            <button
+                              className="btn btn-secondary"
+                              style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', fontWeight: 600, whiteSpace: 'nowrap' }}
+                              title="Unduh / Cetak PDF PO"
+                              onClick={() => handlePrintInvoice(inv)}
+                            >
+                              PDF
+                            </button>
+
+                            {/* Batalkan PO (hanya saat Draft / Sudah Dipesan) */}
                             {(isOwner || isPurchasing) && (inv.status === 'DRAFT' || inv.status === 'SENT') && (
                               <button
                                 className="btn btn-secondary"
-                                style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', color: 'var(--danger)' }}
+                                style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', color: 'var(--danger)', whiteSpace: 'nowrap' }}
                                 title="Batalkan PO"
                                 onClick={() => handleCancelPO(inv)}
                               >
@@ -1401,7 +1354,16 @@ Catatan: ${inv.notes || '-'}`,
                       openReviewPoModal(targetPo);
                     }}
                   >
-                    Edit PO
+                    Proses / Edit PO
+                  </button>
+                )}
+                {(isPurchasing || isOwner) && viewInvoice.status !== 'RECEIVED' && viewInvoice.status !== 'CANCELLED' && (
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 12px', fontSize: '0.8rem', fontWeight: 600, color: '#059669', borderColor: 'rgba(16,185,129,0.4)' }}
+                    onClick={() => handleContactSupplierWA(viewInvoice)}
+                  >
+                    Chat WA
                   </button>
                 )}
                 <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => handlePrintInvoice(viewInvoice)}>
@@ -1571,7 +1533,7 @@ Catatan: ${inv.notes || '-'}`,
               Tinjau rincian pesanan ke supplier <strong>{invoiceToSubmit.supplier}</strong>.
             </p>
 
-            <div className="table-container" style={{ flex: 1, overflowY: 'auto', marginBottom: '16px' }}>
+            <div data-tour="po-table" className="table-container" style={{ flex: 1, overflowY: 'auto', marginBottom: '16px' }}>
               <table className="custom-table" style={{ fontSize: '0.875rem' }}>
                 <thead>
                   <tr>
