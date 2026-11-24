@@ -10,6 +10,8 @@ import { api } from '../../services/api';
 import { supabase } from '../../lib/supabase';
 import { formatIDR } from '../../services/costUtils';
 import { beritaAcaraService } from '../../services/modules/stakeholderV4Service';
+import PdfBrandingSettingsCard from '../../components/shared/PdfBrandingSettingsCard';
+import { getActivePdfBranding } from '../../services/pdfBrandingService';
 
 // Semua data Berita Acara bersumber langsung dari database Supabase (tanpa data dummy).
 
@@ -52,6 +54,8 @@ export default function BeritaAcaraMonthly() {
   const [printMode, setPrintMode] = useState('COMPACT_1PAGE');
   const [loadingSync, setLoadingSync] = useState(false);
   const [recapSourceNote, setRecapSourceNote] = useState('');
+  const [showWatermarkPanel, setShowWatermarkPanel] = useState(false);
+  const [pdfBrand, setPdfBrand] = useState(() => getActivePdfBranding());
   const [savingDoc, setSavingDoc] = useState(false);
   const [sixMonthBreakageHistory, setSixMonthBreakageHistory] = useState([]);
 
@@ -558,6 +562,25 @@ export default function BeritaAcaraMonthly() {
             {printMode === 'COMPACT_1PAGE' ? 'Mode Cetak 1 Lembar (Tanpa Foto)' : 'Mode PDF Lengkap (Tampil Foto)'}
           </button>
 
+          {isOwnerOrHeadBar && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{
+                fontSize: '0.8rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                borderColor: showWatermarkPanel ? '#0d9488' : 'var(--border)',
+                color: showWatermarkPanel ? '#0d9488' : 'var(--text-primary)'
+              }}
+              onClick={() => setShowWatermarkPanel((prev) => !prev)}
+              title="Atur logo / watermark validasi Umatis untuk semua Export PDF"
+            >
+              Watermark PDF
+            </button>
+          )}
+
           <button
             type="button"
             className="btn btn-secondary"
@@ -598,6 +621,38 @@ export default function BeritaAcaraMonthly() {
             {recapSourceNote}
           </div>
         )}
+        {showWatermarkPanel && isOwnerOrHeadBar && (
+          <div className="no-print" style={{ marginBottom: '16px' }}>
+            <PdfBrandingSettingsCard
+              currentTenant={currentTenant}
+              onUpdated={(nextBrand) => setPdfBrand(nextBrand)}
+            />
+          </div>
+        )}
+
+        {pdfBrand?.enabled && pdfBrand?.logoDataUrl && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '10px', marginBottom: '14px', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <img
+                src={pdfBrand.logoDataUrl}
+                alt={pdfBrand.validationLabel || 'Umatis'}
+                style={{ width: '42px', height: '42px', objectFit: 'contain' }}
+              />
+              <div>
+                <div style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                  {pdfBrand.validationLabel || 'Umatis Resto & Venue'}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#0d9488', fontWeight: 600 }}>
+                  Dokumen Resmi Tervalidasi
+                </div>
+              </div>
+            </div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'right' }}>
+              Periode: {periodMonth}
+            </div>
+          </div>
+        )}
+
         {/* ================= BAGIAN 1: BERITA ACARA BARANG KADALUARSA / WASTE ================= */}
         <div style={{ marginBottom: '34px' }}>
           <h2 style={{

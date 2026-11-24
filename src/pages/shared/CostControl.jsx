@@ -404,7 +404,7 @@ export default function CostControl() {
         </div>
       </div>
 
-      <CostControlDualComparison
+      <CostControlDualComparison branchId={activeBranch?.id}
         period={period}
         openingStock={openingStock}
         totalPembelian={totalPembelian}

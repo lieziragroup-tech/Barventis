@@ -78,10 +78,48 @@ export default function InterBranchTransfer() {
     notes: ''
   });
 
-  const unifiedEndpoints = useMemo(
-    () => locationService.getUnifiedTransferEndpoints(currentTenant?.id, branches, activeBranchId),
-    [currentTenant?.id, branches, activeBranchId, locations]
-  );
+  const userRoleLower = String(activeUser?.role || '').trim().toLowerCase();
+  const isMultiBranchTransferRole =
+    userRoleLower.includes('owner') ||
+    userRoleLower.includes('admin') ||
+    userRoleLower === 'central';
+
+  const unifiedEndpoints = useMemo(() => {
+    const allEps = locationService.getUnifiedTransferEndpoints(currentTenant?.id, branches, activeBranchId) || [];
+    if (isMultiBranchTransferRole) return allEps;
+    // Branch-scoped users (Head Bar BSD, Bar BSD, Head Bar Kasuna, Bar Kasuna, Kitchen, Service)
+    // only see Central Warehouse and their own active branch destinations (never other branches).
+    const ownBranchGroup = `Area Internal (${activeBranch?.name || 'Cabang Aktif'})`;
+    return allEps.filter((ep) => {
+      if (ep.group === 'Gudang Pusat (Central)') return true;
+      if (ep.group === ownBranchGroup) return true;
+      if (activeBranchId && ep.branchId && String(ep.branchId) === String(activeBranchId)) return true;
+      return false;
+    });
+  }, [currentTenant?.id, branches, activeBranchId, locations, isMultiBranchTransferRole, activeBranch?.name]);
+
+  // Auto-set default route: Asal = Central Warehouse -> Tujuan = Area cabang sendiri (tidak pernah dobel Central)
+  useEffect(() => {
+    if (!Array.isArray(unifiedEndpoints) || unifiedEndpoints.length === 0) return;
+    const validNames = new Set(unifiedEndpoints.map((ep) => ep.name));
+    const centralEp = unifiedEndpoints.find((ep) => ep.group === 'Gudang Pusat (Central)') || unifiedEndpoints[0];
+    const nonCentralEps = unifiedEndpoints.filter((ep) => ep.group !== 'Gudang Pusat (Central)');
+    const preferredTarget =
+      nonCentralEps.find((ep) => userRoleLower.includes('bar') && String(ep.name || '').toLowerCase().includes('bar')) ||
+      nonCentralEps.find((ep) => userRoleLower.includes('kitchen') && String(ep.name || '').toLowerCase().includes('kitchen')) ||
+      nonCentralEps[0] ||
+      centralEp;
+
+    setRouteHeader((prev) => {
+      const nextSource = validNames.has(prev.source_branch) ? prev.source_branch : centralEp.name;
+      let nextTarget = validNames.has(prev.target_branch) ? prev.target_branch : preferredTarget.name;
+      if (nextTarget === nextSource && preferredTarget && preferredTarget.name !== nextSource) {
+        nextTarget = preferredTarget.name;
+      }
+      if (nextSource === prev.source_branch && nextTarget === prev.target_branch) return prev;
+      return { ...prev, source_branch: nextSource, target_branch: nextTarget };
+    });
+  }, [unifiedEndpoints, userRoleLower]);
   const targetEndpointMeta = useMemo(
     () => unifiedEndpoints.find(ep => ep.name === routeHeader.target_branch) || null,
     [unifiedEndpoints, routeHeader.target_branch]

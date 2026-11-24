@@ -3637,9 +3637,30 @@ export const api = {
         } else if (it.material_id) {
           await supabase.from('invoice_items').update({ unit_price: priceNum }).eq('invoice_id', id).eq('material_id', it.material_id).eq('tenant_id', tenantId);
         }
-        // Forward-Only Price Lock: perbarui new_price di master bahan tanpa menyentuh unit_cost_snapshot historis
+        // Forward-Only Price Lock: perbarui new_price & catat riwayat ke material_price_history tanpa menyentuh unit_cost_snapshot historis
         if (it.material_id && priceNum > 0) {
-          await supabase.from('materials').update({ new_price: priceNum, updated_at: new Date().toISOString() }).eq('id', it.material_id).eq('tenant_id', tenantId);
+          const { data: oldMat } = await supabase
+            .from('materials')
+            .select('price, new_price')
+            .eq('id', it.material_id)
+            .eq('tenant_id', tenantId)
+            .maybeSingle();
+          const prevPrice = Number(oldMat?.new_price ?? oldMat?.price ?? 0);
+          await supabase
+            .from('materials')
+            .update({ new_price: priceNum, updated_at: new Date().toISOString() })
+            .eq('id', it.material_id)
+            .eq('tenant_id', tenantId);
+          if (prevPrice !== priceNum) {
+            await supabase.from('material_price_history').insert({
+              tenant_id: tenantId,
+              material_id: it.material_id,
+              old_price: prevPrice,
+              new_price: priceNum,
+              changed_by: userId,
+              changed_at: new Date().toISOString()
+            });
+          }
         }
       }
       await supabase.from('invoices').update({

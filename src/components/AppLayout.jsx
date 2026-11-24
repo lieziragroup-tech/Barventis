@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import { api } from '../services/api';
+import { supabase } from '../lib/supabase';
 import Onboarding from './Onboarding';
 import ContextualFloatingNav from './ContextualFloatingNav';
 import GuidebookModal from './GuidebookModal';
@@ -196,6 +197,8 @@ export default function DashboardLayout() {
   const isSidebarExpanded = isHovered || isSidebarLocked || spotlightMode === 'tour';
   const [showUrgentModal, setShowUrgentModal] = useState(false);
   const [poReminders, setPoReminders] = useState([]);
+  const [pendingHeadbarPos, setPendingHeadbarPos] = useState([]);
+  const [pendingTransfers, setPendingTransfers] = useState([]);
 
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -285,13 +288,56 @@ export default function DashboardLayout() {
     return () => window.removeEventListener('barventis:po_reminders_updated', readReminders);
   }, []);
 
+  useEffect(() => {
+    const tenantId = activeUser?.tenant_id;
+    if (!tenantId || isSuperAdmin) return;
+    let active = true;
+    const fetchLiveUrgentQueues = async () => {
+      try {
+        let poQ = supabase
+          .from('invoices')
+          .select('id, invoice_no, supplier, branch_id')
+          .eq('tenant_id', tenantId)
+          .eq('status', 'DRAFT')
+          .eq('workflow_status', 'PENDING_HEADBAR')
+          .limit(20);
+        if (activeBranchId && role === 'Bar') poQ = poQ.eq('branch_id', activeBranchId);
+
+        let trQ = supabase
+          .from('inter_branch_transfers')
+          .select('id, transfer_number, from_branch_id, to_branch_id')
+          .eq('tenant_id', tenantId)
+          .eq('status', 'DISPATCHED')
+          .limit(20);
+        if (activeBranchId && role !== 'Admin / Owner' && role !== 'Central') {
+          trQ = trQ.eq('to_branch_id', activeBranchId);
+        }
+
+        const [poRes, trRes] = await Promise.all([
+          poQ.then((r) => r.data || []).catch(() => []),
+          trQ.then((r) => r.data || []).catch(() => [])
+        ]);
+        if (active) {
+          setPendingHeadbarPos(poRes);
+          setPendingTransfers(trRes);
+        }
+      } catch {
+        // ignore transient network errors
+      }
+    };
+    fetchLiveUrgentQueues();
+    return () => { active = false; };
+  }, [activeUser?.tenant_id, activeBranchId, isSuperAdmin, role]);
+
   const urgentRecap = useMemo(() => buildUrgentRecap({
     poReminders,
+    pendingHeadbarPos,
+    pendingTransfers,
     stockItems: stock || [],
     role,
     isHeadBarUser,
     basePath
-  }), [poReminders, stock, role, isHeadBarUser, basePath]);
+  }), [poReminders, pendingHeadbarPos, pendingTransfers, stock, role, isHeadBarUser, basePath]);
 
   // Auto-open Modal Rekap Urgent 1x saat login (menunggu Panduan Spotlight selesai agar tidak bertumpuk)
   useEffect(() => {

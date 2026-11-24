@@ -34,6 +34,7 @@ const DEFAULT_CC_ADJUSTMENTS = [
 ];
 
 export default function CostControlDualComparison({
+  branchId = null,
   period = '2026-08',
   openingStock = 0,
   totalPembelian = 0,
@@ -54,13 +55,13 @@ export default function CostControlDualComparison({
 
   useEffect(() => {
     let active = true;
-    costControlAdjustmentService.listByPeriod(period)
+    costControlAdjustmentService.listByPeriod(period, branchId)
       .then((rows) => {
         if (active && Array.isArray(rows) && rows.length > 0) setAdjustments(rows);
       })
       .catch(() => {});
     return () => { active = false; };
-  }, [period]);
+  }, [period, branchId]);
 
   const [newAdj, setNewAdj] = useState({
     type: 'BUFFET',
