@@ -1,21 +1,23 @@
 import {
   LayoutDashboard,
-  ClipboardList,
-  Boxes,
-  Wrench,
+  ClipboardCheck,
+  PackageCheck,
+  GlassWater,
   Scissors,
-  ShoppingCart,
-  ArrowRightLeft,
-  Tag,
-  Calculator,
-  Trash2,
+  ShoppingBag,
+  Truck,
+  BookOpen,
+  BarChart3,
+  FileCheck2,
   Settings,
-  Building2
+  Building2,
+  AlertCircle,
+  Tag
 } from 'lucide-react';
 
 /**
  * Single Source of Truth untuk seluruh menu sidebar Barventis (Desktop & Mobile).
- * Menggunakan bahasa Indonesia sehari-hari yang simpel, jelas, dan ringkas.
+ * Icon semantik sesuai fungsi, bahasa singkat, humanis, dan bebas em-dash.
  */
 export function getSidebarGroupsForRole({
   role = '',
@@ -45,46 +47,46 @@ export function getSidebarGroupsForRole({
 
   if (!isTenant) return groups;
 
-  // HEAD BAR (BSD / Kasuna — masing-masing terkunci ke cabangnya sendiri)
+  // HEAD BAR (BSD / Kasuna, masing-masing terkunci ke cabangnya sendiri)
   if (role === 'Bar' && isHeadBarUser) {
     groups.push(
       {
         id: 'headbar-harian',
-        title: 'Kerja Harian Bar',
+        title: 'Kerja Harian',
         items: [
           { to: basePath, exact: true, label: 'Dashboard', subtitle: 'Ringkasan stok dan aktivitas hari ini', icon: LayoutDashboard },
-          { to: `${basePath}/daily-inventory`, label: 'Daily Inventory', subtitle: 'Catat stok akhir shift (bahan & beer)', icon: ClipboardList },
-          { to: `${basePath}/olah-bahan`, label: 'Olah & Pecah Bahan', subtitle: 'Produksi sirup, potong buah & pecah bahan utuh', icon: Scissors },
-          { to: `${basePath}/procurement?tab=invoicing`, label: 'Permintaan PO', subtitle: 'Ajukan PO, ACC order Central & terima barang', icon: ShoppingCart },
-          { to: `${basePath}/transfer`, label: 'Mutasi Gudang', subtitle: 'Minta atau terima barang dari Central (Rp 0)', icon: ArrowRightLeft }
+          { to: `${basePath}/daily-inventory`, label: 'Daily Inventory', subtitle: 'Stok akhir shift bahan dan beer', icon: ClipboardCheck },
+          { to: `${basePath}/olah-bahan`, label: 'Olah Bahan', subtitle: 'Produksi sirup, potong buah dan cutting portion', icon: Scissors },
+          { to: `${basePath}/procurement?tab=invoicing`, label: 'Permintaan PO', subtitle: 'Ajukan PO, ACC Central dan terima barang', icon: ShoppingBag },
+          { to: `${basePath}/transfer`, label: 'Mutasi Gudang', subtitle: 'Minta atau terima barang dari Central (Rp 0)', icon: Truck }
         ]
       },
       {
         id: 'headbar-bulanan',
         title: 'Opname & Laporan',
         items: [
-          { to: `${basePath}/opname-assets`, label: 'Stock Opname', subtitle: 'Hitung stok fisik bahan (Resto / Central)', icon: Boxes },
-          { to: `${basePath}/excel-so-glass-tool`, label: 'Gelas & Alat Bar', subtitle: 'Hitung gelas/alat bar & catat barang pecah', icon: Wrench },
-          { to: `${basePath}/pricing-cogs`, label: 'Menu & Resep', subtitle: 'Daftar resep dan harga jual minuman', icon: Tag },
-          { to: `${basePath}/excel-cost-control`, label: 'Cost Control', subtitle: 'Cek selisih pemakaian, biaya & catatan event', icon: Calculator },
-          { to: `${basePath}/excel-berita-acara`, label: 'Berita Acara', subtitle: 'Cetak Berita Acara barang waste & gelas pecah', icon: Trash2 }
+          { to: `${basePath}/opname-assets`, label: 'Stock Opname', subtitle: 'Hitung fisik bahan Resto dan Central', icon: PackageCheck },
+          { to: `${basePath}/excel-so-glass-tool`, label: 'Gelas & Alat Bar', subtitle: 'Stok gelas, alat bar dan catat pecah', icon: GlassWater },
+          { to: `${basePath}/pricing-cogs`, label: 'Menu & Resep', subtitle: 'Resep minuman dan harga jual', icon: BookOpen },
+          { to: `${basePath}/excel-cost-control`, label: 'Cost Control', subtitle: 'Cek selisih pemakaian dan catatan event', icon: BarChart3 },
+          { to: `${basePath}/excel-berita-acara`, label: 'Berita Acara', subtitle: 'Cetak Berita Acara waste dan gelas pecah', icon: FileCheck2 }
         ]
       }
     );
     return groups;
   }
 
-  // REKAN BAR (Operasional harian tanpa akses keuangan / ACC)
+  // REKAN BAR
   if (role === 'Bar' && !isHeadBarUser) {
     groups.push({
       id: 'rekanbar-ops',
-      title: 'Kerja Harian Bar',
+      title: 'Kerja Harian',
       items: [
         { to: basePath, exact: true, label: 'Dashboard Bar', subtitle: 'Ringkasan aktivitas bar hari ini', icon: LayoutDashboard },
-        { to: `${basePath}/daily-inventory`, label: 'Daily Inventory', subtitle: 'Catat stok harian bahan & beer', icon: ClipboardList },
-        { to: `${basePath}/olah-bahan`, label: 'Olah & Pecah Bahan', subtitle: 'Catat produksi sirup, potong buah & pecah bahan', icon: Scissors },
-        { to: `${basePath}/procurement?tab=invoicing`, label: 'Permintaan PO', subtitle: 'Ajukan PO bar & konfirmasi terima barang', icon: ShoppingCart },
-        { to: `${basePath}/transfer`, label: 'Minta ke Central', subtitle: 'Minta pengiriman barang dari Central (Rp 0)', icon: ArrowRightLeft }
+        { to: `${basePath}/daily-inventory`, label: 'Daily Inventory', subtitle: 'Catat stok harian bahan dan beer', icon: ClipboardCheck },
+        { to: `${basePath}/olah-bahan`, label: 'Olah Bahan', subtitle: 'Produksi sirup dan urgent cutting portion', icon: Scissors },
+        { to: `${basePath}/procurement?tab=invoicing`, label: 'Permintaan PO', subtitle: 'Ajukan PO bar dan terima barang', icon: ShoppingBag },
+        { to: `${basePath}/transfer`, label: 'Minta ke Central', subtitle: 'Minta kirim barang dari Central (Rp 0)', icon: Truck }
       ]
     });
     return groups;
@@ -96,42 +98,42 @@ export function getSidebarGroupsForRole({
       title: 'Divisi Kitchen',
       items: [
         { to: basePath, exact: true, label: 'Dashboard Kitchen', subtitle: 'Ringkasan stok dapur hari ini', icon: LayoutDashboard },
-        { to: `${basePath}/daily-inventory`, label: 'Stok Harian Dapur', subtitle: 'Catat pemakaian harian bahan dapur', icon: ClipboardList },
-        { to: `${basePath}/olah-bahan`, label: 'Prep & Potong Bahan', subtitle: 'Catat potongan daging, ikan & sayur', icon: Scissors },
-        { to: `${basePath}/procurement?tab=invoicing`, label: 'Permintaan PO', subtitle: 'Ajukan PO dapur & terima barang', icon: ShoppingCart },
-        { to: `${basePath}/opname-assets`, label: 'Stock Opname', subtitle: 'Hitung stok fisik area dapur', icon: Boxes },
-        { to: `${basePath}/transfer`, label: 'Mutasi Gudang', subtitle: 'Minta bahan dari Central ke dapur', icon: ArrowRightLeft },
-        { to: `${basePath}/pricing-cogs?tab=cogs-all`, label: 'Resep Dapur', subtitle: 'Resep masakan dan modal bahan', icon: Tag }
+        { to: `${basePath}/daily-inventory`, label: 'Stok Harian', subtitle: 'Pemakaian harian bahan dapur', icon: ClipboardCheck },
+        { to: `${basePath}/olah-bahan`, label: 'Prep & Potong', subtitle: 'Potongan daging, ikan dan sayur', icon: Scissors },
+        { to: `${basePath}/procurement?tab=invoicing`, label: 'Permintaan PO', subtitle: 'Ajukan PO dapur dan terima barang', icon: ShoppingBag },
+        { to: `${basePath}/opname-assets`, label: 'Stock Opname', subtitle: 'Hitung fisik stok dapur', icon: PackageCheck },
+        { to: `${basePath}/transfer`, label: 'Mutasi Gudang', subtitle: 'Minta bahan dari Central ke dapur', icon: Truck },
+        { to: `${basePath}/pricing-cogs?tab=cogs-all`, label: 'Resep Dapur', subtitle: 'Resep masakan dan modal bahan', icon: BookOpen }
       ]
     },
     Service: {
       id: 'service-ops',
       title: 'Divisi Service',
       items: [
-        { to: basePath, exact: true, label: 'Dashboard Service', subtitle: 'Ringkasan area floor & alat', icon: LayoutDashboard },
-        { to: `${basePath}/excel-so-glass-tool`, label: 'Gelas & Alat', subtitle: 'Hitung gelas/alat & catat yang pecah', icon: Wrench },
-        { to: `${basePath}/daily-inventory`, label: 'Stok Harian Service', subtitle: 'Catat pemakaian tisu, cup & kemasan', icon: ClipboardList },
-        { to: `${basePath}/procurement?tab=invoicing`, label: 'Permintaan PO', subtitle: 'Ajukan pembelian alat & terima barang', icon: ShoppingCart }
+        { to: basePath, exact: true, label: 'Dashboard Service', subtitle: 'Ringkasan area floor dan alat', icon: LayoutDashboard },
+        { to: `${basePath}/excel-so-glass-tool`, label: 'Gelas & Alat', subtitle: 'Stok gelas, alat dan catat pecah', icon: GlassWater },
+        { to: `${basePath}/daily-inventory`, label: 'Stok Harian', subtitle: 'Pemakaian tisu, cup dan kemasan', icon: ClipboardCheck },
+        { to: `${basePath}/procurement?tab=invoicing`, label: 'Permintaan PO', subtitle: 'Ajukan pembelian alat dan terima barang', icon: ShoppingBag }
       ]
     },
     Central: {
       id: 'central-ops',
       title: 'Gudang Central',
       items: [
-        { to: basePath, exact: true, label: 'Dashboard Central', subtitle: 'Ringkasan barang masuk & keluar gudang', icon: LayoutDashboard },
-        { to: `${basePath}/transfer`, label: 'Kirim ke Cabang', subtitle: 'Kirim stok dari Central ke BSD / Kasuna', icon: ArrowRightLeft },
-        { to: `${basePath}/procurement?tab=invoicing`, label: 'PO Central', subtitle: 'Ajukan PO grosir & terima barang supplier', icon: ShoppingCart },
-        { to: `${basePath}/sistem?tab=stock-ledger`, label: 'Cek Stok Gudang', subtitle: 'Lihat sisa stok Central & cabang', icon: Boxes }
+        { to: basePath, exact: true, label: 'Dashboard Central', subtitle: 'Arus barang masuk dan keluar gudang', icon: LayoutDashboard },
+        { to: `${basePath}/transfer`, label: 'Kirim ke Cabang', subtitle: 'Kirim stok Central ke BSD dan Kasuna', icon: Truck },
+        { to: `${basePath}/procurement?tab=invoicing`, label: 'PO Central', subtitle: 'Ajukan PO grosir dan terima barang', icon: ShoppingBag },
+        { to: `${basePath}/sistem?tab=stock-ledger`, label: 'Cek Stok Gudang', subtitle: 'Sisa stok Central dan seluruh cabang', icon: PackageCheck }
       ]
     },
     Purchasing: {
       id: 'purchasing-ops',
       title: 'Purchasing & PO',
       items: [
-        { to: `${basePath}/procurement?tab=invoicing`, label: 'Daftar & Buat PO', subtitle: 'Buat PO baru, proses & terima barang', icon: ShoppingCart },
-        { to: basePath, exact: true, label: 'Ringkasan PO Bulanan', subtitle: 'Total nilai belanja & status PO bulan ini', icon: LayoutDashboard },
-        { to: `${basePath}/procurement?tab=marketlist`, label: 'Bandingkan Harga', subtitle: 'Cek perbandingan harga antar supplier', icon: Tag },
-        { to: `${basePath}/procurement?tab=pembelian`, label: 'Supplier & Rekap', subtitle: 'Daftar supplier, rekap Tgl 1–31 & Petty Cash', icon: Building2 }
+        { to: `${basePath}/procurement?tab=invoicing`, label: 'Daftar & Buat PO', subtitle: 'Buat PO baru, proses dan terima barang', icon: ShoppingBag },
+        { to: basePath, exact: true, label: 'Ringkasan PO', subtitle: 'Total belanja dan status PO bulan ini', icon: LayoutDashboard },
+        { to: `${basePath}/procurement?tab=marketlist`, label: 'Bandingkan Harga', subtitle: 'Perbandingan harga antar supplier', icon: Tag },
+        { to: `${basePath}/procurement?tab=pembelian`, label: 'Supplier & Rekap', subtitle: 'Daftar supplier, rekap Tgl 1-31 dan Petty Cash', icon: Building2 }
       ]
     },
     Kasir: {
@@ -139,7 +141,7 @@ export function getSidebarGroupsForRole({
       title: 'Layanan',
       items: [
         { to: basePath, exact: true, label: 'Dashboard', subtitle: 'Ringkasan harian', icon: LayoutDashboard },
-        { to: `${basePath}/daily-inventory?tab=waste`, label: 'Lapor Barang Rusak', subtitle: 'Catat barang pecah atau rusak', icon: Trash2 }
+        { to: `${basePath}/daily-inventory?tab=waste`, label: 'Lapor Rusak', subtitle: 'Catat barang pecah atau rusak', icon: AlertCircle }
       ]
     }
   };
@@ -155,27 +157,27 @@ export function getSidebarGroupsForRole({
       id: 'owner-home',
       title: '',
       items: [
-        { to: basePath, exact: true, label: 'Dashboard', subtitle: 'Ringkasan biaya & stok seluruh cabang', icon: LayoutDashboard }
+        { to: basePath, exact: true, label: 'Dashboard', subtitle: 'Ringkasan biaya dan stok seluruh cabang', icon: LayoutDashboard }
       ]
     },
     {
       id: 'owner-ops',
       title: 'Operasional',
       items: [
-        { to: `${basePath}/daily-inventory`, label: 'Daily Inventory', subtitle: 'Stok harian bahan, beer & catatan waste', icon: ClipboardList },
-        { to: `${basePath}/olah-bahan`, label: 'Olah & Pecah Bahan', subtitle: 'Produksi sirup, potong buah & pecah bahan', icon: Scissors },
-        { to: `${basePath}/procurement`, label: 'Pengadaan & PO', subtitle: 'Buat PO, bandingkan harga & daftar supplier', icon: ShoppingCart },
-        { to: `${basePath}/transfer`, label: 'Mutasi Gudang', subtitle: 'Transfer stok Central ke BSD / Kasuna', icon: ArrowRightLeft }
+        { to: `${basePath}/daily-inventory`, label: 'Daily Inventory', subtitle: 'Stok harian bahan, beer dan waste', icon: ClipboardCheck },
+        { to: `${basePath}/olah-bahan`, label: 'Olah Bahan', subtitle: 'Produksi sirup dan urgent cutting portion', icon: Scissors },
+        { to: `${basePath}/procurement`, label: 'Pengadaan & PO', subtitle: 'PO, bandingkan harga dan daftar supplier', icon: ShoppingBag },
+        { to: `${basePath}/transfer`, label: 'Mutasi Gudang', subtitle: 'Transfer stok Central ke BSD dan Kasuna', icon: Truck }
       ]
     },
     {
       id: 'owner-analytics',
       title: 'Laporan & Audit',
       items: [
-        { to: `${basePath}/pricing-cogs`, label: 'Menu & Resep', subtitle: 'Resep minuman, modal & harga jual', icon: Tag },
-        { to: `${basePath}/opname-assets`, label: 'Stock Opname', subtitle: 'Hitung fisik Resto, Central & Gelas/Alat', icon: Boxes },
-        { to: `${basePath}/cost-report`, label: 'Cost Control', subtitle: 'Cek selisih pemakaian & rasio biaya', icon: Calculator },
-        { to: `${basePath}/excel-berita-acara`, label: 'Berita Acara', subtitle: 'Berita Acara barang waste & gelas pecah', icon: Trash2 }
+        { to: `${basePath}/pricing-cogs`, label: 'Menu & Resep', subtitle: 'Resep minuman, modal dan harga jual', icon: BookOpen },
+        { to: `${basePath}/opname-assets`, label: 'Stock Opname', subtitle: 'Opname Resto, Central dan Gelas/Alat', icon: PackageCheck },
+        { to: `${basePath}/cost-report`, label: 'Cost Control', subtitle: 'Cek selisih pemakaian dan rasio biaya', icon: BarChart3 },
+        { to: `${basePath}/excel-berita-acara`, label: 'Berita Acara', subtitle: 'Berita Acara waste dan gelas pecah', icon: FileCheck2 }
       ]
     }
   );
@@ -185,7 +187,7 @@ export function getSidebarGroupsForRole({
       id: 'owner-system',
       title: 'Setelan',
       items: [
-        { to: `${basePath}/sistem`, label: 'Pengaturan', subtitle: 'Profil resto, foto PDF Umatis, staf & cabang', icon: Settings }
+        { to: `${basePath}/sistem`, label: 'Pengaturan', subtitle: 'Profil resto, foto PDF Umatis, staf dan cabang', icon: Settings }
       ]
     });
   }

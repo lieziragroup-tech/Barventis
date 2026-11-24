@@ -643,7 +643,7 @@ export default function Invoicing() {
     const rawPhone = String(supObj?.phone || supObj?.contact || '').replace(/[^0-9]/g, '');
     const waPhone = rawPhone.startsWith('0') ? ('62' + rawPhone.slice(1)) : rawPhone;
     const itemsLines = (inv.items || [])
-      .map((it, i) => `${i + 1}. ${it.item_name} — ${it.qty} ${it.unit || 'pck'} (@ Rp ${Number(it.unit_price || 0).toLocaleString('id-ID')})`)
+      .map((it, i) => `${i + 1}. ${it.item_name} - ${it.qty} ${it.unit || 'pck'} (@ Rp ${Number(it.unit_price || 0).toLocaleString('id-ID')})`)
       .join('\n');
     const msg = `Halo *${inv.supplier}*,\nKami dari bagian Purchasing *Umatis Resto & Venue* ingin memesan Purchase Order yang telah disetujui:\n\n*No. PO:* ${inv.invoice_no}\n*Tanggal:* ${inv.date}\n*Tujuan Kirim:* Gudang ${inv.location || 'RESTO'}\n\n*Rincian Pesanan:*\n${itemsLines}\n\n*Total Nilai PO:* Rp ${Number(inv.total || 0).toLocaleString('id-ID')}\n\nMohon konfirmasi ketersediaan dan jadwal pengiriman beserta Surat Jalan. Terima kasih.`;
     const waUrl = waPhone
@@ -1142,7 +1142,7 @@ Catatan: ${inv.notes || '-'}`,
 
       {/* Print-only Document Header */}
       <div className="print-only print-header">
-        <div className="print-header-brand">BARVENTIS — SISTEM MANAJEMEN GUDANG</div>
+        <div className="print-header-brand">BARVENTIS - SISTEM MANAJEMEN GUDANG</div>
         <div style={{ fontSize: '13pt', fontWeight: 700, margin: '2px 0' }}>Daftar Purchase Order & Invoicing</div>
         <div className="print-header-meta">
           Status: {statusFilter} | Pencarian: {search || 'Semua'} | Dicetak pada: {new Date().toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' })}
@@ -1202,7 +1202,7 @@ Catatan: ${inv.notes || '-'}`,
                           {supplierChanged && (
                             <div style={{ fontSize: '0.72rem', color: '#d97706', marginTop: '2px' }} title={inv.supplier_change_note || ''}>
                               Diganti dari <strong>{inv.original_supplier}</strong>
-                              {inv.supplier_change_note ? ` — "${inv.supplier_change_note}"` : ''}
+                              {inv.supplier_change_note ? ` - "${inv.supplier_change_note}"` : ''}
                             </div>
                           )}
                         </td>
@@ -1892,7 +1892,7 @@ Catatan: ${inv.notes || '-'}`,
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border)', paddingBottom: '14px', marginBottom: '16px' }}>
               <div>
                 <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0 }}>
-                  Proses PO — {reviewPoModal.invoice_no}
+                  Proses PO: {reviewPoModal.invoice_no}
                 </h3>
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px', marginBottom: 0 }}>
                   Supplier awal: <strong>{reviewPoModal.original_supplier || reviewPoModal.supplier}</strong> · Divisi: <strong>{reviewPoModal.division || 'BAR'}</strong>

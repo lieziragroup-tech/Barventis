@@ -187,7 +187,7 @@ export default function Purchasing({ standaloneTab = null } = {}) {
     }
   }, [supplierDrawer]);
 
-  // Click outside to close dropdown — use mousedown on the wrapper so the
+  // Click outside to close dropdown - use mousedown on the wrapper so the
   // dropdown is still alive when any child receives a click event
   useEffect(() => {
 
@@ -206,7 +206,7 @@ export default function Purchasing({ standaloneTab = null } = {}) {
     return s === '-' ? '' : s;
   }, []);
 
-  // Helper: check if material belongs to supplier name (case-insensitive, trimmed — identical to PO boundary logic)
+  // Helper: check if material belongs to supplier name (case-insensitive, trimmed - identical to PO boundary logic)
   const isMaterialInSupplier = useCallback((materialSupplier, targetSupplierName) => {
     const a = normalizeSupplierName(materialSupplier).toLowerCase();
     const b = normalizeSupplierName(targetSupplierName).toLowerCase();
@@ -744,7 +744,7 @@ export default function Purchasing({ standaloneTab = null } = {}) {
     try {
       const allRows = await fetchAllForExport();
       if (allRows.length !== totalCount) {
-        console.warn(`[Export] Baris tertarik (${allRows.length}) tidak sama dengan totalCount (${totalCount}) — periksa filter/pagination di getPurchaseEntriesPaged.`);
+        console.warn(`[Export] Baris tertarik (${allRows.length}) tidak sama dengan totalCount (${totalCount}) - periksa filter/pagination di getPurchaseEntriesPaged.`);
       }
       const rows = allRows.map((p, idx) => ({
         'NO': idx + 1,
@@ -773,7 +773,7 @@ export default function Purchasing({ standaloneTab = null } = {}) {
     try {
       const allRows = await fetchAllForExport();
       if (allRows.length !== totalCount) {
-        console.warn(`[Export] Baris tertarik (${allRows.length}) tidak sama dengan totalCount (${totalCount}) — periksa filter/pagination di getPurchaseEntriesPaged.`);
+        console.warn(`[Export] Baris tertarik (${allRows.length}) tidak sama dengan totalCount (${totalCount}) - periksa filter/pagination di getPurchaseEntriesPaged.`);
       }
       const columns = [
         { key: 'no', label: '#' },
@@ -794,7 +794,7 @@ export default function Purchasing({ standaloneTab = null } = {}) {
       await exportWithAudit({
         format: 'pdf',
         filename: `Riwayat_Pembelian_${period || 'Semua'}`,
-        title: `Log Riwayat Pembelian Harian — Periode: ${period || 'Semua'}`,
+        title: `Log Riwayat Pembelian Harian - Periode: ${period || 'Semua'}`,
         tenantName: 'BARVENTIS - Sistem Manajemen Gudang',
         columns,
         rows,
@@ -830,9 +830,9 @@ export default function Purchasing({ standaloneTab = null } = {}) {
       {/* Tabs (FT-04.1, FT-04.2, FT-04.3 + Stakeholder v3.0 Matrix & Petty Cash Accurate) */}
       <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-tertiary)', padding: '4px', borderRadius: 'var(--radius-md)', width: 'fit-content', maxWidth: '100%', overflowX: 'auto', marginBottom: '20px' }}>
         <button className={`btn ${tab === 'PURCHASES' ? 'btn-primary' : ''}`} style={{ background: tab === 'PURCHASES' ? '' : 'transparent', color: tab === 'PURCHASES' ? '' : 'var(--text-secondary)', whiteSpace: 'nowrap' }} onClick={() => setTab('PURCHASES')}>Pembelian Harian</button>
-        <button className={`btn ${tab === 'MONTHLY_MATRIX' ? 'btn-primary' : ''}`} style={{ background: tab === 'MONTHLY_MATRIX' ? '' : 'transparent', color: tab === 'MONTHLY_MATRIX' ? '' : 'var(--text-secondary)', whiteSpace: 'nowrap' }} onClick={() => setTab('MONTHLY_MATRIX')}>Matriks Rekap Bulanan (Tgl 1–31)</button>
-        <button className={`btn ${tab === 'PETTY_CASH_ACCURATE' ? 'btn-primary' : ''}`} style={{ background: tab === 'PETTY_CASH_ACCURATE' ? '' : 'transparent', color: tab === 'PETTY_CASH_ACCURATE' ? '' : 'var(--text-secondary)', whiteSpace: 'nowrap' }} onClick={() => setTab('PETTY_CASH_ACCURATE')}>Rekap Petty Cash (Accurate) &amp; Tempo</button>
-        <button className={`btn ${tab === 'MONTHLY_AVG' ? 'btn-primary' : ''}`} style={{ background: tab === 'MONTHLY_AVG' ? '' : 'transparent', color: tab === 'MONTHLY_AVG' ? '' : 'var(--text-secondary)', whiteSpace: 'nowrap' }} onClick={() => setTab('MONTHLY_AVG')}>Acuan Stok 1 Bulan (Average Data Riil)</button>
+        <button className={`btn ${tab === 'MONTHLY_MATRIX' ? 'btn-primary' : ''}`} style={{ background: tab === 'MONTHLY_MATRIX' ? '' : 'transparent', color: tab === 'MONTHLY_MATRIX' ? '' : 'var(--text-secondary)', whiteSpace: 'nowrap' }} onClick={() => setTab('MONTHLY_MATRIX')}>Rekap Tgl 1-31</button>
+        <button className={`btn ${tab === 'PETTY_CASH_ACCURATE' ? 'btn-primary' : ''}`} style={{ background: tab === 'PETTY_CASH_ACCURATE' ? '' : 'transparent', color: tab === 'PETTY_CASH_ACCURATE' ? '' : 'var(--text-secondary)', whiteSpace: 'nowrap' }} onClick={() => setTab('PETTY_CASH_ACCURATE')}>Petty Cash &amp; Tempo</button>
+        <button className={`btn ${tab === 'MONTHLY_AVG' ? 'btn-primary' : ''}`} style={{ background: tab === 'MONTHLY_AVG' ? '' : 'transparent', color: tab === 'MONTHLY_AVG' ? '' : 'var(--text-secondary)', whiteSpace: 'nowrap' }} onClick={() => setTab('MONTHLY_AVG')}>Acuan Stok Bulanan</button>
         <button className={`btn ${tab === 'SUPPLIERS' ? 'btn-primary' : ''}`} style={{ background: tab === 'SUPPLIERS' ? '' : 'transparent', color: tab === 'SUPPLIERS' ? '' : 'var(--text-secondary)', whiteSpace: 'nowrap' }} onClick={() => setTab('SUPPLIERS')}>Daftar Supplier</button>
       </div>
 
@@ -1283,7 +1283,7 @@ export default function Purchasing({ standaloneTab = null } = {}) {
               )}
             </div>
 
-            {/* Cart Table — 100% Column-Aligned with Explicit Tujuan Kirim (RESTO vs CENTRAL) & Tanggal (FT-04.1 & FT-04.2) */}
+            {/* Cart Table - 100% Column-Aligned with Explicit Tujuan Kirim (RESTO vs CENTRAL) & Tanggal (FT-04.1 & FT-04.2) */}
             <div className="table-container" style={{ minHeight: '150px' }}>
               <table className="custom-table">
                 <thead>
@@ -1502,7 +1502,7 @@ export default function Purchasing({ standaloneTab = null } = {}) {
             </div>
             {/* Print-only Document Header */}
             <div className="print-only print-header">
-              <div className="print-header-brand">BARVENTIS — SISTEM MANAJEMEN GUDANG</div>
+              <div className="print-header-brand">BARVENTIS - SISTEM MANAJEMEN GUDANG</div>
               <div style={{ fontSize: '13pt', fontWeight: 700, margin: '2px 0' }}>Log Riwayat Pembelian Bahan Baku</div>
               <div className="print-header-meta">
                 Periode: {period || 'Semua Waktu'} | Pencarian: {historySearchInput || 'Semua'} | Tanggal Cetak: {new Date().toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' })}
@@ -2211,7 +2211,7 @@ export default function Purchasing({ standaloneTab = null } = {}) {
             if (matched === 'fuzzy-high') {
               warnings.push(`"${materialName}" dicocokkan otomatis ke "${material.name}" (kemiripan: ${Math.round(score * 100)}%)`);
             } else if (matched === 'fuzzy-low') {
-              warnings.push(`"${materialName}" dicocokkan ke "${material.name}" (kemiripan: ${Math.round(score * 100)}%) — harap verifikasi`);
+              warnings.push(`"${materialName}" dicocokkan ke "${material.name}" (kemiripan: ${Math.round(score * 100)}%) - harap verifikasi`);
             }
 
             let supplier_id = '';
@@ -2550,7 +2550,7 @@ export default function Purchasing({ standaloneTab = null } = {}) {
                 {stagedRemovedMaterials.length > 0 && (
                   <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'rgba(239, 68, 68, 0.06)', border: '1px dashed rgba(239, 68, 68, 0.35)' }}>
                     <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--danger)', marginBottom: '6px' }}>
-                      Akan Dilepas ({stagedRemovedMaterials.length}) — klik Simpan:
+                      Akan Dilepas ({stagedRemovedMaterials.length}) - klik Simpan:
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       {stagedRemovedMaterials.map(m => (

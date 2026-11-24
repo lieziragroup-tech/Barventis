@@ -15,6 +15,8 @@ import Onboarding from './Onboarding';
 import ContextualFloatingNav from './ContextualFloatingNav';
 import GuidebookModal from './GuidebookModal';
 import RoleSpotlightGuide from './RoleSpotlightGuide';
+import UrgentRecapModal from './UrgentRecapModal';
+import { buildUrgentRecap } from '../services/modules/urgentRecapUtils';
 import WidgetErrorBoundary from './WidgetErrorBoundary';
 import barventisIcon from '../assets/barventis-icon.png';
 
@@ -175,6 +177,8 @@ export default function DashboardLayout() {
 
   const [showGuidebook, setShowGuidebook] = useState(false);
   const [spotlightMode, setSpotlightMode] = useState('idle');
+  const [showUrgentModal, setShowUrgentModal] = useState(false);
+  const [poReminders, setPoReminders] = useState([]);
 
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -249,6 +253,44 @@ export default function DashboardLayout() {
     basePath,
     canAccessSettings: hasAccess(['Admin / Owner', 'Owner'])
   }), [role, isHeadBarUser, isSuperAdmin, isTenant, basePath, rawRole]);
+
+  useEffect(() => {
+    const readReminders = () => {
+      try {
+        const raw = localStorage.getItem('bv_po_reminders_v4');
+        setPoReminders(raw ? JSON.parse(raw) : []);
+      } catch {
+        setPoReminders([]);
+      }
+    };
+    readReminders();
+    window.addEventListener('barventis:po_reminders_updated', readReminders);
+    return () => window.removeEventListener('barventis:po_reminders_updated', readReminders);
+  }, []);
+
+  const urgentRecap = useMemo(() => buildUrgentRecap({
+    poReminders,
+    stockItems: stock || [],
+    role,
+    isHeadBarUser,
+    basePath
+  }), [poReminders, stock, role, isHeadBarUser, basePath]);
+
+  // Auto-open Modal Rekap Urgent 1x saat login (menunggu Panduan Spotlight selesai agar tidak bertumpuk)
+  useEffect(() => {
+    if (loadingData || !activeUser?.id || isSuperAdmin) return;
+    if (spotlightMode !== 'idle') return;
+    if (urgentRecap.totalCount === 0) return;
+    try {
+      const seenUrgentKey = `bv_urgent_seen_${activeUser.id}`;
+      if (sessionStorage.getItem(seenUrgentKey) !== 'true') {
+        sessionStorage.setItem(seenUrgentKey, 'true');
+        setShowUrgentModal(true);
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, [loadingData, activeUser?.id, isSuperAdmin, spotlightMode, urgentRecap.totalCount]);
 
   const betaPresets = typeof api.getBetaTestingPresets === 'function' ? api.getBetaTestingPresets() : [];
 
@@ -331,7 +373,7 @@ export default function DashboardLayout() {
     return totalQty <= (item.min_stock || 5);
   }) || [];
 
-  const notifCount = isSuperAdmin ? adminNotifs.length : lowStockItems.length;
+  const notifCount = isSuperAdmin ? adminNotifs.length : urgentRecap.totalCount;
 
   const openProfileModal = () => {
     setEditProfileName(activeUser?.name || '');
@@ -749,7 +791,7 @@ export default function DashboardLayout() {
                 <button
                   className="btn hover:bg-[var(--bg-tertiary)] transition-colors flex items-center justify-center relative"
                   onClick={() => {
-                    setShowNotifications(!showNotifications);
+                    if (isSuperAdmin) { setShowNotifications(!showNotifications); } else { setShowUrgentModal(true); }
                     setShowBetaMenu(false);
                   }}
                   title="Notifikasi Sistem"
@@ -1382,6 +1424,13 @@ export default function DashboardLayout() {
 
       {/* Floating AI Assistant */}
       <GuidebookModal isOpen={showGuidebook} onClose={() => setShowGuidebook(false)} />
+      <UrgentRecapModal
+        isOpen={showUrgentModal}
+        urgentActions={urgentRecap.urgentActions}
+        urgentMaterials={urgentRecap.urgentMaterials}
+        onNavigate={(route) => navigate(route)}
+        onClose={() => setShowUrgentModal(false)}
+      />
       <RoleSpotlightGuide
         mode={spotlightMode}
         role={role}

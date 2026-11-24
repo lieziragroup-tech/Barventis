@@ -496,7 +496,7 @@ export default function ZeroWasteSplitAndBarcode({ mode = 'SPLIT' }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
             <Layers size={20} style={{ color: 'var(--accent)' }} />
             <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0 }}>
-              Split Bahan Zero-Waste (Cutting Portion 0% — Kasus Kelapa Urgent)
+              Urgent Cutting Portion
             </h3>
           </div>
           <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: 0 }}>
@@ -656,7 +656,7 @@ export default function ZeroWasteSplitAndBarcode({ mode = 'SPLIT' }) {
       {/* Split History */}
       <div>
         <h4 style={{ fontSize: '0.92rem', fontWeight: 800, marginBottom: '8px' }}>
-          Riwayat Split Bahan Zero-Waste (Cutting Portion 0%)
+          Riwayat Urgent Cutting Portion
         </h4>
         <div className="table-container">
           <table className="custom-table" style={{ fontSize: '0.82rem' }}>

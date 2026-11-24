@@ -345,16 +345,26 @@ export default function RoleSpotlightGuide({
       </svg>
 
       {targetRect && (
-        <div
+        <motion.div
           aria-hidden="true"
-          className="fixed pointer-events-none rounded-2xl transition-all duration-200 ease-out"
+          className="fixed pointer-events-none rounded-2xl"
+          initial={{ opacity: 0.7, scale: 0.99 }}
+          animate={{
+            opacity: [0.85, 1, 0.85],
+            scale: [1, 1.006, 1],
+            boxShadow: [
+              '0 0 0 3px rgba(16, 185, 129, 0.35), 0 12px 32px rgba(0, 0, 0, 0.45)',
+              '0 0 0 7px rgba(16, 185, 129, 0.55), 0 14px 36px rgba(0, 0, 0, 0.5)',
+              '0 0 0 3px rgba(16, 185, 129, 0.35), 0 12px 32px rgba(0, 0, 0, 0.45)'
+            ]
+          }}
+          transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
           style={{
             top: targetRect.top,
             left: targetRect.left,
             width: targetRect.width,
             height: targetRect.height,
-            border: '2px solid #ffffff',
-            boxShadow: '0 0 0 4px rgba(16, 185, 129, 0.35), 0 12px 32px rgba(0, 0, 0, 0.45)'
+            border: '2px solid #ffffff'
           }}
         />
       )}
@@ -399,6 +409,22 @@ export default function RoleSpotlightGuide({
             >
               <X size={15} />
             </button>
+          </div>
+
+          <div className="flex items-center gap-1.5" aria-hidden="true">
+            {activeSteps.map((s, idx) => (
+              <motion.span
+                key={s.id}
+                animate={{ width: idx === safeIndex ? 20 : 6, opacity: idx <= safeIndex ? 1 : 0.35 }}
+                transition={{ duration: 0.2 }}
+                style={{
+                  height: '5px',
+                  borderRadius: '999px',
+                  background: idx <= safeIndex ? 'var(--accent)' : 'var(--text-muted)',
+                  display: 'inline-block'
+                }}
+              />
+            ))}
           </div>
 
           <div className="space-y-1.5">

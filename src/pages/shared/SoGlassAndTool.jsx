@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Wrench, Plus, Save, AlertTriangle, Trash2, CheckCircle2, RefreshCw } from 'lucide-react';
+import { GlassWater, Plus, Save, AlertTriangle, Trash2, CheckCircle2, RefreshCw, Upload, Download, FileSpreadsheet, FileText } from 'lucide-react';
+import { exportWithAudit } from '../../services/export/exportAudit';
+import { exportToPDF } from '../../services/export/pdfExporter';
 import { supabase } from '../../lib/supabase';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -324,6 +326,152 @@ export default function SoGlassAndTool() {
     }
   };
 
+  const handleDownloadTemplate = async () => {
+    const sampleRows = [
+      { 'Nama Barang': 'Gelas Teh', Satuan: 'pcs', 'Jumlah Awal': 24 },
+      { 'Nama Barang': 'Gelas Beer', Satuan: 'pcs', 'Jumlah Awal': 18 },
+      { 'Nama Barang': 'Shaker Boston', Satuan: 'unit', 'Jumlah Awal': 4 }
+    ];
+    await exportWithAudit({
+      format: 'excel',
+      filename: 'Template_Import_Gelas_Alat_Bar',
+      sheets: [{ name: 'Template Gelas & Alat', rows: sampleRows }],
+      actionName: 'Download Glass & Tool Import Template',
+      role: activeUser?.role || 'Bar'
+    });
+  };
+
+  const handleBulkImportAssets = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeUser?.tenant_id) return;
+    setSaving(true);
+    try {
+      const XLSX = await import('xlsx');
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+      const existingMap = new Map(assetItems.map((a) => [String(a.name || '').trim().toLowerCase(), a]));
+      let inserted = 0;
+      let updated = 0;
+
+      for (const r of rawRows) {
+        const name = String(r['Nama Barang'] || r['NAMA BARANG'] || r['name'] || r['Nama'] || '').trim();
+        if (!name) continue;
+        const unit = String(r['Satuan'] || r['SATUAN'] || r['unit'] || 'pcs').trim() || 'pcs';
+        const qty = Number(r['Jumlah Awal'] ?? r['JUMLAH AWAL'] ?? r['qty_owned'] ?? r['Jumlah'] ?? 0) || 0;
+        const match = existingMap.get(name.toLowerCase());
+
+        if (match) {
+          const { error } = await supabase
+            .from('asset_items')
+            .update({ unit, qty_owned: qty, updated_at: new Date().toISOString() })
+            .eq('id', match.id);
+          if (!error) updated++;
+        } else {
+          const { error } = await supabase.from('asset_items').insert({
+            tenant_id: activeUser.tenant_id,
+            branch_id: activeBranchId || activeUser.branch_id || null,
+            name,
+            unit,
+            qty_owned: qty,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+          if (!error) inserted++;
+        }
+      }
+
+      notify(`Import selesai: ${inserted} barang baru, ${updated} diperbarui.`, 'success');
+      await loadData();
+    } catch (err) {
+      notify('Gagal import file: ' + (err?.message || 'Format tidak didukung'), 'error');
+    } finally {
+      setSaving(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleExportAssetsExcel = async () => {
+    const monthLabel = MONTHS_ID[selectedMonth - 1]?.label || String(selectedMonth);
+    const opnameRows = assetItems.map((item, idx) => {
+      const d = opnameDrafts[item.id] || {};
+      const awal = Number(d.stock_awal ?? item.qty_owned ?? 0);
+      const plus = Number(d.adjustment_plus ?? 0);
+      const minus = Number(d.adjustment_minus ?? 0);
+      const akhir = d.stock_akhir === '' || d.stock_akhir === undefined ? awal + plus - minus : Number(d.stock_akhir);
+      return {
+        No: idx + 1,
+        'Nama Gelas / Alat': item.name,
+        Satuan: item.unit,
+        'Stok Awal': awal,
+        'Tambah (+)': plus,
+        'Pecah / Hilang (-)': minus,
+        'Stok Akhir': akhir,
+        Selisih: akhir - (awal + plus - minus),
+        Catatan: d.keterangan || ''
+      };
+    });
+    const pecahRows = breakageList.map((r, idx) => ({
+      No: idx + 1,
+      Tanggal: r.tanggal,
+      'Oleh Siapa': r.nama_karyawan,
+      'Barang Apa': r.nama_barang,
+      Jumlah: r.jumlah,
+      'Harga Satuan': r.harga,
+      'Total (Rp)': r.total_harga,
+      Keterangan: r.keterangan || ''
+    }));
+    await exportWithAudit({
+      format: 'excel',
+      filename: `Gelas_Alat_Bar_${monthLabel}_${selectedYear}`,
+      sheets: [
+        { name: 'Stok Gelas & Alat', rows: opnameRows },
+        { name: 'Catatan Pecah', rows: pecahRows }
+      ],
+      actionName: 'Export Glass & Tool Opname Excel',
+      role: activeUser?.role || 'Bar'
+    });
+  };
+
+  const handleExportAssetsPdf = async () => {
+    const monthLabel = MONTHS_ID[selectedMonth - 1]?.label || String(selectedMonth);
+    const rows = assetItems.map((item, idx) => {
+      const d = opnameDrafts[item.id] || {};
+      const awal = Number(d.stock_awal ?? item.qty_owned ?? 0);
+      const plus = Number(d.adjustment_plus ?? 0);
+      const minus = Number(d.adjustment_minus ?? 0);
+      const akhir = d.stock_akhir === '' || d.stock_akhir === undefined ? awal + plus - minus : Number(d.stock_akhir);
+      return {
+        no: idx + 1,
+        name: item.name,
+        unit: item.unit,
+        awal: String(awal),
+        minus: String(minus),
+        akhir: String(akhir),
+        catatan: d.keterangan || '-'
+      };
+    });
+    await exportToPDF({
+      filename: `Gelas_Alat_Bar_${monthLabel}_${selectedYear}`,
+      title: `Laporan Stok Gelas & Alat Bar (${activeBranch?.name || 'Cabang'})
+Periode: ${monthLabel} ${selectedYear} | Total Item: ${assetItems.length} | Catatan Pecah: ${breakageList.length} kejadian (${formatIDR(totalBreakageNominal)})`,
+      tenantName: 'BARVENTIS - Gelas & Alat Bar',
+      orientation: 'portrait',
+      columns: [
+        { key: 'no', label: '#' },
+        { key: 'name', label: 'Nama Gelas / Alat' },
+        { key: 'unit', label: 'Satuan' },
+        { key: 'awal', label: 'Awal' },
+        { key: 'minus', label: 'Pecah' },
+        { key: 'akhir', label: 'Akhir' },
+        { key: 'catatan', label: 'Catatan' }
+      ],
+      rows
+    });
+  };
+
   const totalBreakageNominal = useMemo(
     () => breakageList.reduce((sum, r) => sum + (Number(r.total_harga) || 0), 0),
     [breakageList]
@@ -335,7 +483,7 @@ export default function SoGlassAndTool() {
       <div className="glass-card" style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-            <Wrench size={20} style={{ color: 'var(--accent)' }} />
+            <GlassWater size={20} style={{ color: 'var(--accent)' }} />
             <h2 style={{ margin: 0, fontSize: '1.12rem', fontWeight: 800 }}>
               Gelas & Alat Bar ({activeBranch?.name || 'Cabang Aktif'})
             </h2>
@@ -369,9 +517,42 @@ export default function SoGlassAndTool() {
           <button
             type="button"
             className="btn btn-secondary"
+            onClick={handleDownloadTemplate}
+            style={{ padding: '7px 10px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+            title="Unduh contoh file Excel untuk import massal"
+          >
+            <Download size={14} /> Template
+          </button>
+          <label
+            className="btn btn-secondary"
+            style={{ padding: '7px 10px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '5px', cursor: 'pointer', margin: 0 }}
+            title="Import banyak gelas & alat sekaligus dari Excel/CSV"
+          >
+            <Upload size={14} /> Import Massal
+            <input type="file" accept=".xlsx,.xls,.csv" onChange={handleBulkImportAssets} disabled={saving} style={{ display: 'none' }} />
+          </label>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleExportAssetsExcel}
+            style={{ padding: '7px 10px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+          >
+            <FileSpreadsheet size={14} /> Excel
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleExportAssetsPdf}
+            style={{ padding: '7px 10px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+          >
+            <FileText size={14} /> PDF
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
             onClick={loadData}
             disabled={loading}
-            style={{ padding: '7px 10px', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+            style={{ padding: '7px 10px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
           >
             <RefreshCw size={14} /> Muat Ulang
           </button>
@@ -386,7 +567,7 @@ export default function SoGlassAndTool() {
           style={{ background: subTab === 'OPNAME' ? '' : 'transparent', color: subTab === 'OPNAME' ? '' : 'var(--text-secondary)', fontSize: '0.82rem' }}
           onClick={() => setSubTab('OPNAME')}
         >
-          1. Daftar & Hitung Gelas / Alat ({assetItems.length})
+          Stok Gelas & Alat ({assetItems.length})
         </button>
         <button
           type="button"
@@ -394,7 +575,7 @@ export default function SoGlassAndTool() {
           style={{ background: subTab === 'PECAH' ? '' : 'transparent', color: subTab === 'PECAH' ? '' : 'var(--text-secondary)', fontSize: '0.82rem' }}
           onClick={() => setSubTab('PECAH')}
         >
-          2. Catat Gelas Pecah / Rusak ({breakageList.length})
+          Catat Pecah ({breakageList.length})
         </button>
       </div>
 

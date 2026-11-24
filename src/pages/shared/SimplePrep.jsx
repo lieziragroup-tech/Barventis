@@ -484,7 +484,7 @@ export default function SimplePrep({ standaloneMode = null } = {}) {
           style={{ background: prepSubTab === 'ZERO_WASTE_SPLIT' ? '' : 'transparent', color: prepSubTab === 'ZERO_WASTE_SPLIT' ? '' : 'var(--text-secondary)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
           onClick={() => setPrepSubTab('ZERO_WASTE_SPLIT')}
         >
-          Split Bahan Zero-Waste (Cutting Portion 0% — Kasus Kelapa Urgent)
+          Split Bahan Zero-Waste (Cutting Portion 0%, Kasus Kelapa Urgent)
         </button>
         {SHOW_BARCODE_MODULE && (
         <button
