@@ -237,6 +237,7 @@ export default function DashboardLayout() {
         : rawRole;
   const isSuperAdmin = role === 'Super Admin';
   const isTenant = Boolean(role && role !== 'Super Admin' && role !== 'SuperAdmin');
+  const basePath = isSuperAdmin ? '/superadmin' : '/dashboard';
 
   const hasAccess = (allowedRoles) => allowedRoles.includes(role) || allowedRoles.includes(rawRole);
 
@@ -319,7 +320,6 @@ export default function DashboardLayout() {
   // Fallback kept as '/staff' (rar's original behavior) rather than vercel's
   // '' for any unrecognized role value, so navigation links never silently
   // break if a role string doesn't match any of the three above.
-  const basePath = isSuperAdmin ? '/superadmin' : '/dashboard';
 
   const userAvatar = activeUser?.name ? activeUser.name.charAt(0).toUpperCase() : 'U';
 
