@@ -1558,7 +1558,17 @@ export default function InterBranchTransfer() {
                       <select
                         className="form-control text-xs font-semibold py-2 w-full"
                         value={routeHeader.source_branch}
-                        onChange={(e) => setRouteHeader({ ...routeHeader, source_branch: e.target.value })}
+                        onChange={(e) => {
+                          const nextSource = e.target.value;
+                          setRouteHeader((prev) => {
+                            let nextTarget = prev.target_branch;
+                            if (nextTarget === nextSource) {
+                              const fallback = unifiedEndpoints.find((ep) => ep.name !== nextSource);
+                              nextTarget = fallback ? fallback.name : prev.target_branch;
+                            }
+                            return { ...prev, source_branch: nextSource, target_branch: nextTarget };
+                          });
+                        }}
                       >
                         {['Gudang Pusat (Central)', `Area Internal (${activeBranch?.name || 'Cabang Aktif'})`, 'Antar Cabang (Resto Umatis)'].map(grp => {
                           const grpItems = unifiedEndpoints.filter(ep => ep.group === grp);
@@ -1597,7 +1607,9 @@ export default function InterBranchTransfer() {
                         onChange={(e) => setRouteHeader({ ...routeHeader, target_branch: e.target.value })}
                       >
                         {['Gudang Pusat (Central)', `Area Internal (${activeBranch?.name || 'Cabang Aktif'})`, 'Antar Cabang (Resto Umatis)'].map(grp => {
-                          const grpItems = unifiedEndpoints.filter(ep => ep.group === grp);
+                          const grpItems = unifiedEndpoints.filter(
+                            ep => ep.group === grp && ep.name !== routeHeader.source_branch
+                          );
                           if (grpItems.length === 0) return null;
                           return (
                             <optgroup key={grp} label={grp}>
