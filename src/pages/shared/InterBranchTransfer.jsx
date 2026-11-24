@@ -1628,8 +1628,7 @@ export default function InterBranchTransfer() {
                   {targetEndpointMeta && (
                     <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-[var(--border)]/60 text-[11px]">
                       <div className="text-[var(--text-secondary)]">
-                        UUID Tujuan: <code className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-primary)] border border-[var(--border)]">{targetEndpointMeta.uuid}</code>
-                        {' '}• Role Klasifikasi: <strong>{targetEndpointMeta.roleClassification || 'All'}</strong>
+                        Kategori Tujuan: <strong>{targetEndpointMeta.roleClassification || 'Semua'}</strong>
                       </div>
                       <label className="inline-flex items-center gap-1.5 cursor-pointer font-semibold text-indigo-600">
                         <input

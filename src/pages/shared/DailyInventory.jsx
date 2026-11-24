@@ -1441,7 +1441,7 @@ export default function DailyInventory({ category: _category, initialTab, standa
                 className={`btn ${roleCategoryFilterActive ? 'btn-primary' : 'btn-secondary'}`}
                 style={{ padding: '6px 12px', fontSize: '0.78rem', fontWeight: 700 }}
                 onClick={() => setRoleCategoryFilterActive(prev => !prev)}
-                title={`UUID Area: ${userRoleConfig.uuid}`}
+                title={`Area: ${userRoleConfig.label || 'Operasional'}`}
               >
                 {roleCategoryFilterActive
                   ? `Filter Role: ${userRoleConfig.role} (${filteredItems.length} Bahan)`

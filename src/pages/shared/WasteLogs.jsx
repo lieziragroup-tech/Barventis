@@ -1087,7 +1087,7 @@ export default function WasteLogs() {
                         <tr><td colSpan={2} className="px-4 py-8 text-center text-[var(--text-secondary)]">Memuat material...</td></tr>
                       ) : visibleBrokenRows.length ? visibleBrokenRows.map(row => (
                         <tr key={row.material_id} className="border-t border-[var(--border)]">
-                          <td className="px-4 py-3"><div className="font-semibold text-[var(--text-primary)]">{row.name}</div><div className="text-xs text-[var(--text-secondary)]">ID {row.material_id}</div></td>
+                          <td className="px-4 py-3"><div className="font-semibold text-[var(--text-primary)]">{row.name}</div></td>
                           <td className="px-4 py-3"><div className="flex items-center gap-2"><input type="number" min="0" step="any" className="form-control text-right font-mono" value={row.broken_qty} disabled={brokenSaving || brokenSessionLocked || !brokenSessionExists} onChange={e => handleBrokenChange(row.material_id, e.target.value)} aria-label={`BROKEN closing ${row.name}`} placeholder="0" /><span className="text-xs text-[var(--text-secondary)] min-w-8">{row.unit}</span></div></td>
                         </tr>
                       )) : (

@@ -107,7 +107,7 @@ export default function MaterialProduction() {
     try {
       const cleanedIngredients = recipeForm.ingredients.map(i => ({ material_id: i.material_id, qty: i.qty, unit: i.unit }));
       const result = await api.saveProductionRecipe({ ...recipeForm, id: editingId, ingredients: cleanedIngredients });
-      setNotice(`Resep produksi berhasil ${editingId ? 'diperbarui' : 'dibuat'} (ID ${result.batch_id}).`);
+      setNotice(`Resep produksi berhasil ${editingId ? 'diperbarui' : 'dibuat'}.`);
       resetRecipeForm();
       await loadAll();
     } catch (err) {

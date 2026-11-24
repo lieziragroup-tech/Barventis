@@ -952,7 +952,7 @@ export default function DashboardLayout() {
                                       <div>
                                         <p className="text-sm text-[var(--text-primary)] font-medium m-0">Permintaan Reset Data</p>
                                         <p className="text-xs text-[var(--text-secondary)] mt-1 m-0">
-                                          Dari tenant: <span className="font-semibold">{req.tenants?.company_name || req.tenant_id}</span>
+                                          Dari resto: <span className="font-semibold">{req.tenants?.company_name || 'Resto Terdaftar'}</span>
                                         </p>
                                       </div>
                                     </div>

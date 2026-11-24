@@ -1330,7 +1330,7 @@ export default function TenantAdminPanel() {
               <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
                 <thead>
                   <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                    <th style={{ padding: '10px 14px' }}>Kode & UUID Tempat</th>
+                    <th style={{ padding: '10px 14px' }}>Kode Lokasi</th>
                     <th style={{ padding: '10px 14px' }}>Nama Lokasi & Role</th>
                     <th style={{ padding: '10px 14px' }}>Tipe</th>
                     <th style={{ padding: '10px 14px' }}>Filter Kategori Bahan (Role)</th>
@@ -1356,7 +1356,7 @@ export default function TenantAdminPanel() {
                             {loc.code}
                           </span>
                           <span style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-                            UUID: {loc.uuid || '00000000-0000-4000-a000-000000000001'}
+                            
                           </span>
                         </div>
                       </td>
