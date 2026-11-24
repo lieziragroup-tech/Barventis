@@ -6,7 +6,7 @@ import {
   LogOut, Bell, X, RefreshCw, Menu,
   LayoutDashboard, ClipboardList, UploadCloud,
   Tag, ShoppingCart, Boxes, Package,
-  Calculator, Settings, Wrench, Building2, Layout, Edit, MonitorSmartphone, BookOpen, Clock, Box, Scissors, FileSpreadsheet, Warehouse, Trash2, ArrowRightLeft, Store
+  Calculator, Settings, Wrench, Building2, Layout, Edit, MonitorSmartphone, BookOpen, Clock, Box, Scissors, FileSpreadsheet, Warehouse, Trash2, ArrowRightLeft, Store, Pin, PinOff
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
@@ -146,6 +146,22 @@ export default function DashboardLayout() {
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [isSidebarLocked, setIsSidebarLocked] = useState(() => {
+    try {
+      return localStorage.getItem('bv_sidebar_locked_v1') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const toggleSidebarLock = () => {
+    setIsSidebarLocked((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('bv_sidebar_locked_v1', next ? 'true' : 'false');
+      } catch {}
+      return next;
+    });
+  };
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
@@ -177,6 +193,7 @@ export default function DashboardLayout() {
 
   const [showGuidebook, setShowGuidebook] = useState(false);
   const [spotlightMode, setSpotlightMode] = useState('idle');
+  const isSidebarExpanded = isHovered || isSidebarLocked || spotlightMode === 'tour';
   const [showUrgentModal, setShowUrgentModal] = useState(false);
   const [poReminders, setPoReminders] = useState([]);
 
@@ -399,10 +416,11 @@ export default function DashboardLayout() {
 
   return (
     <div className="flex h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] overflow-hidden font-sans relative">
-      {/* Desktop Sidebar Container (Transparent Spacer) */}
+      {/* Desktop Sidebar Container (Auto-expand saat Panduan atau saat di-Lock) */}
       <div 
+        data-tour="sidebar-nav"
         className="hidden lg:block relative z-50 flex-shrink-0"
-        style={{ width: '72px' }}
+        style={{ width: (isSidebarLocked || spotlightMode === 'tour') ? '244px' : '72px', transition: 'width 0.28s ease' }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
@@ -410,33 +428,35 @@ export default function DashboardLayout() {
         <motion.div 
           initial={false}
           animate={{ 
-            width: isHovered ? 244 : 72,
-            boxShadow: isHovered ? "0 16px 24px -6px rgba(0, 0, 0, 0.08), 0 6px 10px -4px rgba(0, 0, 0, 0.03)" : "none"
+            width: isSidebarExpanded ? 244 : 72,
+            boxShadow: (isHovered && !isSidebarLocked && spotlightMode !== 'tour')
+              ? "0 16px 24px -6px rgba(0, 0, 0, 0.08), 0 6px 10px -4px rgba(0, 0, 0, 0.03)"
+              : "none"
           }}
           transition={{ type: "spring", bounce: 0, duration: 0.32 }}
           className="absolute top-0 left-0 h-screen bg-[var(--bg-secondary)] border-r border-[var(--border)] overflow-hidden z-50"
         >
           {/* Static Content Container */}
           <div className="flex flex-col h-full w-[244px]">
-            <div className="flex items-center justify-between py-4 pl-5 pr-4 mb-1">
+            <div className="flex items-center justify-between py-4 pl-5 pr-3 mb-1">
               <div className="flex items-center gap-2.5 overflow-hidden">
                 <img src={barventisIcon} alt="Barventis" className="w-7 h-7 flex-shrink-0" />
                 <span 
                   className="font-bold text-[15px] tracking-wide whitespace-nowrap overflow-hidden"
                   style={{ 
-                    opacity: isHovered ? 1 : 0,
+                    opacity: isSidebarExpanded ? 1 : 0,
                     transition: 'opacity 0.2s ease',
-                    width: '120px'
+                    width: '108px'
                   }}
                 >
                   BARVENTIS
                 </span>
               </div>
             </div>
-            <div data-tour="main-workspace" className="flex-1 overflow-y-auto overflow-x-hidden px-2 scrollbar-hide">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden px-2 scrollbar-hide">
               <div className="flex flex-col gap-0.5">
                 {sidebarGroups.map((group, gIdx) => (
-                  <NavGroup key={group.id} title={group.title || undefined} isHovered={isHovered} isFirst={gIdx === 0}>
+                  <NavGroup key={group.id} title={group.title || undefined} isHovered={isSidebarExpanded} isFirst={gIdx === 0}>
                     {group.items.map((item, idx) => (
                       <NavItem
                         key={`${group.id}-${item.label}`}
@@ -445,7 +465,7 @@ export default function DashboardLayout() {
                         label={item.label}
                         subtitle={item.subtitle}
                         icon={item.icon}
-                        isHovered={isHovered}
+                        isHovered={isSidebarExpanded}
                         index={idx}
                       />
                     ))}
@@ -466,7 +486,7 @@ export default function DashboardLayout() {
                 <div 
                   className="overflow-hidden whitespace-nowrap flex-1"
                   style={{
-                    opacity: isHovered ? 1 : 0,
+                    opacity: isSidebarExpanded ? 1 : 0,
                     transition: 'opacity 0.3s ease'
                   }}
                 >
@@ -476,7 +496,7 @@ export default function DashboardLayout() {
               </div>
 
               <AnimatePresence>
-                {showUserMenu && isHovered && (
+                {showUserMenu && isSidebarExpanded && (
                   <motion.div
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -502,6 +522,36 @@ export default function DashboardLayout() {
                   </motion.div>
                 )}
               </AnimatePresence>
+            </div>
+
+            {/* Lock Sidebar Toggle — Di bawah Profile */}
+            <div className="border-t border-[var(--border)] px-3 py-2.5">
+              <button
+                type="button"
+                data-tour="sidebar-lock-btn"
+                onClick={toggleSidebarLock}
+                title={isSidebarLocked ? 'Buka kunci sidebar (auto-lipat)' : 'Kunci sidebar agar tetap terbuka'}
+                aria-label={isSidebarLocked ? 'Buka kunci sidebar' : 'Kunci sidebar'}
+                className="w-full flex items-center gap-3 px-2.5 py-2 rounded-lg cursor-pointer transition-colors"
+                style={{
+                  background: isSidebarLocked ? 'rgba(16, 185, 129, 0.12)' : 'transparent',
+                  color: isSidebarLocked ? 'var(--accent)' : 'var(--text-secondary)',
+                  border: isSidebarLocked ? '1px solid rgba(16, 185, 129, 0.32)' : '1px solid transparent'
+                }}
+              >
+                <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">
+                  {isSidebarLocked ? <PinOff size={15} /> : <Pin size={15} />}
+                </span>
+                <span
+                  className="text-xs font-semibold whitespace-nowrap overflow-hidden"
+                  style={{
+                    opacity: isSidebarExpanded ? 1 : 0,
+                    transition: 'opacity 0.2s ease'
+                  }}
+                >
+                  {isSidebarLocked ? 'Lepas Kunci Sidebar' : 'Kunci Sidebar'}
+                </span>
+              </button>
             </div>
           </div>
         </motion.div>
@@ -955,7 +1005,7 @@ export default function DashboardLayout() {
           )}
         </header>
 
-        <section className="flex-1 overflow-y-auto relative p-3 md:p-8 pb-32 md:pb-16">
+        <section data-tour="main-workspace" className="flex-1 overflow-y-auto relative p-3 md:p-8 pb-32 md:pb-16">
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}

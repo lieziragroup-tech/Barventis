@@ -7,6 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useData } from '../../contexts/DataContext';
 import { useToast } from '../../contexts/ToastContext';
 import { api } from '../../services/api';
+import { supabase } from '../../lib/supabase';
 import { formatIDR } from '../../services/costUtils';
 import { beritaAcaraService } from '../../services/modules/stakeholderV4Service';
 
@@ -23,10 +24,10 @@ export default function BeritaAcaraMonthly() {
   const { activeBranchId, stock } = useData();
   const toast = useToast();
 
-  const [periodMonth, setPeriodMonth] = useState('2026-10');
-  const [documentDate, setDocumentDate] = useState('2026-10-22');
+  const [periodMonth, setPeriodMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [documentDate, setDocumentDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [locationDivision, setLocationDivision] = useState('Resto - Central');
-  const [submitterName, setSubmitterName] = useState('Irpan');
+  const [submitterName, setSubmitterName] = useState(() => activeUser?.name || 'Head Bar');
   const [submitterNip, setSubmitterNip] = useState('-');
   const [submitterTitle, setSubmitterTitle] = useState('Head Barista');
   const [introStatement, setIntroStatement] = useState(
@@ -50,6 +51,7 @@ export default function BeritaAcaraMonthly() {
   // Mode Cetak: 'COMPACT_1PAGE' (tanpa foto agar hemat kertas 1 lembar) vs 'FULL_WITH_PHOTOS' (dengan foto kecil)
   const [printMode, setPrintMode] = useState('COMPACT_1PAGE');
   const [loadingSync, setLoadingSync] = useState(false);
+  const [recapSourceNote, setRecapSourceNote] = useState('');
   const [savingDoc, setSavingDoc] = useState(false);
   const [sixMonthBreakageHistory, setSixMonthBreakageHistory] = useState([]);
 
@@ -62,117 +64,231 @@ export default function BeritaAcaraMonthly() {
     rawRole === 'bar' ||
     rawRole === 'barista';
 
-  // Load saved BA document for selected periodMonth (from Supabase or localStorage fallback)
-  const loadSavedBaDocument = useCallback(async (targetPeriod) => {
-    const localKey = `bv_ba_doc_${targetPeriod}_${activeBranchId || 'default'}`;
-    try {
-      const doc = await beritaAcaraService.getByPeriod(targetPeriod, activeBranchId);
-      if (doc) {
-        setDocumentDate(doc.document_date || `${targetPeriod}-22`);
-        setLocationDivision(doc.location_division || 'Resto - Central');
-        setSubmitterName(doc.submitter_name || 'Irpan');
-        setSubmitterNip(doc.submitter_nip || '-');
-        setSubmitterTitle(doc.submitter_title || 'Head Barista');
-        setIntroStatement(doc.intro_statement || 'Dengan ini menyerahkan minuman beer yang sudah melewati masa Expired/Rusak Yaitu :');
-        setApproverName(doc.approver_name || 'Bpk. Gandhi');
-        setApproverTitle(doc.approver_title || 'Owner Umatis');
-        setDispositionStatement(doc.disposition_statement || 'Memberikan Izin untuk membuang produk yang waste ini');
-        setClosingStatement(doc.closing_statement || 'Demikian Berita Acara ini dibuat menurut keadaan yang sebenarnya untuk di pergunakan sebagaimana mestinya.');
-        setSignCity(doc.sign_city || 'Tangerang');
-        setWasteItems(Array.isArray(doc.waste_items) && doc.waste_items.length > 0 ? doc.waste_items : []);
-        setBreakageItems(Array.isArray(doc.breakage_items) && doc.breakage_items.length > 0 ? doc.breakage_items : []);
-        setDisposalPhotos(Array.isArray(doc.disposal_photo_urls) ? doc.disposal_photo_urls : []);
-        setStatus(doc.status || 'APPROVED');
-        return;
-      }
-    } catch {
-      // Fallback to localStorage if table not migrated yet
-    }
+  // Helper: tarik otomatis seluruh data Waste & Gelas Pecah bulan terpilih dari database
+  const fetchLiveDatabaseRecap = useCallback(async (targetPeriod) => {
+    const syncedWaste = [];
+    const syncedBreakage = [];
+    const [yStr, mStr] = String(targetPeriod || '').split('-');
+    const yearNum = Number(yStr) || new Date().getFullYear();
+    const monthNum = Number(mStr) || (new Date().getMonth() + 1);
+    const lastDay = new Date(yearNum, monthNum, 0).getDate();
+    const startDate = `${targetPeriod}-01`;
+    const endDate = `${targetPeriod}-${String(lastDay).padStart(2, '0')}`;
 
-    try {
-      const raw = localStorage.getItem(localKey);
-      if (raw) {
-        const doc = JSON.parse(raw);
-        setDocumentDate(doc.documentDate || `${targetPeriod}-22`);
-        setLocationDivision(doc.locationDivision || 'Resto - Central');
-        setSubmitterName(doc.submitterName || 'Irpan');
-        setSubmitterNip(doc.submitterNip || '-');
-        setSubmitterTitle(doc.submitterTitle || 'Head Barista');
-        setIntroStatement(doc.introStatement || 'Dengan ini menyerahkan minuman beer yang sudah melewati masa Expired/Rusak Yaitu :');
-        setApproverName(doc.approverName || 'Bpk. Gandhi');
-        setApproverTitle(doc.approverTitle || 'Owner Umatis');
-        setDispositionStatement(doc.dispositionStatement || 'Memberikan Izin untuk membuang produk yang waste ini');
-        setWasteItems(doc.wasteItems || []);
-        setBreakageItems(doc.breakageItems || []);
-        setDisposalPhotos(doc.disposalPhotos || []);
-        setStatus(doc.status || 'APPROVED');
-      } else if (targetPeriod === '2026-10') {
-        setWasteItems([]);
-        setBreakageItems([]);
-      }
-    } catch {
-      // ignore storage errors
-    }
-  }, [activeBranchId]);
-
-  useEffect(() => {
-    loadSavedBaDocument(periodMonth);
-  }, [periodMonth, loadSavedBaDocument]);
-
-  // Pull daily waste & breakage logs from WasteLogs API for the active period
-  const handleSyncFromDailyWasteLogs = async () => {
-    setLoadingSync(true);
+    // 1. Sumber: waste_logs (catatan limbah & gelas pecah harian)
     try {
       const allLogs = await api.getWasteLogs();
-      const monthLogs = (allLogs || []).filter((l) => String(l.date || '').startsWith(periodMonth));
-
-      const syncedWaste = [];
-      const syncedBreakage = [];
+      const monthLogs = (allLogs || []).filter((l) => {
+        const d = String(l.date || l.created_at || '').slice(0, 10);
+        return d.startsWith(targetPeriod);
+      });
 
       monthLogs.forEach((log, idx) => {
         const mat = (stock || []).find((s) => Number(s.id) === Number(log.material_id || log.item_id));
-        const unitPrice = Number(log.unit_price_snapshot) || Number(mat?.new_price) || Number(mat?.price) || 23000;
+        const unitPrice = Number(log.unit_price_snapshot) || Number(mat?.new_price) || Number(mat?.price) || 0;
         const qtyNum = Number(log.quantity) || 1;
-        const totalHarga = Math.round(qtyNum * unitPrice);
-        const typeUpper = String(log.type || 'WASTE').toUpperCase();
+        const totalHarga = Number(log.total_price_snapshot) || Math.round(qtyNum * unitPrice);
+        const typeUpper = String(log.ba_category || log.type || log.source_type || 'WASTE').toUpperCase();
+        const isBreakage = typeUpper === 'BREAKAGE' || String(log.reason || '').toLowerCase().includes('pecah');
 
-        if (typeUpper === 'BREAKAGE' || String(log.reason || '').toLowerCase().includes('pecah')) {
+        if (isBreakage) {
           syncedBreakage.push({
-            id: `sync-b-${log.id || idx}`,
-            nama_karyawan: log.staff_responsible_name || log.recorded_by_name || 'Staf Bar/Service',
-            nama_barang: log.material_name || mat?.name || 'Gelas Operasional',
-            tanggal: log.date || `${periodMonth}-01`,
+            id: `wl-b-${log.id || idx}`,
+            nama_karyawan: log.staff_responsible_name || log.recorded_by_name || 'Staf Bar',
+            nama_barang: log.material_name || mat?.name || 'Gelas / Alat Bar',
+            tanggal: String(log.date || log.created_at || startDate).slice(0, 10),
             jumlah: qtyNum,
             harga: unitPrice,
             total_harga: totalHarga
           });
         } else {
           syncedWaste.push({
-            id: `sync-w-${log.id || idx}`,
-            nama_barang: log.material_name || mat?.name || 'Bahan Kadaluarsa/Waste',
-            kemasan: log.pack_size_label || mat?.full_pack || '1440 grm',
-            jumlah: `${qtyNum} ${log.unit || mat?.unit || 'box'}`,
-            masa_expired: typeUpper === 'EXPIRED' ? 'Expired' : 'Waste',
+            id: `wl-w-${log.id || idx}`,
+            nama_barang: log.material_name || mat?.name || 'Bahan Waste',
+            kemasan: log.pack_size_label || mat?.full_pack || mat?.unit || '-',
+            jumlah: `${qtyNum} ${mat?.unit || 'pck'}`,
+            masa_expired: log.expiry_or_status_label || log.reason || 'Waste / Expired',
             harga: unitPrice,
             total_harga: totalHarga,
-            photo_url: log.photo_url || ''
+            photo_url: log.photo_evidence_url || log.photo_url || ''
           });
         }
       });
+    } catch {
+      // ignore waste_logs fetch error
+    }
 
+    // 2. Sumber: daily_inventory_items dengan waste_qty > 0 di bulan terpilih
+    try {
+      const tenantId = activeUser?.tenant_id;
+      if (tenantId) {
+        let diQ = supabase
+          .from('daily_inventory_items')
+          .select('id, material_id, waste_qty, unit_cost_snapshot, notes, daily_inventories!inner(date, branch_id), materials(name, unit, full_pack, price, new_price)')
+          .eq('tenant_id', tenantId)
+          .gt('waste_qty', 0)
+          .gte('daily_inventories.date', startDate)
+          .lte('daily_inventories.date', endDate);
+        if (activeBranchId) diQ = diQ.eq('branch_id', activeBranchId);
+
+        const { data: diRows } = await diQ;
+        const groupedWaste = new Map();
+        (diRows || []).forEach((r) => {
+          const name = r.materials?.name || 'Bahan Bar';
+          const key = name.toLowerCase();
+          const qty = Number(r.waste_qty) || 0;
+          const price = Number(r.unit_cost_snapshot || r.materials?.new_price || r.materials?.price || 0);
+          const cur = groupedWaste.get(key) || {
+            id: `di-w-${r.material_id}`,
+            nama_barang: name,
+            kemasan: r.materials?.full_pack || r.materials?.unit || '-',
+            qtyTotal: 0,
+            unit: r.materials?.unit || 'pck',
+            masa_expired: r.notes || 'Waste Daily Inventory',
+            harga: price,
+            photo_url: ''
+          };
+          cur.qtyTotal += qty;
+          groupedWaste.set(key, cur);
+        });
+
+        groupedWaste.forEach((g) => {
+          const alreadyExists = syncedWaste.some((w) => w.nama_barang.toLowerCase() === g.nama_barang.toLowerCase());
+          if (!alreadyExists && g.qtyTotal > 0) {
+            syncedWaste.push({
+              id: g.id,
+              nama_barang: g.nama_barang,
+              kemasan: g.kemasan,
+              jumlah: `${Number(g.qtyTotal.toFixed(2))} ${g.unit}`,
+              masa_expired: g.masa_expired,
+              harga: g.harga,
+              total_harga: Math.round(g.qtyTotal * g.harga),
+              photo_url: ''
+            });
+          }
+        });
+      }
+    } catch {
+      // ignore daily_inventory_items error
+    }
+
+    // 3. Sumber: asset_opname_items (SO Gelas & Alat Bar dengan adjustment_minus > 0)
+    try {
+      const tenantId = activeUser?.tenant_id;
+      if (tenantId) {
+        let aoQ = supabase
+          .from('asset_opname_items')
+          .select('id, asset_id, adjustment_minus, keterangan, asset_items(name, unit)')
+          .eq('tenant_id', tenantId)
+          .eq('period_year', yearNum)
+          .eq('period_month', monthNum)
+          .gt('adjustment_minus', 0);
+        if (activeBranchId) aoQ = aoQ.eq('branch_id', activeBranchId);
+
+        const { data: aoRows } = await aoQ;
+        (aoRows || []).forEach((r) => {
+          const itemName = r.asset_items?.name || 'Gelas / Alat Bar';
+          const alreadyExists = syncedBreakage.some((b) => b.nama_barang.toLowerCase() === itemName.toLowerCase());
+          if (!alreadyExists) {
+            const qty = Number(r.adjustment_minus) || 1;
+            syncedBreakage.push({
+              id: `ao-b-${r.id}`,
+              nama_karyawan: activeUser?.name || 'Tim Bar',
+              nama_barang: itemName,
+              tanggal: endDate,
+              jumlah: qty,
+              harga: 0,
+              total_harga: 0
+            });
+          }
+        });
+      }
+    } catch {
+      // ignore asset_opname_items error
+    }
+
+    return { syncedWaste, syncedBreakage };
+  }, [activeBranchId, activeUser?.tenant_id, activeUser?.name, stock]);
+
+  // Auto-load BA tersimpan + otomatis isi rekap dari database jika belum disimpan / masih kosong
+  const loadSavedBaDocument = useCallback(async (targetPeriod) => {
+    setLoadingSync(true);
+    try {
+      const [doc, liveRecap] = await Promise.all([
+        beritaAcaraService.getByPeriod(targetPeriod, activeBranchId).catch(() => null),
+        fetchLiveDatabaseRecap(targetPeriod)
+      ]);
+
+      const savedWaste = Array.isArray(doc?.waste_items) ? doc.waste_items : [];
+      const savedBreakage = Array.isArray(doc?.breakage_items) ? doc.breakage_items : [];
+
+      if (doc) {
+        setDocumentDate(doc.document_date || new Date().toISOString().split('T')[0]);
+        setLocationDivision(doc.location_division || 'Resto - Bar');
+        setSubmitterName(doc.submitter_name || activeUser?.name || 'Head Bar');
+        setSubmitterNip(doc.submitter_nip || '-');
+        setSubmitterTitle(doc.submitter_title || 'Head Barista');
+        setIntroStatement(doc.intro_statement || 'Dengan ini melaporkan barang yang sudah melewati masa Expired/Rusak yaitu :');
+        setApproverName(doc.approver_name || 'Bpk. Gandhi');
+        setApproverTitle(doc.approver_title || 'Owner Umatis');
+        setDispositionStatement(doc.disposition_statement || 'Memberikan Izin untuk membuang produk yang waste ini');
+        setClosingStatement(doc.closing_statement || 'Demikian Berita Acara ini dibuat menurut keadaan yang sebenarnya untuk di pergunakan sebagaimana mestinya.');
+        setSignCity(doc.sign_city || 'Tangerang');
+        setDisposalPhotos(Array.isArray(doc.disposal_photo_urls) ? doc.disposal_photo_urls : []);
+        setStatus(doc.status || 'APPROVED');
+      }
+
+      // Gunakan data tersimpan jika sudah ada; jika kosong, otomatis isi langsung dari rekap database bulan ini
+      const finalWaste = savedWaste.length > 0 ? savedWaste : liveRecap.syncedWaste;
+      const finalBreakage = savedBreakage.length > 0 ? savedBreakage : liveRecap.syncedBreakage;
+
+      setWasteItems(finalWaste);
+      setBreakageItems(finalBreakage);
+
+      if (savedWaste.length === 0 && savedBreakage.length === 0 && (finalWaste.length > 0 || finalBreakage.length > 0)) {
+        setRecapSourceNote(`Rekap otomatis ditarik dari data bulan ${targetPeriod} (${finalWaste.length} waste, ${finalBreakage.length} gelas pecah). Tinggal cek/edit jika ada yang perlu disesuaikan lalu klik Simpan.`);
+      } else if (doc) {
+        setRecapSourceNote(`Memuat dokumen tersimpan bulan ${targetPeriod}. Kamu tetap bisa edit langsung atau klik Tarik Ulang Data.`);
+      } else {
+        setRecapSourceNote('');
+      }
+    } finally {
+      setLoadingSync(false);
+    }
+  }, [activeBranchId, activeUser?.name, fetchLiveDatabaseRecap]);
+
+  useEffect(() => {
+    loadSavedBaDocument(periodMonth);
+  }, [periodMonth, loadSavedBaDocument]);
+
+  // Tombol Tarik Ulang / Gabungkan Data Terbaru dari Database
+  const handleSyncFromDailyWasteLogs = async () => {
+    setLoadingSync(true);
+    try {
+      const { syncedWaste, syncedBreakage } = await fetchLiveDatabaseRecap(periodMonth);
       if (syncedWaste.length === 0 && syncedBreakage.length === 0) {
         if (toast?.showInfo) {
-          toast.showInfo(`Tidak ditemukan log baru pada periode ${periodMonth}. Menampilkan data resmi Berita Acara Umatis.`);
+          toast.showInfo(`Belum ada catatan Waste atau Gelas Pecah di database untuk periode ${periodMonth}.`);
         }
       } else {
-        if (syncedWaste.length > 0) setWasteItems(syncedWaste);
-        if (syncedBreakage.length > 0) setBreakageItems(syncedBreakage);
+        // Gabungkan item baru yang belum ada di daftar tanpa menghapus edit manual Head Bar
+        setWasteItems((prev) => {
+          const existingNames = new Set(prev.map((w) => String(w.nama_barang || '').toLowerCase()));
+          const additions = syncedWaste.filter((w) => !existingNames.has(String(w.nama_barang || '').toLowerCase()));
+          return prev.length === 0 ? syncedWaste : [...prev, ...additions];
+        });
+        setBreakageItems((prev) => {
+          const existingKeys = new Set(prev.map((b) => `${String(b.nama_barang || '').toLowerCase()}|${b.tanggal}|${String(b.nama_karyawan || '').toLowerCase()}`));
+          const additions = syncedBreakage.filter((b) => !existingKeys.has(`${String(b.nama_barang || '').toLowerCase()}|${b.tanggal}|${String(b.nama_karyawan || '').toLowerCase()}`));
+          return prev.length === 0 ? syncedBreakage : [...prev, ...additions];
+        });
+        setRecapSourceNote(`Data terbaru dari database bulan ${periodMonth} sudah digabungkan. Silakan cek/edit lalu klik Simpan.`);
         if (toast?.showSuccess) {
-          toast.showSuccess(`Berhasil menarik ${syncedWaste.length} item Waste dan ${syncedBreakage.length} item Gelas Pecah dari catatan harian.`);
+          toast.showSuccess(`Rekap diperbarui: ${syncedWaste.length} item Waste & ${syncedBreakage.length} item Gelas Pecah.`);
         }
       }
     } catch (err) {
-      if (toast?.showError) toast.showError(err.message || 'Gagal menyinkronkan data catatan limbah.');
+      if (toast?.showError) toast.showError(err.message || 'Gagal menarik data rekap dari database.');
     } finally {
       setLoadingSync(false);
     }
@@ -477,6 +593,11 @@ export default function BeritaAcaraMonthly() {
           fontFamily: 'Georgia, "Times New Roman", serif'
         }}
       >
+        {recapSourceNote && (
+          <div className="no-print" style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', fontSize: '0.8rem', color: 'var(--text-primary)', marginBottom: '12px' }}>
+            {recapSourceNote}
+          </div>
+        )}
         {/* ================= BAGIAN 1: BERITA ACARA BARANG KADALUARSA / WASTE ================= */}
         <div style={{ marginBottom: '34px' }}>
           <h2 style={{

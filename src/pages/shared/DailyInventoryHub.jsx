@@ -1,19 +1,17 @@
 import { lazyWithRetry } from '../../utils/lazyWithRetry';
 import React, { Suspense } from 'react';
-import { ClipboardList, Trash2, AlertTriangle, FileText } from 'lucide-react';
+import { ClipboardList, Trash2, AlertTriangle } from 'lucide-react';
 import TabContainer from '../../components/shared/TabContainer';
 
 const DailyInventory = lazyWithRetry(() => import('./DailyInventory'));
 const UsageRecap = lazyWithRetry(() => import('./UsageRecap'));
 const WasteLogs = lazyWithRetry(() => import('./WasteLogs'));
 const ExpiryMonitor = lazyWithRetry(() => import('./ExpiryMonitor'));
-const BeritaAcaraMonthly = lazyWithRetry(() => import('./BeritaAcaraMonthly'));
 
 const TABS = [
   { key: 'bahan', label: 'Semua Bahan', icon: ClipboardList },
   { key: 'pemakaian', label: 'Rekap Pemakaian', icon: ClipboardList },
   { key: 'waste', label: 'Catatan Limbah', icon: Trash2 },
-  { key: 'berita-acara', label: 'Berita Acara Bulanan (Waste & Gelas Pecah)', icon: FileText },
   { key: 'expiry', label: 'Pantau Kedaluwarsa', icon: AlertTriangle },
 ];
 
@@ -31,7 +29,6 @@ export default function DailyInventoryHub() {
           {activeTab === 'bahan' && <DailyInventory />}
           {activeTab === 'pemakaian' && <UsageRecap />}
           {activeTab === 'waste' && <WasteLogs />}
-          {activeTab === 'berita-acara' && <BeritaAcaraMonthly />}
           {activeTab === 'expiry' && <ExpiryMonitor />}
         </Suspense>
       )}
