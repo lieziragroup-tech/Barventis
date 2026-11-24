@@ -82,6 +82,7 @@ export default function Invoicing() {
   const sigCanvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [poActionDialog, setPoActionDialog] = useState(null);
+  const [poActionNote, setPoActionNote] = useState('');
 
   // Purchasing Review & Supplier Comparison / Replacement Modal State
   const [reviewPoModal, setReviewPoModal] = useState(null);
@@ -485,7 +486,7 @@ export default function Invoicing() {
         supplier_change_note: invoiceToSubmit.supplier_change_note || '',
         requested_by_role: activeUser?.role || 'Staff',
         requested_by_name: activeUser?.name || 'Staf Cabang',
-        workflow_status: isOwner ? 'APPROVED' : (isCentral ? 'PENDING_HEADBAR' : (isPurchasing ? 'PENDING_APPROVAL' : 'REQUESTED'))
+        workflow_status: isCentral ? 'PENDING_HEADBAR' : 'REQUESTED'
       };
       await onCreateInvoice(enrichedInvoice);
       setShowConfirmModal(false);
@@ -538,25 +539,96 @@ export default function Invoicing() {
     }
   };
 
-  // Status Actions: Cancel PO
+  // Realtime trigger: Purchasing membuka Detail PO -> otomatis status ON_REVIEW
+  const handleOpenPoDetail = async (inv) => {
+    setViewInvoice(inv);
+    const curWf = String(inv.workflow_status || inv.status || '').toUpperCase();
+    if ((isPurchasing || isOwner) && (curWf === 'REQUESTED' || curWf === 'DRAFT') && inv.status === 'DRAFT') {
+      try {
+        await api.updatePoWorkflowAndSupplier(inv.id, { workflow_status: 'ON_REVIEW' });
+        setViewInvoice((prev) => (prev && prev.id === inv.id ? { ...prev, workflow_status: 'ON_REVIEW' } : prev));
+        await reloadInvoices();
+      } catch {
+        // ignore transient errors
+      }
+    }
+  };
+
+  // Status Actions: Cancel PO (dengan catatan wajib)
   const handleCancelPO = (inv) => {
+    setPoActionNote('');
     setPoActionDialog({
       type: 'CANCEL_PO',
-      title: 'Batalkan PO?',
-      message: `Batalkan PO ${inv.invoice_no} (${inv.supplier})?`,
+      title: 'Batalkan PO (Canceled)',
+      message: `Masukkan alasan pembatalan untuk PO ${inv.invoice_no} (${inv.supplier}):`,
       invoice: inv
     });
   };
 
   const executeCancelPO = async (inv) => {
+    const reason = String(poActionNote || '').trim();
+    if (!reason) {
+      if (toast) toast('Catatan alasan pembatalan wajib diisi.', 'warning');
+      return;
+    }
     try {
+      await api.updatePoWorkflowAndSupplier(inv.id, {
+        workflow_status: 'CANCELED',
+        rejection_reason: reason
+      });
       await api.updateInvoiceStatus(inv.id, 'CANCELLED');
       setPoActionDialog(null);
-      if (toast) toast(`PO ${inv.invoice_no} dibatalkan.`, 'info');
+      setPoActionNote('');
+      if (toast) toast(`PO ${inv.invoice_no} dibatalkan (Canceled).`, 'info');
       await reloadInvoices();
       await refreshData();
     } catch (err) {
       if (toast) toast(err.message || 'Gagal membatalkan PO', 'error');
+    }
+  };
+
+  // Status Actions: Reject PO oleh pihak tujuan (barang/harga tidak sesuai + catatan wajib)
+  const handleRejectPO = (inv) => {
+    setPoActionNote('');
+    setPoActionDialog({
+      type: 'REJECT_PO',
+      title: 'Tolak Penerimaan PO (Rejected)',
+      message: `Masukkan catatan ketidaksesuaian barang atau harga untuk PO ${inv.invoice_no}:`,
+      invoice: inv
+    });
+  };
+
+  const executeRejectPO = async (inv) => {
+    const reason = String(poActionNote || '').trim();
+    if (!reason) {
+      if (toast) toast('Catatan alasan penolakan wajib diisi.', 'warning');
+      return;
+    }
+    try {
+      await api.updatePoWorkflowAndSupplier(inv.id, {
+        workflow_status: 'REJECTED',
+        rejection_reason: reason
+      });
+      setPoActionDialog(null);
+      setPoActionNote('');
+      if (toast) toast(`PO ${inv.invoice_no} ditolak (Rejected) dengan catatan.`, 'warning');
+      await reloadInvoices();
+      await refreshData();
+    } catch (err) {
+      if (toast) toast(err.message || 'Gagal menolak PO', 'error');
+    }
+  };
+
+  // Status Action: Supplier menyanggupi -> In Order
+  const handleMarkInOrder = async (inv) => {
+    try {
+      await api.updatePoWorkflowAndSupplier(inv.id, { workflow_status: 'IN_ORDER' });
+      await api.updateInvoiceStatus(inv.id, 'SENT');
+      if (toast) toast(`PO ${inv.invoice_no} masuk status In Order (diproses supplier).`, 'success');
+      await reloadInvoices();
+      await refreshData();
+    } catch (err) {
+      if (toast) toast(err.message || 'Gagal mengubah status ke In Order', 'error');
     }
   };
 
@@ -582,7 +654,10 @@ export default function Invoicing() {
     }
     setSavingReviewPo(true);
     try {
-      const nextStatus = submitForOwnerAcc ? 'APPROVED' : (reviewPoModal.workflow_status || 'REQUESTED');
+      const nextStatus = submitForOwnerAcc ? 'IN_ORDER' : 'ON_REVIEW';
+      if (submitForOwnerAcc) {
+        await api.updateInvoiceStatus(reviewPoModal.id, 'SENT').catch(() => {});
+      }
       await api.updatePoWorkflowAndSupplier(reviewPoModal.id, {
         workflow_status: nextStatus,
         supplier: reviewPoModal.supplier,
@@ -638,7 +713,16 @@ export default function Invoicing() {
     }
   };
 
-  const handleContactSupplierWA = (inv) => {
+  const handleContactSupplierWA = async (inv) => {
+    const curWf = String(inv.workflow_status || inv.status || '').toUpperCase();
+    if ((isPurchasing || isOwner) && ['REQUESTED', 'DRAFT', 'ON_REVIEW'].includes(curWf)) {
+      try {
+        await api.updatePoWorkflowAndSupplier(inv.id, { workflow_status: 'VALIDATION_SUPPLIER' });
+        await reloadInvoices();
+      } catch {
+        // continue opening WA
+      }
+    }
     const supObj = suppliersList.find(s => (s.name || '').toLowerCase().trim() === (inv.supplier || '').toLowerCase().trim());
     const rawPhone = String(supObj?.phone || supObj?.contact || '').replace(/[^0-9]/g, '');
     const waPhone = rawPhone.startsWith('0') ? ('62' + rawPhone.slice(1)) : rawPhone;
@@ -837,16 +921,21 @@ export default function Invoicing() {
   const statusBadge = (status, workflowStatus) => {
     const wf = workflowStatus || status;
     const map = {
-      PENDING_HEADBAR: { label: 'MENUNGGU ACC HEAD BAR (IRPAN)', bg: 'rgba(139, 92, 246, 0.14)', color: '#7c3aed', border: 'rgba(139, 92, 246, 0.35)' },
-      REQUESTED: { label: 'PERMINTAAN CABANG', bg: 'rgba(100, 116, 139, 0.12)', color: '#475569', border: 'rgba(100, 116, 139, 0.3)' },
-      DRAFT: { label: 'PERMINTAAN CABANG', bg: 'rgba(100, 116, 139, 0.12)', color: '#475569', border: 'rgba(100, 116, 139, 0.3)' },
-      PENDING_APPROVAL: { label: 'SIAP DIPROSES PURCHASING', bg: 'rgba(245, 158, 11, 0.14)', color: '#d97706', border: 'rgba(245, 158, 11, 0.35)' },
-      APPROVED: { label: 'SIAP PESAN KE SUPPLIER', bg: 'rgba(16, 185, 129, 0.14)', color: '#059669', border: 'rgba(16, 185, 129, 0.35)' },
-      REJECTED: { label: 'REVISI OWNER', bg: 'rgba(239, 68, 68, 0.12)', color: '#dc2626', border: 'rgba(239, 68, 68, 0.3)' },
-      SENT: { label: 'DIPESAN KE SUPPLIER', bg: 'rgba(59, 130, 246, 0.12)', color: '#2563eb', border: 'rgba(59, 130, 246, 0.3)' },
-      RECEIVED: { label: 'GOODS RECEIPT SELESAI', bg: 'rgba(16, 185, 129, 0.12)', color: '#059669', border: 'rgba(16, 185, 129, 0.3)' },
-      GOODS_RECEIVED: { label: 'GOODS RECEIPT SELESAI', bg: 'rgba(16, 185, 129, 0.12)', color: '#059669', border: 'rgba(16, 185, 129, 0.3)' },
-      CANCELLED: { label: 'DIBATALKAN', bg: 'rgba(239, 68, 68, 0.12)', color: '#dc2626', border: 'rgba(239, 68, 68, 0.3)' }
+      PENDING_HEADBAR: { label: 'ACC Head Bar', bg: 'rgba(139, 92, 246, 0.14)', color: '#7c3aed', border: 'rgba(139, 92, 246, 0.35)' },
+      REQUESTED: { label: 'Requested', bg: 'rgba(100, 116, 139, 0.12)', color: '#475569', border: 'rgba(100, 116, 139, 0.3)' },
+      DRAFT: { label: 'Requested', bg: 'rgba(100, 116, 139, 0.12)', color: '#475569', border: 'rgba(100, 116, 139, 0.3)' },
+      ON_REVIEW: { label: 'On Review', bg: 'rgba(245, 158, 11, 0.14)', color: '#d97706', border: 'rgba(245, 158, 11, 0.35)' },
+      PENDING_APPROVAL: { label: 'On Review', bg: 'rgba(245, 158, 11, 0.14)', color: '#d97706', border: 'rgba(245, 158, 11, 0.35)' },
+      VALIDATION_SUPPLIER: { label: 'Validation Supplier', bg: 'rgba(99, 102, 241, 0.14)', color: '#4f46e5', border: 'rgba(99, 102, 241, 0.35)' },
+      IN_ORDER: { label: 'In Order', bg: 'rgba(59, 130, 246, 0.14)', color: '#2563eb', border: 'rgba(59, 130, 246, 0.35)' },
+      SENT: { label: 'In Order', bg: 'rgba(59, 130, 246, 0.14)', color: '#2563eb', border: 'rgba(59, 130, 246, 0.35)' },
+      APPROVED: { label: 'In Order', bg: 'rgba(59, 130, 246, 0.14)', color: '#2563eb', border: 'rgba(59, 130, 246, 0.35)' },
+      COMPLETED: { label: 'Completed', bg: 'rgba(16, 185, 129, 0.14)', color: '#059669', border: 'rgba(16, 185, 129, 0.35)' },
+      RECEIVED: { label: 'Completed', bg: 'rgba(16, 185, 129, 0.14)', color: '#059669', border: 'rgba(16, 185, 129, 0.35)' },
+      GOODS_RECEIVED: { label: 'Completed', bg: 'rgba(16, 185, 129, 0.14)', color: '#059669', border: 'rgba(16, 185, 129, 0.35)' },
+      REJECTED: { label: 'Rejected', bg: 'rgba(239, 68, 68, 0.14)', color: '#dc2626', border: 'rgba(239, 68, 68, 0.35)' },
+      CANCELED: { label: 'Canceled', bg: 'rgba(225, 29, 72, 0.12)', color: '#be123c', border: 'rgba(225, 29, 72, 0.3)' },
+      CANCELLED: { label: 'Canceled', bg: 'rgba(225, 29, 72, 0.12)', color: '#be123c', border: 'rgba(225, 29, 72, 0.3)' }
     };
     const s = map[wf] || map[status] || { label: wf, bg: 'rgba(100, 116, 139, 0.12)', color: '#475569', border: 'rgba(100, 116, 139, 0.3)' };
     
@@ -1222,7 +1311,7 @@ Catatan: ${inv.notes || '-'}`,
                               className="btn btn-secondary"
                               style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', fontWeight: 600 }}
                               title="Lihat Rincian PO & Catatan Supplier"
-                              onClick={() => setViewInvoice(inv)}
+                              onClick={() => handleOpenPoDetail(inv)}
                             >
                               Detail
                             </button>
@@ -1246,26 +1335,58 @@ Catatan: ${inv.notes || '-'}`,
                               </button>
                             )}
 
-                            {(isPurchasing || isOwner) && wf !== 'PENDING_HEADBAR' && inv.status === 'DRAFT' && (
+                            {(isPurchasing || isOwner) && ['REQUESTED', 'DRAFT', 'ON_REVIEW', 'VALIDATION_SUPPLIER'].includes(wf) && inv.status === 'DRAFT' && (
+                              <button
+                                className="btn btn-secondary"
+                                style={{ padding: '5px 9px', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', fontWeight: 700, color: '#059669', borderColor: 'rgba(16, 185, 129, 0.4)', whiteSpace: 'nowrap' }}
+                                title="Hubungi Supplier terkait via WhatsApp (otomatis ubah status ke Validation Supplier)"
+                                onClick={() => handleContactSupplierWA(inv)}
+                              >
+                                Hubungi Supplier
+                              </button>
+                            )}
+
+                            {(isPurchasing || isOwner) && ['REQUESTED', 'DRAFT', 'ON_REVIEW'].includes(wf) && inv.status === 'DRAFT' && (
                               <button
                                 className="btn btn-primary"
                                 style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700, whiteSpace: 'nowrap' }}
-                                title="Edit supplier/harga, bandingkan harga, lalu simpan atau pesan ke supplier"
+                                title="Review/edit supplier & harga PO"
                                 onClick={() => openReviewPoModal(inv)}
                               >
                                 Proses PO
                               </button>
                             )}
 
-                            {(inv.status === 'SENT' || wf === 'APPROVED') && inv.status !== 'RECEIVED' && inv.status !== 'CANCELLED' && (
+                            {(isPurchasing || isOwner) && wf === 'VALIDATION_SUPPLIER' && inv.status === 'DRAFT' && (
                               <button
-                                className="btn btn-success"
-                                style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700, whiteSpace: 'nowrap' }}
-                                title="Konfirmasi barang tiba dengan foto barang & surat jalan"
-                                onClick={() => openReceiveModal(inv)}
+                                className="btn btn-primary"
+                                style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700, background: '#2563eb', borderColor: '#2563eb', whiteSpace: 'nowrap' }}
+                                title="Supplier menyanggupi pesanan -> ubah status ke In Order"
+                                onClick={() => handleMarkInOrder(inv)}
                               >
-                                Terima Barang
+                                In Order
                               </button>
+                            )}
+
+                            {(inv.status === 'SENT' || wf === 'IN_ORDER' || wf === 'APPROVED') && inv.status !== 'RECEIVED' && inv.status !== 'CANCELLED' && wf !== 'REJECTED' && (
+                              <>
+                                <button
+                                  className="btn btn-success"
+                                  style={{ padding: '5px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', fontWeight: 700, whiteSpace: 'nowrap' }}
+                                  title="Konfirmasi barang sesuai & sampai di tujuan (Completed)"
+                                  onClick={() => openReceiveModal(inv)}
+                                >
+                                  Terima Barang
+                                </button>
+                                <button
+                                  className="btn btn-secondary"
+                                  style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', fontWeight: 700, color: '#dc2626', whiteSpace: 'nowrap' }}
+                                  title="Tolak barang karena tidak sesuai pesanan/harga (Rejected + Catatan)"
+                                  onClick={() => handleRejectPO(inv)}
+                                >
+                                  Tolak
+                                </button>
+                              </>
                             )}
 
                             {/* Unduh PDF Cepat */}
@@ -2239,6 +2360,21 @@ Catatan: ${inv.notes || '-'}`,
             </h3>
             <p style={{ fontSize: '0.86rem', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: 1.5 }}>
               {poActionDialog.message}
+              {(poActionDialog.type === 'CANCEL_PO' || poActionDialog.type === 'REJECT_PO') && (
+                <div style={{ marginTop: '12px' }}>
+                  <label className="form-label" style={{ fontSize: '0.76rem', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
+                    Catatan Alasan (Wajib diisi) *
+                  </label>
+                  <textarea
+                    rows={3}
+                    className="form-control"
+                    placeholder={poActionDialog.type === 'REJECT_PO' ? 'Mis. Barang datang rusak / harga bon tidak sesuai kesepakatan...' : 'Mis. Permintaan dibatalkan karena stok masih cukup...'}
+                    value={poActionNote}
+                    onChange={(e) => setPoActionNote(e.target.value)}
+                    style={{ width: '100%', fontSize: '0.82rem', padding: '8px 10px' }}
+                  />
+                </div>
+              )}
             </p>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button

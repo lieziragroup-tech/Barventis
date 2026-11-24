@@ -13,28 +13,31 @@ export async function exportToPDF({ filename, title, tenantName, columns, rows, 
   const marginX = 14;
   const maxTextWidth = pageWidth - marginX * 2;
 
-  // Optional Owner Validation Photo / Logo (Top-Left) — shifts brand title automatically to prevent overlap
+  // Official Enlarged Umatis Letterhead Logo (Top-Left) — zero overlap
   const brandMeta = drawPdfBrandHeaderLogo(doc, {
     marginX,
-    topY: 7.5,
-    maxWidthMm: 18,
-    maxHeightMm: 13
+    topY: 7,
+    maxWidthMm: 28,
+    maxHeightMm: 18
   });
 
   const brandTextX = brandMeta.textOffsetX;
   const headerBottomY = brandMeta.headerBottomY;
 
-  // Header Brand (Left) & Print Metadata (Right) — zero overlap
+  // Official Company Letterhead Title (Left) & Print Metadata (Right)
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
+  doc.setFontSize(brandMeta.logoRendered ? 15 : 13);
   doc.setTextColor(15, 23, 42);
-  doc.text(String(tenantName || 'BARVENTIS - Sistem Manajemen Gudang'), brandTextX, 13.5);
+  const officialTitle = brandMeta.logoRendered
+    ? String(brandMeta.validationLabel || 'Umatis Resto & Venue')
+    : String(tenantName || 'Umatis Resto & Venue');
+  doc.text(officialTitle, brandTextX, brandMeta.logoRendered ? 14.5 : 13.5);
 
-  if (brandMeta.logoRendered && brandMeta.validationLabel) {
+  if (brandMeta.logoRendered) {
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(15, 118, 110);
-    doc.text(`Validasi Resmi: ${brandMeta.validationLabel}`, brandTextX, 18.2);
+    doc.setFontSize(8.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text('Dokumen Resmi Purchase Order & Inventaris', brandTextX, 20);
   }
 
   doc.setFont('helvetica', 'normal');
@@ -116,8 +119,6 @@ export async function exportToPDF({ filename, title, tenantName, columns, rows, 
     }
   });
 
-  // Render official Umatis validation seal block below the table if Owner uploaded a validation photo
-  drawPdfValidationSealBlock(doc, { marginX });
 
   doc.save(`${filename}_${new Date().toISOString().split('T')[0]}.pdf`);
 }

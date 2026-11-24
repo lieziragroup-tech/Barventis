@@ -192,7 +192,7 @@ function detectImageFormat(dataUrl) {
  * without overlapping adjacent title text.
  * Returns { logoRendered, textOffsetX, headerBottomY, validationLabel }.
  */
-export function drawPdfBrandHeaderLogo(doc, { marginX = 14, topY = 8, maxWidthMm = 18, maxHeightMm = 13 } = {}) {
+export function drawPdfBrandHeaderLogo(doc, { marginX = 14, topY = 7, maxWidthMm = 28, maxHeightMm = 18 } = {}) {
   const branding = getActivePdfBranding();
   if (!branding.enabled || !branding.logoDataUrl) {
     return {
@@ -218,7 +218,7 @@ export function drawPdfBrandHeaderLogo(doc, { marginX = 14, topY = 8, maxWidthMm
     return {
       logoRendered: true,
       textOffsetX: marginX + drawW + 4,
-      headerBottomY: Math.max(22.5, topY + maxHeightMm + 2),
+      headerBottomY: Math.max(27.5, topY + maxHeightMm + 3),
       validationLabel: branding.validationLabel || 'Umatis Resto & Venue'
     };
   } catch {
@@ -258,64 +258,6 @@ export function drawPdfValidationFooter(doc, marginX = 14) {
  * Draws a compact official validation seal block (mini photo + verified text)
  * right below the main table on the final page of a PDF document.
  */
-export function drawPdfValidationSealBlock(doc, { marginX = 14, startY = null } = {}) {
-  const branding = getActivePdfBranding();
-  if (!branding.enabled || !branding.logoDataUrl) return;
-
-  try {
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const boxW = 68;
-    const boxH = 19;
-    let y = (startY ?? doc.lastAutoTable?.finalY ?? 120) + 8;
-
-    if (y + boxH + 14 > pageHeight) {
-      doc.addPage();
-      y = 20;
-    }
-
-    const boxX = pageWidth - marginX - boxW;
-    doc.setDrawColor(203, 213, 225);
-    doc.setFillColor(248, 250, 252);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(boxX, y, boxW, boxH, 2, 2, 'FD');
-
-    const format = detectImageFormat(branding.logoDataUrl);
-    const props = doc.getImageProperties(branding.logoDataUrl);
-    const imgW = props?.width || 100;
-    const imgH = props?.height || 100;
-    const ratio = Math.min(13 / imgW, 13 / imgH);
-    const drawW = Math.max(5, imgW * ratio);
-    const drawH = Math.max(5, imgH * ratio);
-
-    doc.addImage(
-      branding.logoDataUrl,
-      format,
-      boxX + 3,
-      y + (boxH - drawH) / 2,
-      drawW,
-      drawH,
-      undefined,
-      'FAST'
-    );
-
-    const textX = boxX + 3 + drawW + 3;
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor(15, 118, 110);
-    doc.text('TERVALIDASI RESMI', textX, y + 6.5);
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5);
-    doc.setTextColor(15, 23, 42);
-    const label = String(branding.validationLabel || 'Umatis Resto & Venue').slice(0, 28);
-    doc.text(label, textX, y + 11.5);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6.8);
-    doc.setTextColor(100, 116, 139);
-    doc.text(`Dibuat via Barventis • ${new Date().toLocaleDateString('id-ID')}`, textX, y + 15.8);
-  } catch {
-    // Never fail PDF generation due to optional seal rendering
-  }
+export function drawPdfValidationSealBlock() {
+  // Disabled per user request: official letterhead uses enlarged Umatis logo in header.
 }
