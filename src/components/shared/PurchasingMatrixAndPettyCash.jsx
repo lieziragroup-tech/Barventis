@@ -7,57 +7,7 @@ import { exportToPDF } from '../../services/export/pdfExporter';
 import { formatIDR } from '../../services/costUtils';
 import { exportWithAudit } from '../../services/export/exportAudit';
 
-const DEFAULT_PETTY_CASH_ROWS = [
-  {
-    id: 'pc-1',
-    date: '2026-10-14',
-    item_name: 'Kelapa Batok Urgent (Belanja Dadakan Bar)',
-    supplier: 'Pasar Umum',
-    location: 'RESTO',
-    qty: 10,
-    unit: 'pck',
-    unit_price: 15000,
-    total: 150000,
-    payment_method: 'PETTY_CASH',
-    payment_status: 'PAID',
-    accurate_account: '1101-02 Kas Kecil Resto (Petty Cash)',
-    proof_photo: '',
-    notes: 'Stok Central kosong, beli dadakan pakai Petty Cash Resto (Dipecah jadi Air Kelapa 1L & Daging Kelapa)'
-  },
-  {
-    id: 'pc-2',
-    date: '2026-10-18',
-    item_name: 'Cincau Hijau Segar',
-    supplier: 'Pasar Umum',
-    location: 'RESTO',
-    qty: 5,
-    unit: 'pck',
-    unit_price: 12000,
-    total: 60000,
-    payment_method: 'PETTY_CASH',
-    payment_status: 'PAID',
-    accurate_account: '1101-02 Kas Kecil Resto (Petty Cash)',
-    proof_photo: '',
-    notes: 'Pembelian tunai kasir resto untuk operasional es cincau'
-  },
-  {
-    id: 'pc-3',
-    date: '2026-10-21',
-    item_name: 'Jeruk Pontianak (Penyesuaian Harga Bon Pasar)',
-    supplier: 'Pasar Umum',
-    location: 'RESTO',
-    qty: 4,
-    unit: 'kg',
-    unit_price: 35000,
-    total: 140000,
-    payment_method: 'TEMPO',
-    payment_status: 'UNPAID',
-    due_date: '2026-10-28',
-    accurate_account: '2101-01 Hutang Dagang Supplier (Tempo)',
-    proof_photo: '',
-    notes: 'Harga bon naik dari Rp 20.000 menjadi Rp 35.000/kg (Forward-Only Price Lock aktif)'
-  }
-];
+// Semua data Petty Cash & Tempo bersumber langsung dari database Supabase (tanpa data dummy).
 
 const MONTH_OPTIONS = [
   { value: 1, label: 'Januari' },
@@ -138,9 +88,9 @@ export default function PurchasingMatrixAndPettyCash({
   const [pettyCashRows, setPettyCashRows] = useState(() => {
     try {
       const raw = localStorage.getItem('bv_petty_cash_accurate_v3');
-      return raw ? JSON.parse(raw) : DEFAULT_PETTY_CASH_ROWS;
+      return raw ? JSON.parse(raw) : [];
     } catch {
-      return DEFAULT_PETTY_CASH_ROWS;
+      return [];
     }
   });
   const [paymentFilter, setPaymentFilter] = useState('ALL');

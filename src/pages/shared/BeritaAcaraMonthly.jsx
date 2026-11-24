@@ -10,29 +10,7 @@ import { api } from '../../services/api';
 import { formatIDR } from '../../services/costUtils';
 import { beritaAcaraService } from '../../services/modules/stakeholderV4Service';
 
-const DEFAULT_WASTE_ROWS_OCT_2026 = [
-  {
-    id: 'w-oct-1',
-    nama_barang: 'Juice Sirsak',
-    kemasan: '1440 grm',
-    jumlah: '1 box',
-    masa_expired: 'Waste',
-    harga: 105000,
-    total_harga: 105000,
-    photo_url: ''
-  }
-];
-
-const DEFAULT_BREAKAGE_ROWS_OCT_2026 = [
-  { id: 'b-oct-1', nama_karyawan: 'ayat', nama_barang: 'Gelas teh', tanggal: '2026-10-03', jumlah: 1, harga: 23000, total_harga: 23000 },
-  { id: 'b-oct-2', nama_karyawan: 'Putri', nama_barang: 'Gelas teh', tanggal: '2026-10-06', jumlah: 1, harga: 23000, total_harga: 23000 },
-  { id: 'b-oct-3', nama_karyawan: 'Ali partime', nama_barang: 'Gelas teh', tanggal: '2026-10-10', jumlah: 2, harga: 23000, total_harga: 46000 },
-  { id: 'b-oct-4', nama_karyawan: 'costumer', nama_barang: 'Gelas teh', tanggal: '2026-10-10', jumlah: 1, harga: 23000, total_harga: 23000 },
-  { id: 'b-oct-5', nama_karyawan: 'Tukang kolam ikan', nama_barang: 'Gelas teh', tanggal: '2026-10-12', jumlah: 1, harga: 23000, total_harga: 23000 },
-  { id: 'b-oct-6', nama_karyawan: 'costumer', nama_barang: 'Gelas teh mocel', tanggal: '2026-10-15', jumlah: 1, harga: 23000, total_harga: 23000 },
-  { id: 'b-oct-7', nama_karyawan: 'fajar', nama_barang: 'Gelas latte ice', tanggal: '2026-10-18', jumlah: 1, harga: 28000, total_harga: 28000 },
-  { id: 'b-oct-8', nama_karyawan: 'Efan partime', nama_barang: 'Gelas teh', tanggal: '2026-10-23', jumlah: 1, harga: 23000, total_harga: 23000 }
-];
+// Semua data Berita Acara bersumber langsung dari database Supabase (tanpa data dummy).
 
 const DISPOSITION_PRESETS = [
   'Memberikan Izin untuk membuang produk yang waste ini',
@@ -64,8 +42,8 @@ export default function BeritaAcaraMonthly() {
   );
   const [signCity, setSignCity] = useState('Tangerang');
 
-  const [wasteItems, setWasteItems] = useState(DEFAULT_WASTE_ROWS_OCT_2026);
-  const [breakageItems, setBreakageItems] = useState(DEFAULT_BREAKAGE_ROWS_OCT_2026);
+  const [wasteItems, setWasteItems] = useState([]);
+  const [breakageItems, setBreakageItems] = useState([]);
   const [disposalPhotos, setDisposalPhotos] = useState([]);
   const [status, setStatus] = useState('APPROVED');
 
@@ -101,8 +79,8 @@ export default function BeritaAcaraMonthly() {
         setDispositionStatement(doc.disposition_statement || 'Memberikan Izin untuk membuang produk yang waste ini');
         setClosingStatement(doc.closing_statement || 'Demikian Berita Acara ini dibuat menurut keadaan yang sebenarnya untuk di pergunakan sebagaimana mestinya.');
         setSignCity(doc.sign_city || 'Tangerang');
-        setWasteItems(Array.isArray(doc.waste_items) && doc.waste_items.length > 0 ? doc.waste_items : DEFAULT_WASTE_ROWS_OCT_2026);
-        setBreakageItems(Array.isArray(doc.breakage_items) && doc.breakage_items.length > 0 ? doc.breakage_items : DEFAULT_BREAKAGE_ROWS_OCT_2026);
+        setWasteItems(Array.isArray(doc.waste_items) && doc.waste_items.length > 0 ? doc.waste_items : []);
+        setBreakageItems(Array.isArray(doc.breakage_items) && doc.breakage_items.length > 0 ? doc.breakage_items : []);
         setDisposalPhotos(Array.isArray(doc.disposal_photo_urls) ? doc.disposal_photo_urls : []);
         setStatus(doc.status || 'APPROVED');
         return;
@@ -124,13 +102,13 @@ export default function BeritaAcaraMonthly() {
         setApproverName(doc.approverName || 'Bpk. Gandhi');
         setApproverTitle(doc.approverTitle || 'Owner Umatis');
         setDispositionStatement(doc.dispositionStatement || 'Memberikan Izin untuk membuang produk yang waste ini');
-        setWasteItems(doc.wasteItems || DEFAULT_WASTE_ROWS_OCT_2026);
-        setBreakageItems(doc.breakageItems || DEFAULT_BREAKAGE_ROWS_OCT_2026);
+        setWasteItems(doc.wasteItems || []);
+        setBreakageItems(doc.breakageItems || []);
         setDisposalPhotos(doc.disposalPhotos || []);
         setStatus(doc.status || 'APPROVED');
       } else if (targetPeriod === '2026-10') {
-        setWasteItems(DEFAULT_WASTE_ROWS_OCT_2026);
-        setBreakageItems(DEFAULT_BREAKAGE_ROWS_OCT_2026);
+        setWasteItems([]);
+        setBreakageItems([]);
       }
     } catch {
       // ignore storage errors

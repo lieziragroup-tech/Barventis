@@ -108,71 +108,91 @@ function buildStepsForRole(roleKey, basePath = '/dashboard') {
     case 'HEAD_BAR':
       return {
         topics: [
-          { id: 'daily', label: 'Daily Inventory', subtitle: 'Stok harian bahan & beer dalam 1 menu' },
-          { id: 'opname', label: 'Stock Opname', subtitle: 'SO Resto, Central, & SO Glass/Tool' },
-          { id: 'produksi', label: 'Produksi & PO', subtitle: 'Olah bahan, Split 0% Waste & PO Bar' },
-          { id: 'audit', label: 'Cost Control & BA', subtitle: 'Komparasi Harian vs SO & Berita Acara' }
+          { id: 'harian', label: 'Kerja Harian Bar', subtitle: 'Tutup shift Daily Inventory & olah bahan' },
+          { id: 'po_mutasi', label: 'PO & Mutasi Central', subtitle: 'Ajukan PO, ACC Central & minta barang' },
+          { id: 'opname_glass', label: 'Opname & Gelas Bar', subtitle: 'Hitung stok fisik & catat gelas pecah' },
+          { id: 'laporan', label: 'Cost Control & BA', subtitle: 'Cek selisih biaya & cetak Berita Acara' }
         ],
         steps: [
           {
             id: 'hb-daily',
-            topic: 'daily',
-            sectionLabel: 'Daily Inventory',
+            topic: 'harian',
+            sectionLabel: 'Kerja Harian · Langkah 1',
             route: `${basePath}/daily-inventory`,
             target: 'main-workspace',
-            title: 'Daily Inventory (Bahan & Beer Jadi Satu)',
-            description: 'Catat stok awal, masuk, dan sisa akhir shift untuk bahan racikan maupun beer dari satu halaman tanpa perlu pindah-pindah menu.',
-            tip: 'Pastikan closing harian diisi rutin agar laporan pemakaian harian di Cost Control akurat.'
+            title: 'Catat Stok Akhir Shift (Bahan & Beer)',
+            description: 'Setiap selesai shift, isi sisa bahan racikan dan beer di satu halaman ini. Data yang rutin diisi akan otomatis menghitung pemakaian harian bar.',
+            tip: 'Menu ini khusus menampilkan stok cabang kamu sendiri.'
           },
           {
-            id: 'hb-opname',
-            topic: 'opname',
-            sectionLabel: 'Stock Opname',
-            route: `${basePath}/opname-assets`,
-            target: 'main-workspace',
-            title: 'Stock Opname Resto, Central & SO Glass',
-            description: 'Pilih area opname langsung di halaman ini: stok fisik meja/chiller Resto, gudang Central, atau audit aset Gelas & Tool.',
-            tip: 'Data gelas pecah dari SO Glass otomatis bisa ditarik ke Berita Acara bulanan.'
-          },
-          {
-            id: 'hb-produksi',
-            topic: 'produksi',
-            sectionLabel: 'Proses Produksi',
+            id: 'hb-olah',
+            topic: 'harian',
+            sectionLabel: 'Kerja Harian · Langkah 2',
             route: `${basePath}/olah-bahan`,
             target: 'main-workspace',
-            title: 'Olah Bahan & Split Bahan 0% Waste',
-            description: 'Catat produksi sirup/base, trimming buah, atau pecah 1 bahan induk (misalnya Kelapa Urgent) menjadi 2 stok turunan tanpa terhitung waste.',
-            tip: 'Gunakan fitur Split Bahan saat memecah bahan utuh agar stok turunan langsung bertambah.'
+            title: 'Catat Olah & Pecah Bahan Utuh',
+            description: 'Gunakan tab Olah & Potong Bahan untuk sirup/base atau potong buah. Kalau memecah bahan utuh jadi 2 stok (seperti Kelapa jadi Air + Daging), pakai tab Pecah Bahan Utuh supaya tidak terhitung waste.',
+            tip: 'Pecah bahan utuh otomatis mengurangi stok induk dan menambah stok hasil pecahannya.'
           },
           {
             id: 'hb-po',
-            topic: 'produksi',
-            sectionLabel: 'Permintaan PO',
+            topic: 'po_mutasi',
+            sectionLabel: 'PO & Mutasi · Langkah 3',
             route: `${basePath}/procurement?tab=invoicing`,
             target: 'main-workspace',
-            title: 'Permintaan PO & ACC Order Central',
-            description: 'Ajukan PO bahan bar, verifikasi order dari Central (ACC Head Bar), dan unggah foto barang + surat jalan saat menerima pengiriman.',
-            tip: 'Jika stok tersedia di Central, gunakan Mutasi Gudang (Rp 0) agar tidak dobel belanja.'
+            title: 'Ajukan PO, ACC Order Central & Terima Barang',
+            description: 'Buat permintaan PO bahan bar di sini. Jika ada order Central yang menunggu persetujuan, klik ACC Head Bar. Saat barang datang, klik Terima Barang dan lampirkan foto fisik + surat jalan.',
+            tip: 'Jika barang sudah tersedia di gudang Central, cukup minta lewat Mutasi Gudang.'
+          },
+          {
+            id: 'hb-mutasi',
+            topic: 'po_mutasi',
+            sectionLabel: 'PO & Mutasi · Langkah 4',
+            route: `${basePath}/transfer`,
+            target: 'main-workspace',
+            title: 'Minta / Terima Barang dari Central (Rp 0)',
+            description: 'Ajukan permintaan kirim barang dari Central ke bar cabang kamu. Begitu barang sampai, klik Terima Barang agar stok cabang langsung bertambah tanpa dobel biaya belanja.',
+            tip: 'Mutasi antar gudang selalu tercatat Rp 0 karena sudah dibeli di PO awal.'
+          },
+          {
+            id: 'hb-opname',
+            topic: 'opname_glass',
+            sectionLabel: 'Bulanan · Langkah 5',
+            route: `${basePath}/opname-assets`,
+            target: 'main-workspace',
+            title: 'Hitung Stock Opname Bahan (Resto / Central)',
+            description: 'Di akhir bulan, hitung sisa fisik bahan di bar dan pilih tab Opname Resto atau Central dari satu halaman ini.',
+            tip: 'Hasil opname ini nanti dibandingkan dengan catatan harian di Cost Control.'
+          },
+          {
+            id: 'hb-glass',
+            topic: 'opname_glass',
+            sectionLabel: 'Bulanan · Langkah 6',
+            route: `${basePath}/excel-so-glass-tool`,
+            target: 'main-workspace',
+            title: 'Gelas & Alat Bar (Terpisah dari Waste)',
+            description: 'Menu ini khusus untuk daftar & hitung gelas/alat bar. Kalau ada gelas atau alat yang pecah, buka tab Catat Gelas Pecah lalu isi Kapan, Oleh Siapa, Barang Apa, Jumlah, dan Harganya.',
+            tip: 'Catatan gelas pecah yang disimpan di sini otomatis masuk ke Berita Acara bulan berjalan.'
           },
           {
             id: 'hb-cc',
-            topic: 'audit',
-            sectionLabel: 'Cost Control',
+            topic: 'laporan',
+            sectionLabel: 'Bulanan · Langkah 7',
             route: `${basePath}/excel-cost-control`,
             target: 'main-workspace',
-            title: 'Cost Control Dual-Mode & Event/Buffet',
-            description: 'Bandingkan pemakaian berdasarkan input harian dengan hasil Stock Opname, serta masukkan catatan Buffet/Event/Compliment (Rp 0) agar rasio HPP adil.',
-            tip: 'Semua penyesuaian Buffet/Event tersimpan langsung ke database.'
+            title: 'Cek Cost Control & Catat Event / Buffet',
+            description: 'Bandingkan pemakaian harian dengan hasil Stock Opname. Kalau ada pemakaian untuk Buffet, Event, atau Compliment (Rp 0), masukkan di sini agar persentase biaya tetap akurat.',
+            tip: 'Catatan event membantu Owner memahami selisih stok secara objektif.'
           },
           {
             id: 'hb-ba',
-            topic: 'audit',
-            sectionLabel: 'Berita Acara',
+            topic: 'laporan',
+            sectionLabel: 'Bulanan · Langkah 8',
             route: `${basePath}/excel-berita-acara`,
             target: 'main-workspace',
-            title: 'Berita Acara Waste & Gelas Pecah Bulanan',
-            description: 'Tarik langsung data waste dan gelas pecah dari database, pantau riwayat 6 bulan per karyawan, lalu cetak mode hemat 1 lembar atau PDF lengkap dengan foto.',
-            tip: 'Klik Simpan ke Database sebelum mencetak supaya histori 6 bulan selalu terupdate.'
+            title: 'Cetak Berita Acara Waste & Gelas Pecah',
+            description: 'Seluruh catatan barang kadaluarsa/waste dan gelas pecah bulan ini terkumpul di sini lengkap dengan rekap 6 bulan per staf. Pilih mode cetak 1 lembar hemat kertas atau PDF lengkap dengan foto.',
+            tip: 'Jangan lupa klik Simpan ke Database sebelum mencetak atau mengunduh PDF.'
           }
         ]
       };

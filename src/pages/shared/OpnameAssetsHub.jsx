@@ -4,12 +4,14 @@ import { Boxes, Warehouse, Wrench, FileText } from 'lucide-react';
 import TabContainer from '../../components/shared/TabContainer';
 
 const StockOpname = lazyWithRetry(() => import('./StockOpname'));
+const SoGlassAndTool = lazyWithRetry(() => import('./SoGlassAndTool'));
 const StockAdjustments = lazyWithRetry(() => import('./StockAdjustments'));
 
 const TABS = [
   { key: 'resto', label: 'Opname Resto', icon: Boxes },
   { key: 'central', label: 'Opname Central', icon: Warehouse },
-  { key: 'adjustments', label: 'Audit Selisih', icon: FileText },
+  { key: 'glass-tool', label: 'Gelas & Alat Bar', icon: Wrench },
+  { key: 'adjustments', label: 'Selisih Stok', icon: FileText },
 ];
 
 const Loading = () => (
@@ -25,7 +27,8 @@ export default function OpnameAssetsHub() {
         <Suspense fallback={<Loading />}>
           {activeTab === 'resto' && <StockOpname defaultLocation="RESTO" />}
           {activeTab === 'central' && <StockOpname defaultLocation="CENTRAL" />}
-                    {activeTab === 'adjustments' && <StockAdjustments />}
+          {activeTab === 'glass-tool' && <SoGlassAndTool />}
+          {activeTab === 'adjustments' && <StockAdjustments />}
         </Suspense>
       )}
     </TabContainer>

@@ -9,6 +9,8 @@ import { formatIDR, calculateIngredientCost } from '../../services/costUtils';
 import { getExpiryColor } from '../../utils/expiryColor';
 import ZeroWasteSplitAndBarcode from '../../components/shared/ZeroWasteSplitAndBarcode';
 
+const SHOW_BARCODE_MODULE = false; // Disembunyikan sementara sesuai kesepakatan operasional
+
 const COMMON_UNITS = ['gr', 'kg', 'ml', 'L', 'pck', 'pcs', 'btl', 'can'];
 
 const PROCESSING_TYPES = [
@@ -484,6 +486,7 @@ export default function SimplePrep({ standaloneMode = null } = {}) {
         >
           Split Bahan Zero-Waste (Cutting Portion 0% — Kasus Kelapa Urgent)
         </button>
+        {SHOW_BARCODE_MODULE && (
         <button
           type="button"
           className={`btn ${prepSubTab === 'BARCODE_CENTRAL' ? 'btn-primary' : ''}`}
@@ -492,10 +495,11 @@ export default function SimplePrep({ standaloneMode = null } = {}) {
         >
           Cetak &amp; Scan Barcode Lot Gudang Central
         </button>
+        )}
       </div>
 
       {prepSubTab === 'ZERO_WASTE_SPLIT' && <ZeroWasteSplitAndBarcode mode="SPLIT" />}
-      {prepSubTab === 'BARCODE_CENTRAL' && <ZeroWasteSplitAndBarcode mode="BARCODE" />}
+      {SHOW_BARCODE_MODULE && prepSubTab === 'BARCODE_CENTRAL' && <ZeroWasteSplitAndBarcode mode="BARCODE" />}
 
 
       {/* Main Dual-Column Workspace */}
