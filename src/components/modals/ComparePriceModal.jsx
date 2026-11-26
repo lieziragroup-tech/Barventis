@@ -2,12 +2,19 @@ import { useState, useEffect, useMemo } from 'react';
 import { X, Calendar, Plus, Bell } from 'lucide-react';
 import { api } from '../../services/api';
 
-const STORAGE_KEY = 'barventis_supplier_price_comparisons_v17';
-const REMINDER_KEY = 'bv_po_reminders_v4';
+function getActiveBranchKey() {
+  try {
+    return localStorage.getItem('bv_active_branch_id') || 'default';
+  } catch {
+    return 'default';
+  }
+}
+const getStorageKey = () => `barventis_supplier_price_comparisons_v52_${getActiveBranchKey()}`;
+const getReminderKey = () => `bv_po_reminders_v5_${getActiveBranchKey()}`;
 
 function loadSavedOffersMap() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(getStorageKey());
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
@@ -16,7 +23,7 @@ function loadSavedOffersMap() {
 
 function saveOffersMap(map) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+    localStorage.setItem(getStorageKey(), JSON.stringify(map));
   } catch {
     // ignore storage errors
   }
@@ -37,7 +44,7 @@ export function computeLeadTimeMeta(dateStr) {
 function savePoReminder({ itemName, supplierName, deliveryDate, hLabel, price, unit }) {
   if (!deliveryDate || !supplierName) return;
   try {
-    const raw = localStorage.getItem(REMINDER_KEY);
+    const raw = localStorage.getItem(getReminderKey());
     const list = raw ? JSON.parse(raw) : [];
     const entry = {
       id: `rem-${Date.now()}`,
@@ -54,7 +61,7 @@ function savePoReminder({ itemName, supplierName, deliveryDate, hLabel, price, u
       (r) => !(r.item_name === entry.item_name && r.supplier_name === entry.supplier_name && !r.done)
     );
     const next = [entry, ...filtered].slice(0, 30);
-    localStorage.setItem(REMINDER_KEY, JSON.stringify(next));
+    localStorage.setItem(getReminderKey(), JSON.stringify(next));
     window.dispatchEvent(new CustomEvent('barventis:po_reminders_updated', { detail: next }));
   } catch {
     // ignore storage errors

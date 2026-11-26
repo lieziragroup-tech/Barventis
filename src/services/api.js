@@ -1240,6 +1240,7 @@ export const api = {
         .select('*')
         .eq('tenant_id', tenantId);
       if (branchId) query = query.eq('branch_id', branchId);
+    if (locationFilter) query = query.eq('location', locationFilter);
       const { data, error } = await query;
       if (error) { console.error("DB Error:", error); throw error; }
       return data;
@@ -3358,7 +3359,7 @@ export const api = {
     });
   },
 
-  getInvoicesPaged: async ({ page = 1, pageSize = 15, search = '', status = 'ALL', branchId: branchIdArg = null } = {}) => {
+  getInvoicesPaged: async ({ page = 1, pageSize = 15, search = '', status = 'ALL', branchId: branchIdArg = null, locationFilter = null } = {}) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { data: [], totalCount: 0 };
     const branchId = await requireBranchId(branchIdArg);
@@ -6311,7 +6312,7 @@ export const api = {
     return true;
   },
 
-  getInvoicesStats: async (branchIdArg = null) => {
+  getInvoicesStats: async (branchIdArg = null, locationFilter = null) => {
     const tenantId = await getActiveTenantId();
     if (!tenantId) return { total: 0, pending: 0, received: 0, totalValue: 0 };
     const branchId = await requireBranchId(branchIdArg);
@@ -6321,6 +6322,7 @@ export const api = {
       .select('status, total')
       .eq('tenant_id', tenantId);
     if (branchId) invQ = invQ.eq('branch_id', branchId);
+    if (locationFilter) invQ = invQ.eq('location', locationFilter);
     const { data } = await invQ;
 
     if (!data) return { total: 0, pending: 0, received: 0, totalValue: 0 };

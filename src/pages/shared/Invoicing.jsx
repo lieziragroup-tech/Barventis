@@ -209,9 +209,10 @@ export default function Invoicing() {
   const reloadInvoices = useCallback(async () => {
     setLoadingList(true);
     try {
+      const poLocationScope = isCentral ? 'CENTRAL' : (isRekanBar ? 'RESTO' : null);
       const [invRes, stats] = await Promise.all([
-        api.getInvoicesPaged({ page: invoicesPage, pageSize: INVOICES_PAGE_SIZE, search: debouncedSearch, status: statusFilter }),
-        api.getInvoicesStats()
+        api.getInvoicesPaged({ page: invoicesPage, pageSize: INVOICES_PAGE_SIZE, search: debouncedSearch, status: statusFilter, locationFilter: poLocationScope }),
+        api.getInvoicesStats(null, poLocationScope)
       ]);
       setPaginatedInvoices(invRes.data);
       setTotalInvoices(invRes.totalCount);
@@ -221,7 +222,7 @@ export default function Invoicing() {
     } finally {
       setLoadingList(false);
     }
-  }, [invoicesPage, debouncedSearch, statusFilter, activeBranchId]);
+  }, [invoicesPage, debouncedSearch, statusFilter, activeBranchId, isCentral, isRekanBar]);
 
   useEffect(() => {
     setInvoicesPage(1);
@@ -1195,12 +1196,23 @@ Catatan: ${inv.notes || '-'}`,
           </div>
           <div className="kpi-value" style={{ color: '#059669' }}>{kpis.received}</div>
         </div>
-        <div className="glass-card kpi-card">
-          <div className="kpi-header">
-            <span className="kpi-title">Total Belanja</span>
+        {(isOwner || isPurchasing) ? (
+          <div className="glass-card kpi-card">
+            <div className="kpi-header">
+              <span className="kpi-title">Total Belanja</span>
+            </div>
+            <div className="kpi-value" style={{ fontSize: '1.25rem' }}>{formatIDR(kpis.totalValue)}</div>
           </div>
-          <div className="kpi-value" style={{ fontSize: '1.25rem' }}>{formatIDR(kpis.totalValue)}</div>
-        </div>
+        ) : (
+          <div className="glass-card kpi-card">
+            <div className="kpi-header">
+              <span className="kpi-title">Cakupan PO</span>
+            </div>
+            <div className="kpi-value" style={{ fontSize: '1.05rem', color: 'var(--accent)' }}>
+              {isCentral ? 'Khusus Central' : 'Khusus Cabang'}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Print-only Document Header */}
@@ -1224,7 +1236,7 @@ Catatan: ${inv.notes || '-'}`,
                 <th>Tanggal</th>
                 <th style={{ textAlign: 'center' }}>Lokasi</th>
                 <th style={{ textAlign: 'right' }}>Item</th>
-                <th style={{ textAlign: 'right' }}>Total Nilai</th>
+                {(isOwner || isPurchasing) && <th style={{ textAlign: 'right' }}>Total Nilai</th>}
                 <th style={{ textAlign: 'center' }}>Status</th>
                 <th style={{ textAlign: 'center', minWidth: '220px' }} className="no-print">Aksi</th>
               </tr>
@@ -1276,7 +1288,7 @@ Catatan: ${inv.notes || '-'}`,
                           </span>
                         </td>
                         <td style={{ textAlign: 'right', fontSize: '0.85rem' }}>{inv.items?.length || 0} bahan</td>
-                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatIDR(inv.total)}</td>
+                        {(isOwner || isPurchasing) && <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatIDR(inv.total)}</td>}
                         <td style={{ textAlign: 'center' }}>{statusBadge(inv.status, wf)}</td>
                         <td style={{ textAlign: 'center' }} className="no-print">
                           <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'nowrap', whiteSpace: 'nowrap', justifyContent: 'center' }}>

@@ -2467,3 +2467,62 @@ dialog::backdrop {
     -webkit-overflow-scrolling: touch;
   }
 }
+
+/* ============================================================================
+ * Barventis v5.3 Modern Web Guidance Layer (Clean, Minimalist, Accessible)
+ * ============================================================================ */
+:root {
+  accent-color: var(--accent);
+}
+
+html, body, #root {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+h1, h2, h3 {
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+/* Visible, calm keyboard focus indicator (WCAG 2.2 AA) */
+:where(button, a, input, select, textarea, [tabindex="0"]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Post-interaction form validation (:user-invalid avoids premature red noise) */
+.form-control:user-invalid {
+  border-color: #dc2626;
+}
+
+.form-control:autofill {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+/* Prevent scroll chaining under modals, slide-overs, and scrollable tables */
+dialog,
+.modal-content,
+.table-container,
+.overflow-x-auto {
+  overscroll-behavior: contain;
+}
+
+/* Below-the-fold rendering containment for smoother INP & initial paint */
+.bv-defer-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 420px;
+}
+
+/* Respect OS reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

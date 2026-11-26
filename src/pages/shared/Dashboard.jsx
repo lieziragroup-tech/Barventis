@@ -11,6 +11,19 @@ import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatIDR, calculateIngredientCost } from '../../services/costUtils';
 import WidgetErrorBoundary from '../../components/WidgetErrorBoundary';
+import {
+  DASHBOARD_ROLES,
+  resolveDashboardRole,
+  filterInvoicesForRole,
+  isCentralTransfer,
+  isCentralTransaction,
+} from '../../services/modules/roleBoundaryUtils';
+import { FocalActionBanner, StatusPill } from '../../components/dashboard/DashboardPrimitives';
+import {
+  CentralDashboardView,
+  HeadBarDashboardView,
+  RekanBarDashboardView,
+} from '../../components/dashboard/RoleOperationalDashboards';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
 
 export default function Dashboard() {
@@ -18,17 +31,12 @@ export default function Dashboard() {
   const { activeUser } = useAuth();
   const { stock, unitConversionMap, branches, activeBranch, canSwitchBranch, switchBranch } = useData();
 
-  const rawRole = String(activeUser?.role || '').trim();
-  const normalizedRole = rawRole === 'SuperAdmin'
-    ? 'Super Admin'
-    : rawRole === 'Admin  Owner'
-      ? 'Admin / Owner'
-      : rawRole === 'Barista' || rawRole === 'Head Bar' || rawRole === 'Rekan Bar'
-        ? 'Bar'
-        : rawRole;
-
-  const isCentralRole = normalizedRole === 'Central';
-  const isPurchasingRole = normalizedRole === 'Purchasing';
+  const dashboardRole = resolveDashboardRole(activeUser);
+  const isOwnerRole = dashboardRole === DASHBOARD_ROLES.OWNER;
+  const isCentralRole = dashboardRole === DASHBOARD_ROLES.CENTRAL;
+  const isPurchasingRole = dashboardRole === DASHBOARD_ROLES.PURCHASING;
+  const isHeadBarRole = dashboardRole === DASHBOARD_ROLES.HEAD_BAR;
+  const isRekanBarRole = dashboardRole === DASHBOARD_ROLES.REKAN_BAR;
 
   const [transactions, setTransactions] = useState([]);
   const [isLoadingTx, setIsLoadingTx] = useState(true);
@@ -94,13 +102,13 @@ export default function Dashboard() {
   }, [period, activeBranch?.id]);
 
   useEffect(() => {
-    if (!isCentralRole && !isPurchasingRole) return;
+    if (isOwnerRole) return;
     let active = true;
     setLoadingRoleData(true);
     Promise.all([
-      api.getInvoices().catch(() => []),
+      isRekanBarRole ? Promise.resolve([]) : api.getInvoices().catch(() => []),
       isCentralRole ? api.getTransfers().catch(() => []) : Promise.resolve([]),
-      isCentralRole && typeof api.getInterBranchShipments === 'function' ? api.getInterBranchShipments().catch(() => []) : Promise.resolve([]),
+      (isCentralRole || isHeadBarRole || isRekanBarRole) && typeof api.getInterBranchShipments === 'function' ? api.getInterBranchShipments().catch(() => []) : Promise.resolve([]),
       isPurchasingRole && typeof api.getSuppliers === 'function' ? api.getSuppliers().catch(() => []) : Promise.resolve([])
     ])
       .then(([invs, trfs, ships, sups]) => {
@@ -114,7 +122,7 @@ export default function Dashboard() {
         if (active) setLoadingRoleData(false);
       });
     return () => { active = false; };
-  }, [isCentralRole, isPurchasingRole, period, activeBranch?.id]);
+  }, [isOwnerRole, isCentralRole, isPurchasingRole, isHeadBarRole, isRekanBarRole, period, activeBranch?.id]);
 
   useEffect(() => {
     if (!canSwitchBranch || branchScope !== 'ALL') return;
@@ -164,7 +172,8 @@ export default function Dashboard() {
     periodTransfers.forEach(trf => {
       const src = String(trf.source_branch || 'Central Warehouse');
       const tgt = String(trf.target_branch || 'Resto Bar');
-      const isFromCentral = src.toLowerCase().includes('central') || src.toLowerCase() !== tgt.toLowerCase();
+      if (!isCentralTransfer({ from_location: src, to_location: tgt })) return;
+      const isFromCentral = src.toLowerCase().includes('central');
       const val = Number(trf.amount) || (Number(trf.qty || 0) * Number(trf.price || 0));
 
       if (isFromCentral) {
@@ -197,6 +206,7 @@ export default function Dashboard() {
     periodShipments.forEach(ship => {
       const fromName = branchNameById[ship.from_branch_id] || 'Gudang Central';
       const toName = branchNameById[ship.to_branch_id] || 'Cabang Tujuan';
+      if (!isCentralTransfer({ from_branch_name: fromName, to_branch_name: toName, from_is_central: !ship.from_branch_id })) return;
       const items = Array.isArray(ship.inter_branch_transfer_items) ? ship.inter_branch_transfer_items : [];
       const shipDate = String(ship.shipped_at || ship.created_at || '').slice(0, 10);
 
@@ -246,9 +256,10 @@ export default function Dashboard() {
 
     // 2. Inbound Sources (From PO Suppliers & Inbound Transactions)
     const sourceMap = new Map();
-    const periodInvoices = (invoicesList || []).filter(inv => String(inv.date || '').startsWith(period));
-    const receivedPos = periodInvoices.filter(inv => (inv.workflow_status || inv.status) === 'RECEIVED');
-    const pendingCentralPos = (invoicesList || []).filter(inv => !['RECEIVED', 'CANCELLED', 'REJECTED'].includes(String(inv.workflow_status || inv.status).toUpperCase()));
+    const centralOnlyInvoices = filterInvoicesForRole(invoicesList, DASHBOARD_ROLES.CENTRAL);
+    const periodInvoices = centralOnlyInvoices.filter(inv => String(inv.date || '').startsWith(period));
+    const receivedPos = periodInvoices.filter(inv => String(inv.workflow_status || inv.status).toUpperCase() === 'RECEIVED');
+    const pendingCentralPos = centralOnlyInvoices.filter(inv => !['RECEIVED', 'COMPLETED', 'CANCELLED', 'CANCELED', 'REJECTED'].includes(String(inv.workflow_status || inv.status).toUpperCase()));
 
     receivedPos.forEach(inv => {
       const sup = inv.supplier || 'Supplier Umum';
@@ -281,6 +292,7 @@ export default function Dashboard() {
     // Also include direct IN / PURCHASE_IN transactions in the period not already represented
     (transactions || []).forEach(tx => {
       if (!tx.date || !tx.date.startsWith(period)) return;
+      if (!isCentralTransaction(tx)) return;
       if (['IN', 'PURCHASE_IN'].includes(tx.type) && Number(tx.qty) > 0) {
         const supName = tx.supplier || 'Pembelian / Barang Masuk';
         const val = Math.abs(Number(tx.amount || 0));
@@ -319,8 +331,10 @@ export default function Dashboard() {
 
     const totalInboundValue = inboundSources.reduce((s, x) => s + x.totalValue, 0);
     const totalInboundCount = inboundSources.reduce((s, x) => s + x.count, 0);
+    const totalInboundQty = inboundSources.reduce((s, x) => s + x.totalQty, 0);
     const totalOutboundValue = destinations.reduce((s, x) => s + x.totalValue, 0);
     const totalOutboundCount = destinations.reduce((s, x) => s + x.count, 0);
+    const totalOutboundQty = destinations.reduce((s, x) => s + x.totalQty, 0);
 
     return {
       destinations,
@@ -328,9 +342,12 @@ export default function Dashboard() {
       unifiedMovements,
       totalInboundValue,
       totalInboundCount,
+      totalInboundQty,
       totalOutboundValue,
       totalOutboundCount,
+      totalOutboundQty,
       pendingCentralPos,
+      centralPos: periodInvoices,
       periodInvoices
     };
   }, [isCentralRole, transfersList, shipmentsList, invoicesList, transactions, period, branchNameById]);
@@ -488,420 +505,53 @@ export default function Dashboard() {
   // VIEW 1: DEDICATED CENTRAL ROLE DASHBOARD
   // ============================================================================
   if (isCentralRole && centralMetrics) {
-    const filteredMovements = centralMetrics.unifiedMovements.filter(m => {
-      const matchDir = centralFlowFilter === 'ALL' || m.direction === centralFlowFilter;
-      const q = centralSearch.trim().toLowerCase();
-      const matchQ = !q ||
-        String(m.item_name || '').toLowerCase().includes(q) ||
-        String(m.from_party || '').toLowerCase().includes(q) ||
-        String(m.to_party || '').toLowerCase().includes(q) ||
-        String(m.reference || '').toLowerCase().includes(q);
-      return matchDir && matchQ;
-    });
-
     return (
-      <div className="fade-in space-y-5">
-        {/* Top Control Bar: Periode & Pintasan Operasional Central */}
-        <div className="glass-card p-3.5 sm:px-5 sm:py-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 w-full md:w-auto">
-            <div className="w-8 h-8 rounded-lg bg-[var(--accent-glow)] text-[var(--accent)] flex items-center justify-center shrink-0">
-              <Calendar size={16} />
-            </div>
-            <span className="text-xs sm:text-sm font-bold text-[var(--text-secondary)] whitespace-nowrap">Periode Logistik:</span>
-            <select
-              className="form-control flex-1 sm:w-[190px]"
-              style={{ padding: '7px 12px', fontSize: '0.85rem', fontWeight: 600 }}
-              value={period}
-              onChange={e => setPeriod(e.target.value)}
-            >
-              {periodOptions.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard/transfer')}
-              className="btn btn-primary flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 whitespace-nowrap shrink-0"
-            >
-              <ArrowRightLeft size={15} />
-              <span>+ Mutasi dari Central ke Cabang</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard/procurement?tab=invoicing')}
-              className="btn btn-secondary flex items-center gap-1.5 text-xs font-semibold px-3 py-2 whitespace-nowrap shrink-0"
-            >
-              <ShoppingCart size={15} />
-              <span>PO & Penerimaan Barang</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard/sistem?tab=stock-ledger')}
-              className="btn btn-secondary flex items-center gap-1.5 text-xs font-semibold px-3 py-2 whitespace-nowrap shrink-0"
-            >
-              <Package size={15} />
-              <span>Stok Gudang Central</span>
-            </button>
-          </div>
-        </div>
-
-        {/* 4 KPI Cards: Barang Masuk, Barang Keluar ke Cabang, PO Central, Stok Central */}
-        <div className="kpi-grid">
-          <div className="glass-card kpi-card">
-            <div className="kpi-header">
-              <span className="kpi-title">Barang Masuk (Inbound)</span>
-              <div className="kpi-icon-wrap" style={{ background: 'var(--success-glow)', color: 'var(--success)' }}>
-                <ArrowDownLeft size={20} />
-              </div>
-            </div>
-            <div className="kpi-value tabular-nums">{formatIDR(centralMetrics.totalInboundValue)}</div>
-            <div className="kpi-footer">
-              <span className="text-[var(--text-secondary)] tabular-nums">
-                {centralMetrics.totalInboundCount} penerimaan PO & stok masuk ({periodLabel})
-              </span>
-            </div>
-          </div>
-
-          <div className="glass-card kpi-card" onClick={() => navigate('/dashboard/transfer')} style={{ cursor: 'pointer' }}>
-            <div className="kpi-header">
-              <span className="kpi-title">Mutasi Keluar ke Cabang</span>
-              <div className="kpi-icon-wrap" style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}>
-                <ArrowUpRight size={20} />
-              </div>
-            </div>
-            <div className="kpi-value tabular-nums">{formatIDR(centralMetrics.totalOutboundValue)}</div>
-            <div className="kpi-footer">
-              <span className="text-[var(--text-secondary)] tabular-nums">
-                {centralMetrics.totalOutboundCount} pengiriman ke {centralMetrics.destinations.length} tujuan cabang/unit
-              </span>
-            </div>
-          </div>
-
-          <div className="glass-card kpi-card" onClick={() => navigate('/dashboard/procurement?tab=invoicing')} style={{ cursor: 'pointer' }}>
-            <div className="kpi-header">
-              <span className="kpi-title">Antrean PO & Penerimaan</span>
-              <div className="kpi-icon-wrap" style={{ background: 'var(--info-glow)', color: 'var(--info)' }}>
-                <Truck size={20} />
-              </div>
-            </div>
-            <div className="kpi-value tabular-nums">{centralMetrics.pendingCentralPos.length} PO</div>
-            <div className="kpi-footer">
-              <span className="text-[var(--text-secondary)] tabular-nums">
-                {centralMetrics.periodInvoices.length} total PO tercatat pada bulan ini
-              </span>
-            </div>
-          </div>
-
-          <div className="glass-card kpi-card" onClick={() => navigate('/dashboard/sistem?tab=stock-ledger')} style={{ cursor: 'pointer' }}>
-            <div className="kpi-header">
-              <span className="kpi-title">Nilai Stok Central</span>
-              <div className="kpi-icon-wrap" style={{ background: centralLowStockItems.length > 0 ? 'var(--warning-glow)' : 'var(--success-glow)', color: centralLowStockItems.length > 0 ? 'var(--warning)' : 'var(--success)' }}>
-                <Package size={20} />
-              </div>
-            </div>
-            <div className="kpi-value tabular-nums">{formatIDR(centralStockValuation || stockValuation)}</div>
-            <div className="kpi-footer">
-              <span style={{ color: centralLowStockItems.length > 0 ? 'var(--danger)' : 'var(--text-secondary)' }} className="tabular-nums font-semibold">
-                {centralLowStockItems.length} bahan Central di bawah stok minimum
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* 2-Column Split: Distribusi Keluar (Central -> Cabang Mana) & Sumber Barang Masuk (Dari Mana) */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
-          {/* Panel Kiri: Barang Keluar dari Central ke Cabang / Unit Mana Saja */}
-          <div className="glass-card p-5 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between gap-2 mb-4">
-                <div>
-                  <h3 className="text-base font-bold text-[var(--text-primary)] m-0">
-                    Distribusi Barang Keluar: Central ke Cabang / Unit Tujuan
-                  </h3>
-                  <p className="text-xs text-[var(--text-secondary)] m-0 mt-0.5">
-                    Rincian mutasi stok dari Central ke masing-masing cabang dan unit operasional ({periodLabel}).
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => navigate('/dashboard/transfer')}
-                  className="btn btn-secondary text-xs font-semibold px-2.5 py-1.5 whitespace-nowrap shrink-0"
-                >
-                  Kelola Mutasi
-                </button>
-              </div>
-
-              {loadingRoleData || isLoadingTx ? (
-                <div className="py-10 text-center text-xs text-[var(--text-muted)]">Memuat data distribusi cabang...</div>
-              ) : centralMetrics.destinations.length === 0 ? (
-                <div className="py-10 text-center text-xs text-[var(--text-muted)]">
-                  Belum ada mutasi keluar dari Central pada periode {periodLabel}.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="custom-table w-full text-xs">
-                    <thead>
-                      <tr>
-                        <th>Tujuan Cabang / Unit</th>
-                        <th>Kategori</th>
-                        <th className="text-right">Frekuensi</th>
-                        <th className="text-right">Total Qty</th>
-                        <th className="text-right">Nilai Distribusi</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {centralMetrics.destinations.map((dest) => (
-                        <tr key={dest.destination} className="hover:bg-[var(--bg-tertiary)]/50">
-                          <td className="font-bold text-[var(--text-primary)]">{dest.destination}</td>
-                          <td className="text-[var(--text-secondary)]">{dest.type}</td>
-                          <td className="text-right font-mono tabular-nums">{dest.count}x mutasi</td>
-                          <td className="text-right font-mono tabular-nums">{dest.totalQty.toFixed(1)}</td>
-                          <td className="text-right font-mono tabular-nums font-bold text-[var(--accent)]">
-                            {formatIDR(dest.totalValue)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Panel Kanan: Barang Masuk ke Central dari Mana Saja (Supplier PO / Transfer Masuk) */}
-          <div className="glass-card p-5 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between gap-2 mb-4">
-                <div>
-                  <h3 className="text-base font-bold text-[var(--text-primary)] m-0">
-                    Sumber Barang Masuk ke Central (PO Supplier & Inbound)
-                  </h3>
-                  <p className="text-xs text-[var(--text-secondary)] m-0 mt-0.5">
-                    Rekap asal barang masuk ke gudang Central berdasarkan supplier dan penerimaan PO ({periodLabel}).
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => navigate('/dashboard/procurement?tab=invoicing')}
-                  className="btn btn-secondary text-xs font-semibold px-2.5 py-1.5 whitespace-nowrap shrink-0"
-                >
-                  Lihat Semua PO
-                </button>
-              </div>
-
-              {loadingRoleData || isLoadingTx ? (
-                <div className="py-10 text-center text-xs text-[var(--text-muted)]">Memuat sumber barang masuk...</div>
-              ) : centralMetrics.inboundSources.length === 0 ? (
-                <div className="py-10 text-center text-xs text-[var(--text-muted)]">
-                  Belum ada penerimaan barang masuk yang tercatat pada periode {periodLabel}.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="custom-table w-full text-xs">
-                    <thead>
-                      <tr>
-                        <th>Asal / Supplier</th>
-                        <th>Jenis Masuk</th>
-                        <th className="text-right">Frekuensi</th>
-                        <th className="text-right">Total Qty</th>
-                        <th className="text-right">Total Nilai Masuk</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {centralMetrics.inboundSources.slice(0, 8).map((src) => (
-                        <tr key={src.source} className="hover:bg-[var(--bg-tertiary)]/50">
-                          <td className="font-bold text-[var(--text-primary)]">{src.source}</td>
-                          <td className="text-[var(--text-secondary)]">{src.type}</td>
-                          <td className="text-right font-mono tabular-nums">{src.count}x</td>
-                          <td className="text-right font-mono tabular-nums">{src.totalQty.toFixed(1)}</td>
-                          <td className="text-right font-mono tabular-nums font-bold" style={{ color: 'var(--success)' }}>
-                            {formatIDR(src.totalValue)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Daftar PO Central Aktif / Menunggu Penerimaan */}
-        <div className="glass-card p-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-            <div>
-              <h3 className="text-base font-bold text-[var(--text-primary)] m-0">
-                Purchase Order (PO) Central & Status Penerimaan Barang
-              </h3>
-              <p className="text-xs text-[var(--text-secondary)] m-0 mt-0.5">
-                Daftar PO yang sedang berjalan maupun yang sudah diterima di gudang.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard/procurement?tab=invoicing')}
-              className="btn btn-primary text-xs font-bold px-3 py-1.5 whitespace-nowrap self-start sm:self-auto"
-            >
-              Buka Modul PO & Goods Receipt
-            </button>
-          </div>
-
-          {invoicesList.length === 0 ? (
-            <div className="py-8 text-center text-xs text-[var(--text-muted)]">
-              Belum ada dokumen Purchase Order (PO) terdaftar.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="custom-table w-full text-xs">
-                <thead>
-                  <tr>
-                    <th>No. PO</th>
-                    <th>Tanggal</th>
-                    <th>Supplier</th>
-                    <th>Lokasi Tujuan</th>
-                    <th className="text-right">Jumlah Item</th>
-                    <th className="text-right">Total Nilai PO</th>
-                    <th>Status</th>
-                    <th className="text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoicesList.slice(0, 6).map(inv => {
-                    const wf = String(inv.workflow_status || inv.status || 'DRAFT').toUpperCase();
-                    return (
-                      <tr key={inv.id} className="hover:bg-[var(--bg-tertiary)]/50">
-                        <td className="font-mono font-bold text-[var(--accent)]">{inv.invoice_no}</td>
-                        <td className="font-mono tabular-nums text-[var(--text-secondary)]">{inv.date}</td>
-                        <td className="font-semibold text-[var(--text-primary)]">{inv.supplier}</td>
-                        <td className="text-[var(--text-secondary)]">{inv.location || 'CENTRAL'}</td>
-                        <td className="text-right font-mono tabular-nums">{(inv.items || []).length} bahan</td>
-                        <td className="text-right font-mono tabular-nums font-bold">{formatIDR(inv.total || 0)}</td>
-                        <td className="font-semibold">
-                          <span style={{
-                            color: wf === 'RECEIVED' ? 'var(--success)' : wf === 'CANCELLED' || wf === 'REJECTED' ? 'var(--danger)' : 'var(--warning)'
-                          }}>
-                            {wf}
-                          </span>
-                        </td>
-                        <td className="text-right">
-                          <button
-                            type="button"
-                            onClick={() => navigate('/dashboard/procurement?tab=invoicing')}
-                            className="btn btn-secondary text-[11px] font-semibold px-2.5 py-1"
-                          >
-                            {wf === 'SENT' || wf === 'APPROVED' ? 'Terima Barang' : 'Detail PO'}
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Ledger Riwayat Pergerakan Barang Masuk & Keluar Central */}
-        <div className="glass-card p-5">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
-            <div>
-              <h3 className="text-base font-bold text-[var(--text-primary)] m-0">
-                Riwayat Arus Barang Masuk & Keluar Central ({periodLabel})
-              </h3>
-              <p className="text-xs text-[var(--text-secondary)] m-0 mt-0.5">
-                Lacak secara detail setiap bahan masuk dari mana dan keluar/mutasi ke cabang mana.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)]">
-                {[
-                  { key: 'ALL', label: 'Semua Arus' },
-                  { key: 'MASUK', label: 'Barang Masuk' },
-                  { key: 'KELUAR', label: 'Mutasi Keluar' }
-                ].map(tab => (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    onClick={() => setCentralFlowFilter(tab.key)}
-                    className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors whitespace-nowrap ${
-                      centralFlowFilter === tab.key
-                        ? 'bg-[var(--bg-secondary)] text-[var(--accent)] shadow-2xs'
-                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="relative min-w-[200px]">
-                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                <input
-                  type="text"
-                  className="form-control pl-8 py-1.5 text-xs"
-                  placeholder="Cari bahan, cabang, supplier..."
-                  value={centralSearch}
-                  onChange={e => setCentralSearch(e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
-
-          {filteredMovements.length === 0 ? (
-            <div className="py-10 text-center text-xs text-[var(--text-muted)]">
-              Tidak ada catatan pergerakan barang masuk/keluar yang sesuai filter pada periode ini.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="custom-table w-full text-xs">
-                <thead>
-                  <tr>
-                    <th>Tanggal</th>
-                    <th>Arus</th>
-                    <th>Kategori</th>
-                    <th>Bahan / Paket</th>
-                    <th className="text-right">Kuantitas</th>
-                    <th>Dari Mana (Asal)</th>
-                    <th>Ke Mana (Tujuan)</th>
-                    <th className="text-right">Nilai Estimasi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredMovements.slice(0, 20).map((mv) => (
-                    <tr key={mv.id} className="hover:bg-[var(--bg-tertiary)]/50">
-                      <td className="font-mono tabular-nums text-[var(--text-secondary)] whitespace-nowrap">{mv.date}</td>
-                      <td className="font-bold whitespace-nowrap" style={{ color: mv.direction === 'MASUK' ? 'var(--success)' : 'var(--accent)' }}>
-                        {mv.direction === 'MASUK' ? '↓ MASUK' : '↑ KELUAR'}
-                      </td>
-                      <td className="text-[var(--text-secondary)] whitespace-nowrap">{mv.category}</td>
-                      <td className="font-semibold text-[var(--text-primary)]">{mv.item_name}</td>
-                      <td className="text-right font-mono tabular-nums font-semibold whitespace-nowrap">
-                        {typeof mv.qty === 'number' ? mv.qty.toFixed(1) : mv.qty} {mv.unit}
-                      </td>
-                      <td className="text-[var(--text-secondary)]">{mv.from_party}</td>
-                      <td className="font-semibold text-[var(--text-primary)]">{mv.to_party}</td>
-                      <td className="text-right font-mono tabular-nums font-bold">
-                        {formatIDR(mv.value || 0)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
+      <CentralDashboardView
+        period={period}
+        setPeriod={setPeriod}
+        periodOptions={periodOptions}
+        periodLabel={periodLabel}
+        centralMetrics={centralMetrics}
+        centralLowStockItems={centralLowStockItems}
+        loadingRoleData={loadingRoleData}
+        navigate={navigate}
+      />
     );
   }
 
-  // ============================================================================
-  // VIEW 2: DEDICATED PURCHASING ROLE DASHBOARD
-  // ============================================================================
+  if (isHeadBarRole) {
+    const branchLowStockItems = (stock || []).filter(item => Number(item.qty_resto || 0) < Number(item.min_stock || 15));
+    const branchPos = filterInvoicesForRole(invoicesList, DASHBOARD_ROLES.HEAD_BAR, activeBranch?.id);
+    const incomingTransfers = (shipmentsList || []).filter(
+      s => (!activeBranch?.id || String(s.to_branch_id) === String(activeBranch.id)) && !['RECEIVED', 'COMPLETED', 'CANCELLED'].includes(String(s.status || '').toUpperCase())
+    );
+    return (
+      <HeadBarDashboardView
+        activeBranchName={activeBranch?.name || 'Aktif'}
+        branchStockItems={stock || []}
+        branchLowStockItems={branchLowStockItems}
+        branchPos={branchPos}
+        incomingTransfers={incomingTransfers}
+        navigate={navigate}
+      />
+    );
+  }
+
+  if (isRekanBarRole) {
+    const branchLowStockItems = (stock || []).filter(item => Number(item.qty_resto || 0) < Number(item.min_stock || 15));
+    const incomingTransfers = (shipmentsList || []).filter(
+      s => (!activeBranch?.id || String(s.to_branch_id) === String(activeBranch.id)) && !['RECEIVED', 'COMPLETED', 'CANCELLED'].includes(String(s.status || '').toUpperCase())
+    );
+    return (
+      <RekanBarDashboardView
+        activeBranchName={activeBranch?.name || 'Aktif'}
+        branchLowStockItems={branchLowStockItems}
+        incomingTransfers={incomingTransfers}
+        navigate={navigate}
+      />
+    );
+  }
+
   if (isPurchasingRole && purchasingMetrics) {
     const filteredMonthlyPos = purchasingMetrics.monthlyPos.filter(inv => {
       const wf = String(inv.workflow_status || inv.status || 'DRAFT').toUpperCase();
@@ -923,6 +573,24 @@ export default function Dashboard() {
 
     return (
       <div className="fade-in space-y-5">
+        <FocalActionBanner
+          eyebrow="Fokus Pengadaan & Supplier"
+          title={purchasingMetrics.requestedCount > 0 ? `${purchasingMetrics.requestedCount} permintaan PO menunggu proses Purchasing` : `Seluruh antrean PO bulan ${periodLabel} terkendali`}
+          description={`Total ${purchasingMetrics.totalMonthlyPoCount} PO aktif tercatat pada ${periodLabel} dengan nilai pengadaan ${formatIDR(purchasingMetrics.totalMonthlyPoValue)}.`}
+          tone={purchasingMetrics.requestedCount > 0 ? 'warning' : 'success'}
+          primaryAction={{
+            label: '+ Buat PO Baru',
+            icon: <Plus size={15} />,
+            onClick: () => navigate('/dashboard/procurement?tab=invoicing&create=1'),
+          }}
+          secondaryActions={[
+            {
+              label: 'Komparasi Harga',
+              icon: <Tag size={14} />,
+              onClick: () => navigate('/dashboard/procurement?tab=marketlist'),
+            },
+          ]}
+        />
         {/* Top Control Bar: Periode Bulan & Pintasan Utama Pembuatan PO */}
         <div className="glass-card p-3.5 sm:px-5 sm:py-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 w-full md:w-auto">
@@ -1272,12 +940,8 @@ export default function Dashboard() {
                         </td>
                         <td className="text-right font-mono tabular-nums">{(inv.items || []).length} bahan</td>
                         <td className="text-right font-mono tabular-nums font-bold">{formatIDR(inv.total || 0)}</td>
-                        <td className="font-semibold">
-                          <span style={{
-                            color: wf === 'RECEIVED' ? 'var(--success)' : wf === 'CANCELLED' || wf === 'REJECTED' ? 'var(--danger)' : 'var(--warning)'
-                          }}>
-                            {wf}
-                          </span>
+                        <td>
+                          <StatusPill status={wf} />
                         </td>
                         <td className="text-right">
                           <button
@@ -1351,6 +1015,25 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      <FocalActionBanner
+        eyebrow={branchScope === 'ALL' ? `Ringkasan Eksekutif · Semua Cabang (${branches.length})` : `Ringkasan Eksekutif · Cabang ${activeBranch?.name || 'Aktif'}`}
+        title={lowStockItems.length > 0 ? `${lowStockItems.length} item stok menipis · Rasio Biaya ${currentCostPct.toFixed(1)}%` : `Rasio Biaya F&B ${currentCostPct.toFixed(1)}% (Target < 27%)`}
+        description={`Pantau kesehatan biaya, omzet penjualan, dan nilai persediaan pada periode ${periodLabel}. Klik kartu untuk meninjau rincian operasional.`}
+        tone={currentCostPct > 30 || lowStockItems.length > 20 ? 'warning' : 'success'}
+        primaryAction={{
+          label: 'Analisis Cost Control',
+          icon: <TrendingDown size={15} />,
+          onClick: () => navigate('/dashboard/cost-control'),
+        }}
+        secondaryActions={[
+          {
+            label: 'Kelola PO',
+            icon: <ShoppingCart size={14} />,
+            onClick: () => navigate('/dashboard/procurement?tab=invoicing'),
+          },
+        ]}
+      />
 
       {canSwitchBranch && branchScope === 'ALL' ? (
         <div className="space-y-6">

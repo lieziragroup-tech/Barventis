@@ -668,7 +668,11 @@ export default function DashboardLayout() {
               </select>
             ) : (
               <span className="text-xs font-semibold text-[var(--text-secondary)] truncate">
-                {activeBranch.name}
+                {String(activeUser?.role || '').toLowerCase() === 'central'
+                  ? 'Gudang Central'
+                  : String(activeUser?.role || '').toLowerCase() === 'purchasing'
+                    ? 'Purchasing'
+                    : activeBranch.name}
               </span>
             )}
           </div>
@@ -812,7 +816,13 @@ export default function DashboardLayout() {
                     title="Cabang tugas aktif"
                   >
                     <Store size={14} className="text-[var(--accent)] shrink-0" />
-                    <span className="max-w-[150px] truncate">{activeBranch.name}</span>
+                    <span className="max-w-[150px] truncate">
+                      {String(activeUser?.role || '').toLowerCase() === 'central'
+                        ? 'Gudang Central'
+                        : String(activeUser?.role || '').toLowerCase() === 'purchasing'
+                          ? 'Purchasing'
+                          : activeBranch.name}
+                    </span>
                   </div>
                 )
               )}

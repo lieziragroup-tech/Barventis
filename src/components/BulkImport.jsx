@@ -1,3 +1,4 @@
+import { yieldToMain } from '../utils/yieldToMain';
 import { useState, useRef } from 'react';
 import {
   UploadCloud, FileSpreadsheet, Download, CheckCircle,
@@ -99,6 +100,7 @@ export default function BulkImport({
 
   // Generate and download template Excel in browser
   const handleDownloadTemplate = async () => {
+    await yieldToMain();
     const XLSX = await getXLSX();
     const wb = XLSX.utils.book_new();
     
@@ -150,6 +152,17 @@ export default function BulkImport({
   // Parse uploaded Excel file
   const handleFileUpload = async (file) => {
     if (!file) return;
+    const MAX_IMPORT_BYTES = 5 * 1024 * 1024; // 5 MB safety cap
+    const lowerName = String(file.name || '').toLowerCase();
+    const isAllowedExt = lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls') || lowerName.endsWith('.csv');
+    if (!isAllowedExt) {
+      setErrors(['Format berkas tidak didukung. Gunakan berkas .xlsx, .xls, atau .csv.']);
+      return;
+    }
+    if (file.size > MAX_IMPORT_BYTES) {
+      setErrors(['Ukuran berkas melebihi batas aman 5 MB. Bagi data menjadi beberapa berkas lebih kecil.']);
+      return;
+    }
     const XLSX = await getXLSX();
     setLoading(true);
     setErrors([]);

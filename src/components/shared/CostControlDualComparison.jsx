@@ -46,7 +46,7 @@ export default function CostControlDualComparison({
 }) {
   const [adjustments, setAdjustments] = useState(() => {
     try {
-      const raw = localStorage.getItem(`bv_cc_adj_${period}`);
+      const raw = localStorage.getItem(`bv_cc_adj_${branchId || 'default'}_${period}`);
       return raw ? JSON.parse(raw) : DEFAULT_CC_ADJUSTMENTS;
     } catch {
       return DEFAULT_CC_ADJUSTMENTS;
@@ -118,7 +118,7 @@ export default function CostControlDualComparison({
     const next = [savedItem, ...adjustments];
     setAdjustments(next);
     try {
-      localStorage.setItem(`bv_cc_adj_${period}`, JSON.stringify(next));
+      localStorage.setItem(`bv_cc_adj_${branchId || 'default'}_${period}`, JSON.stringify(next));
     } catch {
       // ignore
     }
@@ -130,7 +130,7 @@ export default function CostControlDualComparison({
     const next = adjustments.filter((a) => a.id !== id);
     setAdjustments(next);
     try {
-      localStorage.setItem(`bv_cc_adj_${period}`, JSON.stringify(next));
+      localStorage.setItem(`bv_cc_adj_${branchId || 'default'}_${period}`, JSON.stringify(next));
     } catch {
       // ignore
     }

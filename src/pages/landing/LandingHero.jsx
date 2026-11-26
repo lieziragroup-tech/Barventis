@@ -15,7 +15,11 @@ export default function LandingHero() {
       <div className="landing-container">
         <div className="hero-grid">
           <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: 'easeOut' }}>
-            <h1 className="hero-headline" dangerouslySetInnerHTML={{ __html: c.headline.replace(/_(.*?)_/g, '<em>$1</em>') }} />
+            <h1 className="hero-headline">
+              {String(c.headline || '').split(/_(.*?)_/g).map((part, idx) => (
+                idx % 2 === 1 ? <em key={idx}>{part}</em> : part
+              ))}
+            </h1>
             <p className="hero-sub">{c.sub}</p>
             <div className="hero-ctas">
               <Link to="/login" className="landing-btn landing-btn-primary">

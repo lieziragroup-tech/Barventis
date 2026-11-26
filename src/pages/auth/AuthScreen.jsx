@@ -174,6 +174,10 @@ export default function AuthScreen() {
                   <Mail size={18} style={{ position: 'absolute', left: '14px', top: '12px', color: 'var(--text-muted)' }} />
                   <input
                     type="email"
+                  autoComplete="email"
+                  spellCheck={false}
+                  autoCapitalize="none"
+                  autoCorrect="off"
                     required
                     placeholder="nama@perusahaan.com"
                     value={loginData.email}
