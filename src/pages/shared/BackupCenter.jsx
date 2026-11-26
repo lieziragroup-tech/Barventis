@@ -136,7 +136,7 @@ export default function BackupCenter() {
         setUploadedFile(file);
         triggerRestoreModal(file);
       } else {
-        toast.showWarning("File harus berformat ZIP cadangan SQLite UMATIS.");
+        toast.showWarning("File harus berformat ZIP cadangan sistem Barventis.");
       }
     }
   };
@@ -148,7 +148,7 @@ export default function BackupCenter() {
         setUploadedFile(file);
         triggerRestoreModal(file);
       } else {
-        toast.showWarning("File harus berformat ZIP cadangan SQLite UMATIS.");
+        toast.showWarning("File harus berformat ZIP cadangan sistem Barventis.");
       }
     }
   };

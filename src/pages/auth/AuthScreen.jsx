@@ -131,7 +131,7 @@ export default function AuthScreen() {
             BARVENTIS
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem' }}>
-            {mode === 'login' && 'Masuk ke Workspace Cost Control & Inventory Resto Umatis'}
+            {mode === 'login' && 'Masuk ke Workspace Inventaris & Cost Control Barventis'}
             {mode === 'register' && 'Daftarkan Bisnis F&B / Restoran Baru'}
             {mode === 'invite' && 'Undangan Bergabung Staf Operasional'}
           </p>
@@ -175,7 +175,7 @@ export default function AuthScreen() {
                   <input
                     type="email"
                     required
-                    placeholder="owner.beta@umatis.id"
+                    placeholder="nama@perusahaan.com"
                     value={loginData.email}
                     onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
                     style={{
@@ -252,7 +252,7 @@ export default function AuthScreen() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
                     <Zap size={15} style={{ color: 'var(--accent)', flexShrink: 0 }} />
                     <span style={{ fontSize: '0.78rem', fontWeight: '800', letterSpacing: '0.03em', textTransform: 'uppercase', color: 'var(--text-primary)' }}>
-                      Shortcut Login Beta Testing (Resto Umatis)
+                      Shortcut Login Trial (Mode Pengujian)
                     </span>
                   </div>
                   <span style={{
@@ -364,7 +364,7 @@ export default function AuthScreen() {
                   fontSize: '0.71rem',
                   color: 'var(--text-muted)'
                 }}>
-                  <span>Password seragam: <strong>BetaUmatis2026!</strong></span>
+                  <span>Password seragam: <strong>UmatisTrial2026!</strong></span>
                   <span>Data Dummy: <strong>BSD & Kasuna</strong></span>
                 </div>
               </div>

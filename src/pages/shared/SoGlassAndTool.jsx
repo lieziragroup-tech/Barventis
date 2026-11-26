@@ -266,11 +266,11 @@ export default function SoGlassAndTool() {
         submitterNip: existingDoc?.submitter_nip || '-',
         submitterTitle: existingDoc?.submitter_title || 'Head Barista',
         introStatement: existingDoc?.intro_statement || 'Dengan ini melaporkan barang / gelas bar yang pecah atau rusak yaitu:',
-        approverName: existingDoc?.approver_name || 'Owner Umatis',
+        approverName: existingDoc?.approver_name || 'Owner / Pimpinan',
         approverTitle: existingDoc?.approver_title || 'Owner',
         dispositionStatement: existingDoc?.disposition_statement || 'Dicatat sebagai evaluasi bulanan operasional bar.',
         closingStatement: existingDoc?.closing_statement || 'Demikian Berita Acara ini dibuat menurut keadaan yang sebenarnya.',
-        signCity: existingDoc?.sign_city || 'Tangerang',
+        signCity: existingDoc?.sign_city || '',
         wasteItems: Array.isArray(existingDoc?.waste_items) ? existingDoc.waste_items : [],
         breakageItems: nextBreakageItems,
         totalWasteAmount: Number(existingDoc?.total_waste_amount) || 0,
@@ -304,11 +304,11 @@ export default function SoGlassAndTool() {
         submitterNip: existingDoc?.submitter_nip || '-',
         submitterTitle: existingDoc?.submitter_title || 'Head Barista',
         introStatement: existingDoc?.intro_statement || 'Dengan ini melaporkan barang / gelas bar yang pecah atau rusak yaitu:',
-        approverName: existingDoc?.approver_name || 'Owner Umatis',
+        approverName: existingDoc?.approver_name || 'Owner / Pimpinan',
         approverTitle: existingDoc?.approver_title || 'Owner',
         dispositionStatement: existingDoc?.disposition_statement || 'Dicatat sebagai evaluasi bulanan operasional bar.',
         closingStatement: existingDoc?.closing_statement || 'Demikian Berita Acara ini dibuat menurut keadaan yang sebenarnya.',
-        signCity: existingDoc?.sign_city || 'Tangerang',
+        signCity: existingDoc?.sign_city || '',
         wasteItems: Array.isArray(existingDoc?.waste_items) ? existingDoc.waste_items : [],
         breakageItems: nextBreakageItems,
         totalWasteAmount: Number(existingDoc?.total_waste_amount) || 0,
@@ -621,7 +621,7 @@ Periode: ${monthLabel} ${selectedYear} | Total Item: ${assetItems.length} | Cata
             <div>
               <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 700 }}>Jumlah Awal Dimiliki</label>
               <input
-                type="number"
+                type="number" inputMode="numeric"
                 min="0"
                 className="form-control"
                 value={newAsset.qty_owned}
@@ -672,7 +672,7 @@ Periode: ${monthLabel} ${selectedYear} | Total Item: ${assetItems.length} | Cata
                       <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{item.unit}</td>
                       <td>
                         <input
-                          type="number"
+                          type="number" inputMode="numeric"
                           className="form-control"
                           style={{ textAlign: 'center', padding: '5px 6px', fontSize: '0.8rem' }}
                           value={d.stock_awal}
@@ -681,7 +681,7 @@ Periode: ${monthLabel} ${selectedYear} | Total Item: ${assetItems.length} | Cata
                       </td>
                       <td>
                         <input
-                          type="number"
+                          type="number" inputMode="numeric"
                           min="0"
                           className="form-control"
                           style={{ textAlign: 'center', padding: '5px 6px', fontSize: '0.8rem' }}
@@ -691,7 +691,7 @@ Periode: ${monthLabel} ${selectedYear} | Total Item: ${assetItems.length} | Cata
                       </td>
                       <td>
                         <input
-                          type="number"
+                          type="number" inputMode="numeric"
                           min="0"
                           className="form-control"
                           style={{ textAlign: 'center', padding: '5px 6px', fontSize: '0.8rem' }}
@@ -701,7 +701,7 @@ Periode: ${monthLabel} ${selectedYear} | Total Item: ${assetItems.length} | Cata
                       </td>
                       <td>
                         <input
-                          type="number"
+                          type="number" inputMode="numeric"
                           min="0"
                           placeholder={String(expected)}
                           className="form-control"
@@ -815,7 +815,7 @@ Periode: ${monthLabel} ${selectedYear} | Total Item: ${assetItems.length} | Cata
             <div>
               <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 700 }}>Jumlah Pecah</label>
               <input
-                type="number"
+                type="number" inputMode="numeric"
                 min="1"
                 className="form-control"
                 value={breakForm.jumlah}
@@ -828,7 +828,7 @@ Periode: ${monthLabel} ${selectedYear} | Total Item: ${assetItems.length} | Cata
             <div>
               <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 700 }}>Harga Satuan (Rp)</label>
               <input
-                type="number"
+                type="number" inputMode="numeric"
                 min="0"
                 className="form-control"
                 value={breakForm.harga}

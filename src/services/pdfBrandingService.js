@@ -8,7 +8,7 @@ const DEFAULT_BRANDING = {
   logoDataUrl: '',
   logoWidth: 0,
   logoHeight: 0,
-  validationLabel: 'Umatis Resto & Venue',
+  validationLabel: 'Dokumen Resmi Perusahaan',
   updatedAt: null
 };
 
@@ -219,7 +219,7 @@ export function drawPdfBrandHeaderLogo(doc, { marginX = 14, topY = 7, maxWidthMm
       logoRendered: true,
       textOffsetX: marginX + drawW + 4,
       headerBottomY: Math.max(27.5, topY + maxHeightMm + 3),
-      validationLabel: branding.validationLabel || 'Umatis Resto & Venue'
+      validationLabel: branding.validationLabel || 'Dokumen Resmi Perusahaan'
     };
   } catch {
     return {
@@ -246,7 +246,7 @@ export function drawPdfValidationFooter(doc, marginX = 14) {
   doc.text(`Halaman ${doc.internal.getNumberOfPages()}`, marginX, footerY);
 
   if (branding.enabled && branding.logoDataUrl) {
-    const label = branding.validationLabel || 'Umatis Resto & Venue';
+    const label = branding.validationLabel || 'Dokumen Resmi Perusahaan';
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
     doc.setTextColor(15, 118, 110);

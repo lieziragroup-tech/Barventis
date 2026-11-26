@@ -35,15 +35,15 @@ export default function BeritaAcaraMonthly() {
   const [introStatement, setIntroStatement] = useState(
     'Dengan ini menyerahkan minuman beer yang sudah melewati masa Expired/Rusak Yaitu :'
   );
-  const [approverName, setApproverName] = useState('Bpk. Gandhi');
-  const [approverTitle, setApproverTitle] = useState('Owner Umatis');
+  const [approverName, setApproverName] = useState('');
+  const [approverTitle, setApproverTitle] = useState('Owner / Pimpinan');
   const [dispositionStatement, setDispositionStatement] = useState(
     'Memberikan Izin untuk membuang produk yang waste ini'
   );
   const [closingStatement, setClosingStatement] = useState(
     'Demikian Berita Acara ini dibuat menurut keadaan yang sebenarnya untuk di pergunakan sebagaimana mestinya.'
   );
-  const [signCity, setSignCity] = useState('Tangerang');
+  const [signCity, setSignCity] = useState('');
 
   const [wasteItems, setWasteItems] = useState([]);
   const [breakageItems, setBreakageItems] = useState([]);
@@ -233,11 +233,11 @@ export default function BeritaAcaraMonthly() {
         setSubmitterNip(doc.submitter_nip || '-');
         setSubmitterTitle(doc.submitter_title || 'Head Barista');
         setIntroStatement(doc.intro_statement || 'Dengan ini melaporkan barang yang sudah melewati masa Expired/Rusak yaitu :');
-        setApproverName(doc.approver_name || 'Bpk. Gandhi');
-        setApproverTitle(doc.approver_title || 'Owner Umatis');
+        setApproverName(doc.approver_name || '');
+        setApproverTitle(doc.approver_title || 'Owner / Pimpinan');
         setDispositionStatement(doc.disposition_statement || 'Memberikan Izin untuk membuang produk yang waste ini');
         setClosingStatement(doc.closing_statement || 'Demikian Berita Acara ini dibuat menurut keadaan yang sebenarnya untuk di pergunakan sebagaimana mestinya.');
-        setSignCity(doc.sign_city || 'Tangerang');
+        setSignCity(doc.sign_city || '');
         setDisposalPhotos(Array.isArray(doc.disposal_photo_urls) ? doc.disposal_photo_urls : []);
         setStatus(doc.status || 'APPROVED');
       }
@@ -517,7 +517,7 @@ export default function BeritaAcaraMonthly() {
             </span>
           </div>
           <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: 0 }}>
-            Format resmi Umatis Resto &amp; Venue (Head Barista <strong>Irpan</strong> &amp; Owner <strong>Bpk. Gandhi</strong>) lengkap dengan evaluasi historis 6 bulan karyawan.
+            Dokumen resmi Berita Acara bulanan barang kadaluarsa/waste dan gelas pecah lengkap dengan rekap 6 bulan karyawan.
           </p>
         </div>
 
@@ -575,7 +575,7 @@ export default function BeritaAcaraMonthly() {
                 color: showWatermarkPanel ? '#0d9488' : 'var(--text-primary)'
               }}
               onClick={() => setShowWatermarkPanel((prev) => !prev)}
-              title="Atur logo / watermark validasi Umatis untuk semua Export PDF"
+              title="Atur logo & kop perusahaan untuk semua Export PDF"
             >
               Watermark PDF
             </button>
@@ -635,12 +635,12 @@ export default function BeritaAcaraMonthly() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <img
                 src={pdfBrand.logoDataUrl}
-                alt={pdfBrand.validationLabel || 'Umatis'}
+                alt={pdfBrand.validationLabel || 'Logo Perusahaan'}
                 style={{ width: '42px', height: '42px', objectFit: 'contain' }}
               />
               <div>
                 <div style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                  {pdfBrand.validationLabel || 'Umatis Resto & Venue'}
+                  {pdfBrand.validationLabel || currentTenant?.company_name || 'Dokumen Resmi Perusahaan'}
                 </div>
                 <div style={{ fontSize: '0.72rem', color: '#0d9488', fontWeight: 600 }}>
                   Dokumen Resmi Tervalidasi

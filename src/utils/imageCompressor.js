@@ -62,8 +62,8 @@ export const compressAndWatermark = async (file, options = {}) => {
   const { userName = 'Unknown' } = options;
   
   const timeStr = formatWIB();
-  // Sesuai PRD FR-BAR-05: [UMATIS RESTO BSD] \quad YYYY-MM-DD HH:mm:ss WIB \quad User: [Nama Barista]
-  const watermarkText = `[UMATIS RESTO BSD]    ${timeStr}    User: ${userName}`;
+  // Sesuai PRD FR-BAR-05: [BARVENTIS] \quad YYYY-MM-DD HH:mm:ss WIB \quad User: [Nama Barista]
+  const watermarkText = `[BARVENTIS]    ${timeStr}    User: ${userName}`;
 
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

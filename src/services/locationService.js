@@ -239,7 +239,7 @@ export const locationService = {
         name: `Cabang ${b.name}`,
         branchName: b.name,
         displayLabel: `Cabang ${b.name}${b.id === activeBranchId ? ' (Cabang Saat Ini)' : ''}`,
-        group: 'Antar Cabang (Resto Umatis)',
+        group: 'Antar Cabang',
         endpointType: 'BRANCH',
         branchId: b.id,
         isCurrentBranch: b.id === activeBranchId,

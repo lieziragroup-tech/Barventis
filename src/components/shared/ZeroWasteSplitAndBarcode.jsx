@@ -30,7 +30,7 @@ export default function ZeroWasteSplitAndBarcode({ mode = 'SPLIT' }) {
         {
           id: 'zw-seed-1',
           date: '2026-10-20',
-          parent_name: 'Kelapa Batok Umatis (Kelapa Urgent)',
+          parent_name: 'Bahan Induk Utuh',
           parent_qty: 10,
           parent_unit: 'pck',
           outputs: [
@@ -38,7 +38,7 @@ export default function ZeroWasteSplitAndBarcode({ mode = 'SPLIT' }) {
             { name: 'Daging Kelapa', qty: 2.5, unit: 'kg' }
           ],
           waste_qty: 0,
-          actor: 'Irpan (Head Bar)'
+          actor: 'Head Bar'
         }
       ];
     } catch {
@@ -97,7 +97,7 @@ export default function ZeroWasteSplitAndBarcode({ mode = 'SPLIT' }) {
   const handleLoadKelapaPreset = () => {
     const kelapaMat =
       materials.find((m) => String(m.name || '').toLowerCase().includes('kelapa')) ||
-      materials[0] || { id: 9991, name: 'Kelapa Batok Umatis (Kelapa Urgent)', unit: 'pck', qty_resto: 15, price: 15000 };
+      materials[0] || { id: 9991, name: 'Bahan Induk Utuh', unit: 'pck', qty_resto: 15, price: 15000 };
     const airMat = materials.find((m) => String(m.name || '').toLowerCase().includes('air kelapa'));
     const dagingMat = materials.find((m) => String(m.name || '').toLowerCase().includes('daging kelapa'));
 
@@ -123,7 +123,7 @@ export default function ZeroWasteSplitAndBarcode({ mode = 'SPLIT' }) {
       }
     ]);
     if (toast?.showInfo) {
-      toast.showInfo('Preset Kasus Kelapa Urgent (10 pack -> Air Kelapa 1 L + Daging Kelapa 2,5 kg dengan Waste 0%) dimuat.');
+      toast.showInfo('Contoh preset Urgent Cutting Portion dimuat.');
     }
   };
 
@@ -160,7 +160,7 @@ export default function ZeroWasteSplitAndBarcode({ mode = 'SPLIT' }) {
     e.preventDefault();
     const pQty = parseFloat(parentQty);
     if (!selectedParent && !parentSearch.trim()) {
-      return toast?.showError?.('Pilih bahan induk terlebih dahulu (mis. Kelapa Urgent).');
+      return toast?.showError?.('Pilih bahan induk terlebih dahulu.');
     }
     if (!Number.isFinite(pQty) || pQty <= 0) {
       return toast?.showError?.('Kuantitas bahan induk harus lebih dari 0.');
@@ -278,7 +278,7 @@ export default function ZeroWasteSplitAndBarcode({ mode = 'SPLIT' }) {
     setScannedLotResult(found || { notFound: true, query: scanInput });
   };
 
-  const handleQuickTransferZeroCost = async (lot, targetBranchLabel = 'Resto BSD') => {
+  const handleQuickTransferZeroCost = async (lot, targetBranchLabel = 'Cabang Utama') => {
     setTransferringLotId(lot.lot_id);
     try {
       await api.createTransfer({
@@ -379,19 +379,19 @@ export default function ZeroWasteSplitAndBarcode({ mode = 'SPLIT' }) {
                       type="button"
                       className="btn btn-secondary"
                       style={{ fontSize: '0.78rem', fontWeight: 700 }}
-                      onClick={() => handleQuickTransferZeroCost(scannedLotResult, 'Resto BSD')}
+                      onClick={() => handleQuickTransferZeroCost(scannedLotResult, 'Cabang Utama')}
                       disabled={transferringLotId === scannedLotResult.lot_id}
                     >
-                      <ArrowRightLeft size={13} style={{ marginRight: '5px' }} /> Mutasi ke BSD (Rp 0)
+                      <ArrowRightLeft size={13} style={{ marginRight: '5px' }} /> Mutasi Cabang 1 (Rp 0)
                     </button>
                     <button
                       type="button"
                       className="btn btn-secondary"
                       style={{ fontSize: '0.78rem', fontWeight: 700 }}
-                      onClick={() => handleQuickTransferZeroCost(scannedLotResult, 'Resto Kasuna')}
+                      onClick={() => handleQuickTransferZeroCost(scannedLotResult, 'Cabang Kedua')}
                       disabled={transferringLotId === scannedLotResult.lot_id}
                     >
-                      <ArrowRightLeft size={13} style={{ marginRight: '5px' }} /> Mutasi ke Kasuna (Rp 0)
+                      <ArrowRightLeft size={13} style={{ marginRight: '5px' }} /> Mutasi Cabang 2 (Rp 0)
                     </button>
                   </div>
                 </div>
@@ -468,17 +468,17 @@ export default function ZeroWasteSplitAndBarcode({ mode = 'SPLIT' }) {
                     type="button"
                     className="btn btn-secondary"
                     style={{ flex: 1, fontSize: '0.72rem', padding: '4px 6px' }}
-                    onClick={() => handleQuickTransferZeroCost(lot, 'Resto BSD')}
+                    onClick={() => handleQuickTransferZeroCost(lot, 'Cabang Utama')}
                   >
-                    Kirim BSD (Rp 0)
+                    Kirim Cabang 1 (Rp 0)
                   </button>
                   <button
                     type="button"
                     className="btn btn-secondary"
                     style={{ flex: 1, fontSize: '0.72rem', padding: '4px 6px' }}
-                    onClick={() => handleQuickTransferZeroCost(lot, 'Resto Kasuna')}
+                    onClick={() => handleQuickTransferZeroCost(lot, 'Cabang Kedua')}
                   >
-                    Kirim Kasuna (Rp 0)
+                    Kirim Cabang 2 (Rp 0)
                   </button>
                 </div>
               </div>
@@ -523,7 +523,7 @@ export default function ZeroWasteSplitAndBarcode({ mode = 'SPLIT' }) {
               type="text"
               list="zw-parent-materials"
               className="form-control"
-              placeholder="Ketik mis. Kelapa Batok Umatis / Kelapa Urgent..."
+              placeholder="Ketik mis. Kelapa Batok Segar / Kelapa Urgent..."
               value={parentSearch}
               onChange={(e) => {
                 const val = e.target.value;

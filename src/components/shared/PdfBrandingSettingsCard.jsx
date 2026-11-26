@@ -14,7 +14,7 @@ import {
 export default function PdfBrandingSettingsCard({ currentTenant, onToast, onUpdated }) {
   const [enabled, setEnabled] = useState(true);
   const [logoDataUrl, setLogoDataUrl] = useState('');
-  const [validationLabel, setValidationLabel] = useState('Umatis Resto & Venue');
+  const [validationLabel, setValidationLabel] = useState(currentTenant?.company_name || 'Perusahaan');
   const [meta, setMeta] = useState({ width: 0, height: 0 });
   const [saving, setSaving] = useState(false);
 
@@ -22,7 +22,7 @@ export default function PdfBrandingSettingsCard({ currentTenant, onToast, onUpda
     const hydrated = hydrateBrandingFromTenantRecord(currentTenant || { id: 'active' });
     setEnabled(hydrated.enabled !== false);
     setLogoDataUrl(hydrated.logoDataUrl || '');
-    setValidationLabel(hydrated.validationLabel || currentTenant?.company_name || 'Umatis Resto & Venue');
+    setValidationLabel(hydrated.validationLabel || currentTenant?.company_name || 'Perusahaan');
     setMeta({ width: hydrated.logoWidth || 0, height: hydrated.logoHeight || 0 });
   }, [currentTenant]);
 
@@ -48,10 +48,10 @@ export default function PdfBrandingSettingsCard({ currentTenant, onToast, onUpda
         logoDataUrl: dataUrl,
         logoWidth: width,
         logoHeight: height,
-        validationLabel: validationLabel || currentTenant?.company_name || 'Umatis Resto & Venue'
+        validationLabel: validationLabel || currentTenant?.company_name || 'Perusahaan'
       });
       onUpdated?.(res.branding);
-      notify('Watermark & foto validasi PDF Umatis tersimpan dan langsung aktif.', 'success');
+      notify('Logo & kop dokumen PDF perusahaan tersimpan dan langsung aktif.', 'success');
     } catch (err) {
       notify(err.message || 'Gagal memproses foto validasi.', 'error');
     } finally {
@@ -82,7 +82,7 @@ export default function PdfBrandingSettingsCard({ currentTenant, onToast, onUpda
         logoDataUrl,
         logoWidth: meta.width,
         logoHeight: meta.height,
-        validationLabel: validationLabel || currentTenant?.company_name || 'Umatis Resto & Venue'
+        validationLabel: validationLabel || currentTenant?.company_name || 'Perusahaan'
       });
       onUpdated?.(res.branding);
       notify('Label validasi dokumen PDF berhasil disimpan.', 'success');
@@ -118,10 +118,10 @@ export default function PdfBrandingSettingsCard({ currentTenant, onToast, onUpda
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '12px' }}>
         <div>
           <h4 style={{ margin: '0 0 4px 0', fontSize: '0.9rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <ShieldCheck size={16} style={{ color: '#0d9488' }} /> Watermark & Foto Validasi Dokumen PDF
+            <ShieldCheck size={16} style={{ color: '#0d9488' }} /> Logo & Kop Dokumen PDF
           </h4>
           <p style={{ margin: 0, fontSize: '0.76rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-            Logo atau foto resmi Umatis yang dipasang di sini otomatis tampil di kop, stempel, dan watermark semua Export PDF (PO, Berita Acara, Gelas & Alat, dan Laporan).
+            Logo resmi perusahaan yang dipasang di sini otomatis tampil di kop setiap file Export PDF (PO, Berita Acara, Gelas & Alat, dan Laporan).
           </p>
         </div>
         <label className="toggle-switch" style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', flexShrink: 0 }}>
@@ -149,7 +149,7 @@ export default function PdfBrandingSettingsCard({ currentTenant, onToast, onUpda
           display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0
         }}>
           {logoDataUrl ? (
-            <img src={logoDataUrl} alt="Watermark Umatis" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', padding: '4px' }} />
+            <img src={logoDataUrl} alt="Logo Perusahaan" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', padding: '4px' }} />
           ) : (
             <ImageIcon size={22} style={{ color: 'var(--text-muted)' }} />
           )}
@@ -157,7 +157,7 @@ export default function PdfBrandingSettingsCard({ currentTenant, onToast, onUpda
         <div style={{ flex: 1, minWidth: '200px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <label className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.78rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', margin: 0 }}>
-              <Upload size={13} /> {logoDataUrl ? 'Ganti Foto Watermark' : 'Upload Foto Umatis'}
+              <Upload size={13} /> {logoDataUrl ? 'Ganti Logo' : 'Upload Logo Perusahaan'}
               <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handleUpload} disabled={saving} style={{ display: 'none' }} />
             </label>
             {logoDataUrl && (
@@ -188,7 +188,7 @@ export default function PdfBrandingSettingsCard({ currentTenant, onToast, onUpda
             className="form-control"
             value={validationLabel}
             onChange={(e) => setValidationLabel(e.target.value)}
-            placeholder="Contoh: Umatis Resto & Venue"
+            placeholder="Contoh: Nama Resto / Perusahaan Anda"
             style={{ width: '100%', padding: '7px 10px', fontSize: '0.8rem' }}
           />
         </div>

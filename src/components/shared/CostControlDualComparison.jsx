@@ -25,7 +25,7 @@ const DEFAULT_CC_ADJUSTMENTS = [
   {
     id: 'adj-3',
     type: 'EVENT',
-    title: 'Sajian Welcome Drink Event Korporat Umatis',
+    title: 'Sajian Welcome Drink Event Korporat',
     date: '2026-08-27',
     pax_or_qty: 60,
     estimated_cost: 330000,

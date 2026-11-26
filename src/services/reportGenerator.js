@@ -888,7 +888,7 @@ function buildCOGSSheet(dbData, XLSX, isBeer = false) {
 
 function buildStockOpnameSheet(dbData, location, period, XLSX, unitConversionMap) {
   const rows = [];
-  rows.push(['UMATIS RESTO AND VENUE']);
+  rows.push(['BARVENTIS']);
   rows.push(['BSD CITY, KAVLING TAMAN KOTA BARAT LOT No.II.6, SAMPORA, KEC.CISAUK, KABUPATEN TANGERANG, BANTEN 15345']);
   rows.push(['08197888123']);
   rows.push([`Stock Opname ${MONTHS_ID[period.month]} ${period.year}`, '', location]);

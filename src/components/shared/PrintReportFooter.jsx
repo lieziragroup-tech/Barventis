@@ -4,7 +4,7 @@ import { getActivePdfBranding } from '../../services/pdfBrandingService';
 /**
  * Standardized print footer for multi-page inventory reports.
  * Visible ONLY when printed (@media print).
- * Renders system metadata, optional Owner Umatis validation photo/badge, and page numbering.
+ * Renders system metadata, optional Owner / Pimpinan validation photo/badge, and page numbering.
  */
 export default function PrintReportFooter({
   title = 'Laporan Inventaris',
@@ -21,12 +21,12 @@ export default function PrintReportFooter({
           {showBrand && (
             <img
               src={branding.logoDataUrl}
-              alt={branding.validationLabel || 'Umatis'}
+              alt={branding.validationLabel || 'Logo Perusahaan'}
               style={{ width: '18px', height: '18px', objectFit: 'contain', borderRadius: '3px' }}
             />
           )}
           <span className="print-footer-brand">
-            {showBrand ? (branding.validationLabel || 'Umatis Resto & Venue') : 'BARVENTIS'}
+            {showBrand ? (branding.validationLabel || 'Dokumen Resmi Perusahaan') : 'BARVENTIS'}
           </span>
           {tenantName && <span> • {tenantName}</span>}
           <span> • {title}</span>

@@ -29,8 +29,8 @@ export async function exportToPDF({ filename, title, tenantName, columns, rows, 
   doc.setFontSize(brandMeta.logoRendered ? 15 : 13);
   doc.setTextColor(15, 23, 42);
   const officialTitle = brandMeta.logoRendered
-    ? String(brandMeta.validationLabel || 'Umatis Resto & Venue')
-    : String(tenantName || 'Umatis Resto & Venue');
+    ? String(brandMeta.validationLabel || 'Dokumen Resmi Perusahaan')
+    : String(tenantName || 'Dokumen Resmi Perusahaan');
   doc.text(officialTitle, brandTextX, brandMeta.logoRendered ? 14.5 : 13.5);
 
   if (brandMeta.logoRendered) {

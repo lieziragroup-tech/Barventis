@@ -1570,7 +1570,7 @@ export default function InterBranchTransfer() {
                           });
                         }}
                       >
-                        {['Gudang Pusat (Central)', `Area Internal (${activeBranch?.name || 'Cabang Aktif'})`, 'Antar Cabang (Resto Umatis)'].map(grp => {
+                        {['Gudang Pusat (Central)', `Area Internal (${activeBranch?.name || 'Cabang Aktif'})`, 'Antar Cabang'].map(grp => {
                           const grpItems = unifiedEndpoints.filter(ep => ep.group === grp);
                           if (grpItems.length === 0) return null;
                           return (
@@ -1606,7 +1606,7 @@ export default function InterBranchTransfer() {
                         value={routeHeader.target_branch}
                         onChange={(e) => setRouteHeader({ ...routeHeader, target_branch: e.target.value })}
                       >
-                        {['Gudang Pusat (Central)', `Area Internal (${activeBranch?.name || 'Cabang Aktif'})`, 'Antar Cabang (Resto Umatis)'].map(grp => {
+                        {['Gudang Pusat (Central)', `Area Internal (${activeBranch?.name || 'Cabang Aktif'})`, 'Antar Cabang'].map(grp => {
                           const grpItems = unifiedEndpoints.filter(
                             ep => ep.group === grp && ep.name !== routeHeader.source_branch
                           );

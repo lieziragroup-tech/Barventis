@@ -2449,3 +2449,21 @@ dialog::backdrop {
     border-bottom: 1px solid #cbd5e1 !important;
   }
 }
+
+/* === BARVENTIS v5.0 MOBILE-FIRST ON-SPOT ERGONOMICS (NIA) === */
+@media (max-width: 768px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  .btn-primary,
+  .btn-success {
+    min-height: 44px;
+  }
+
+  .table-container {
+    -webkit-overflow-scrolling: touch;
+  }
+}

@@ -253,7 +253,7 @@ function buildStepsForRole(roleKey, basePath = '/dashboard') {
       return {
         topics: [
           { id: 'dashboard', label: 'Dashboard Central', subtitle: 'Ringkasan stok masuk & keluar' },
-          { id: 'transfer', label: 'Mutasi ke Cabang', subtitle: 'Kirim stok ke Resto BSD / Kasuna' },
+          { id: 'transfer', label: 'Mutasi ke Cabang', subtitle: 'Kirim stok ke cabang tujuan' },
           { id: 'po', label: 'PO Central', subtitle: 'Ajukan PO grosir & terima barang' },
           { id: 'stok', label: 'Pantau Stok', subtitle: 'Cek lot, barcode & sisa gudang' }
         ],
@@ -275,7 +275,7 @@ function buildStepsForRole(roleKey, basePath = '/dashboard') {
             route: `${basePath}/transfer`,
             target: 'main-workspace',
             title: 'Kirim Stok ke Cabang Tujuan (Rp 0)',
-            description: 'Proses pengiriman barang dari Central ke Resto BSD atau Kasuna. Stok cabang otomatis bertambah begitu penerima mengonfirmasi penerimaan.',
+            description: 'Proses pengiriman barang dari Central ke cabang tujuan. Stok cabang otomatis bertambah begitu penerima mengonfirmasi penerimaan.',
             tip: 'Cek barcode lot barang sebelum dikirim agar pelacakan FIFO akurat.'
           },
           {
@@ -439,10 +439,10 @@ function buildStepsForRole(roleKey, basePath = '/dashboard') {
     default:
       return {
         topics: [
-          { id: 'dashboard', label: 'Dashboard & Cabang', subtitle: 'Ringkasan HPP & pindah cabang BSD/Kasuna' },
+          { id: 'dashboard', label: 'Dashboard & Cabang', subtitle: 'Ringkasan biaya & pindah cabang aktif' },
           { id: 'pengadaan', label: 'Pengadaan & PO', subtitle: 'Pantau PO, komparasi supplier & rekap' },
           { id: 'cost', label: 'Cost Control & SO', subtitle: 'Audit variansi HPP, rasio biaya & opname' },
-          { id: 'setelan', label: 'Setelan Owner & PDF', subtitle: 'Kelola user, cabang & Foto Validasi Umatis' }
+          { id: 'setelan', label: 'Setelan & Logo PDF', subtitle: 'Kelola staf, cabang & logo kop dokumen PDF' }
         ],
         steps: [
           {
@@ -453,7 +453,7 @@ function buildStepsForRole(roleKey, basePath = '/dashboard') {
             target: 'main-workspace',
             title: 'Ringkasan HPP & Inventaris Cabang',
             description: 'Pantau performa biaya bahan (COGS), nilai stok berjalan, dan status PO seluruh operasional dari satu layar.',
-            tip: 'Gunakan pemilih cabang di kanan atas untuk berganti antara Resto BSD, Kasuna, atau Central.'
+            tip: 'Gunakan pemilih cabang di kanan atas untuk berpindah antar cabang atau Gudang Central.'
           },
           {
             id: 'ow-po',
@@ -481,9 +481,9 @@ function buildStepsForRole(roleKey, basePath = '/dashboard') {
             sectionLabel: 'Setelan Owner',
             route: `${basePath}/sistem?tab=admin`,
             target: 'main-workspace',
-            title: 'Pengaturan Resto & Foto Validasi PDF Umatis',
-            description: 'Kelola akun staf, cabang, kunci periode pembukuan, dan upload Foto/Logo Resmi Umatis di tab Profil Resto agar otomatis tercetak di setiap Export PDF.',
-            tip: 'Foto Validasi Umatis otomatis muncul di kop, footer, dan stempel validasi setiap PDF.'
+            title: 'Pengaturan Resto & Logo Kop PDF',
+            description: 'Kelola akun staf, cabang, kunci periode pembukuan, dan upload Logo Resmi Perusahaan di tab Profil Resto agar otomatis tercetak di setiap Export PDF.',
+            tip: 'Logo perusahaan otomatis tampil besar di kop atas setiap dokumen PDF.'
           }
         ]
       };

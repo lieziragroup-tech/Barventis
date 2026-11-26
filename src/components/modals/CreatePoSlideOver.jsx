@@ -38,6 +38,7 @@ function loadOffersForMaterial(mat) {
 }
 
 export default function CreatePoSlideOver({
+  activeBranchId = null,
   open,
   onClose,
   stock = [],
@@ -220,7 +221,8 @@ export default function CreatePoSlideOver({
 
     // Simpan pengingat PO agar Purchasing tidak lupa
     try {
-      const raw = localStorage.getItem('bv_po_reminders_v4');
+      const remKey = `bv_po_reminders_v5_${activeBranchId || 'default'}`;
+      const raw = localStorage.getItem(remKey);
       const list = raw ? JSON.parse(raw) : [];
       const rem = {
         id: `rem-${Date.now()}`,
@@ -233,7 +235,8 @@ export default function CreatePoSlideOver({
         done: false,
         created_at: new Date().toISOString()
       };
-      localStorage.setItem('bv_po_reminders_v4', JSON.stringify([rem, ...list].slice(0, 30)));
+      const scopedRem = { ...rem, branch_id: activeBranchId || null };
+      localStorage.setItem(remKey, JSON.stringify([scopedRem, ...list].slice(0, 30)));
       window.dispatchEvent(new CustomEvent('barventis:po_reminders_updated'));
     } catch {
       // ignore

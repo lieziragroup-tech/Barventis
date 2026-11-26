@@ -23,7 +23,7 @@ export default function TenantAdminPanel() {
   // Foto / Logo Validasi Umatis untuk semua Export PDF
   const [pdfBrandEnabled, setPdfBrandEnabled] = useState(true);
   const [pdfBrandLogo, setPdfBrandLogo] = useState('');
-  const [pdfBrandLabel, setPdfBrandLabel] = useState('Umatis Resto & Venue');
+  const [pdfBrandLabel, setPdfBrandLabel] = useState(currentTenant?.company_name || 'Perusahaan');
   const [pdfBrandMeta, setPdfBrandMeta] = useState({ width: 0, height: 0 });
   const [savingPdfBrand, setSavingPdfBrand] = useState(false);
 
@@ -169,7 +169,7 @@ export default function TenantAdminPanel() {
       const hydrated = hydrateBrandingFromTenantRecord(currentTenant);
       setPdfBrandEnabled(hydrated.enabled !== false);
       setPdfBrandLogo(hydrated.logoDataUrl || '');
-      setPdfBrandLabel(hydrated.validationLabel || currentTenant.company_name || 'Umatis Resto & Venue');
+      setPdfBrandLabel(hydrated.validationLabel || currentTenant.company_name || currentTenant?.company_name || 'Perusahaan');
       setPdfBrandMeta({ width: hydrated.logoWidth || 0, height: hydrated.logoHeight || 0 });
       setIsPosEnabled(!!currentTenant.is_pos_enabled);
     }
@@ -521,9 +521,9 @@ export default function TenantAdminPanel() {
         logoDataUrl: dataUrl,
         logoWidth: width,
         logoHeight: height,
-        validationLabel: pdfBrandLabel || currentTenant?.company_name || 'Umatis Resto & Venue'
+        validationLabel: pdfBrandLabel || currentTenant?.company_name || currentTenant?.company_name || 'Perusahaan'
       });
-      displayToast('Foto validasi Umatis tersimpan dan langsung aktif di semua Export PDF.', 'success');
+      displayToast('Logo kop dokumen resmi tersimpan dan langsung aktif di semua Export PDF.', 'success');
     } catch (err) {
       displayToast(err.message || 'Gagal memproses foto validasi.', 'error');
     } finally {
@@ -540,7 +540,7 @@ export default function TenantAdminPanel() {
         logoDataUrl: pdfBrandLogo,
         logoWidth: pdfBrandMeta.width,
         logoHeight: pdfBrandMeta.height,
-        validationLabel: pdfBrandLabel || currentTenant?.company_name || 'Umatis Resto & Venue'
+        validationLabel: pdfBrandLabel || currentTenant?.company_name || currentTenant?.company_name || 'Perusahaan'
       });
       displayToast('Setelan foto validasi Export PDF berhasil disimpan.', 'success');
     } catch (err) {
@@ -560,7 +560,7 @@ export default function TenantAdminPanel() {
         logoDataUrl: '',
         logoWidth: 0,
         logoHeight: 0,
-        validationLabel: pdfBrandLabel || currentTenant?.company_name || 'Umatis Resto & Venue'
+        validationLabel: pdfBrandLabel || currentTenant?.company_name || currentTenant?.company_name || 'Perusahaan'
       });
       setPdfBrandEnabled(false);
       displayToast('Foto validasi PDF dihapus.', 'info');
@@ -704,7 +704,9 @@ export default function TenantAdminPanel() {
                   onChange={(e) => setInviteRole(e.target.value)}
                 >
                   <option value="Admin / Owner">Owner</option>
-                  <option value="Bar">Bar</option>
+                  <option value="Head Bar">Head Bar (Pimpinan Bar Cabang)</option>
+                      <option value="Rekan Bar">Rekan Bar (Staf Harian Bar)</option>
+                      <option value="Bar">Bar</option>
                   <option value="Kitchen">Kitchen</option>
                   <option value="Central">Central</option>
                   <option value="Service">Service</option>
@@ -1065,10 +1067,10 @@ export default function TenantAdminPanel() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '12px' }}>
                   <div>
                     <h4 style={{ margin: '0 0 4px 0', fontSize: '0.9rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <ShieldCheck size={16} style={{ color: '#0d9488' }} /> Foto Validasi Umatis (Export PDF)
+                      <ShieldCheck size={16} style={{ color: '#0d9488' }} /> Logo & Kop Dokumen PDF
                     </h4>
                     <p style={{ margin: 0, fontSize: '0.76rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-                      Pasang logo atau foto resmi Umatis supaya otomatis muncul di kop, stempel, dan footer setiap file PDF yang diexport sebagai bukti berkas resmi.
+                      Pasang logo resmi perusahaan agar otomatis tampil di kop setiap Export PDF (PO, Berita Acara, dan Laporan).
                     </p>
                   </div>
                   <label className="toggle-switch" style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', flexShrink: 0 }}>
@@ -1109,7 +1111,7 @@ export default function TenantAdminPanel() {
                     display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0
                   }}>
                     {pdfBrandLogo ? (
-                      <img src={pdfBrandLogo} alt="Foto Validasi Umatis" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', padding: '4px' }} />
+                      <img src={pdfBrandLogo} alt="Logo Perusahaan" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', padding: '4px' }} />
                     ) : (
                       <ImageIcon size={24} style={{ color: 'var(--text-muted)' }} />
                     )}
@@ -1117,7 +1119,7 @@ export default function TenantAdminPanel() {
                   <div style={{ flex: 1, minWidth: '200px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                       <label className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.78rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', margin: 0 }}>
-                        <Upload size={13} /> {pdfBrandLogo ? 'Ganti Foto Umatis' : 'Upload Foto Umatis'}
+                        <Upload size={13} /> {pdfBrandLogo ? 'Ganti Logo' : 'Upload Logo Perusahaan'}
                         <input
                           type="file"
                           accept="image/png,image/jpeg,image/webp"
@@ -1139,7 +1141,7 @@ export default function TenantAdminPanel() {
                       )}
                     </div>
                     <small style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>
-                      Format PNG/JPG/WebP (maks 5 MB). Disarankan logo Umatis berlatar bersih agar tajam saat dicetak.
+                      Format PNG/JPG/WebP (maks 5 MB). Disarankan logo berlatar bersih/transparan agar tajam saat dicetak.
                     </small>
                   </div>
                 </div>
@@ -1154,7 +1156,7 @@ export default function TenantAdminPanel() {
                       className="form-control"
                       value={pdfBrandLabel}
                       onChange={(e) => setPdfBrandLabel(e.target.value)}
-                      placeholder="Contoh: Umatis Resto & Venue"
+                      placeholder="Contoh: Nama Resto / Perusahaan Anda"
                       style={{ width: '100%', padding: '7px 10px', fontSize: '0.8rem' }}
                     />
                   </div>

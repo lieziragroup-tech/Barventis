@@ -43,7 +43,7 @@ export function buildUrgentRecap({
   const urgentActions = [];
   const urgentMaterials = [];
   const roleLower = String(role || '').toLowerCase();
-  const canSeePoReminders = ['purchasing', 'owner', 'admin / owner', 'central', 'bar'].includes(roleLower);
+  const canSeePoReminders = ['purchasing', 'owner', 'admin / owner', 'central', 'bar', 'head bar', 'rekan bar'].includes(roleLower);
 
   // 1. Urgent Action: PO mendekati jadwal kirim (H-2, H-1, Hari Ini, atau Lewat)
   if (canSeePoReminders) {

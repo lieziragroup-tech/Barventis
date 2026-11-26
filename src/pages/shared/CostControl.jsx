@@ -308,7 +308,7 @@ export default function CostControl() {
         format: 'pdf',
         filename,
         title: `Laporan ${type === 'ALL' ? 'Lengkap' : type === 'SUMMARY' ? 'Cost Control Summary' : 'Stock Opname Fisik'} - ${period}`,
-        tenantName: 'UMATIS RESTO & VENUE',
+        tenantName: activeBranch?.name ? `Barventis - ${activeBranch.name}` : 'Barventis',
         columns,
         rows,
         actionName: 'Cost Control Export PDF',

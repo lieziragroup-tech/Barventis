@@ -121,7 +121,7 @@ export function getSidebarGroupsForRole({
       title: 'Gudang Central',
       items: [
         { to: basePath, exact: true, label: 'Dashboard Central', subtitle: 'Arus barang masuk dan keluar gudang', icon: LayoutDashboard },
-        { to: `${basePath}/transfer`, label: 'Kirim ke Cabang', subtitle: 'Kirim stok Central ke BSD dan Kasuna', icon: Truck },
+        { to: `${basePath}/transfer`, label: 'Kirim ke Cabang', subtitle: 'Kirim stok dari Central ke cabang tujuan', icon: Truck },
         { to: `${basePath}/procurement?tab=invoicing`, label: 'PO Central', subtitle: 'Ajukan PO grosir dan terima barang', icon: ShoppingBag },
         { to: `${basePath}/sistem?tab=stock-ledger`, label: 'Cek Stok Gudang', subtitle: 'Sisa stok Central dan seluruh cabang', icon: PackageCheck }
       ]
@@ -167,7 +167,7 @@ export function getSidebarGroupsForRole({
         { to: `${basePath}/daily-inventory`, label: 'Daily Inventory', subtitle: 'Stok harian bahan, beer dan waste', icon: ClipboardCheck },
         { to: `${basePath}/olah-bahan`, label: 'Olah Bahan', subtitle: 'Produksi sirup dan urgent cutting portion', icon: Scissors },
         { to: `${basePath}/procurement`, label: 'Pengadaan & PO', subtitle: 'PO, bandingkan harga dan daftar supplier', icon: ShoppingBag },
-        { to: `${basePath}/transfer`, label: 'Mutasi Gudang', subtitle: 'Transfer stok Central ke BSD dan Kasuna', icon: Truck }
+        { to: `${basePath}/transfer`, label: 'Mutasi Gudang', subtitle: 'Transfer stok antar gudang dan cabang', icon: Truck }
       ]
     },
     {
@@ -187,7 +187,7 @@ export function getSidebarGroupsForRole({
       id: 'owner-system',
       title: 'Setelan',
       items: [
-        { to: `${basePath}/sistem`, label: 'Pengaturan', subtitle: 'Profil resto, foto PDF Umatis, staf dan cabang', icon: Settings }
+        { to: `${basePath}/sistem`, label: 'Pengaturan', subtitle: 'Profil resto, logo PDF perusahaan, staf dan cabang', icon: Settings }
       ]
     });
   }

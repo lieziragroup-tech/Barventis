@@ -309,7 +309,7 @@ export default function BaristaReport() {
               Drag & drop file .xlsx dari ESB POS system, atau klik untuk browse
             </p>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: 8 }}>
-              Format: Daily Sales Menu Report_URVGANDHI_April_Minuman.xlsx
+              Format: Daily Sales Menu Report_Cabang_Bulan.xlsx
             </p>
           </div>
           <input

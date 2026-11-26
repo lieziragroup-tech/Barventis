@@ -1558,9 +1558,8 @@ export const api = {
   logout: async () => {
     try { await logAudit('LOGOUT', 'User melakukan logout dari sistem.'); } catch { /* ignore: best-effort */ }
     // Clear any legacy localStorage keys (backward compat cleanup)
-    localStorage.removeItem('umatis_token');
-    localStorage.removeItem('umatis_tenant_name');
-    localStorage.removeItem('umatis_user');
+    localStorage.removeItem('bv_po_reminders_v4');
+    localStorage.removeItem('barventis_pdf_branding_active_v1');
 
     // SEC-01: Clear module-level cache
     activeTenantId = null;
@@ -1725,7 +1724,9 @@ export const api = {
   },
 
   // --- BETA TESTING SHORTCUTS & DUMMY SEEDER (RESTO UMATIS: BSD & KASUNA) ---
-  getBetaTestingPresets: () => [
+  getBetaTestingPresets: () => {
+    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ENABLE_TRIAL_SHORTCUT === 'false') return [];
+    return [
     {
       key: 'OWNER_UMATIS',
       label: 'Owner Resto Umatis',
@@ -1810,7 +1811,8 @@ export const api = {
       branchCode: 'KASUNA',
       badge: 'BAR • KASUNA'
     }
-  ],
+    ];
+  },
 
   loginWithBetaShortcut: async (presetKey) => {
     const presets = api.getBetaTestingPresets();

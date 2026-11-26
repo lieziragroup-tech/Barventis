@@ -65,7 +65,7 @@ export default function Invoicing() {
   const isOwner = ['admin / owner', 'admin  owner', 'owner', 'super admin', 'superadmin'].includes(rawRole);
   const isPurchasing = rawRole === 'purchasing';
   const isCentral = rawRole === 'central';
-  const isHeadBar = rawRole === 'head bar' || String(activeUser?.name || '').toLowerCase().includes('irpan') || rawRole === 'supervisor';
+  const isHeadBar = rawRole === 'head bar' || rawRole === 'supervisor';
   const isRekanBar = rawRole === 'rekan bar' || rawRole === 'bar' || rawRole === 'barista';
   const userDivisionScope = getUserDivisionScope(activeUser?.role);
 
@@ -93,7 +93,7 @@ export default function Invoicing() {
   const [savingQuickSup, setSavingQuickSup] = useState(false);
   const [poReminders, setPoReminders] = useState(() => {
     try {
-      const raw = localStorage.getItem('bv_po_reminders_v4');
+      const raw = localStorage.getItem(`bv_po_reminders_v5_${activeBranchId || 'default'}`);
       return raw ? JSON.parse(raw).filter((r) => !r.done) : [];
     } catch {
       return [];
@@ -103,22 +103,23 @@ export default function Invoicing() {
   useEffect(() => {
     const onRemUpdated = () => {
       try {
-        const raw = localStorage.getItem('bv_po_reminders_v4');
+        const raw = localStorage.getItem(`bv_po_reminders_v5_${activeBranchId || 'default'}`);
         setPoReminders(raw ? JSON.parse(raw).filter((r) => !r.done) : []);
       } catch {
         setPoReminders([]);
       }
     };
+    onRemUpdated();
     window.addEventListener('barventis:po_reminders_updated', onRemUpdated);
     return () => window.removeEventListener('barventis:po_reminders_updated', onRemUpdated);
-  }, []);
+  }, [activeBranchId]);
 
   const handleMarkReminderDone = (remId) => {
     try {
-      const raw = localStorage.getItem('bv_po_reminders_v4');
+      const raw = localStorage.getItem(`bv_po_reminders_v5_${activeBranchId || 'default'}`);
       const all = raw ? JSON.parse(raw) : [];
       const next = all.map((r) => (r.id === remId ? { ...r, done: true } : r));
-      localStorage.setItem('bv_po_reminders_v4', JSON.stringify(next));
+      localStorage.setItem(`bv_po_reminders_v5_${activeBranchId || 'default'}`, JSON.stringify(next));
       setPoReminders(next.filter((r) => !r.done));
     } catch {
       setPoReminders((prev) => prev.filter((r) => r.id !== remId));
@@ -685,33 +686,6 @@ export default function Invoicing() {
     }
   };
 
-  const handleOwnerDecision = async (inv, decision) => {
-    const isApprove = decision === 'APPROVED';
-    let rejectionReason = '';
-    if (!isApprove) {
-      rejectionReason = 'Revisi sesuai catatan review' || '';
-      if (!rejectionReason.trim()) return;
-    }
-    try {
-      await api.updatePoWorkflowAndSupplier(inv.id, {
-        workflow_status: isApprove ? 'APPROVED' : 'REJECTED',
-        approved_by_name: activeUser?.name || 'Owner',
-        rejection_reason: isApprove ? '' : rejectionReason.trim()
-      });
-      if (toast) {
-        toast(
-          isApprove
-            ? `PO ${inv.invoice_no} telah di-ACC Owner. Purchasing kini dapat menghubungi supplier ${inv.supplier}.`
-            : `PO ${inv.invoice_no} dikembalikan ke Purchasing untuk revisi.`,
-          isApprove ? 'success' : 'info'
-        );
-      }
-      await reloadInvoices();
-      await refreshData();
-    } catch (err) {
-      if (toast) toast(err.message || 'Gagal memproses keputusan Owner', 'error');
-    }
-  };
 
   const handleContactSupplierWA = async (inv) => {
     const curWf = String(inv.workflow_status || inv.status || '').toUpperCase();
@@ -729,7 +703,7 @@ export default function Invoicing() {
     const itemsLines = (inv.items || [])
       .map((it, i) => `${i + 1}. ${it.item_name} - ${it.qty} ${it.unit || 'pck'} (@ Rp ${Number(it.unit_price || 0).toLocaleString('id-ID')})`)
       .join('\n');
-    const msg = `Halo *${inv.supplier}*,\nKami dari bagian Purchasing *Umatis Resto & Venue* ingin memesan Purchase Order yang telah disetujui:\n\n*No. PO:* ${inv.invoice_no}\n*Tanggal:* ${inv.date}\n*Tujuan Kirim:* Gudang ${inv.location || 'RESTO'}\n\n*Rincian Pesanan:*\n${itemsLines}\n\n*Total Nilai PO:* Rp ${Number(inv.total || 0).toLocaleString('id-ID')}\n\nMohon konfirmasi ketersediaan dan jadwal pengiriman beserta Surat Jalan. Terima kasih.`;
+    const msg = `Halo *${inv.supplier}*,\nKami dari bagian Purchasing *${currentTenant?.company_name || 'Tim Purchasing'}* ingin memesan Purchase Order yang telah disetujui:\n\n*No. PO:* ${inv.invoice_no}\n*Tanggal:* ${inv.date}\n*Tujuan Kirim:* Gudang ${inv.location || 'RESTO'}\n\n*Rincian Pesanan:*\n${itemsLines}\n\n*Total Nilai PO:* Rp ${Number(inv.total || 0).toLocaleString('id-ID')}\n\nMohon konfirmasi ketersediaan dan jadwal pengiriman beserta Surat Jalan. Terima kasih.`;
     const waUrl = waPhone
       ? `https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`
       : `https://wa.me/?text=${encodeURIComponent(msg)}`;
@@ -1427,7 +1401,7 @@ Catatan: ${inv.notes || '-'}`,
               {!loadingList && totalInvoices === 0 && (
                 <tr>
                   <td colSpan="8" style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>
-                    Belum ada Purchase Order. Klik "Buat PO Baru" untuk membuat pesanan pembelian baru.
+                    Belum ada data PO di cabang ini. Gunakan tombol tambah di kanan atas untuk membuat PO baru.
                   </td>
                 </tr>
               )}
@@ -1628,6 +1602,7 @@ Catatan: ${inv.notes || '-'}`,
 
       {/* Create PO Slide-over Modal (Material-First: Pilih Bahan -> Bandingkan Supplier & Shortcut Harga -> Tanggal Kirim) */}
       <CreatePoSlideOver
+          activeBranchId={activeBranchId}
         open={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         stock={stock}
@@ -1782,7 +1757,7 @@ Catatan: ${inv.notes || '-'}`,
                   Verifikasi Harga Satuan Sesuai Bon / Nota Fisik (Forward-Only Price Lock)
                 </div>
                 <div style={{ fontSize: '0.73rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                  Jika harga di bon fisik berubah (mis. Jeruk Pontianak naik dari Rp 20.000 ke Rp 35.000/kg), ubah harga di bawah ini sebelum klik Simpan. Perubahan harga hanya berlaku ke depan dan tidak mengubah laporan historis bulan lalu.
+                  Jika harga di bon fisik berubah dari estimasi PO, ubah harga di bawah ini sebelum klik Simpan. Perubahan harga hanya berlaku ke depan dan tidak mengubah laporan historis bulan lalu.
                 </div>
                 <table className="custom-table" style={{ fontSize: '0.78rem' }}>
                   <thead>

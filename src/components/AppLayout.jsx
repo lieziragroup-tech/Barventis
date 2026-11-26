@@ -12,9 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
-import Onboarding from './Onboarding';
 import ContextualFloatingNav from './ContextualFloatingNav';
-import GuidebookModal from './GuidebookModal';
 import RoleSpotlightGuide from './RoleSpotlightGuide';
 import UrgentRecapModal from './UrgentRecapModal';
 import { buildUrgentRecap } from '../services/modules/urgentRecapUtils';
@@ -170,7 +168,6 @@ export default function DashboardLayout() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     // Show onboarding for non-Super-Admin users who haven't dismissed it
@@ -192,7 +189,6 @@ export default function DashboardLayout() {
     }
   }, [loadingData, stock, activeUser]);
 
-  const [showGuidebook, setShowGuidebook] = useState(false);
   const [spotlightMode, setSpotlightMode] = useState('idle');
   const isSidebarExpanded = isHovered || isSidebarLocked || spotlightMode === 'tour';
   const [showUrgentModal, setShowUrgentModal] = useState(false);
@@ -277,8 +273,13 @@ export default function DashboardLayout() {
   useEffect(() => {
     const readReminders = () => {
       try {
-        const raw = localStorage.getItem('bv_po_reminders_v4');
-        setPoReminders(raw ? JSON.parse(raw) : []);
+        const remKey = `bv_po_reminders_v5_${activeBranchId || 'default'}`;
+        const raw = localStorage.getItem(remKey);
+        const parsed = raw ? JSON.parse(raw) : [];
+        const scoped = Array.isArray(parsed)
+          ? parsed.filter((r) => !activeBranchId || !r.branch_id || String(r.branch_id) === String(activeBranchId))
+          : [];
+        setPoReminders(scoped);
       } catch {
         setPoReminders([]);
       }
@@ -286,7 +287,7 @@ export default function DashboardLayout() {
     readReminders();
     window.addEventListener('barventis:po_reminders_updated', readReminders);
     return () => window.removeEventListener('barventis:po_reminders_updated', readReminders);
-  }, []);
+  }, [activeBranchId]);
 
   useEffect(() => {
     const tenantId = activeUser?.tenant_id;
@@ -381,7 +382,7 @@ export default function DashboardLayout() {
       await api.seedBetaTestingDummyData();
       await refreshData();
       setShowBetaMenu(false);
-      showToast('Data dummy Beta Testing (Resto Umatis: BSD & Kasuna) berhasil dimuat ulang!', 'success');
+      showToast('Data demo Beta Testing berhasil dimuat ulang!', 'success');
     } catch (err) {
       showToast(err?.message || 'Gagal memuat ulang data dummy Beta Testing', 'error');
     } finally {
@@ -646,7 +647,7 @@ export default function DashboardLayout() {
           <div className="mx-4 mb-3 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] flex items-center gap-2">
             <Store size={14} className="text-[var(--accent)] shrink-0" />
             <span className="text-[11px] font-medium text-[var(--text-muted)] shrink-0">
-              {currentTenant?.company_name || 'Resto Umatis'} •
+              {currentTenant?.company_name || 'Barventis'} •
             </span>
             {canSwitchBranch ? (
               <select
@@ -789,7 +790,7 @@ export default function DashboardLayout() {
                   >
                     <Store size={14} className="text-[var(--accent)] shrink-0" />
                     <span className="hidden lg:inline text-[11px] font-semibold text-[var(--text-muted)] whitespace-nowrap">
-                      {currentTenant?.company_name || 'Resto Umatis'} • Cabang:
+                      {currentTenant?.company_name || 'Barventis'} • Cabang:
                     </span>
                     <select
                       aria-label="Pilih Cabang"
@@ -1008,7 +1009,7 @@ export default function DashboardLayout() {
                   <div className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-2.5 py-1 min-w-0 flex-1">
                     <Store size={13} className="text-[var(--accent)] shrink-0" />
                     <span className="text-[11px] font-medium text-[var(--text-muted)] shrink-0">
-                      {currentTenant?.company_name || 'Resto Umatis'} •
+                      {currentTenant?.company_name || 'Barventis'} •
                     </span>
                     <select
                       aria-label="Pilih Cabang Mobile Header"
@@ -1027,7 +1028,7 @@ export default function DashboardLayout() {
                 ) : (
                   <div className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] px-2.5 py-1 text-xs font-semibold text-[var(--text-secondary)] truncate">
                     <Store size={13} className="text-[var(--accent)] shrink-0" />
-                    <span className="truncate">{currentTenant?.company_name || 'Resto Umatis'} • Cabang {activeBranch.name}</span>
+                    <span className="truncate">{currentTenant?.company_name || 'Barventis'} • Cabang {activeBranch.name}</span>
                   </div>
                 )
               ) : <div />}
@@ -1051,7 +1052,7 @@ export default function DashboardLayout() {
           )}
         </header>
 
-        <section data-tour="main-workspace" className="flex-1 overflow-y-auto relative p-3 md:p-8 pb-32 md:pb-16">
+        <section data-tour="main-workspace" className="flex-1 overflow-y-auto pb-24 lg:pb-6 relative p-3 md:p-8 pb-32 md:pb-16">
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
@@ -1105,7 +1106,7 @@ export default function DashboardLayout() {
                   Shortcut Beta Testing
                 </div>
                 <div className="text-[11px] text-[var(--text-secondary)] mt-0.5">
-                  Resto Umatis • Cabang BSD & Kasuna
+                  {currentTenant?.company_name || 'Barventis'} • Multi-Cabang
                 </div>
               </div>
               <button
@@ -1496,31 +1497,9 @@ export default function DashboardLayout() {
           Sinkronisasi Database...
         </div>
       )}
-      
-      {/* Onboarding Modal for new tenants */}
-
-      {showOnboarding && (
-        <Onboarding
-          tenantName={tenantName}
-          onNavigate={(tab) => {
-            setShowOnboarding(false);
-            sessionStorage.setItem('barventis_onboarding_dismissed', 'true');
-            // Route dynamically based on Onboarding output
-            if (tab === 'stock') navigate(`${basePath}/sistem?tab=stock-ledger`);
-            if (tab === 'recipes') navigate(`${basePath}/pricing-cogs?tab=cogs-beverage`);
-            if (tab === 'daily') navigate(`${basePath}/daily-inventory`);
-            if (tab === 'cost-report') navigate(`${basePath}/cost-report`);
-          }}
-          onDismiss={() => {
-            setShowOnboarding(false);
-            sessionStorage.setItem('barventis_onboarding_dismissed', 'true');
-          }}
-        />
-      )}
 
       {/* Floating AI Assistant */}
-      <GuidebookModal isOpen={showGuidebook} onClose={() => setShowGuidebook(false)} />
-      <UrgentRecapModal
+            <UrgentRecapModal
         isOpen={showUrgentModal}
         urgentActions={urgentRecap.urgentActions}
         urgentMaterials={urgentRecap.urgentMaterials}
