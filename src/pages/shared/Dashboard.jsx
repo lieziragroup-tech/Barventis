@@ -282,7 +282,7 @@ export default function Dashboard() {
         unit: `${(inv.items || []).length} item`,
         value: Number(inv.total || 0),
         from_party: `Supplier: ${sup}`,
-        to_party: inv.location === 'RESTO' ? 'Gudang Resto' : 'Gudang Central',
+        to_party: inv.location === 'RESTO' ? 'Cabang' : 'Gudang Central',
         reference: inv.invoice_no,
         notes: inv.notes || 'Penerimaan barang PO',
         status: 'RECEIVED'

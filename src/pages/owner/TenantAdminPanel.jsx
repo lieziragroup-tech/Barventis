@@ -705,7 +705,7 @@ export default function TenantAdminPanel() {
                 >
                   <option value="Admin / Owner">Owner</option>
                   <option value="Head Bar">Head Bar (Pimpinan Bar Cabang)</option>
-                      <option value="Rekan Bar">Rekan Bar (Staf Harian Bar)</option>
+                      <option value="Barista">Barista (Staf Harian Bar)</option>
                       <option value="Bar">Bar</option>
                   <option value="Kitchen">Kitchen</option>
                   <option value="Central">Central</option>

@@ -1,3 +1,4 @@
+import { confirmAction } from '../../utils/confirmDialog';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Search,
@@ -1058,16 +1059,18 @@ export default function WasteLogs() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-[var(--text-primary)]">Tanggal EOD</label>
-                  <input type="date" className="form-control text-sm py-2" value={brokenDate} disabled={brokenSaving} onChange={e => {
-                    if (brokenRows.some(row => row.dirty) && !window.confirm('Perubahan BROKEN belum disimpan. Ganti tanggal dan buang perubahan tersebut?')) return;
-                    setBrokenDate(e.target.value);
+                  <input type="date" className="form-control text-sm py-2" value={brokenDate} disabled={brokenSaving} onChange={async (e) => {
+                    const nextDate = e.target.value;
+                    if (brokenRows.some(row => row.dirty) && !(await confirmAction('Perubahan BROKEN belum disimpan. Ganti tanggal dan buang perubahan tersebut?'))) return;
+                    setBrokenDate(nextDate);
                   }} />
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-[var(--text-primary)]">Lokasi</label>
-                  <select className="form-control text-sm py-2" value={brokenLocation} disabled={brokenSaving} onChange={e => {
-                    if (brokenRows.some(row => row.dirty) && !window.confirm('Perubahan BROKEN belum disimpan. Ganti lokasi dan buang perubahan tersebut?')) return;
-                    setBrokenLocation(e.target.value);
+                  <select className="form-control text-sm py-2" value={brokenLocation} disabled={brokenSaving} onChange={async (e) => {
+                    const nextLoc = e.target.value;
+                    if (brokenRows.some(row => row.dirty) && !(await confirmAction('Perubahan BROKEN belum disimpan. Ganti lokasi dan buang perubahan tersebut?'))) return;
+                    setBrokenLocation(nextLoc);
                   }}>
                     <option value="RESTO">Resto</option><option value="CENTRAL">Central</option>
                   </select>

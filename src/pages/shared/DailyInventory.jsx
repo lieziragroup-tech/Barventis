@@ -1,3 +1,5 @@
+import { resolveDashboardRole, canViewFinancialMetrics } from '../../services/modules/roleBoundaryUtils';
+import { confirmAction } from '../../utils/confirmDialog';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { getExpiryColor } from '../../utils/expiryColor';
 import { Calendar, FileText, PlusCircle, Save, Loader2, Lock, Unlock, Info, Package, Camera, HelpCircle, ChevronDown, X, AlertCircle, Search, ChevronLeft, ChevronRight, CheckCheck, Eye, AlertTriangle, Plus, Check, Clock, Trash2, ArrowLeftRight, FlaskConical } from 'lucide-react';
@@ -253,6 +255,7 @@ export function getInventoryRowMetrics(item, row = {}, strict = false) {
 
 export default function DailyInventory({ category: _category, initialTab, standaloneEodOnly = false, sheetTitle = null }) {
   const { activeUser } = useAuth();
+  const canSeePrices = canViewFinancialMetrics(resolveDashboardRole(activeUser));
   const { activeBranchId } = useData();
   // Daily Inventory is primarily an input workflow. Open the editable EOD form by default;
   // users can switch to REKAP whenever they need historical output.
@@ -801,7 +804,7 @@ export default function DailyInventory({ category: _category, initialTab, standa
     return { ...lot, [field]: normalized };
   }));
   const removeManualInLot = (itemId, lotKey) => updateManualInLots(itemId, lots => lots.filter(lot => lot.lot_key !== lotKey));
-  const confirmZeroActivityForUntouched = () => {
+  const confirmZeroActivityForUntouched = async () => {
     const candidates = items.filter(item => {
       const row = inventory[item.id] || {};
       return !row.out_confirmed && (row.qty_out === '' || row.qty_out === null || row.qty_out === undefined);
@@ -810,7 +813,7 @@ export default function DailyInventory({ category: _category, initialTab, standa
       setSuccess('Tidak ada kolom OUT kosong yang perlu dikonfirmasi.');
       return;
     }
-    const approved = window.confirm(`Konfirmasi OUT = 0 untuk ${candidates.length} material yang kolom OUT-nya belum diisi?`);
+    const approved = (await confirmAction(`Konfirmasi OUT = 0 untuk ${candidates.length} material yang kolom OUT-nya belum diisi?`));
     if (!approved) return;
     setInventory(prev => {
       const next = { ...prev };
@@ -1478,10 +1481,10 @@ export default function DailyInventory({ category: _category, initialTab, standa
             )}
 
             {activeTab === 'EOD' && !isLocked && (
-              <>
+              <div className="hidden lg:flex items-center gap-2">
                 <button
-                  className="btn btn-secondary"
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                  type="button"
+                  className="btn btn-secondary flex items-center gap-2"
                   onClick={handleSave}
                   disabled={saving || loading}
                 >
@@ -1489,23 +1492,25 @@ export default function DailyInventory({ category: _category, initialTab, standa
                   Simpan Draf
                 </button>
                 <button
-                  className="btn"
-                  style={{ background: '#059669', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}
+                  type="button"
+                  className="btn flex items-center gap-2"
+                  style={{ background: '#059669', color: 'white' }}
                   onClick={() => setPhotoModal({ isOpen: true, bucket: 'closing-photos', contextName: `Closing_EOD_${date}` })}
                 >
                   <Camera size={16} />
                   Bukti Closing
                 </button>
                 <button
-                  className="btn"
-                  style={{ background: '#059669', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}
+                  type="button"
+                  className="btn flex items-center gap-2"
+                  style={{ background: '#059669', color: 'white' }}
                   onClick={submitEODSettlement}
                   disabled={saving || loading}
                 >
                   {saving ? <Loader2 size={16} className="animate-spin" /> : <Lock size={16} />}
                   Kunci EOD
                 </button>
-              </>
+              </div>
             )}
           </div>
         </div>
@@ -1581,7 +1586,7 @@ export default function DailyInventory({ category: _category, initialTab, standa
                 }}
                 title="Filter barang yang memiliki selisih antara Input Manual Barista vs Penjualan POS ESB"
               >
-                <span>Selisih vs POS ESB</span>
+                <span className="whitespace-nowrap">Selisih POS</span>
                 <span
                   className="px-1.5 py-0.2 rounded-full text-[10px] font-bold"
                   style={{
@@ -1603,7 +1608,7 @@ export default function DailyInventory({ category: _category, initialTab, standa
                 title="Tampilkan hanya bahan hasil olahan / SimplePrep (Batching Jus, Sirup, Base)"
               >
                 <FlaskConical size={11} />
-                <span>Hasil Olahan / Prep</span>
+                <span className="whitespace-nowrap">Hasil Prep</span>
                 <span
                   className="px-1.5 py-0.2 rounded-full text-[10px] font-bold"
                   style={{
@@ -1717,16 +1722,16 @@ export default function DailyInventory({ category: _category, initialTab, standa
                   >
                     Barang
                   </th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '90px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Stok Awal</th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '85px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Masuk (IN)</th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '90px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Pakai (OUT)</th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '125px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Compare POS ESB</th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '85px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Limbah</th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '85px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Sisa Utuh</th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '85px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Terbuka</th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '95px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Stok Akhir</th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '90px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Terpakai</th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 14px', textAlign: 'right', minWidth: '120px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Biaya HPP</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 15, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '90px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Stok Awal</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 15, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '85px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Masuk (IN)</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 15, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '90px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Pakai (OUT)</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 15, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '125px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Compare POS ESB</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 15, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '85px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Limbah</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 15, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '85px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Sisa Utuh</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 15, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '85px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Terbuka</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 15, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '95px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Stok Akhir</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 15, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '90px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Terpakai</th>
+                  <th style={{ position: 'sticky', top: 0, zIndex: 15, background: '#f8fafc', padding: '10px 14px', textAlign: 'right', minWidth: '120px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">Biaya HPP</th>
                 </tr>
               </thead>
               <tbody>
@@ -1785,9 +1790,11 @@ export default function DailyInventory({ category: _category, initialTab, standa
                               Hasil Olah / Prep
                             </span>
                           )}
-                          <div className="text-[10px] text-[var(--text-muted)] leading-tight mt-0.5" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                            Rp {(Number(mat.price) || 0).toLocaleString('id-ID')} / {mat.unit || 'unit'}
-                          </div>
+                          {canSeePrices && (
+                            {canSeePrices && (<div className="text-[10px] text-[var(--text-muted)] leading-tight mt-0.5" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                              Rp {(Number(mat.price) || 0).toLocaleString('id-ID')} / {mat.unit || 'unit'}
+                            </div>)}
+                          )}
                         </td>
                         <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{Number(row.stok_awal) || 0}</td>
                         <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{Number(row.qty_in) || 0}</td>
@@ -1865,31 +1872,31 @@ export default function DailyInventory({ category: _category, initialTab, standa
                   >
                     Barang
                   </th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '88px', width: '88px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                  <th style={{ position: 'sticky', top: 0, zIndex: 15, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '88px', width: '88px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
                     Stok Awal
                   </th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '102px', width: '102px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                  <th style={{ position: 'sticky', top: 0, zIndex: 15, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '102px', width: '102px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
                     Masuk (IN)
                   </th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '142px', width: '142px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                  <th style={{ position: 'sticky', top: 0, zIndex: 15, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '142px', width: '142px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
                     Pakai (OUT)
                   </th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '130px', width: '130px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                  <th style={{ position: 'sticky', top: 0, zIndex: 15, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '130px', width: '130px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
                     Compare POS ESB
                   </th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '128px', width: '128px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                  <th style={{ position: 'sticky', top: 0, zIndex: 15, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '128px', width: '128px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
                     Limbah
                   </th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '86px', width: '86px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                  <th style={{ position: 'sticky', top: 0, zIndex: 15, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '86px', width: '86px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
                     Sisa Utuh
                   </th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '94px', width: '94px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                  <th style={{ position: 'sticky', top: 0, zIndex: 15, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '94px', width: '94px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
                     Stok Akhir
                   </th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '86px', width: '86px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                  <th style={{ position: 'sticky', top: 0, zIndex: 15, background: '#f8fafc', padding: '10px 8px', textAlign: 'center', minWidth: '86px', width: '86px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
                     Terpakai
                   </th>
-                  <th style={{ position: 'sticky', top: 0, zIndex: 25, background: '#f8fafc', padding: '10px 14px', textAlign: 'right', minWidth: '118px', width: '118px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
+                  <th style={{ position: 'sticky', top: 0, zIndex: 15, background: '#f8fafc', padding: '10px 14px', textAlign: 'right', minWidth: '118px', width: '118px', borderBottom: '1px solid #e2e8f0' }} className="whitespace-nowrap">
                     Biaya HPP
                   </th>
                 </tr>
@@ -2427,51 +2434,68 @@ export default function DailyInventory({ category: _category, initialTab, standa
           </div>
         )}
 
-        {/* Sticky Floating Action Bar di Bawah */}
+        {/* Safe bottom spacer so Pagination is 100% reachable above Slim Docked Action Bar on mobile */}
+        {activeTab === 'EOD' && !isLocked && <div className="h-24 lg:h-4 no-print" aria-hidden="true" />}
+
+        {/* Slim Docked Action Bar (1-Row, flush above Mobile Bottom Nav, zero overlap) */}
         {activeTab === 'EOD' && !isLocked && (
-          <div className="no-print sticky bottom-[72px] lg:bottom-3 z-30 mt-4 p-3 sm:p-3.5 rounded-2xl border shadow-xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3" style={{ background: 'rgba(255, 255, 255, 0.96)', backdropFilter: 'blur(10px)', borderColor: 'var(--border)' }}>
-            <div className="flex items-center gap-2 text-xs">
+          <div
+            className="no-print fixed bottom-[60px] left-0 right-0 lg:sticky lg:bottom-3 z-30 px-3 py-2 lg:px-4 lg:py-2.5 lg:rounded-2xl border-t lg:border shadow-sm lg:shadow-lg flex items-center justify-between gap-2"
+            style={{ background: 'rgba(255, 255, 255, 0.97)', backdropFilter: 'blur(8px)', borderColor: 'var(--border)' }}
+          >
+            <div className="flex items-center gap-1.5 text-[11px] sm:text-xs min-w-0 truncate">
               {autoSaveStatus === 'saving' && (
-                <span className="flex items-center gap-1.5 text-amber-600 font-semibold">
-                  <Loader2 size={15} className="animate-spin" /> Menyimpan draft otomatis...
+                <span className="flex items-center gap-1 text-amber-700 font-semibold truncate">
+                  <Loader2 size={13} className="animate-spin shrink-0" /> <span className="truncate">Menyimpan...</span>
                 </span>
               )}
               {autoSaveStatus === 'saved' && (
-                <span className="flex items-center gap-1.5 text-emerald-700 font-semibold bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                  <Check size={14} /> Draft tersimpan otomatis {lastSavedTime ? `(pk ${lastSavedTime})` : ''}
+                <span className="flex items-center gap-1 text-emerald-700 font-semibold truncate">
+                  <Check size={13} className="shrink-0" /> <span className="truncate">Tersimpan {lastSavedTime ? lastSavedTime : ''}</span>
                 </span>
               )}
               {autoSaveStatus === 'dirty' && (
-                <span className="flex items-center gap-1.5 text-amber-700 font-semibold bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
-                  <Clock size={14} /> Ada perubahan baru (auto-save dalam 5 dtk)...
+                <span className="flex items-center gap-1 text-amber-700 font-semibold truncate">
+                  <Clock size={13} className="shrink-0" /> <span className="truncate">Auto-save 5 dtk</span>
                 </span>
               )}
               {(autoSaveStatus === 'idle' || autoSaveStatus === 'error') && (
-                <span className="text-[var(--text-muted)] flex items-center gap-1.5">
-                  <Clock size={14} /> {lastSavedTime ? `Draft terakhir tersimpan pk ${lastSavedTime}` : 'Otomatis menyimpan draft tiap 5 detik jeda input'}
+                <span className="text-[var(--text-muted)] flex items-center gap-1 truncate">
+                  <Clock size={13} className="shrink-0" />
+                  <span className="hidden sm:inline">Otomatis menyimpan draft tiap 5 detik</span>
+                  <span className="sm:hidden">Auto-save</span>
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <button
                 type="button"
-                className="btn btn-secondary text-xs font-semibold"
-                style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px' }}
-                onClick={handleSave}
-                disabled={saving || loading}
+                className="btn btn-secondary text-xs font-semibold px-2.5 py-2 min-h-[40px] flex items-center gap-1"
+                onClick={() => setPhotoModal({ isOpen: true, bucket: 'closing-photos', contextName: `Closing_EOD_${date}` })}
+                title="Unggah foto bukti closing shift"
+                aria-label="Bukti Closing"
               >
-                {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-                Simpan Draf
+                <Camera size={15} />
+                <span className="hidden sm:inline">Bukti</span>
               </button>
               <button
                 type="button"
-                className="btn text-xs font-semibold"
-                style={{ background: '#059669', color: '#fff', padding: '8px 18px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                className="btn btn-secondary text-xs font-semibold px-3 py-2 min-h-[40px] flex items-center gap-1.5 whitespace-nowrap"
+                onClick={handleSave}
+                disabled={saving || loading}
+              >
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                <span>Draf</span>
+              </button>
+              <button
+                type="button"
+                className="btn text-xs font-bold px-3.5 py-2 min-h-[40px] flex items-center gap-1.5 whitespace-nowrap"
+                style={{ background: '#059669', color: '#fff' }}
                 onClick={submitEODSettlement}
                 disabled={saving || loading}
               >
-                {saving ? <Loader2 size={15} className="animate-spin" /> : <Lock size={15} />}
-                Kunci EOD
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
+                <span>Kunci EOD</span>
               </button>
             </div>
           </div>
@@ -2540,7 +2564,7 @@ export default function DailyInventory({ category: _category, initialTab, standa
                   </div>
                 )}
               </div>
-              <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t p-4" style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+              <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 border-t p-4" style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowClosingPreview(false)} disabled={saving}>Batal</button>
                 <button type="button" className="btn" style={{ background: closingPreview.blockers.length ? '#9ca3af' : '#059669', color: '#fff' }} onClick={confirmClosingFromPreview} disabled={saving || loading || closingPreview.blockers.length > 0}>
                   {saving ? <Loader2 size={15} className="mr-2 animate-spin" /> : <Lock size={15} className="mr-2" />} Kunci EOD

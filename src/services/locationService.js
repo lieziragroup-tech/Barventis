@@ -155,7 +155,7 @@ export const locationService = {
       const cLoc = locs.find(l => l.code === 'CENTRAL') || DEFAULT_LOCATIONS[1];
       return { role: r, defaultLocationCode: 'CENTRAL', uuid: cLoc.uuid, allowedCategories: [] };
     }
-    if (r === 'Bar' || r === 'Barista' || r === 'Head Bar' || r === 'Rekan Bar') {
+    if (r === 'Bar' || r === 'Barista' || r === 'Head Bar' || r === 'Barista') {
       const bLoc = locs.find(l => l.code === 'RESTO') || DEFAULT_LOCATIONS[2];
       return { role: 'Bar', defaultLocationCode: 'RESTO', uuid: bLoc.uuid, allowedCategories: roleMap.Bar || bLoc.allowedCategories || [] };
     }

@@ -21,7 +21,7 @@ export function getRoleDisplayName(roleKey) {
   const labels = {
     OWNER: 'Owner / Admin',
     HEAD_BAR: 'Head Bar',
-    REKAN_BAR: 'Rekan Bar',
+    REKAN_BAR: 'Barista',
     PURCHASING: 'Purchasing',
     CENTRAL: 'Gudang Central',
     KITCHEN: 'Kitchen (Dapur)',

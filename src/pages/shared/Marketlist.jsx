@@ -1,3 +1,4 @@
+import { confirmAction } from '../../utils/confirmDialog';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, Edit2, Trash2, Save, X, Search, Loader2, Package, TrendingDown, Building2 } from 'lucide-react';
 import React, { Suspense } from 'react';
@@ -158,7 +159,7 @@ export default function Marketlist() {
   };
 
   const handleDelete = async (id, name) => {
-    if (!window.confirm(`Hapus bahan baku "${name}"? Data yang terhapus tidak bisa dikembalikan.`)) return;
+    if (!(await confirmAction(`Hapus bahan baku "${name}"? Data yang terhapus tidak bisa dikembalikan.`))) return;
     setSaving(true);
     try {
       await api.deleteMaterial(id);

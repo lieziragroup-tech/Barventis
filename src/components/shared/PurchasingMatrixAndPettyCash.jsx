@@ -87,7 +87,7 @@ export default function PurchasingMatrixAndPettyCash({
   }, [mode, effectivePeriod]);
   const [pettyCashRows, setPettyCashRows] = useState(() => {
     try {
-      const raw = localStorage.getItem('bv_petty_cash_accurate_v3');
+      const raw = localStorage.getItem(`bv_petty_cash_v54_${((() => { try { return localStorage.getItem('bv_active_branch_id') || 'default'; } catch { return 'default'; } })())}`);
       return raw ? JSON.parse(raw) : [];
     } catch {
       return [];
@@ -315,7 +315,7 @@ Total Bahan: ${grandTotals.totalMaterials} jenis (${grandTotals.activeMaterials}
     );
     setPettyCashRows(updated);
     try {
-      localStorage.setItem('bv_petty_cash_accurate_v3', JSON.stringify(updated));
+      localStorage.setItem(`bv_petty_cash_v54_${((() => { try { return localStorage.getItem('bv_active_branch_id') || 'default'; } catch { return 'default'; } })())}`, JSON.stringify(updated));
     } catch {
       // ignore
     }
@@ -333,7 +333,7 @@ Total Bahan: ${grandTotals.totalMaterials} jenis (${grandTotals.activeMaterials}
       );
       setPettyCashRows(updated);
       try {
-        localStorage.setItem('bv_petty_cash_accurate_v3', JSON.stringify(updated));
+        localStorage.setItem(`bv_petty_cash_v54_${((() => { try { return localStorage.getItem('bv_active_branch_id') || 'default'; } catch { return 'default'; } })())}`, JSON.stringify(updated));
       } catch {
         // ignore
       }
@@ -362,7 +362,7 @@ Total Bahan: ${grandTotals.totalMaterials} jenis (${grandTotals.activeMaterials}
     const updated = [created, ...pettyCashRows];
     setPettyCashRows(updated);
     try {
-      localStorage.setItem('bv_petty_cash_accurate_v3', JSON.stringify(updated));
+      localStorage.setItem(`bv_petty_cash_v54_${((() => { try { return localStorage.getItem('bv_active_branch_id') || 'default'; } catch { return 'default'; } })())}`, JSON.stringify(updated));
     } catch {
       // ignore
     }

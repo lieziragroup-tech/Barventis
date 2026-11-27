@@ -1,3 +1,4 @@
+import { confirmAction } from '../../utils/confirmDialog';
 import { useState, useMemo, useEffect } from 'react';
 import { useLocation, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -293,7 +294,7 @@ function RecipesInner({ categoryFilter } = {}) {
   };
 
   const handleBulkDelete = async () => {
-    if (!window.confirm(`Hapus ${selectedItems.length} resep terpilih secara permanen?`)) return;
+    if (!(await confirmAction(`Hapus ${selectedItems.length} resep terpilih secara permanen?`))) return;
     const failed = [];
     for (const id of selectedItems) {
       if (id) {
@@ -403,7 +404,7 @@ function RecipesInner({ categoryFilter } = {}) {
 
   const handleSaveRecipe = async () => {
     if (!activeRecipe) return;
-    if (!window.confirm(`Simpan perubahan resep "${activeRecipe.menu_name}"?`)) return;
+    if (!(await confirmAction(`Simpan perubahan resep "${activeRecipe.menu_name}"?`))) return;
     const savedIngredients = editedIngredients
       .filter(ing => ing.item_name !== '')
       .map(ing => {
@@ -440,7 +441,7 @@ function RecipesInner({ categoryFilter } = {}) {
 
 
   const handleRecalculateAll = async () => {
-    if (!window.confirm('Hitung ulang HPP semua resep sesuai harga bahan terbaru?')) return;
+    if (!(await confirmAction('Hitung ulang HPP semua resep sesuai harga bahan terbaru?'))) return;
     setRecalculating(true);
     try {
       const result = await api.recalculateAllRecipes();
@@ -1074,7 +1075,7 @@ function RecipesInner({ categoryFilter } = {}) {
                   className="btn premium-btn premium-btn-danger" 
                   style={{ padding: '10px 20px', fontSize: '0.85rem', borderRadius: 'var(--radius-md)', display: 'flex', gap: '8px', background: 'var(--danger-glow)', color: 'var(--danger-text)', border: '1px solid rgba(220, 38, 38, 0.2)' }} 
                   onClick={async () => {
-                    if (window.confirm(`Hapus resep "${activeRecipe.menu_name}"?`)) {
+                    if ((await confirmAction(`Hapus resep "${activeRecipe.menu_name}"?`))) {
                       try {
                         await onDeleteRecipe(activeRecipe.id);
                         setActiveRecipe(null);

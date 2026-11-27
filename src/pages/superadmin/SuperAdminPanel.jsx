@@ -1,3 +1,4 @@
+import { confirmAction } from '../../utils/confirmDialog';
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -441,7 +442,7 @@ export default function SuperAdminPanel({ tab }) {
   };
 
   const handleDeleteTemplate = async (id, name) => {
-    if (!window.confirm(`Apakah Anda yakin ingin menghapus template ${name}? Tindakan ini tidak dapat dibatalkan.`)) return;
+    if (!(await confirmAction(`Apakah Anda yakin ingin menghapus template ${name}? Tindakan ini tidak dapat dibatalkan.`))) return;
     try {
       const { error } = await supabase.from('pos_templates').delete().eq('id', id);
       if (error) throw error;

@@ -1,7 +1,6 @@
 /**
- * Strict Role-Boundary & Data Isolation Utilities for Barventis v5.1.
- * Ensures sensitive financial figures, cross-location POs, and cross-branch
- * records are never exposed to unauthorized operational roles.
+ * Single Source of Truth for Role Boundaries, Financial Visibility,
+ * and Unified Status Registries (PO & Transfer) in Barventis v5.4.
  */
 
 export const DASHBOARD_ROLES = {
@@ -9,11 +8,12 @@ export const DASHBOARD_ROLES = {
   PURCHASING: 'PURCHASING',
   CENTRAL: 'CENTRAL',
   HEAD_BAR: 'HEAD_BAR',
-  REKAN_BAR: 'REKAN_BAR',
+  REKAN_BAR: 'REKAN_BAR', // Canonical UI display label: "Barista"
 };
 
 /**
  * Resolves a user's canonical dashboard boundary role from activeUser.
+ * Backward-compatible with legacy role strings ('Barista', 'Bar', 'Barista', 'Admin  Owner').
  */
 export function resolveDashboardRole(activeUser) {
   const raw = String(activeUser?.role || '').trim().toLowerCase();
@@ -35,18 +35,46 @@ export function resolveDashboardRole(activeUser) {
 }
 
 /**
- * Only Executive (Owner) and Procurement (Purchasing) roles are permitted
- * to view company financial valuations, purchase totals, or COGS metrics.
+ * Canonical SaaS display label for each role.
  */
-export function canViewFinancialMetrics(dashboardRole) {
-  return dashboardRole === DASHBOARD_ROLES.OWNER || dashboardRole === DASHBOARD_ROLES.PURCHASING;
+export function getCanonicalRoleLabel(dashboardRole) {
+  switch (dashboardRole) {
+    case DASHBOARD_ROLES.OWNER:
+      return 'Owner';
+    case DASHBOARD_ROLES.PURCHASING:
+      return 'Purchasing';
+    case DASHBOARD_ROLES.CENTRAL:
+      return 'Central';
+    case DASHBOARD_ROLES.HEAD_BAR:
+      return 'Head Bar';
+    default:
+      return 'Barista';
+  }
 }
 
 /**
- * Returns the strict PO location filter to enforce at both API and UI layers.
- * - CENTRAL: strictly 'CENTRAL' (never sees RESTO/outlet POs)
- * - HEAD_BAR / REKAN_BAR: strictly 'RESTO' (own branch outlet POs only)
- * - OWNER / PURCHASING: null (full visibility across locations)
+ * Operational financial transparency (Rp in operational modules like PO/Waste/Berita Acara):
+ * - OWNER, PURCHASING, and HEAD_BAR ("tangan kanan owner") are permitted.
+ * - CENTRAL (warehouse logistics) and BARISTA (floor shift) remain restricted.
+ */
+export function canViewFinancialMetrics(dashboardRole) {
+  return (
+    dashboardRole === DASHBOARD_ROLES.OWNER ||
+    dashboardRole === DASHBOARD_ROLES.PURCHASING ||
+    dashboardRole === DASHBOARD_ROLES.HEAD_BAR
+  );
+}
+
+/**
+ * Executive company-wide financial metrics (Omzet, Food Cost %, Company Stock Valuation, Multi-Branch):
+ * Strictly OWNER only.
+ */
+export function canViewCompanyFinancials(dashboardRole) {
+  return dashboardRole === DASHBOARD_ROLES.OWNER;
+}
+
+/**
+ * Strict PO location scope enforced across API and UI layers.
  */
 export function getPoLocationScopeForRole(dashboardRole) {
   if (dashboardRole === DASHBOARD_ROLES.CENTRAL) return 'CENTRAL';
@@ -77,7 +105,7 @@ export function filterInvoicesForRole(invoices = [], dashboardRole, activeBranch
     });
   }
 
-  // REKAN_BAR: strictly own branch RESTO POs, with financial total stripped
+  // Barista: strictly own branch RESTO POs, with financial total stripped
   return list
     .filter((inv) => {
       const loc = String(inv?.location || '').trim().toUpperCase();
@@ -102,8 +130,7 @@ export function isCentralTransfer(record) {
  */
 export function isCentralTransaction(tx) {
   if (!tx) return false;
-  const loc = String(tx.location || '').trim().toUpperCase();
-  return loc === 'CENTRAL';
+  return String(tx.location || '').trim().toUpperCase() === 'CENTRAL';
 }
 
 /**
@@ -119,38 +146,69 @@ export function formatCleanQty(value) {
 }
 
 /**
- * Returns semantic pill badge styles (pre-attentive visual psychology cue) for workflow statuses.
+ * Canonical 7-stage PO Workflow Status Visual Registry (WCAG AA contrast >= 4.5:1):
+ * Requested -> On Review -> Validation Supplier -> In Order -> Completed | Rejected | Canceled
  */
 export function getWorkflowStatusVisual(status) {
   const wf = String(status || 'REQUESTED').trim().toUpperCase();
-  if (['RECEIVED', 'COMPLETED', 'APPROVED', 'SELESAI'].includes(wf)) {
-    return {
-      label: wf === 'RECEIVED' ? 'Selesai / Diterima' : wf === 'COMPLETED' ? 'Selesai' : wf === 'APPROVED' ? 'Disetujui' : wf,
-      bg: 'rgba(16, 185, 129, 0.12)',
-      color: '#047857',
-      dot: '#10b981',
-    };
+
+  if (['COMPLETED', 'RECEIVED', 'GOODS_RECEIVED', 'SELESAI'].includes(wf)) {
+    return { label: 'Completed', bg: 'rgba(16, 185, 129, 0.14)', color: '#047857', dot: '#10b981' };
   }
-  if (['CANCELLED', 'CANCELED', 'REJECTED', 'DIBATALKAN', 'DITOLAK'].includes(wf)) {
-    return {
-      label: wf === 'REJECTED' ? 'Ditolak' : 'Dibatalkan',
-      bg: 'rgba(239, 68, 68, 0.10)',
-      color: '#b91c1c',
-      dot: '#ef4444',
-    };
+  if (wf === 'REJECTED' || wf === 'DITOLAK') {
+    return { label: 'Rejected', bg: 'rgba(239, 68, 68, 0.12)', color: '#b91c1c', dot: '#ef4444' };
   }
-  if (['IN_ORDER', 'SENT', 'DISPATCHED', 'VALIDATION_SUPPLIER'].includes(wf)) {
-    return {
-      label: wf === 'IN_ORDER' ? 'Dalam Pesanan' : wf === 'VALIDATION_SUPPLIER' ? 'Validasi Supplier' : wf === 'DISPATCHED' ? 'Dalam Pengiriman' : 'Dipesan',
-      bg: 'rgba(14, 165, 233, 0.12)',
-      color: '#0369a1',
-      dot: '#0ea5e9',
-    };
+  if (['CANCELED', 'CANCELLED', 'DIBATALKAN'].includes(wf)) {
+    return { label: 'Canceled', bg: 'rgba(225, 29, 72, 0.12)', color: '#be123c', dot: '#e11d48' };
   }
-  return {
-    label: wf === 'ON_REVIEW' ? 'Sedang Ditinjau' : wf === 'PENDING_HEADBAR' ? 'Menunggu ACC' : 'Menunggu Proses',
-    bg: 'rgba(245, 158, 11, 0.12)',
-    color: '#b45309',
-    dot: '#f59e0b',
-  };
+  if (wf === 'VALIDATION_SUPPLIER') {
+    return { label: 'Validation Supplier', bg: 'rgba(99, 102, 241, 0.14)', color: '#4338ca', dot: '#6366f1' };
+  }
+  if (['IN_ORDER', 'SENT', 'APPROVED', 'DISPATCHED'].includes(wf)) {
+    return { label: 'In Order', bg: 'rgba(59, 130, 246, 0.14)', color: '#1d4ed8', dot: '#3b82f6' };
+  }
+  if (['ON_REVIEW', 'PENDING_APPROVAL', 'PENDING_HEADBAR'].includes(wf)) {
+    return { label: 'On Review', bg: 'rgba(245, 158, 11, 0.14)', color: '#b45309', dot: '#f59e0b' };
+  }
+  return { label: 'Requested', bg: 'rgba(100, 116, 139, 0.12)', color: '#475569', dot: '#64748b' };
+}
+
+/**
+ * Canonical Transfer / Mutasi Gudang Status Visual Registry (English, aligned with PO stages):
+ * Requested -> Approved -> In Transit -> Completed | Rejected | Canceled
+ */
+export function getTransferStatusVisual(status) {
+  const st = String(status || 'REQUESTED').trim().toUpperCase();
+
+  if (['COMPLETED', 'RECEIVED', 'SELESAI'].includes(st)) {
+    return { label: 'Completed', bg: 'rgba(16, 185, 129, 0.14)', color: '#047857', dot: '#10b981' };
+  }
+  if (['IN_TRANSIT', 'DISPATCHED', 'SHIPPED', 'SENT'].includes(st)) {
+    return { label: 'In Transit', bg: 'rgba(59, 130, 246, 0.14)', color: '#1d4ed8', dot: '#3b82f6' };
+  }
+  if (st === 'APPROVED' || st === 'DISETUJUI') {
+    return { label: 'Approved', bg: 'rgba(99, 102, 241, 0.14)', color: '#4338ca', dot: '#6366f1' };
+  }
+  if (st === 'REJECTED' || st === 'DITOLAK') {
+    return { label: 'Rejected', bg: 'rgba(239, 68, 68, 0.12)', color: '#b91c1c', dot: '#ef4444' };
+  }
+  if (['CANCELED', 'CANCELLED', 'DIBATALKAN'].includes(st)) {
+    return { label: 'Canceled', bg: 'rgba(225, 29, 72, 0.12)', color: '#be123c', dot: '#e11d48' };
+  }
+  return { label: 'Requested', bg: 'rgba(245, 158, 11, 0.14)', color: '#b45309', dot: '#f59e0b' };
+}
+
+/**
+ * Returns branch-scoped localStorage key to prevent cross-branch state bleeding.
+ */
+export function getBranchScopedStorageKey(baseKey, branchId = null) {
+  let bId = branchId;
+  if (!bId && typeof localStorage !== 'undefined') {
+    try {
+      bId = localStorage.getItem('bv_active_branch_id') || 'default';
+    } catch {
+      bId = 'default';
+    }
+  }
+  return `${baseKey}_${bId || 'default'}`;
 }

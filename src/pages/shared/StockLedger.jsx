@@ -1,3 +1,4 @@
+import { confirmAction } from '../../utils/confirmDialog';
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import useDebounce from '../../hooks/useDebounce';
@@ -293,7 +294,7 @@ function StockLedgerInner() {
   };
 
   const handleAttemptDelete = async (itemName) => {
-    if (!confirm(`Hapus "${itemName}" dari inventory?`)) return;
+    if (!(await confirmAction(`Hapus "${itemName}" dari inventory?`))) return;
     try {
       await onDeleteItem(itemName);
     } catch (err) {
@@ -316,7 +317,7 @@ function StockLedgerInner() {
   };
 
   const handleBulkDelete = async () => {
-    if (!confirm(`Hapus ${selectedItems.length} bahan terpilih secara permanen?`)) return;
+    if (!(await confirmAction(`Hapus ${selectedItems.length} bahan terpilih secara permanen?`))) return;
 
     let failedCount = 0;
     let failedNames = [];
@@ -347,7 +348,7 @@ function StockLedgerInner() {
       window.dispatchEvent(new CustomEvent('barventis:toast', { detail: { message: 'Alasan penyesuaian wajib diisi.', type: 'warning' } }));
       return;
     }
-    if (!window.confirm(`Simpan penyesuaian stok ${adjustItem.name}?`)) return;
+    if (!(await confirmAction(`Simpan penyesuaian stok ${adjustItem.name}?`))) return;
     try {
       await onAdjustStock(adjustItem.name, adjustLoc, adjustType, parseFloat(adjustQty), adjustNotes);
       setAdjustItem(null); setAdjustQty(''); setAdjustNotes('');
@@ -360,7 +361,7 @@ function StockLedgerInner() {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     if (!editItem) return;
-    if (!window.confirm(`Simpan perubahan bahan "${editItem.name}"?`)) return;
+    if (!(await confirmAction(`Simpan perubahan bahan "${editItem.name}"?`))) return;
     
     try {
       // First, handle stock adjustments if they changed the physical stock fields
@@ -409,7 +410,7 @@ function StockLedgerInner() {
       return;
     }
 
-    if (!window.confirm(`Simpan bahan baru "${newItem.name}"?`)) return;
+    if (!(await confirmAction(`Simpan bahan baru "${newItem.name}"?`))) return;
     try {
       const payload = { ...newItem, new_price: newItem.price };
       delete payload.initial_qty_resto;
@@ -863,7 +864,7 @@ function StockLedgerInner() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '4px', marginBottom: '8px' }}>
-            <button className={`btn ${historyTab === 'LEDGER' ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '4px 8px', fontSize: '0.75rem', flex: 1 }} onClick={() => setHistoryTab('LEDGER')}>Mutasi Stok</button>
+            <button className={`btn ${historyTab === 'LEDGER' ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '4px 8px', fontSize: '0.75rem', flex: 1 }} onClick={() => setHistoryTab('LEDGER')}>Mutasi Gudang</button>
             <button className={`btn ${historyTab === 'PURCHASES' ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '4px 8px', fontSize: '0.75rem', flex: 1 }} onClick={() => setHistoryTab('PURCHASES')}>Riwayat Pembelian</button>
           </div>
           {historyTab === 'LEDGER' && (

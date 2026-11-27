@@ -7184,7 +7184,7 @@ export const api = {
     // Store rich metadata locally so "Diolah Menjadi Apa" and exact units display immediately in history
     if (typeof window !== 'undefined') {
       try {
-        const metaKey = 'barventis_prep_batch_meta_v1';
+        const metaKey = `barventis_prep_batch_meta_v54_${((() => { try { return localStorage.getItem('bv_active_branch_id') || 'default'; } catch { return 'default'; } })())}`;
         const existingMeta = JSON.parse(localStorage.getItem(metaKey) || '{}');
         existingMeta[batchNumber] = {
           target_mat_id: finalTargetMatId,
@@ -7684,7 +7684,7 @@ export const api = {
       let localMeta = {};
       if (typeof window !== 'undefined') {
         try {
-          localMeta = JSON.parse(localStorage.getItem('barventis_prep_batch_meta_v1') || '{}');
+          localMeta = JSON.parse(localStorage.getItem(`barventis_prep_batch_meta_v54_${((() => { try { return localStorage.getItem('bv_active_branch_id') || 'default'; } catch { return 'default'; } })())}`) || '{}');
         } catch (_) {
           /* ignore malformed prep batch metadata */
         }

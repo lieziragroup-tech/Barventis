@@ -25,7 +25,7 @@ export default function ZeroWasteSplitAndBarcode({ mode = 'SPLIT' }) {
   const [savingSplit, setSavingSplit] = useState(false);
   const [splitHistory, setSplitHistory] = useState(() => {
     try {
-      const raw = localStorage.getItem('bv_zero_waste_splits_v3');
+      const raw = localStorage.getItem(`bv_zero_waste_splits_v54_${((() => { try { return localStorage.getItem('bv_active_branch_id') || 'default'; } catch { return 'default'; } })())}`);
       return raw ? JSON.parse(raw) : [
         {
           id: 'zw-seed-1',
@@ -252,7 +252,7 @@ export default function ZeroWasteSplitAndBarcode({ mode = 'SPLIT' }) {
       const updatedHistory = [newRecord, ...splitHistory];
       setSplitHistory(updatedHistory);
       try {
-        localStorage.setItem('bv_zero_waste_splits_v3', JSON.stringify(updatedHistory));
+        localStorage.setItem(`bv_zero_waste_splits_v54_${((() => { try { return localStorage.getItem('bv_active_branch_id') || 'default'; } catch { return 'default'; } })())}`, JSON.stringify(updatedHistory));
       } catch {
         // ignore
       }

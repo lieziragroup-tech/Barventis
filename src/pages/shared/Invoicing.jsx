@@ -1145,10 +1145,10 @@ Catatan: ${inv.notes || '-'}`,
             onChange={e => { setStatusFilter(e.target.value); setInvoicesPage(1); }}
           >
             <option value="ALL">Semua Status PO</option>
-            <option value="DRAFT">Permintaan Cabang &amp; Menunggu ACC</option>
-            <option value="SENT">Sudah Dipesan ke Supplier (SENT)</option>
-            <option value="RECEIVED">Sudah Diterima (RECEIVED)</option>
-            <option value="CANCELLED">Dibatalkan</option>
+            <option value="DRAFT">Requested / On Review / Validation Supplier</option>
+            <option value="SENT">In Order</option>
+            <option value="RECEIVED">Completed</option>
+            <option value="CANCELLED">Canceled / Rejected</option>
           </select>
           <ExportButton
             onExportExcel={handleExportExcel}
@@ -1159,7 +1159,7 @@ Catatan: ${inv.notes || '-'}`,
             currentRole={activeUser?.role}
             title="Cetak daftar Purchase Order"
           />
-          {(isOwner || isPurchasing) && (
+          {(isOwner || isPurchasing || isHeadBar) && (
             <button className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '0.85rem' }} onClick={() => setShowBulkImport(true)}>
               Import PO
             </button>
@@ -1196,7 +1196,7 @@ Catatan: ${inv.notes || '-'}`,
           </div>
           <div className="kpi-value" style={{ color: '#059669' }}>{kpis.received}</div>
         </div>
-        {(isOwner || isPurchasing) ? (
+        {(isOwner || isPurchasing || isHeadBar) ? (
           <div className="glass-card kpi-card">
             <div className="kpi-header">
               <span className="kpi-title">Total Belanja</span>
@@ -1236,7 +1236,7 @@ Catatan: ${inv.notes || '-'}`,
                 <th>Tanggal</th>
                 <th style={{ textAlign: 'center' }}>Lokasi</th>
                 <th style={{ textAlign: 'right' }}>Item</th>
-                {(isOwner || isPurchasing) && <th style={{ textAlign: 'right' }}>Total Nilai</th>}
+                {(isOwner || isPurchasing || isHeadBar) && <th style={{ textAlign: 'right' }}>Total Nilai</th>}
                 <th style={{ textAlign: 'center' }}>Status</th>
                 <th style={{ textAlign: 'center', minWidth: '220px' }} className="no-print">Aksi</th>
               </tr>
@@ -1288,7 +1288,7 @@ Catatan: ${inv.notes || '-'}`,
                           </span>
                         </td>
                         <td style={{ textAlign: 'right', fontSize: '0.85rem' }}>{inv.items?.length || 0} bahan</td>
-                        {(isOwner || isPurchasing) && <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatIDR(inv.total)}</td>}
+                        {(isOwner || isPurchasing || isHeadBar) && <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatIDR(inv.total)}</td>}
                         <td style={{ textAlign: 'center' }}>{statusBadge(inv.status, wf)}</td>
                         <td style={{ textAlign: 'center' }} className="no-print">
                           <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'nowrap', whiteSpace: 'nowrap', justifyContent: 'center' }}>
@@ -1386,7 +1386,7 @@ Catatan: ${inv.notes || '-'}`,
                             </button>
 
                             {/* Batalkan PO (hanya saat Draft / Sudah Dipesan) */}
-                            {(isOwner || isPurchasing) && (inv.status === 'DRAFT' || inv.status === 'SENT') && (
+                            {(isOwner || isPurchasing || isHeadBar) && (inv.status === 'DRAFT' || inv.status === 'SENT') && (
                               <button
                                 className="btn btn-secondary"
                                 style={{ padding: '5px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', color: 'var(--danger)', whiteSpace: 'nowrap' }}

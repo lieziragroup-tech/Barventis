@@ -1,3 +1,4 @@
+import { confirmAction } from '../../utils/confirmDialog';
 import { useState, useEffect } from 'react';
 import { 
   Database, Download, Trash2, RefreshCw, UploadCloud, 
@@ -99,7 +100,7 @@ export default function BackupCenter() {
 
   // BUG-BC-03: api.deleteBackup(id) expects a backup UUID, not a filename.
   const handleDeleteBackup = async (backup) => {
-    if (!window.confirm(`Hapus file backup "${backup.filename}"?`)) {
+    if (!(await confirmAction(`Hapus file backup "${backup.filename}"?`))) {
       return;
     }
 

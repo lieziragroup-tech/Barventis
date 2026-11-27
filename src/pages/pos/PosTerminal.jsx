@@ -18,7 +18,7 @@ export default function PosTerminal() {
   
   // Persistent cart
   const [cart, setCart] = useState(() => {
-    const saved = localStorage.getItem('barventis_pos_cart');
+    const saved = localStorage.getItem(`barventis_pos_cart_v54_${((() => { try { return localStorage.getItem('bv_active_branch_id') || 'default'; } catch { return 'default'; } })())}`);
     if (saved) {
       try { return JSON.parse(saved); } catch { return []; }
     }
@@ -69,7 +69,7 @@ export default function PosTerminal() {
 
 
   useEffect(() => {
-    localStorage.setItem('barventis_pos_cart', JSON.stringify(cart));
+    localStorage.setItem(`barventis_pos_cart_v54_${((() => { try { return localStorage.getItem('bv_active_branch_id') || 'default'; } catch { return 'default'; } })())}`, JSON.stringify(cart));
   }, [cart]);
 
   // Filter only active/ready recipes
@@ -360,7 +360,7 @@ export default function PosTerminal() {
       if (res.success) {
         showSuccess(`Pembayaran berhasil! No Order: ${res.orderNo}`);
         setCart([]); // Clear cart
-        localStorage.removeItem('barventis_pos_cart');
+        localStorage.removeItem(`barventis_pos_cart_v54_${((() => { try { return localStorage.getItem('bv_active_branch_id') || 'default'; } catch { return 'default'; } })())}`);
         setShowCheckoutModal(false);
         setIsCartOpen(false); // Close cart on mobile if open
         await refreshData(); // Refresh stock in background

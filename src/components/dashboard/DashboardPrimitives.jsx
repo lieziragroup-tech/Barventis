@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowRight } from 'lucide-react';
-import { getWorkflowStatusVisual } from '../../services/modules/roleBoundaryUtils';
+import { getWorkflowStatusVisual, getTransferStatusVisual } from '../../services/modules/roleBoundaryUtils';
 
 const TONE_MAP = {
   neutral: {
@@ -172,8 +172,8 @@ export function CalmKpiCard({
 /**
  * Pre-Attentive Status Pill with colored dot + tinted background.
  */
-export function StatusPill({ status }) {
-  const vis = getWorkflowStatusVisual(status);
+export function StatusPill({ status, variant = 'po' }) {
+  const vis = variant === 'transfer' ? getTransferStatusVisual(status) : getWorkflowStatusVisual(status);
   return (
     <span
       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap"

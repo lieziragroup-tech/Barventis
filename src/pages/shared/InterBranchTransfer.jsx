@@ -1,3 +1,4 @@
+import { confirmAction } from '../../utils/confirmDialog';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Search,
@@ -369,9 +370,9 @@ export default function InterBranchTransfer() {
       }
       const avail = isSourceCentral ? item.qty_central : item.qty_resto;
       if (avail > 0 && qty > avail) {
-        const confirmExceed = window.confirm(
+        const confirmExceed = (await confirmAction(
           `Perhatian: Kuantitas transfer "${item.name}" (${qty} ${item.unit}) melebihi stok tercatat di ${routeHeader.source_branch} (${avail} ${item.unit}). Tetap lanjutkan?`
-        );
+        ));
         if (!confirmExceed) return;
       }
     }
@@ -380,7 +381,7 @@ export default function InterBranchTransfer() {
     setError('');
 
     try {
-      const isRequestMode = ['Bar', 'Barista', 'Head Bar', 'Rekan Bar'].includes(activeUser?.role);
+      const isRequestMode = ['Bar', 'Barista', 'Head Bar', 'Barista'].includes(activeUser?.role);
       const targetEp = unifiedEndpoints.find(ep => ep.name === routeHeader.target_branch);
       const sourceEp = unifiedEndpoints.find(ep => ep.name === routeHeader.source_branch);
       const isCrossBranchRoute =
@@ -450,7 +451,7 @@ export default function InterBranchTransfer() {
   };
 
   const handleApproveRequest = async (txId) => {
-    if (!window.confirm('Setujui permintaan transfer ini? Stok akan otomatis berpindah.')) return;
+    if (!(await confirmAction('Setujui permintaan transfer ini? Stok akan otomatis berpindah.'))) return;
     setLoading(true);
     try {
       await api.approveTransferRequest(txId);
@@ -465,7 +466,7 @@ export default function InterBranchTransfer() {
   };
 
   const handleRejectRequest = async (txId) => {
-    if (!window.confirm('Tolak dan hapus permintaan transfer ini?')) return;
+    if (!(await confirmAction('Tolak dan hapus permintaan transfer ini?'))) return;
     setLoading(true);
     try {
       await api.rejectTransferRequest(txId);
@@ -689,7 +690,7 @@ export default function InterBranchTransfer() {
               }}
             >
               <Plus size={17} />
-              <span>{['Bar', 'Barista', 'Head Bar', 'Rekan Bar'].includes(activeUser?.role) ? 'Minta Barang' : 'Buat Mutasi'}</span>
+              <span>{['Bar', 'Barista', 'Head Bar', 'Barista'].includes(activeUser?.role) ? 'Minta Barang' : 'Buat Mutasi'}</span>
             </button>
           )}
         </div>
@@ -1221,7 +1222,7 @@ export default function InterBranchTransfer() {
                       <span>{new Date(r.date).toLocaleDateString('id-ID')}</span>
                     </div>
                     {notes && <div className="text-xs italic text-[var(--text-secondary)]">"{notes}"</div>}
-                    {!['Bar', 'Barista', 'Head Bar', 'Rekan Bar'].includes(activeUser?.role) && (
+                    {!['Bar', 'Barista', 'Head Bar', 'Barista'].includes(activeUser?.role) && (
                       <div className="flex items-center gap-2 pt-1">
                         <button onClick={() => handleApproveRequest(r.id)} disabled={loading} className="btn btn-primary py-1.5 px-3 text-xs flex-1 justify-center"><Check size={14}/> Setujui</button>
                         <button onClick={() => handleRejectRequest(r.id)} disabled={loading} className="btn btn-secondary py-1.5 px-3 text-xs flex-1 justify-center text-rose-500"><X size={14}/> Tolak</button>
@@ -1261,7 +1262,7 @@ export default function InterBranchTransfer() {
                         </td>
                         <td className="py-3 px-4 text-xs italic text-[var(--text-secondary)]">{notes || '-'}</td>
                         <td className="py-3 px-4 text-center">
-                          {!['Bar', 'Barista', 'Head Bar', 'Rekan Bar'].includes(activeUser?.role) ? (
+                          {!['Bar', 'Barista', 'Head Bar', 'Barista'].includes(activeUser?.role) ? (
                             <div className="flex items-center justify-center gap-2">
                               <button onClick={() => handleApproveRequest(r.id)} disabled={loading} className="btn btn-primary py-1 px-2 text-xs bg-emerald-500 hover:bg-emerald-600 border-none text-white font-bold"><Check size={14}/> Setuju</button>
                               <button onClick={() => handleRejectRequest(r.id)} disabled={loading} className="btn btn-secondary py-1 px-2 text-xs text-rose-500 hover:bg-rose-50 border-rose-200"><X size={14}/> Tolak</button>
@@ -1498,7 +1499,7 @@ export default function InterBranchTransfer() {
                 </div>
                 <div>
                   <h3 className="text-base md:text-lg font-bold m-0 text-[var(--text-primary)]">
-                    {['Bar', 'Barista', 'Head Bar', 'Rekan Bar'].includes(activeUser?.role) ? 'Permintaan Barang' : 'Buat Mutasi Stok'}
+                    {['Bar', 'Barista', 'Head Bar', 'Barista'].includes(activeUser?.role) ? 'Permintaan Barang' : 'Buat Mutasi Gudang'}
                   </h3>
                   <p className="text-xs text-[var(--text-secondary)] m-0">
                     Pilih rute dan daftar bahan transfer.

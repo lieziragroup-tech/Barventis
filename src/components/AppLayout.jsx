@@ -340,12 +340,14 @@ export default function DashboardLayout() {
     basePath
   }), [poReminders, pendingHeadbarPos, pendingTransfers, stock, role, isHeadBarUser, basePath]);
 
-  // Auto-open Modal Rekap Urgent 1x saat login (menunggu Panduan Spotlight selesai agar tidak bertumpuk)
+  // Auto-open Modal Rekap Urgent 1x saat login (wajib tunggu Panduan Spotlight selesai agar tidak pernah bertumpuk)
   useEffect(() => {
     if (loadingData || !activeUser?.id || isSuperAdmin) return;
     if (spotlightMode !== 'idle') return;
     if (urgentRecap.totalCount === 0) return;
     try {
+      const spotlightDoneKey = `barventis_spotlight_done_${activeUser.id}`;
+      if (localStorage.getItem(spotlightDoneKey) !== 'true') return;
       const seenUrgentKey = `bv_urgent_seen_${activeUser.id}`;
       if (sessionStorage.getItem(seenUrgentKey) !== 'true') {
         sessionStorage.setItem(seenUrgentKey, 'true');
@@ -746,7 +748,7 @@ export default function DashboardLayout() {
                             ? "Dashboard Purchasing & PO"
                             : "Dashboard"
                       )}
-                      {location.pathname === `${basePath}/daily-inventory` && "Daily Inventory"}
+                      {location.pathname === `${basePath}/daily-inventory` && "Stok Harian"}
                       {location.pathname === `${basePath}/olah-bahan` && "Olah Bahan"}
                       {location.pathname === `${basePath}/procurement` && (role === 'Central' ? "PO & Penerimaan Central" : "Pengadaan & Supplier")}
                       {location.pathname === `${basePath}/transfer` && (role === 'Central' ? "Mutasi Central ke Cabang" : "Mutasi Gudang")}
@@ -864,7 +866,7 @@ export default function DashboardLayout() {
               {/* Tombol Panduan Desktop/Tablet (>= 640px) */}
               <button
                 className="hidden sm:flex btn hover:opacity-85 transition-opacity items-center justify-center gap-1.5"
-                onClick={() => setSpotlightMode('prompt')}
+                onClick={() => { setShowUrgentModal(false); setSpotlightMode('prompt'); }}
                 title="Buku Panduan Sistem"
                 style={{
                   background: 'var(--accent-glow)', border: '1px solid var(--accent)', borderRadius: '10px',
@@ -1044,19 +1046,7 @@ export default function DashboardLayout() {
               ) : <div />}
 
               <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setSpotlightMode('prompt')}
-                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 border"
-                  style={{
-                    background: 'var(--accent-glow)',
-                    borderColor: 'var(--accent)',
-                    color: 'var(--accent)'
-                  }}
-                >
-                  <BookOpen size={13} />
-                  <span>Panduan</span>
-                </button>
+                
               </div>
             </div>
           )}
@@ -1510,7 +1500,7 @@ export default function DashboardLayout() {
 
       {/* Floating AI Assistant */}
             <UrgentRecapModal
-        isOpen={showUrgentModal}
+        isOpen={showUrgentModal && spotlightMode === 'idle'}
         urgentActions={urgentRecap.urgentActions}
         urgentMaterials={urgentRecap.urgentMaterials}
         onNavigate={(route) => navigate(route)}

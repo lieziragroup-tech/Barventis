@@ -1,3 +1,5 @@
+import { useAuth } from '../../contexts/AuthContext';
+import { resolveDashboardRole, canViewFinancialMetrics } from '../../services/modules/roleBoundaryUtils';
 import { useState, useMemo, useEffect } from 'react';
 import { useData } from '../../contexts/DataContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -42,6 +44,8 @@ function convertBetweenUnits(value, fromUnit, toUnit) {
 }
 
 export default function SimplePrep({ standaloneMode = null } = {}) {
+  const { activeUser } = useAuth();
+  const canSeePrices = canViewFinancialMetrics(resolveDashboardRole(activeUser));
   const { stock: rawStock, refreshData, activeBranchId } = useData();
   const materials = useMemo(() => rawStock || [], [rawStock]);
   const toast = useToast();
