@@ -19,6 +19,24 @@ import { buildUrgentRecap } from '../services/modules/urgentRecapUtils';
 import WidgetErrorBoundary from './WidgetErrorBoundary';
 import barventisIcon from '../assets/barventis-icon.png';
 
+function getNavTourSlug(toPath = '') {
+  const s = String(toPath || '').toLowerCase();
+  if (s.includes('daily-inventory')) return 'daily-inventory';
+  if (s.includes('olah-bahan') || s.includes('simple-prep')) return 'olah-bahan';
+  if (s.includes('tab=marketlist')) return 'marketlist';
+  if (s.includes('tab=pembelian')) return 'pembelian';
+  if (s.includes('procurement') || s.includes('invoicing')) return 'invoicing';
+  if (s.includes('transfer')) return 'transfer';
+  if (s.includes('so-glass-tool')) return 'so-glass-tool';
+  if (s.includes('opname-assets')) return 'opname-assets';
+  if (s.includes('cost-control') || s.includes('cost-report')) return 'cost-control';
+  if (s.includes('berita-acara')) return 'berita-acara';
+  if (s.includes('tab=stock-ledger')) return 'stock-ledger';
+  if (s.includes('tab=admin')) return 'admin';
+  return 'dashboard';
+}
+
+
 const DEFAULT_HUB_TABS = {
   '/dashboard/procurement': 'invoicing',
   '/dashboard/daily-inventory': 'bahan',
