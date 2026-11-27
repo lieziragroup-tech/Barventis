@@ -1791,9 +1791,9 @@ export default function DailyInventory({ category: _category, initialTab, standa
                             </span>
                           )}
                           {canSeePrices && (
-                            {canSeePrices && (<div className="text-[10px] text-[var(--text-muted)] leading-tight mt-0.5" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                            <div className="text-[10px] text-[var(--text-muted)] leading-tight mt-0.5" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
                               Rp {(Number(mat.price) || 0).toLocaleString('id-ID')} / {mat.unit || 'unit'}
-                            </div>)}
+                            </div>
                           )}
                         </td>
                         <td className="text-center font-mono tabular-nums whitespace-nowrap text-xs" style={{ padding: '9px 8px', borderBottom: '1px solid #f1f5f9' }}>{Number(row.stok_awal) || 0}</td>
@@ -2009,9 +2009,11 @@ export default function DailyInventory({ category: _category, initialTab, standa
                               </span>
                             </div>
                           )}
-                          <div className="text-[10px] text-[var(--text-muted)] leading-tight mt-0.5" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                            Rp {unitPrice.toLocaleString('id-ID')} / {packUnit}
-                          </div>
+                          {canSeePrices && (
+                            <div className="text-[10px] text-[var(--text-muted)] leading-tight mt-0.5" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                              Rp {unitPrice.toLocaleString('id-ID')} / {packUnit}
+                            </div>
+                          )}
                           {hasTwoUnits && (
                             <div className="text-[9px] text-emerald-700 font-semibold leading-tight mt-0.5" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
                               1 {packUnit} = {Number(twoTierContentQty).toLocaleString('id-ID')} {contentUnit}
