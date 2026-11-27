@@ -13,8 +13,9 @@ export default function ConfirmDialogHost() {
     const handler = (e) => {
       if (e?.detail) setReq(e.detail);
     };
+    window.__bvConfirmHostMounted = true;
     window.addEventListener(CONFIRM_EVENT, handler);
-    return () => window.removeEventListener(CONFIRM_EVENT, handler);
+    return () => { window.__bvConfirmHostMounted = false; window.removeEventListener(CONFIRM_EVENT, handler); };
   }, []);
 
   useEffect(() => {

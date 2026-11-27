@@ -1,3 +1,4 @@
+import { resolveDashboardRole, canViewFinancialMetrics } from '../../services/modules/roleBoundaryUtils';
 import { confirmAction } from '../../utils/confirmDialog';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
@@ -33,6 +34,14 @@ import MaterialAutocomplete from '../../components/shared/MaterialAutocomplete';
 import useIsMobile from '../../hooks/useIsMobile';
 import { locationService } from '../../services/locationService';
 
+const formatTransferRef = (rawId) => {
+  const s = String(rawId || '-');
+  const uuidMatch = s.match(/^TRF-([0-9a-f]{6})[0-9a-f-]{20,}$/i);
+  if (uuidMatch) return `TRF-${uuidMatch[1].toUpperCase()}`;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(s)) return `TRF-${s.slice(0, 6).toUpperCase()}`;
+  return s;
+};
+
 export default function InterBranchTransfer() {
   const {
     currentTenant,
@@ -44,6 +53,7 @@ export default function InterBranchTransfer() {
     activeBranchId
   } = useData();
   const { activeUser } = useAuth();
+  const canSeeValuation = canViewFinancialMetrics(resolveDashboardRole(activeUser));
   const isMobile = useIsMobile(768);
   const [showTransferGuide, setShowTransferGuide] = useState(false);
 
@@ -306,7 +316,7 @@ export default function InterBranchTransfer() {
   const filteredTransfers = useMemo(() => {
     return (transfers || []).filter(t => {
       const matchesSearch =
-        `${t.id} ${t.item_name} ${t.source_branch} ${t.target_branch} ${t.notes || ''}`
+        `${formatTransferRef(t.id)} ${t.item_name} ${t.source_branch} ${t.target_branch} ${t.notes || ''}`
           .toLowerCase()
           .includes(searchTerm.toLowerCase());
 
@@ -811,7 +821,7 @@ export default function InterBranchTransfer() {
               </div>
               <div>
                 <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider block">
-                  Selesai Diterima
+                  Completed
                 </span>
                 <div className="text-lg md:text-xl font-extrabold text-[var(--text-primary)] tabular-nums">
                   {interBranchStats.receivedCount} <span className="text-xs font-normal text-[var(--text-secondary)]">kiriman</span>
@@ -1117,6 +1127,7 @@ export default function InterBranchTransfer() {
           </div>
         </div>
 
+        {canSeeValuation && (
         <div className="glass-card p-3.5 flex items-center gap-3">
           <div className="p-2 rounded-xl bg-purple-500/10 text-purple-500 shrink-0">
             <TrendingUp size={18} />
@@ -1130,6 +1141,7 @@ export default function InterBranchTransfer() {
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* Main Table Card */}
@@ -1290,7 +1302,7 @@ export default function InterBranchTransfer() {
                 <th className="py-3 px-4 text-left">Item / Bahan Baku</th>
                 <th className="py-3 px-4 text-left">Rute Perpindahan</th>
                 <th className="py-3 px-4 text-right">Kuantitas</th>
-                <th className="py-3 px-4 text-right">Valuasi (Rp)</th>
+                {canSeeValuation && <th className="py-3 px-4 text-right">Valuasi (Rp)</th>}
                 <th className="py-3 px-4 text-left">Catatan</th>
                 <th className="py-3 px-4 text-center">Status</th>
               </tr>
@@ -1333,7 +1345,7 @@ export default function InterBranchTransfer() {
                   <tr key={t.id} className="hover:bg-[var(--bg-secondary)]/50 transition-colors">
                     <td className="py-3 px-4 font-mono text-xs font-semibold">
                       <span className="px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border)]">
-                        {t.id}
+                        {formatTransferRef(t.id)}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-xs whitespace-nowrap text-[var(--text-secondary)]">
@@ -1378,7 +1390,7 @@ export default function InterBranchTransfer() {
                     </td>
                     <td className="py-3 px-4 text-center">
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
-                        <CheckCircle2 size={12} /> Selesai
+                        <CheckCircle2 size={12} /> Completed
                       </span>
                     </td>
                   </tr>
@@ -1414,7 +1426,7 @@ export default function InterBranchTransfer() {
               <div key={t.id} className="border rounded-xl p-3.5 bg-[var(--bg-secondary)]/30 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-[var(--bg-secondary)] border">
-                    {t.id}
+                    {formatTransferRef(t.id)}
                   </span>
                   <span className="text-xs text-[var(--text-secondary)]">
                     {t.date ? new Date(t.date).toLocaleDateString('id-ID') : '-'}

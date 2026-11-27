@@ -263,6 +263,7 @@ export default function App() {
       </Routes>
       </ErrorBoundary>
     </React.Suspense>
+      <ConfirmDialogHost />
     </LanguageProvider>
   );
 }

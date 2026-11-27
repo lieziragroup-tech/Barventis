@@ -13,6 +13,9 @@ export function confirmAction(messageOrOptions) {
   if (typeof window === 'undefined') {
     return Promise.resolve(true);
   }
+  if (!window.__bvConfirmHostMounted) {
+    return Promise.resolve(window.confirm(opts.message || 'Apakah kamu yakin ingin melanjutkan tindakan ini?'));
+  }
 
   return new Promise((resolve) => {
     window.dispatchEvent(new CustomEvent(CONFIRM_EVENT, {
