@@ -1,0 +1,497 @@
+import { confirmAction } from '../../utils/confirmDialog';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Plus, Edit2, Trash2, Save, X, Search, Loader2, Package, TrendingDown, Building2 } from 'lucide-react';
+import React, { Suspense } from 'react';
+import { api } from '../../services/api';
+import { useData } from '../../contexts/DataContext';
+import { useAuth } from '../../contexts/AuthContext';
+import Pagination from '../../components/shared/Pagination';
+import TwoTierConversionEditor from '../../components/shared/TwoTierConversionEditor';
+import { resolvePackInfo, getUnitPrice } from '../../services/costUtils';
+
+export const OFFICIAL_CATEGORIES = [
+  'Coffee & Tea',
+  'Milk & Soft Drink',
+  'Drink & Beer',
+  'Powder',
+  'Syrup & Souce',
+  'Fresh Fruit',
+  'Bahan Frozen',
+  'Dry Goods',
+  'ETC',
+  'Extra Cost',
+  'Bahan Mentah / Raw Material',
+  'Bahan Olahan / Prep',
+  'Consumable (Packaging)',
+  'Glass & Tool (Asset)'
+];
+
+export default function Marketlist() {
+  const { showToast, refreshData, activeBranchId } = useData();
+  const { activeUser: _activeUser } = useAuth();
+  
+  const [materials, setMaterials] = useState([]);
+  const [_suppliers, setSuppliers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  
+  const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
+
+  
+  // Inline edit states
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  // Advanced Modals (Lazy)
+  const [showAddSupplier, setShowAddSupplier] = useState(false);
+  const [compareModalItem, setCompareModalItem] = useState(null);
+
+  const AddSupplierModal = useMemo(() => React.lazy(() => import('../../components/modals/AddSupplierModal')), []);
+  const ComparePriceModal = useMemo(() => React.lazy(() => import('../../components/modals/ComparePriceModal')), []);
+
+  const handleAddSupplierSuccess = (newSupplier) => {
+    // Optimistic UI update or trigger refresh
+    showToast(`Supplier ${newSupplier.name} ditambahkan`, 'success');
+  };
+
+  // Modal for Create
+  const [showModal, setShowModal] = useState(false);
+  const [newMaterial, setNewMaterial] = useState({
+    name: '',
+    category: OFFICIAL_CATEGORIES[0],
+    unit: 'pck',
+    full_pack: '1000 grm',
+    price: 0,
+    supplier: '',
+    min_stock: 15,
+    shelf_life_days: ''
+  });
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [matData, supData] = await Promise.all([
+        api.getMaterials(),
+        api.getSuppliers()
+      ]);
+      setMaterials(matData || []);
+      setSuppliers(supData || []);
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast, activeBranchId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, categoryFilter]);
+
+  
+  const availableCategories = useMemo(() => {
+    const dbCats = (materials || []).map(m => (m.category || '').trim()).filter(Boolean);
+    return Array.from(new Set([...OFFICIAL_CATEGORIES, ...dbCats]));
+  }, [materials]);
+
+  const filteredMaterials = useMemo(() => {
+    return materials.filter(m => {
+      const matchSearch = m.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          (m.sku && m.sku.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchCat = categoryFilter === 'ALL' || m.category === categoryFilter;
+      return matchSearch && matchCat;
+    });
+  }, [materials, searchTerm, categoryFilter]);
+
+  const paginatedMaterials = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredMaterials.slice(start, start + itemsPerPage);
+  }, [filteredMaterials, currentPage, itemsPerPage]);
+
+  const startEdit = (mat) => {
+    const activePrice = Number(mat.new_price) > 0 ? Number(mat.new_price) : (Number(mat.price) || 0);
+    setEditingId(mat.id);
+    setEditForm({
+      name: mat.name,
+      category: mat.category || OFFICIAL_CATEGORIES[0],
+      unit: mat.unit || 'pck',
+      full_pack: mat.full_pack || '',
+      price: activePrice,
+      supplier: mat.supplier || '',
+      shelf_life_days: mat.shelf_life_days ?? ''
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm({});
+  };
+
+  const saveEdit = async (id) => {
+    setSaving(true);
+    try {
+      await api.updateMaterial(id, {
+        name: editForm.name,
+        category: editForm.category,
+        unit: editForm.unit,
+        full_pack: editForm.full_pack,
+        price: parseFloat(editForm.price) || 0,
+        new_price: parseFloat(editForm.price) || 0,
+        supplier: editForm.supplier,
+        shelf_life_days: editForm.shelf_life_days ? parseInt(editForm.shelf_life_days, 10) : null
+      });
+      showToast('Bahan dan satuan berhasil diperbarui', 'success');
+      setEditingId(null);
+      fetchData();
+      refreshData();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id, name) => {
+    if (!(await confirmAction(`Hapus bahan baku "${name}"? Data yang terhapus tidak bisa dikembalikan.`))) return;
+    setSaving(true);
+    try {
+      await api.deleteMaterial(id);
+      showToast('Bahan berhasil dihapus', 'success');
+      fetchData();
+      refreshData();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await api.createMaterial({
+        ...newMaterial,
+        price: parseFloat(newMaterial.price) || 0,
+        new_price: parseFloat(newMaterial.price) || 0,
+        shelf_life_days: newMaterial.shelf_life_days ? parseInt(newMaterial.shelf_life_days, 10) : null
+      });
+      showToast('Bahan baku baru berhasil ditambahkan', 'success');
+      setShowModal(false);
+      setNewMaterial({
+        name: '',
+        category: OFFICIAL_CATEGORIES[0],
+        unit: 'pck',
+        full_pack: '1000 grm',
+        price: 0,
+        supplier: '',
+        min_stock: 15,
+        shelf_life_days: ''
+      });
+      fetchData();
+      refreshData();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+
+  return (
+    <div className="fade-in space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 className="text-2xl font-extrabold text-[var(--text-primary)]">Katalog Bahan</h2>
+          <p className="text-sm text-[var(--text-secondary)]">Kelola bahan, konversi satuan, dan harga.</p>
+        </div>
+        <div className="flex gap-2">
+          <button className="btn btn-secondary" onClick={() => setShowAddSupplier(true)}>
+            <Building2 size={16} className="mr-2" /> Tambah Supplier
+          </button>
+          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+            <Plus size={16} className="mr-2" /> Tambah Bahan
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+          <input 
+            type="text" 
+            placeholder="Cari nama bahan atau SKU..." 
+            className="form-control pl-9 w-full"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <select className="form-control sm:w-64" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
+          <option value="ALL">Semua Kategori</option>
+          {availableCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+        </select>
+      </div>
+
+      <div className="glass-card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="custom-table w-full">
+            <thead>
+              <tr>
+                <th className="w-12 text-center">No</th>
+                <th className="w-56">Nama Bahan</th>
+                <th className="w-40">Kategori</th>
+                <th className="w-60">Satuan & Konversi</th>
+                <th className="w-28 text-center">Masa Simpan</th>
+                <th className="w-40">Supplier</th>
+                <th className="w-44 text-right">Harga / Pack</th>
+                <th className="w-28 text-center">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan="8" className="text-center py-8"><Loader2 className="animate-spin mx-auto text-[var(--text-muted)]" /></td></tr>
+              ) : filteredMaterials.length === 0 ? (
+                <tr><td colSpan="8" className="text-center py-12 text-[var(--text-muted)]"><Package size={48} className="mx-auto mb-3 opacity-20"/>Tidak ada bahan baku ditemukan</td></tr>
+              ) : (
+                paginatedMaterials.map((mat, idx) => {
+                  const isEditing = editingId === mat.id;
+                  const activePrice = Number(mat.new_price) > 0 ? Number(mat.new_price) : (Number(mat.price) || 0);
+                  const pack = resolvePackInfo(mat.full_pack, mat.unit);
+                  const unitPriceInfo = getUnitPrice({ ...mat, price: activePrice });
+                  const totalStock = (Number(mat.qty_resto) || 0) + (Number(mat.qty_central) || 0);
+                  const convertedTotal = totalStock * (pack.size || 0);
+                  const convertedUnit = (pack.unit || mat.unit || '').toUpperCase();
+
+                  return (
+                    <tr key={mat.id} className="hover:bg-[var(--bg-secondary)]/50">
+                      <td className="text-center text-[var(--text-muted)] font-mono text-xs">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
+                      
+                      <td>
+                        {isEditing ? (
+                          <input type="text" className="form-control w-full py-1 text-sm" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
+                        ) : (
+                          <div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-semibold">{mat.name}</span>
+                              {mat.is_prep_output && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                                  Hasil Olah / Prep
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                              {mat.full_pack || mat.unit} / {mat.unit}
+                            </div>
+                          </div>
+                        )}
+                      </td>
+
+                      <td>
+                        {isEditing ? (
+                          <select className="form-control w-full py-1 text-sm" value={editForm.category} onChange={e => setEditForm({...editForm, category: e.target.value})}>
+                            {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        ) : (
+                          <span className="badge badge-secondary text-xs">{mat.category || 'Belum Kategori'}</span>
+                        )}
+                      </td>
+
+                      <td>
+                        {isEditing ? (
+                          <TwoTierConversionEditor
+                            compact
+                            instanceId={`row-${mat.id}`}
+                            unit={editForm.unit}
+                            fullPack={editForm.full_pack}
+                            price={editForm.price}
+                            onChange={({ unit, full_pack }) => setEditForm({ ...editForm, unit, full_pack })}
+                          />
+                        ) : (
+                          <div className="space-y-0.5">
+                            {pack.size > 0 ? (
+                              <div className="text-xs font-mono font-semibold text-slate-800">
+                                1 <span className="text-blue-700 font-bold">{mat.unit}</span> = {Number(pack.size).toLocaleString('id-ID')}{' '}
+                                <span className="text-emerald-700 font-bold">{convertedUnit}</span>
+                              </div>
+                            ) : (
+                              <div className="text-xs font-mono font-semibold text-slate-700">
+                                Satuan: <span className="text-blue-700 font-bold">{mat.unit || '-'}</span> ({mat.full_pack || '-'})
+                              </div>
+                            )}
+                            <div className="text-[10px] font-mono text-slate-500">
+                              Stok: {totalStock.toFixed(1)} {mat.unit}
+                              {pack.size > 0 ? ` (${convertedTotal.toFixed(0)} ${convertedUnit})` : ''}
+                            </div>
+                            {unitPriceInfo.resolved && (
+                              <div className="text-[10px] font-mono text-emerald-700 font-medium">
+                                HPP Isi: Rp {unitPriceInfo.unitPrice.toLocaleString('id-ID', { maximumFractionDigits: 2 })} / {pack.unit}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="text-center">
+                        {isEditing ? (
+                          <div className="flex items-center justify-center gap-1">
+                            <input
+                              type="number"
+                              min="1"
+                              placeholder="Hari"
+                              className="form-control w-16 py-1 text-xs text-center border-[var(--accent)]"
+                              value={editForm.shelf_life_days ?? ''}
+                              onChange={e => setEditForm({...editForm, shelf_life_days: e.target.value})}
+                            />
+                            <span className="text-[11px] text-[var(--text-muted)]">hr</span>
+                          </div>
+                        ) : (
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                            mat.shelf_life_days ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'text-gray-400'
+                          }`}>
+                            {mat.shelf_life_days ? `${mat.shelf_life_days} hr` : '-'}
+                          </span>
+                        )}
+                      </td>
+
+                      <td>
+                        {isEditing ? (
+                          <input type="text" placeholder="Nama Supplier" className="form-control w-full py-1 text-sm border-[var(--accent)]" value={editForm.supplier} onChange={e => setEditForm({...editForm, supplier: e.target.value})} />
+                        ) : (
+                          <span className="text-[var(--text-secondary)] text-sm">{mat.supplier || '-'}</span>
+                        )}
+                      </td>
+
+                      <td className="text-right font-mono">
+                        {isEditing ? (
+                          <input type="number" min="0" className="form-control w-full py-1 text-sm text-right border-[var(--accent)]" value={editForm.price} onChange={e => setEditForm({...editForm, price: e.target.value})} />
+                        ) : (
+                          <div className="flex items-center justify-end gap-1">
+                            <div>
+                              <div>Rp {activePrice.toLocaleString('id-ID')}</div>
+                              <div className="text-[10px] text-[var(--text-muted)]">/ {mat.unit || 'pck'}</div>
+                            </div>
+                            <button
+                              type="button"
+                              className="btn btn-secondary text-[11px] py-1 px-2 font-bold"
+                              style={{ color: 'var(--accent)', borderColor: 'rgba(16, 185, 129, 0.35)' }}
+                              title="Komparasi Harga, Bahan & Kualitas dari Supplier Lain"
+                              onClick={() => setCompareModalItem(mat)}
+                            >
+                              Komparasi
+                            </button>
+                          </div>
+                        )}
+                      </td>
+
+                      <td>
+                        <div className="flex items-center justify-center gap-2">
+                          {isEditing ? (
+                            <>
+                              <button onClick={() => saveEdit(mat.id)} disabled={saving} className="p-1.5 text-emerald-600 bg-emerald-50 rounded hover:bg-emerald-100"><Save size={16}/></button>
+                              <button onClick={cancelEdit} disabled={saving} className="p-1.5 text-rose-600 bg-rose-50 rounded hover:bg-rose-100"><X size={16}/></button>
+                            </>
+                          ) : (
+                            <>
+                              <button onClick={() => startEdit(mat)} className="p-1.5 text-blue-600 bg-blue-50 rounded hover:bg-blue-100"><Edit2 size={16}/></button>
+                              <button onClick={() => handleDelete(mat.id, mat.name)} className="p-1.5 text-rose-600 bg-rose-50 rounded hover:bg-rose-100"><Trash2 size={16}/></button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination Bar */}
+        <div className="p-4 border-t border-[var(--border)] bg-[var(--bg-secondary)]/30">
+          <Pagination
+            page={currentPage}
+            pageSize={itemsPerPage}
+            totalCount={filteredMaterials.length}
+            onPageChange={setCurrentPage}
+            itemLabel="bahan baku"
+          />
+        </div>
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <form onSubmit={handleCreate} className="bg-[var(--bg-primary)] rounded-xl w-full max-w-lg overflow-hidden shadow-2xl">
+            <div className="p-4 border-b border-[var(--border)] flex justify-between items-center">
+              <h3 className="font-bold text-lg">Tambah Bahan Baru</h3>
+              <button type="button" onClick={() => setShowModal(false)}><X size={20}/></button>
+            </div>
+            <div className="p-4 space-y-4 max-h-[80vh] overflow-y-auto">
+              <div>
+                <label className="form-label">Nama Bahan</label>
+                <input required type="text" className="form-control w-full" value={newMaterial.name} onChange={e => setNewMaterial({...newMaterial, name: e.target.value})} />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label">Kategori</label>
+                  <select className="form-control w-full" value={newMaterial.category} onChange={e => setNewMaterial({...newMaterial, category: e.target.value})}>
+                    {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label">Harga Beli / Pack (Rp)</label>
+                  <input required type="number" min="0" className="form-control w-full" value={newMaterial.price} onChange={e => setNewMaterial({...newMaterial, price: e.target.value})} />
+                </div>
+              </div>
+
+              <TwoTierConversionEditor
+                unit={newMaterial.unit}
+                fullPack={newMaterial.full_pack}
+                price={newMaterial.price}
+                onChange={({ unit, full_pack }) => setNewMaterial({ ...newMaterial, unit, full_pack })}
+              />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label">Supplier</label>
+                  <input type="text" className="form-control w-full" value={newMaterial.supplier} onChange={e => setNewMaterial({...newMaterial, supplier: e.target.value})} />
+                </div>
+                <div>
+                  <label className="form-label flex items-center justify-between">
+                    <span>Masa Simpan</span>
+                    <span className="text-[10px] text-gray-400 font-normal">Hari</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="Contoh: 3 / 30"
+                    className="form-control w-full"
+                    value={newMaterial.shelf_life_days}
+                    onChange={e => setNewMaterial({...newMaterial, shelf_life_days: e.target.value})}
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-[var(--text-muted)] -mt-2">
+                * Otomatis mengisi tanggal kedaluwarsa.
+              </p>
+            </div>
+            <div className="p-4 border-t border-[var(--border)] flex justify-end gap-2 bg-[var(--bg-secondary)]">
+              <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Batal</button>
+              <button type="submit" disabled={saving} className="btn btn-primary">{saving ? 'Menyimpan...' : 'Simpan'}</button>
+            </div>
+          </form>
+        </div>
+      )}
+      <Suspense fallback={null}>
+        {showAddSupplier && <AddSupplierModal onClose={() => setShowAddSupplier(false)} onSuccess={handleAddSupplierSuccess} />}
+        {compareModalItem && <ComparePriceModal item={compareModalItem} onClose={() => setCompareModalItem(null)} onSelect={(offer) => showToast(`Pilih ${offer.supplier_name}`, 'success')} />}
+      </Suspense>
+     </div>
+   );
+}
