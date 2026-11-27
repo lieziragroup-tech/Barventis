@@ -85,6 +85,7 @@ export default function SimplePrep({ standaloneMode = null } = {}) {
   const [isWasteManual, setIsWasteManual] = useState(false);
   const [photoWaste, setPhotoWaste] = useState(null);
   const [photoWastePreview, setPhotoWastePreview] = useState(null);
+  const [extraOutputs, setExtraOutputs] = useState([]);
   const [notes, setNotes] = useState('');
 
   // Quick Setup Modal for Missing Raw Materials
@@ -368,6 +369,7 @@ export default function SimplePrep({ standaloneMode = null } = {}) {
     setIsWasteManual(false);
     setPhotoWaste(null);
     setPhotoWastePreview(null);
+      setExtraOutputs([]);
     setNotes('');
     setExpiryDate('');
   };
@@ -410,7 +412,7 @@ export default function SimplePrep({ standaloneMode = null } = {}) {
         new_target_hpp: Math.round(analytics.newTargetHppPerUnit),
         photo_before: photoBefore,
         photo_clean: photoClean,
-        photo_waste: photoWaste || photoClean,
+        photo_waste: parseFloat(wasteQty || 0) > 0 ? (photoWaste || null) : null,
         notes: notes,
         expiry_date: expiryDate || null
       });
@@ -471,40 +473,6 @@ export default function SimplePrep({ standaloneMode = null } = {}) {
           </div>
         </div>
       </div>
-
-      {/* Sub-Navigation Tabs: Trimming Standar vs Split Zero-Waste (Kelapa) vs Barcode Lot Central */}
-      <div style={{ display: 'flex', gap: '6px', background: 'var(--bg-tertiary)', padding: '5px', borderRadius: 'var(--radius-md)', width: 'fit-content', maxWidth: '100%', overflowX: 'auto' }}>
-        <button
-          type="button"
-          className={`btn ${prepSubTab === 'TRIMMING' ? 'btn-primary' : ''}`}
-          style={{ background: prepSubTab === 'TRIMMING' ? '' : 'transparent', color: prepSubTab === 'TRIMMING' ? '' : 'var(--text-secondary)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
-          onClick={() => setPrepSubTab('TRIMMING')}
-        >
-          Olah Bahan &amp; Trimming (Dengan Ampas/Susut)
-        </button>
-        <button
-          type="button"
-          className={`btn ${prepSubTab === 'ZERO_WASTE_SPLIT' ? 'btn-primary' : ''}`}
-          style={{ background: prepSubTab === 'ZERO_WASTE_SPLIT' ? '' : 'transparent', color: prepSubTab === 'ZERO_WASTE_SPLIT' ? '' : 'var(--text-secondary)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
-          onClick={() => setPrepSubTab('ZERO_WASTE_SPLIT')}
-        >
-          Urgent Cutting Portion
-        </button>
-        {SHOW_BARCODE_MODULE && (
-        <button
-          type="button"
-          className={`btn ${prepSubTab === 'BARCODE_CENTRAL' ? 'btn-primary' : ''}`}
-          style={{ background: prepSubTab === 'BARCODE_CENTRAL' ? '' : 'transparent', color: prepSubTab === 'BARCODE_CENTRAL' ? '' : 'var(--text-secondary)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
-          onClick={() => setPrepSubTab('BARCODE_CENTRAL')}
-        >
-          Cetak &amp; Scan Barcode Lot Gudang Central
-        </button>
-        )}
-      </div>
-
-      {prepSubTab === 'ZERO_WASTE_SPLIT' && <ZeroWasteSplitAndBarcode mode="SPLIT" />}
-      {SHOW_BARCODE_MODULE && prepSubTab === 'BARCODE_CENTRAL' && <ZeroWasteSplitAndBarcode mode="BARCODE" />}
-
 
       {/* Main Dual-Column Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -897,6 +865,74 @@ export default function SimplePrep({ standaloneMode = null } = {}) {
                 </div>
               )}
 
+              {/* Multi-Output: Tambah Hasil Olahan Lain (opsional, untuk pemecahan 1 bahan -> 2+ hasil) */}
+              <div className="pt-3 border-t border-[var(--border)]/60 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <span className="text-xs font-bold text-gray-700">Hasil Olahan Tambahan (Opsional)</span>
+                    <p className="text-[11px] text-[var(--text-muted)] m-0">Tambahkan jika 1 bahan induk menghasilkan lebih dari 1 bahan jadi (misal air &amp; daging buah).</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setExtraOutputs(prev => [...prev, { id: Date.now() + Math.random(), name: '', qty: '', unit: 'kg' }])}
+                    className="btn btn-secondary text-xs font-semibold px-2.5 py-1.5 whitespace-nowrap shrink-0"
+                  >
+                    + Tambah Hasil
+                  </button>
+                </div>
+                {extraOutputs.length > 0 && (
+                  <div className="space-y-2">
+                    {extraOutputs.map((row, idx) => (
+                      <div key={row.id} className="grid grid-cols-12 gap-2 items-center bg-slate-50/80 p-2 rounded-xl border border-slate-200">
+                        <input
+                          type="text"
+                          className="form-control col-span-5 text-xs py-1.5"
+                          placeholder={`Nama hasil ke-${idx + 2}...`}
+                          value={row.name}
+                          onChange={(e) => setExtraOutputs(prev => prev.map(r => r.id === row.id ? { ...r, name: e.target.value } : r))}
+                        />
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          step="any"
+                          min="0"
+                          className="form-control col-span-3 text-xs py-1.5 font-mono"
+                          placeholder="Qty"
+                          value={row.qty}
+                          onChange={(e) => setExtraOutputs(prev => prev.map(r => r.id === row.id ? { ...r, qty: e.target.value } : r))}
+                        />
+                        <input
+                          type="text"
+                          list="bv-prep-units"
+                          className="form-control col-span-3 text-xs py-1.5"
+                          placeholder="Satuan"
+                          value={row.unit}
+                          onChange={(e) => setExtraOutputs(prev => prev.map(r => r.id === row.id ? { ...r, unit: e.target.value } : r))}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setExtraOutputs(prev => prev.filter(r => r.id !== row.id))}
+                          className="col-span-1 text-xs font-bold text-rose-600 hover:text-rose-800 py-1 cursor-pointer"
+                          aria-label="Hapus baris hasil"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    <datalist id="bv-prep-units">
+                      <option value="kg" />
+                      <option value="gr" />
+                      <option value="L" />
+                      <option value="ml" />
+                      <option value="pcs" />
+                      <option value="porsi" />
+                      <option value="btl" />
+                      <option value="pack" />
+                    </datalist>
+                  </div>
+                )}
+              </div>
+
               {/* Setup Tanggal Kedaluwarsa Olahan (FEFO) */}
               <div className="pt-3 border-t border-[var(--border)]/60 space-y-2.5">
                 <div className="flex items-center justify-between">
@@ -953,9 +989,22 @@ export default function SimplePrep({ standaloneMode = null } = {}) {
                   <span className="w-5 h-5 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-[11px] font-bold">3</span>
                   Ampas & Susut
                 </span>
-                <span className="text-[11px] font-medium text-red-600 bg-red-100/60 px-2 py-0.5 rounded-full">
-                  {isWasteManual ? 'Manual' : 'Otomatis'}
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setIsWasteManual(true); setWasteQty('0'); setPhotoWaste(null); setPhotoWastePreview(null); }}
+                    className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border cursor-pointer transition-colors ${
+                      Number(wasteQty || 0) <= 0
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
+                    }`}
+                  >
+                    {Number(wasteQty || 0) <= 0 ? '✓ 0 Waste (Tanpa Ampas)' : 'Set 0 Waste'}
+                  </button>
+                  <span className="text-[11px] font-medium text-red-600 bg-red-100/60 px-2 py-0.5 rounded-full">
+                    {isWasteManual ? 'Manual' : 'Otomatis'}
+                  </span>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
@@ -1002,6 +1051,7 @@ export default function SimplePrep({ standaloneMode = null } = {}) {
 
                 {/* Foto 3: Bukti Ampas */}
                 <div className="sm:col-span-5">
+{Number(wasteQty || 0) > 0 ? (
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-xs font-bold text-red-700">Foto Ampas *</label>
                     {photoClean && !photoWaste && (
@@ -1017,6 +1067,11 @@ export default function SimplePrep({ standaloneMode = null } = {}) {
                       </button>
                     )}
                   </div>
+) : (
+  <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 font-medium">
+    0 Waste aktif: foto ampas tidak diperlukan dan tidak masuk ke Berita Acara Waste.
+  </div>
+)}
                   <div className="relative border-2 border-dashed border-red-300 rounded-xl h-[42px] flex items-center justify-center overflow-hidden bg-white hover:bg-red-50/50 transition-colors">
                     {photoWastePreview ? (
                       <div className="relative w-full h-full flex items-center justify-between px-3 bg-red-50/50">
@@ -1181,7 +1236,7 @@ export default function SimplePrep({ standaloneMode = null } = {}) {
                   2. Bersih {photoClean ? '✓' : 'Belum'}
                 </div>
                 <div className={`p-2 rounded-lg border ${(photoWaste || photoClean) ? 'bg-red-50 border-red-200 text-red-800 font-bold' : 'bg-white border-gray-200 text-gray-400'}`}>
-                  3. Ampas {photoWaste ? '✓' : photoClean ? 'Auto' : 'Belum'}
+                  3. Ampas {Number(wasteQty || 0) <= 0 ? '0 Waste' : (photoWaste ? '✓' : 'Belum')}
                 </div>
               </div>
             </div>

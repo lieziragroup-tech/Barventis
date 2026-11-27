@@ -47,7 +47,7 @@ const ROLE_SIDEBAR_CONFIG = {
   },
 };
 
-const NavItem = ({ to, exact, label, subtitle, icon: Icon, isHovered, onClick }) => {
+const NavItem = ({ to, exact, label, subtitle, icon: Icon, isHovered, onClick , dataTour }) => {
   const location = useLocation();
   const tooltipText = subtitle ? `${label} — ${subtitle}` : label;
 
@@ -70,7 +70,7 @@ const NavItem = ({ to, exact, label, subtitle, icon: Icon, isHovered, onClick })
 
   return (
     <div className="block w-full mb-0.5">
-      <NavLink
+      <NavLink data-tour={dataTour}
         to={to}
         end={exact}
         onClick={onClick}
@@ -190,7 +190,19 @@ export default function DashboardLayout() {
   }, [loadingData, stock, activeUser]);
 
   const [spotlightMode, setSpotlightMode] = useState('idle');
-  const isSidebarExpanded = isHovered || isSidebarLocked || spotlightMode === 'tour';
+  const [isTabletViewport, setIsTabletViewport] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth >= 768 && window.innerWidth < 1024;
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const mq = window.matchMedia('(min-width: 768px) and (max-width: 1023px)');
+    const sync = () => setIsTabletViewport(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+  const isSidebarExpanded = isHovered || isSidebarLocked || isTabletViewport || spotlightMode === 'tour';
   const [showUrgentModal, setShowUrgentModal] = useState(false);
   const [poReminders, setPoReminders] = useState([]);
   const [pendingHeadbarPos, setPendingHeadbarPos] = useState([]);
@@ -468,8 +480,8 @@ export default function DashboardLayout() {
       {/* Desktop Sidebar Container (Auto-expand saat Panduan atau saat di-Lock) */}
       <div 
         data-tour="sidebar-nav"
-        className="hidden lg:block relative z-50 flex-shrink-0"
-        style={{ width: (isSidebarLocked || spotlightMode === 'tour') ? '244px' : '72px', transition: 'width 0.28s ease' }}
+        className="hidden md:block relative z-50 flex-shrink-0"
+        style={{ width: (isSidebarLocked || isTabletViewport || spotlightMode === 'tour') ? '244px' : '72px', transition: 'width 0.28s ease' }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
@@ -478,7 +490,7 @@ export default function DashboardLayout() {
           initial={false}
           animate={{ 
             width: isSidebarExpanded ? 244 : 72,
-            boxShadow: (isHovered && !isSidebarLocked && spotlightMode !== 'tour')
+            boxShadow: (isHovered && !isSidebarLocked && !isTabletViewport && spotlightMode !== 'tour')
               ? "0 16px 24px -6px rgba(0, 0, 0, 0.08), 0 6px 10px -4px rgba(0, 0, 0, 0.03)"
               : "none"
           }}
@@ -516,6 +528,7 @@ export default function DashboardLayout() {
                         icon={item.icon}
                         isHovered={isSidebarExpanded}
                         index={idx}
+                        dataTour={`nav-${getNavTourSlug(item.to)}`}
                       />
                     ))}
                   </NavGroup>
@@ -1182,11 +1195,12 @@ export default function DashboardLayout() {
       {isTenant && (
         <nav
           aria-label="Navigasi Cepat Mobile"
-          className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-secondary)]/95 backdrop-blur-md border-t border-[var(--border)] px-2 pt-1.5 pb-[calc(6px+env(safe-area-inset-bottom))] shadow-[0_-4px_20px_rgba(45,42,38,0.06)]"
+          className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-secondary)]/95 backdrop-blur-md border-t border-[var(--border)] px-2 pt-1.5 pb-[calc(6px+env(safe-area-inset-bottom))] shadow-[0_-4px_20px_rgba(45,42,38,0.06)]"
         >
           <div className="grid grid-cols-5 gap-1 max-w-md mx-auto">
             <NavLink
-              to={basePath}
+              data-tour="mob-dashboard"
+                  to={basePath}
               end
               className={({ isActive }) =>
                 `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
@@ -1204,6 +1218,7 @@ export default function DashboardLayout() {
             {role === 'Central' ? (
               <>
                 <NavLink
+                  data-tour="mob-transfer"
                   to={`${basePath}/transfer`}
                   className={({ isActive }) =>
                     `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
@@ -1216,6 +1231,7 @@ export default function DashboardLayout() {
                   <span className="text-[10px] mt-0.5 leading-tight truncate">Mutasi ke Cabang</span>
                 </NavLink>
                 <NavLink
+                  data-tour="mob-invoicing"
                   to={`${basePath}/procurement?tab=invoicing`}
                   className={({ isActive }) =>
                     `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
@@ -1228,6 +1244,7 @@ export default function DashboardLayout() {
                   <span className="text-[10px] mt-0.5 leading-tight truncate">PO Central</span>
                 </NavLink>
                 <NavLink
+                  data-tour="mob-stock-ledger"
                   to={`${basePath}/sistem?tab=stock-ledger`}
                   className={({ isActive }) =>
                     `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
@@ -1288,6 +1305,7 @@ export default function DashboardLayout() {
             ) : (role === 'Service' || role === 'Kasir') ? (
               <>
                 <NavLink
+                  data-tour="mob-daily-inventory"
                   to={`${basePath}/daily-inventory`}
                   className={({ isActive }) =>
                     `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
@@ -1300,6 +1318,7 @@ export default function DashboardLayout() {
                   <span className="text-[10px] mt-0.5 leading-tight truncate">Stok Harian</span>
                 </NavLink>
                 <NavLink
+                  data-tour="mob-opname-assets"
                   to={`${basePath}/opname-assets`}
                   className={({ isActive }) =>
                     `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${
@@ -1339,6 +1358,7 @@ export default function DashboardLayout() {
                   <span className="text-[10px] mt-0.5 leading-tight truncate">Stok Harian</span>
                 </NavLink>
                 <NavLink
+                  data-tour="mob-olah-bahan"
                   to={`${basePath}/olah-bahan`}
                   className={({ isActive }) =>
                     `flex flex-col items-center justify-center py-1 rounded-xl transition-colors ${

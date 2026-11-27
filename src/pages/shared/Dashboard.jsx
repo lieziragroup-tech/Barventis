@@ -1019,7 +1019,7 @@ export default function Dashboard() {
       <FocalActionBanner
         eyebrow={branchScope === 'ALL' ? `Ringkasan Eksekutif · Semua Cabang (${branches.length})` : `Ringkasan Eksekutif · Cabang ${activeBranch?.name || 'Aktif'}`}
         title={lowStockItems.length > 0 ? `${lowStockItems.length} item stok menipis · Rasio Biaya ${currentCostPct.toFixed(1)}%` : `Rasio Biaya F&B ${currentCostPct.toFixed(1)}% (Target < 27%)`}
-        description={`Pantau kesehatan biaya, omzet penjualan, dan nilai persediaan pada periode ${periodLabel}. Klik kartu untuk meninjau rincian operasional.`}
+        description={`Pantau kesehatan biaya, omzet penjualan, dan nilai persediaan pada periode ${periodLabel}. Pilih menu di samping untuk melihat rincian tiap bagian.`}
         tone={currentCostPct > 30 || lowStockItems.length > 20 ? 'warning' : 'success'}
         primaryAction={{
           label: 'Analisis Cost Control',
@@ -1095,7 +1095,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-base font-bold text-[var(--text-primary)] m-0">Performa Antar Cabang</h3>
-                <p className="text-xs text-[var(--text-secondary)] m-0 mt-0.5">Klik baris untuk masuk ke cabang.</p>
+                <p className="text-xs text-[var(--text-secondary)] m-0 mt-0.5">Pilih nama cabang untuk melihat detailnya.</p>
               </div>
             </div>
             {loadingMultiBranch ? (

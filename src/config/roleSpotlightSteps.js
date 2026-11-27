@@ -1,506 +1,421 @@
 /**
- * Role-based Interactive Spotlight Guide steps for Barventis.
- * Adapted from TechnicianSpotlightGuide.tsx with everyday Indonesian copy
- * tailored to each active role in Umatis Resto & Venue.
+ * Barventis v5.7 Full-Coverage Role Spotlight Steps
+ * Every step targets its exact sidebar menu (`nav-<navTarget>`) on Desktop/Tablet
+ * and adapts automatically to Bottom Navigation (`mob-<navTarget>`) on Mobile.
  */
 
 export function resolveSpotlightRoleKey(role = '', isHeadBarUser = false) {
   const r = String(role || '').trim().toLowerCase();
-  if (r === 'bar' || r === 'barista' || r === 'head bar' || r === 'rekan bar') {
-    return isHeadBarUser || r === 'head bar' ? 'HEAD_BAR' : 'REKAN_BAR';
+  if (r === 'owner' || r === 'admin / owner' || r === 'admin  owner' || r === 'super admin' || r === 'superadmin') {
+    return 'OWNER';
   }
   if (r === 'purchasing') return 'PURCHASING';
   if (r === 'central') return 'CENTRAL';
-  if (r === 'kitchen') return 'KITCHEN';
-  if (r === 'service') return 'SERVICE';
-  if (r === 'kasir') return 'KASIR';
-  return 'OWNER';
+  if (r === 'head bar' || r === 'supervisor' || isHeadBarUser) return 'HEAD_BAR';
+  return 'BARISTA';
 }
 
 export function getRoleDisplayName(roleKey) {
   const labels = {
     OWNER: 'Owner / Admin',
     HEAD_BAR: 'Head Bar',
-    REKAN_BAR: 'Barista',
+    BARISTA: 'Barista',
     PURCHASING: 'Purchasing',
     CENTRAL: 'Gudang Central',
-    KITCHEN: 'Kitchen (Dapur)',
-    SERVICE: 'Service & Alat',
-    KASIR: 'Kasir / Layanan'
   };
-  return labels[roleKey] || 'Pengguna Barventis';
-}
-
-function buildStepsForRole(roleKey, basePath = '/dashboard') {
-  switch (roleKey) {
-    case 'PURCHASING':
-      return {
-        topics: [
-          { id: 'po', label: 'Pembuatan PO', subtitle: 'Buat PO, bandingkan supplier & proses kirim' },
-          { id: 'rekap', label: 'Rekap & Bulanan', subtitle: 'Pantau total PO dan matriks Tgl 1–31' },
-          { id: 'komparasi', label: 'Komparasi Harga', subtitle: 'Cek efisiensi harga antar supplier' },
-          { id: 'supplier', label: 'Supplier & Petty Cash', subtitle: 'Master supplier, Pasar Umum & Tempo' }
-        ],
-        steps: [
-          {
-            id: 'purch-header',
-            topic: 'po',
-            sectionLabel: 'Pembuatan PO',
-            route: `${basePath}/procurement?tab=invoicing`,
-            target: 'header-bar',
-            title: 'Area Kerja Divisi Purchasing',
-            description: 'Dari halaman ini kamu kelola seluruh permintaan PO cabang & Central, cek pengingat jadwal kirim, sampai penerimaan barang.',
-            tip: 'Arahkan kursor ke sidebar kiri kapan saja untuk berpindah menu.'
-          },
-          {
-            id: 'purch-create-po',
-            topic: 'po',
-            sectionLabel: 'Pembuatan PO',
-            route: `${basePath}/procurement?tab=invoicing`,
-            target: 'po-create-btn',
-            title: 'Buat PO Baru (Pilih Bahan Dulu)',
-            description: 'Klik + Buat PO Baru, cari bahan dulu dengan pencarian cepat, lalu bandingkan langsung harga antar supplier dan atur tanggal kirim (kalender H+N).',
-            tip: 'Kalau ada harga naik/turun atau supplier baru, bisa langsung pakai shortcut -1rb/+1rb dan + Supplier Baru di dalam modal.'
-          },
-          {
-            id: 'purch-table',
-            topic: 'po',
-            sectionLabel: 'Pembuatan PO',
-            route: `${basePath}/procurement?tab=invoicing`,
-            target: 'po-table',
-            title: 'Proses PO Satu Jalur (1 Baris Rapi)',
-            description: 'Klik Proses PO untuk ubah supplier/harga lalu pesan ke supplier. Saat barang tiba, klik Terima Barang. Detail, Chat WA, dan PDF tersedia langsung tanpa bikin bingung.',
-            tip: 'Tombol Proses PO dan Edit PO membuka form yang sama agar data tetap sinkron.'
-          },
-          {
-            id: 'purch-dashboard',
-            topic: 'rekap',
-            sectionLabel: 'Total PO Bulanan',
-            route: basePath,
-            target: 'main-workspace',
-            title: 'Pantau Total PO Bulanan',
-            description: 'Lihat ringkasan nilai belanja PO bulan berjalan, jumlah dokumen yang masih perlu diproses, dan status penerimaan barang.',
-            tip: 'Gunakan pemilih cabang di pojok kanan atas untuk mengecek cabang tertentu.'
-          },
-          {
-            id: 'purch-komparasi',
-            topic: 'komparasi',
-            sectionLabel: 'Komparasi Harga',
-            route: `${basePath}/procurement?tab=marketlist`,
-            target: 'main-workspace',
-            title: 'Bandingkan Harga & Kualitas Supplier',
-            description: 'Catat dan bandingkan harga dari beberapa supplier sekaligus untuk menemukan vendor paling hemat dengan kualitas setara.',
-            tip: 'Setiap perubahan harga hanya berlaku ke depan (forward-only) supaya histori lama aman.'
-          },
-          {
-            id: 'purch-supplier',
-            topic: 'supplier',
-            sectionLabel: 'Supplier & Matriks',
-            route: `${basePath}/procurement?tab=pembelian`,
-            target: 'main-workspace',
-            title: 'Master Supplier, Matriks Tgl 1–31 & Petty Cash',
-            description: 'Kelola daftar supplier (termasuk Pasar Umum), cek Matriks Rekap Belanja per bulan & tahun lengkap dengan export Excel/PDF, serta catat Petty Cash dan Tempo.',
-            tip: 'Pilih bulan dan tahun di tab Matriks untuk mengunduh total QTY dan Total Belanja keseluruhan.'
-          }
-        ]
-      };
-
-    case 'HEAD_BAR':
-      return {
-        topics: [
-          { id: 'harian', label: 'Kerja Harian Bar', subtitle: 'Tutup shift Daily Inventory & olah bahan' },
-          { id: 'po_mutasi', label: 'PO & Mutasi Central', subtitle: 'Ajukan PO, ACC Central & minta barang' },
-          { id: 'opname_glass', label: 'Opname & Gelas Bar', subtitle: 'Hitung stok fisik & catat gelas pecah' },
-          { id: 'laporan', label: 'Cost Control & BA', subtitle: 'Cek selisih biaya & cetak Berita Acara' }
-        ],
-        steps: [
-          {
-            id: 'hb-daily',
-            topic: 'harian',
-            sectionLabel: 'Kerja Harian · Langkah 1',
-            route: `${basePath}/daily-inventory`,
-            target: 'main-workspace',
-            title: 'Catat Stok Akhir Shift (Bahan & Beer)',
-            description: 'Setiap selesai shift, isi sisa bahan racikan dan beer di satu halaman ini. Data yang rutin diisi akan otomatis menghitung pemakaian harian bar.',
-            tip: 'Menu ini khusus menampilkan stok cabang kamu sendiri.'
-          },
-          {
-            id: 'hb-olah',
-            topic: 'harian',
-            sectionLabel: 'Kerja Harian · Langkah 2',
-            route: `${basePath}/olah-bahan`,
-            target: 'main-workspace',
-            title: 'Catat Olah & Pecah Bahan Utuh',
-            description: 'Gunakan tab Olah & Potong Bahan untuk sirup/base atau potong buah. Kalau memecah bahan utuh jadi 2 stok (seperti Kelapa jadi Air + Daging), pakai tab Pecah Bahan Utuh supaya tidak terhitung waste.',
-            tip: 'Pecah bahan utuh otomatis mengurangi stok induk dan menambah stok hasil pecahannya.'
-          },
-          {
-            id: 'hb-po',
-            topic: 'po_mutasi',
-            sectionLabel: 'PO & Mutasi · Langkah 3',
-            route: `${basePath}/procurement?tab=invoicing`,
-            target: 'main-workspace',
-            title: 'Ajukan PO, ACC Order Central & Terima Barang',
-            description: 'Buat permintaan PO bahan bar di sini. Jika ada order Central yang menunggu persetujuan, klik ACC Head Bar. Saat barang datang, klik Terima Barang dan lampirkan foto fisik + surat jalan.',
-            tip: 'Jika barang sudah tersedia di gudang Central, cukup minta lewat Mutasi Gudang.'
-          },
-          {
-            id: 'hb-mutasi',
-            topic: 'po_mutasi',
-            sectionLabel: 'PO & Mutasi · Langkah 4',
-            route: `${basePath}/transfer`,
-            target: 'main-workspace',
-            title: 'Minta / Terima Barang dari Central (Rp 0)',
-            description: 'Ajukan permintaan kirim barang dari Central ke bar cabang kamu. Begitu barang sampai, klik Terima Barang agar stok cabang langsung bertambah tanpa dobel biaya belanja.',
-            tip: 'Mutasi antar gudang selalu tercatat Rp 0 karena sudah dibeli di PO awal.'
-          },
-          {
-            id: 'hb-opname',
-            topic: 'opname_glass',
-            sectionLabel: 'Bulanan · Langkah 5',
-            route: `${basePath}/opname-assets`,
-            target: 'main-workspace',
-            title: 'Hitung Stock Opname Bahan (Resto / Central)',
-            description: 'Di akhir bulan, hitung sisa fisik bahan di bar dan pilih tab Opname Resto atau Central dari satu halaman ini.',
-            tip: 'Hasil opname ini nanti dibandingkan dengan catatan harian di Cost Control.'
-          },
-          {
-            id: 'hb-glass',
-            topic: 'opname_glass',
-            sectionLabel: 'Bulanan · Langkah 6',
-            route: `${basePath}/excel-so-glass-tool`,
-            target: 'main-workspace',
-            title: 'Gelas & Alat Bar (Terpisah dari Waste)',
-            description: 'Menu ini khusus untuk daftar & hitung gelas/alat bar. Kalau ada gelas atau alat yang pecah, buka tab Catat Gelas Pecah lalu isi Kapan, Oleh Siapa, Barang Apa, Jumlah, dan Harganya.',
-            tip: 'Catatan gelas pecah yang disimpan di sini otomatis masuk ke Berita Acara bulan berjalan.'
-          },
-          {
-            id: 'hb-cc',
-            topic: 'laporan',
-            sectionLabel: 'Bulanan · Langkah 7',
-            route: `${basePath}/excel-cost-control`,
-            target: 'main-workspace',
-            title: 'Cek Cost Control & Catat Event / Buffet',
-            description: 'Bandingkan pemakaian harian dengan hasil Stock Opname. Kalau ada pemakaian untuk Buffet, Event, atau Compliment (Rp 0), masukkan di sini agar persentase biaya tetap akurat.',
-            tip: 'Catatan event membantu Owner memahami selisih stok secara objektif.'
-          },
-          {
-            id: 'hb-ba',
-            topic: 'laporan',
-            sectionLabel: 'Bulanan · Langkah 8',
-            route: `${basePath}/excel-berita-acara`,
-            target: 'main-workspace',
-            title: 'Cetak Berita Acara Waste & Gelas Pecah',
-            description: 'Seluruh catatan barang kadaluarsa/waste dan gelas pecah bulan ini terkumpul di sini lengkap dengan rekap 6 bulan per staf. Pilih mode cetak 1 lembar hemat kertas atau PDF lengkap dengan foto.',
-            tip: 'Jangan lupa klik Simpan ke Database sebelum mencetak atau mengunduh PDF.'
-          }
-        ]
-      };
-
-    case 'REKAN_BAR':
-      return {
-        topics: [
-          { id: 'daily', label: 'Daily Inventory', subtitle: 'Catat stok harian bahan & beer' },
-          { id: 'produksi', label: 'Proses Produksi', subtitle: 'Produksi sirup, trimming & split bahan' },
-          { id: 'po', label: 'Permintaan PO', subtitle: 'Ajukan PO bar & foto terima barang' },
-          { id: 'transfer', label: 'Minta ke Central', subtitle: 'Request mutasi stok Rp 0 dari Central' }
-        ],
-        steps: [
-          {
-            id: 'rb-daily',
-            topic: 'daily',
-            sectionLabel: 'Daily Inventory',
-            route: `${basePath}/daily-inventory`,
-            target: 'main-workspace',
-            title: 'Catat Stok Harian Bahan & Beer',
-            description: 'Isi sisa stok bahan racikan dan beer setiap akhir shift di satu menu Daily Inventory.',
-            tip: 'Cek kembali satuan (gr/ml/botol) sebelum klik simpan.'
-          },
-          {
-            id: 'rb-produksi',
-            topic: 'produksi',
-            sectionLabel: 'Proses Produksi',
-            route: `${basePath}/olah-bahan`,
-            target: 'main-workspace',
-            title: 'Catat Produksi & Split Bahan',
-            description: 'Input hasil batching sirup, teh base, trimming buah, atau split bahan agar kartu stok tetap sinkron dengan pemakaian aktual.',
-            tip: 'Laporkan bahan yang rusak atau kadaluarsa di tab Waste agar tercatat rapi.'
-          },
-          {
-            id: 'rb-po',
-            topic: 'po',
-            sectionLabel: 'Permintaan PO',
-            route: `${basePath}/procurement?tab=invoicing`,
-            target: 'main-workspace',
-            title: 'Ajukan PO & Terima Barang',
-            description: 'Buat permintaan PO ketika stok menipis. Saat kurir datang, klik Terima Barang dan lampirkan foto fisik barang serta surat jalan.',
-            tip: 'Kalau barang tersedia di gudang Central, cukup minta lewat Mutasi Gudang.'
-          },
-          {
-            id: 'rb-transfer',
-            topic: 'transfer',
-            sectionLabel: 'Minta Barang Central',
-            route: `${basePath}/transfer`,
-            target: 'main-workspace',
-            title: 'Request Mutasi dari Central (Rp 0)',
-            description: 'Ajukan permintaan transfer barang dari gudang Central ke Bar. Saat barang sampai di Bar, klik Terima Barang agar stok otomatis berpindah.',
-            tip: 'Mutasi internal dicatat Rp 0 agar tidak terhitung belanja ganda.'
-          }
-        ]
-      };
-
-    case 'CENTRAL':
-      return {
-        topics: [
-          { id: 'dashboard', label: 'Dashboard Central', subtitle: 'Ringkasan stok masuk & keluar' },
-          { id: 'transfer', label: 'Mutasi ke Cabang', subtitle: 'Kirim stok ke cabang tujuan' },
-          { id: 'po', label: 'PO Central', subtitle: 'Ajukan PO grosir & terima barang' },
-          { id: 'stok', label: 'Pantau Stok', subtitle: 'Cek lot, barcode & sisa gudang' }
-        ],
-        steps: [
-          {
-            id: 'ct-dash',
-            topic: 'dashboard',
-            sectionLabel: 'Dashboard Central',
-            route: basePath,
-            target: 'main-workspace',
-            title: 'Pantau Arus Gudang Central',
-            description: 'Lihat barang yang baru masuk dari supplier, permintaan mutasi dari cabang, dan stok yang mendekati batas minimum.',
-            tip: 'Prioritaskan permintaan cabang yang berstatus menunggu kirim.'
-          },
-          {
-            id: 'ct-transfer',
-            topic: 'transfer',
-            sectionLabel: 'Mutasi ke Cabang',
-            route: `${basePath}/transfer`,
-            target: 'main-workspace',
-            title: 'Kirim Stok ke Cabang Tujuan (Rp 0)',
-            description: 'Proses pengiriman barang dari Central ke cabang tujuan. Stok cabang otomatis bertambah begitu penerima mengonfirmasi penerimaan.',
-            tip: 'Cek barcode lot barang sebelum dikirim agar pelacakan FIFO akurat.'
-          },
-          {
-            id: 'ct-po',
-            topic: 'po',
-            sectionLabel: 'PO Central',
-            route: `${basePath}/procurement?tab=invoicing`,
-            target: 'main-workspace',
-            title: 'Ajukan PO Central & Goods Receipt',
-            description: 'Buat permintaan PO untuk pengisian ulang gudang Central (akan diverifikasi Head Bar sebelum diproses Purchasing), lalu konfirmasi terima barang dengan foto.',
-            tip: 'Jika harga bon fisik berbeda dari PO, penyesuaian bisa dicatat saat Terima Barang.'
-          },
-          {
-            id: 'ct-stok',
-            topic: 'stok',
-            sectionLabel: 'Buku Stok',
-            route: `${basePath}/sistem?tab=stock-ledger`,
-            target: 'main-workspace',
-            title: 'Cek Kartu Stok & Cetak Barcode Lot',
-            description: 'Pantau histori keluar-masuk setiap bahan di gudang Central dan seluruh cabang secara real-time.',
-            tip: 'Gunakan kolom pencarian untuk mengecek saldo bahan tertentu dengan cepat.'
-          }
-        ]
-      };
-
-    case 'KITCHEN':
-      return {
-        topics: [
-          { id: 'daily', label: 'Inventaris Kitchen', subtitle: 'Pemakaian harian bahan dapur' },
-          { id: 'prep', label: 'Trimming & Prep', subtitle: 'Olah daging, ikan & sayur' },
-          { id: 'po', label: 'PO & Mutasi', subtitle: 'Ajukan PO dapur & minta ke Central' },
-          { id: 'opname', label: 'Stock Opname', subtitle: 'Audit fisik stok area dapur' }
-        ],
-        steps: [
-          {
-            id: 'kt-daily',
-            topic: 'daily',
-            sectionLabel: 'Inventaris Kitchen',
-            route: `${basePath}/daily-inventory`,
-            target: 'main-workspace',
-            title: 'Catat Pemakaian Harian Dapur',
-            description: 'Input sisa stok bahan dapur setiap closing shift agar pemakaian harian dan bahan yang hampir habis langsung terpantau.',
-            tip: 'Catat juga bahan susut/rusak di tab Waste.'
-          },
-          {
-            id: 'kt-prep',
-            topic: 'prep',
-            sectionLabel: 'Trimming & Prep',
-            route: `${basePath}/olah-bahan`,
-            target: 'main-workspace',
-            title: 'Catat Trimming & Olahan Dapur',
-            description: 'Rekam proses pemotongan daging, ikan, sayur, atau saus base agar berat bersih (yield) tercatat akurat di stok.',
-            tip: 'Pastikan berat hasil bersih diisi sesuai timbangan aktual.'
-          },
-          {
-            id: 'kt-po',
-            topic: 'po',
-            sectionLabel: 'PO & Mutasi',
-            route: `${basePath}/procurement?tab=invoicing`,
-            target: 'main-workspace',
-            title: 'Ajukan PO Dapur & Terima Barang',
-            description: 'Buat permintaan PO bahan dapur ke Purchasing dan konfirmasi penerimaan barang lengkap dengan foto fisik.',
-            tip: 'Untuk barang yang tersedia di gudang pusat, minta lewat menu Mutasi Gudang.'
-          },
-          {
-            id: 'kt-opname',
-            topic: 'opname',
-            sectionLabel: 'Stock Opname',
-            route: `${basePath}/opname-assets`,
-            target: 'main-workspace',
-            title: 'Stock Opname Area Dapur',
-            description: 'Lakukan sensus fisik berkala di chiller dan dry store dapur untuk mencocokkan stok sistem dengan kondisi lapangan.',
-            tip: 'Selisih stok otomatis muncul sebagai bahan evaluasi Cost Control.'
-          }
-        ]
-      };
-
-    case 'SERVICE':
-      return {
-        topics: [
-          { id: 'aset', label: 'Alat & Glassware', subtitle: 'Inventaris gelas, alat makan & mesin' },
-          { id: 'pecah', label: 'Lapor Barang Pecah', subtitle: 'Catat gelas pecah / alat rusak' },
-          { id: 'daily', label: 'Inventaris Service', subtitle: 'Catat pemakaian amenities & floor' },
-          { id: 'po', label: 'Permintaan PO', subtitle: 'Ajukan pengadaan alat & packaging' }
-        ],
-        steps: [
-          {
-            id: 'sv-aset',
-            topic: 'aset',
-            sectionLabel: 'Alat & Glassware',
-            route: `${basePath}/opname-assets`,
-            target: 'main-workspace',
-            title: 'Pantau Daftar Gelas, Alat Makan & Aset',
-            description: 'Cek jumlah aset aktif dan lakukan opname berkala untuk gelas, piring, cutleries, dan perlengkapan floor.',
-            tip: 'Data barang rusak dari sini otomatis bisa masuk ke Berita Acara bulanan.'
-          },
-          {
-            id: 'sv-pecah',
-            topic: 'pecah',
-            sectionLabel: 'Lapor Barang Pecah',
-            route: `${basePath}/daily-inventory?tab=waste`,
-            target: 'main-workspace',
-            title: 'Lapor Gelas Pecah / Alat Rusak',
-            description: 'Catat setiap insiden gelas pecah atau perlengkapan rusak beserta nama penanggung jawab dan tanggal kejadian.',
-            tip: 'Pencatatan cepat memudahkan rekap Berita Acara akhir bulan.'
-          },
-          {
-            id: 'sv-daily',
-            topic: 'daily',
-            sectionLabel: 'Inventaris Service',
-            route: `${basePath}/daily-inventory`,
-            target: 'main-workspace',
-            title: 'Catat Stok Amenities & Packaging',
-            description: 'Pantau pemakaian harian tisu, sedotan, kemasan takeaway, dan perlengkapan layanan lainnya.',
-            tip: 'Update stok di akhir shift supaya tidak kehabisan mendadak.'
-          },
-          {
-            id: 'sv-po',
-            topic: 'po',
-            sectionLabel: 'Permintaan PO',
-            route: `${basePath}/procurement?tab=invoicing`,
-            target: 'main-workspace',
-            title: 'Ajukan PO Perlengkapan Service',
-            description: 'Kirim permintaan pembelian alat/packaging baru ke Purchasing dan lakukan konfirmasi terima barang saat paket tiba.',
-            tip: 'Lampirkan foto kondisi barang saat diterima.'
-          }
-        ]
-      };
-
-    case 'KASIR':
-      return {
-        topics: [
-          { id: 'dash', label: 'Dashboard Layanan', subtitle: 'Ringkasan operasional harian' },
-          { id: 'limbah', label: 'Lapor Limbah', subtitle: 'Catat barang pecah atau rusak' }
-        ],
-        steps: [
-          {
-            id: 'ks-dash',
-            topic: 'dash',
-            sectionLabel: 'Dashboard Layanan',
-            route: basePath,
-            target: 'main-workspace',
-            title: 'Ringkasan Operasional Layanan',
-            description: 'Pantau status operasional harian cabang aktif dari halaman Dashboard utama.',
-            tip: 'Pastikan cabang aktif di pojok kanan atas sudah sesuai lokasi kerjamu.'
-          },
-          {
-            id: 'ks-limbah',
-            topic: 'limbah',
-            sectionLabel: 'Lapor Limbah',
-            route: `${basePath}/daily-inventory?tab=waste`,
-            target: 'main-workspace',
-            title: 'Catat Barang Pecah atau Rusak',
-            description: 'Laporkan insiden barang pecah/rusak di area kasir atau floor agar langsung tercatat di log database.',
-            tip: 'Isi keterangan singkat penyebab kerusakan supaya mudah diaudit.'
-          }
-        ]
-      };
-
-    case 'OWNER':
-    default:
-      return {
-        topics: [
-          { id: 'dashboard', label: 'Dashboard & Cabang', subtitle: 'Ringkasan biaya & pindah cabang aktif' },
-          { id: 'pengadaan', label: 'Pengadaan & PO', subtitle: 'Pantau PO, komparasi supplier & rekap' },
-          { id: 'cost', label: 'Cost Control & SO', subtitle: 'Audit variansi HPP, rasio biaya & opname' },
-          { id: 'setelan', label: 'Setelan & Logo PDF', subtitle: 'Kelola staf, cabang & logo kop dokumen PDF' }
-        ],
-        steps: [
-          {
-            id: 'ow-dash',
-            topic: 'dashboard',
-            sectionLabel: 'Dashboard Owner',
-            route: basePath,
-            target: 'main-workspace',
-            title: 'Ringkasan HPP & Inventaris Cabang',
-            description: 'Pantau performa biaya bahan (COGS), nilai stok berjalan, dan status PO seluruh operasional dari satu layar.',
-            tip: 'Gunakan pemilih cabang di kanan atas untuk berpindah antar cabang atau Gudang Central.'
-          },
-          {
-            id: 'ow-po',
-            topic: 'pengadaan',
-            sectionLabel: 'Pengadaan & PO',
-            route: `${basePath}/procurement?tab=invoicing`,
-            target: 'main-workspace',
-            title: 'Pantau PO & Efisiensi Supplier',
-            description: 'Cek seluruh PO aktif, unduh PDF resmi, pantau perbandingan harga supplier, hingga rekap belanja bulanan Tgl 1–31 dan Petty Cash.',
-            tip: 'Semua tombol aksi PO kini dirapikan 1 baris sesuai tahapan statusnya.'
-          },
-          {
-            id: 'ow-cost',
-            topic: 'cost',
-            sectionLabel: 'Cost Control & SO',
-            route: `${basePath}/cost-report`,
-            target: 'main-workspace',
-            title: 'Audit Cost Control & Stock Opname',
-            description: 'Tinjau rasio HPP aktual vs teoritis POS ESB, perbandingan pemakaian harian vs opname, serta catatan Buffet/Event.',
-            tip: 'Cek juga menu Berita Acara untuk persetujuan barang waste dan rekap gelas pecah.'
-          },
-          {
-            id: 'ow-settings',
-            topic: 'setelan',
-            sectionLabel: 'Setelan Owner',
-            route: `${basePath}/sistem?tab=admin`,
-            target: 'main-workspace',
-            title: 'Pengaturan Resto & Logo Kop PDF',
-            description: 'Kelola akun staf, cabang, kunci periode pembukuan, dan upload Logo Resmi Perusahaan di tab Profil Resto agar otomatis tercetak di setiap Export PDF.',
-            tip: 'Logo perusahaan otomatis tampil besar di kop atas setiap dokumen PDF.'
-          }
-        ]
-      };
-  }
+  return labels[roleKey] || 'Tim Operasional';
 }
 
 export function getSpotlightGuideForRole(role = '', isHeadBarUser = false, basePath = '/dashboard') {
   const roleKey = resolveSpotlightRoleKey(role, isHeadBarUser);
-  const config = buildStepsForRole(roleKey, basePath);
-  const sectionCards = config.topics.map((t) => ({
-    ...t,
-    stepCount: config.steps.filter((s) => s.topic === t.id).length
-  }));
+  const roleLabel = getRoleDisplayName(roleKey);
+
+  if (roleKey === 'OWNER') {
+    const steps = [
+      {
+        id: 'owner-dashboard',
+        section: 'Ringkasan',
+        navTarget: 'dashboard',
+        target: 'nav-dashboard',
+        route: basePath,
+        title: 'Dashboard Eksekutif',
+        body: 'Pantau rasio biaya F&B terhadap target 27%, total penjualan, nilai stok, dan perbandingan performa seluruh cabang dari satu layar.',
+        tip: 'Gunakan pilihan Cabang Aktif atau Semua Cabang di bagian atas untuk membandingkan tiap lokasi.',
+      },
+      {
+        id: 'owner-daily',
+        section: 'Operasional',
+        navTarget: 'daily-inventory',
+        target: 'nav-daily-inventory',
+        route: `${basePath}/daily-inventory`,
+        title: 'Stok Harian (EOD)',
+        body: 'Periksa catatan pemakaian bahan harian dari setiap cabang, kecocokan dengan penjualan POS, dan status kunci shift harian.',
+        tip: 'Data yang sudah dikunci EOD otomatis menjadi dasar perhitungan pemakaian aktual.',
+      },
+      {
+        id: 'owner-prep',
+        section: 'Operasional',
+        navTarget: 'olah-bahan',
+        target: 'nav-olah-bahan',
+        route: `${basePath}/olah-bahan`,
+        title: 'Olah Bahan & Pemecahan Stok',
+        body: 'Pantau pencatatan olahan bahan mentah menjadi satu atau beberapa bahan jadi beserta persentase hasil dan ampasnya.',
+        tip: 'Olahan dengan 0 waste otomatis tidak masuk ke laporan kerugian ampas.',
+      },
+      {
+        id: 'owner-po',
+        section: 'Pengadaan',
+        navTarget: 'invoicing',
+        target: 'nav-invoicing',
+        route: `${basePath}/procurement?tab=invoicing`,
+        title: 'Pengadaan & Purchase Order',
+        body: 'Awasi seluruh tahapan PO mulai dari Requested, On Review, Validation Supplier, In Order, hingga Completed, Rejected, atau Canceled.',
+        tip: 'Setiap perubahan harga saat penerimaan otomatis tercatat ke riwayat harga bahan.',
+      },
+      {
+        id: 'owner-transfer',
+        section: 'Distribusi',
+        navTarget: 'transfer',
+        target: 'nav-transfer',
+        route: `${basePath}/transfer`,
+        title: 'Mutasi Gudang',
+        body: 'Pantau pengiriman stok dari Gudang Central ke masing-masing cabang dengan pencatatan transfer internal Rp 0 agar modal tidak terhitung ganda.',
+        tip: 'Status mutasi tersusun rapi dari Requested, Approved, In Transit, hingga Completed.',
+      },
+      {
+        id: 'owner-opname',
+        section: 'Audit Stok',
+        navTarget: 'opname-assets',
+        target: 'nav-opname-assets',
+        route: `${basePath}/opname-assets`,
+        title: 'Stock Opname & Gelas Bar',
+        body: 'Verifikasi selisih stok fisik bahan baku serta pantau inventaris gelas dan peralatan bar secara terpisah.',
+        tip: 'Barang pecah yang dicatat langsung terhubung ke rekap Berita Acara bulanan.',
+      },
+      {
+        id: 'owner-cost',
+        section: 'Keuangan',
+        navTarget: 'cost-control',
+        target: 'nav-cost-control',
+        route: `${basePath}/excel-cost-control`,
+        title: 'Cost Control & Selisih HPP',
+        body: 'Bandingkan pemakaian teoritis dari penjualan POS terhadap pemakaian aktual di lapangan untuk mendeteksi kebocoran biaya lebih awal.',
+        tip: 'Kamu bisa mencatat penyesuaian event atau buffet agar rasio biaya tetap akurat.',
+      },
+      {
+        id: 'owner-ba',
+        section: 'Laporan',
+        navTarget: 'berita-acara',
+        target: 'nav-berita-acara',
+        route: `${basePath}/excel-berita-acara`,
+        title: 'Berita Acara Bulanan',
+        body: 'Cetak dokumen resmi rekap bulanan waste bahan dan gelas pecah lengkap dengan kop logo perusahaan.',
+        tip: 'Data ditarik otomatis dari catatan harian tanpa input ulang.',
+      },
+      {
+        id: 'owner-admin',
+        section: 'Pengaturan',
+        navTarget: 'admin',
+        target: 'nav-admin',
+        route: `${basePath}/sistem?tab=admin`,
+        title: 'Pengaturan Perusahaan & Logo PDF',
+        body: 'Kelola cabang, undang akun asli untuk setiap peran (Central, Purchasing, Head Bar, Barista), dan atur logo resmi kop dokumen PDF.',
+        tip: 'Logo yang diunggah di sini langsung aktif di seluruh PDF ekspor sistem.',
+      },
+    ];
+    return {
+      roleKey,
+      roleLabel,
+      sectionCards: [
+        { id: 'ringkasan', label: 'Dashboard & Stok', subtitle: 'Rasio biaya, stok harian & olah bahan' },
+        { id: 'pengadaan', label: 'PO & Mutasi', subtitle: 'Pantau pengadaan & distribusi Central' },
+        { id: 'audit', label: 'Opname & Cost Control', subtitle: 'Audit fisik, gelas & selisih HPP' },
+        { id: 'admin', label: 'Berita Acara & Setelan', subtitle: 'Cetak dokumen resmi & kelola staf' },
+      ],
+      allSteps: steps,
+    };
+  }
+
+  if (roleKey === 'HEAD_BAR') {
+    const steps = [
+      {
+        id: 'hb-dashboard',
+        section: 'Ringkasan',
+        navTarget: 'dashboard',
+        target: 'nav-dashboard',
+        route: basePath,
+        title: 'Dashboard Head Bar',
+        body: 'Lihat langsung bahan Bar yang menipis di cabangmu, pengiriman masuk dari Central, dan status permintaan PO cabang.',
+        tip: 'Semua data di sini otomatis tersaring khusus untuk cabang tugasmu.',
+      },
+      {
+        id: 'hb-daily',
+        section: 'Harian',
+        navTarget: 'daily-inventory',
+        target: 'nav-daily-inventory',
+        route: `${basePath}/daily-inventory`,
+        title: 'Stok Harian (EOD)',
+        body: 'Periksa input stok akhir shift dari tim Barista, unggah foto bukti closing, lalu kunci EOD di akhir operasional.',
+        tip: 'Bar simpan di bawah selalu siap dijangkau tanpa perlu scroll kembali ke atas.',
+      },
+      {
+        id: 'hb-prep',
+        section: 'Harian',
+        navTarget: 'olah-bahan',
+        target: 'nav-olah-bahan',
+        route: `${basePath}/olah-bahan`,
+        title: 'Olah Bahan & Pemecahan Stok',
+        body: 'Catat pengolahan bahan mentah menjadi satu atau beberapa bahan turunan dengan satuan fleksibel, termasuk opsi 0 waste tanpa foto ampas.',
+        tip: 'Foto bahan mentah dan hasil bersih dapat diunggah setelah proses olah selesai.',
+      },
+      {
+        id: 'hb-po',
+        section: 'Pengadaan',
+        navTarget: 'invoicing',
+        target: 'nav-invoicing',
+        route: `${basePath}/procurement?tab=invoicing`,
+        title: 'Pengadaan & PO Cabang',
+        body: 'Ajukan permintaan pembelian bahan cabang, pantau statusnya, dan konfirmasi penerimaan barang dengan foto bukti.',
+        tip: 'PO yang sudah diterima akan otomatis menambah stok cabangmu.',
+      },
+      {
+        id: 'hb-transfer',
+        section: 'Distribusi',
+        navTarget: 'transfer',
+        target: 'nav-transfer',
+        route: `${basePath}/transfer`,
+        title: 'Mutasi Gudang',
+        body: 'Ajukan permintaan barang dari Gudang Central ke cabangmu dan konfirmasi penerimaan saat pengiriman tiba.',
+        tip: 'Tujuan mutasi otomatis dikunci ke cabang tugasmu agar tidak salah kirim.',
+      },
+      {
+        id: 'hb-opname',
+        section: 'Audit',
+        navTarget: 'opname-assets',
+        target: 'nav-opname-assets',
+        route: `${basePath}/opname-assets`,
+        title: 'Stock Opname Bahan',
+        body: 'Lakukan penghitungan stok fisik berkala untuk memastikan angka sistem sama dengan stok nyata di bar.',
+        tip: 'Catat alasan selisih agar mudah ditelusuri saat evaluasi bulanan.',
+      },
+      {
+        id: 'hb-glass',
+        section: 'Audit',
+        navTarget: 'so-glass-tool',
+        target: 'nav-so-glass-tool',
+        route: `${basePath}/excel-so-glass-tool`,
+        title: 'Gelas & Alat Bar',
+        body: 'Catat inventaris gelas, shaker, dan peralatan bar serta laporan pecah atau rusak secara terpisah dari bahan baku.',
+        tip: 'Catatan gelas pecah otomatis masuk ke rekap Berita Acara bulanan.',
+      },
+      {
+        id: 'hb-ba',
+        section: 'Laporan',
+        navTarget: 'berita-acara',
+        target: 'nav-berita-acara',
+        route: `${basePath}/excel-berita-acara`,
+        title: 'Berita Acara & Logo Kop PDF',
+        body: 'Cetak Berita Acara bulanan cabang dan atur logo resmi kop dokumen PDF tanpa perlu merepotkan Owner.',
+        tip: 'Periksa rekap otomatis sebelum mengunduh PDF resmi.',
+      },
+    ];
+    return {
+      roleKey,
+      roleLabel,
+      sectionCards: [
+        { id: 'harian', label: 'Kerja Harian Bar', subtitle: 'Dashboard, stok harian & olah bahan' },
+        { id: 'po_mutasi', label: 'PO & Mutasi', subtitle: 'Ajukan PO cabang & minta barang Central' },
+        { id: 'audit', label: 'Opname & Gelas', subtitle: 'Audit fisik bahan & peralatan bar' },
+        { id: 'laporan', label: 'Berita Acara & Kop', subtitle: 'Cetak BA bulanan & atur logo PDF' },
+      ],
+      allSteps: steps,
+    };
+  }
+
+  if (roleKey === 'PURCHASING') {
+    const steps = [
+      {
+        id: 'pur-dashboard',
+        section: 'Ringkasan',
+        navTarget: 'dashboard',
+        target: 'nav-dashboard',
+        route: basePath,
+        title: 'Dashboard Pengadaan',
+        body: 'Pantau jumlah permintaan PO yang menunggu proses, total nilai pengadaan bulan ini, dan ringkasan seluruh status PO.',
+        tip: 'Klik tombol Buat PO Baru untuk memulai pengadaan cepat.',
+      },
+      {
+        id: 'pur-invoicing',
+        section: 'Pengadaan',
+        navTarget: 'invoicing',
+        target: 'nav-invoicing',
+        route: `${basePath}/procurement?tab=invoicing`,
+        title: 'Kelola PO (7 Tahapan)',
+        body: 'Proses setiap PO dari Requested ke On Review (saat buka detail), Validation Supplier (saat klik WhatsApp supplier), In Order, hingga Completed.',
+        tip: 'Jika PO ditolak atau dibatalkan, catatan alasan wajib diisi sebagai arsip.',
+      },
+      {
+        id: 'pur-marketlist',
+        section: 'Harga',
+        navTarget: 'marketlist',
+        target: 'nav-marketlist',
+        route: `${basePath}/procurement?tab=marketlist`,
+        title: 'Komparasi Harga & Bahan',
+        body: 'Bandingkan harga antar supplier untuk setiap bahan baku dan atur pengingat jadwal PO H-2.',
+        tip: 'Perubahan harga terbaru otomatis tersimpan ke riwayat harga.',
+      },
+      {
+        id: 'pur-supplier',
+        section: 'Supplier',
+        navTarget: 'pembelian',
+        target: 'nav-pembelian',
+        route: `${basePath}/procurement?tab=pembelian`,
+        title: 'Master Supplier & Petty Cash',
+        body: 'Kelola daftar supplier, kontak WhatsApp resmi, matriks pembelian harian tanggal 1 sampai 31, dan kas kecil pengadaan.',
+        tip: 'Pastikan nomor WhatsApp supplier aktif agar pintasan kirim PO berjalan lancar.',
+      },
+    ];
+    return {
+      roleKey,
+      roleLabel,
+      sectionCards: [
+        { id: 'dash', label: 'Dashboard PO', subtitle: 'Ringkasan antrean & belanja bulanan' },
+        { id: 'po', label: 'Kelola PO', subtitle: '7 tahapan status PO & kirim WhatsApp' },
+        { id: 'harga', label: 'Komparasi Harga', subtitle: 'Bandingkan penawaran antar supplier' },
+        { id: 'supplier', label: 'Supplier & Rekap', subtitle: 'Kontak supplier, matriks & petty cash' },
+      ],
+      allSteps: steps,
+    };
+  }
+
+  if (roleKey === 'CENTRAL') {
+    const steps = [
+      {
+        id: 'cen-dashboard',
+        section: 'Ringkasan',
+        navTarget: 'dashboard',
+        target: 'nav-dashboard',
+        route: basePath,
+        title: 'Dashboard Gudang Central',
+        body: 'Pantau jumlah unit barang masuk ke Central, pengiriman keluar ke cabang, antrean PO khusus Central, dan stok kritis gudang.',
+        tip: 'Seluruh angka di sini fokus pada logistik fisik Gudang Central.',
+      },
+      {
+        id: 'cen-transfer',
+        section: 'Distribusi',
+        navTarget: 'transfer',
+        target: 'nav-transfer',
+        route: `${basePath}/transfer`,
+        title: 'Mutasi Central ke Cabang',
+        body: 'Setujui permintaan barang dari cabang, kirim mutasi keluar, dan pantau status pengiriman hingga diterima (Completed).',
+        tip: 'Klik Setuju atau Tolak untuk memproses permintaan cabang secara langsung.',
+      },
+      {
+        id: 'cen-po',
+        section: 'Pengadaan',
+        navTarget: 'invoicing',
+        target: 'nav-invoicing',
+        route: `${basePath}/procurement?tab=invoicing`,
+        title: 'PO Khusus Gudang Central',
+        body: 'Ajukan permintaan PO grosir tujuan Central dan lakukan penerimaan barang (Goods Receipt) lengkap dengan foto bukti saat barang tiba.',
+        tip: 'Daftar ini hanya menampilkan PO tujuan Central agar tidak bercampur dengan PO cabang.',
+      },
+      {
+        id: 'cen-stock',
+        section: 'Inventaris',
+        navTarget: 'stock-ledger',
+        target: 'nav-stock-ledger',
+        route: `${basePath}/sistem?tab=stock-ledger`,
+        title: 'Stok Gudang Central',
+        body: 'Periksa sisa stok fisik tiap bahan di Gudang Central dan pantau bahan yang sudah menyentuh batas minimum.',
+        tip: 'Segera ajukan PO Central jika bahan utama mendekati batas minimum.',
+      },
+    ];
+    return {
+      roleKey,
+      roleLabel,
+      sectionCards: [
+        { id: 'dash', label: 'Dashboard Central', subtitle: 'Ringkasan barang masuk & keluar' },
+        { id: 'mutasi', label: 'Mutasi ke Cabang', subtitle: 'Proses & kirim permintaan cabang' },
+        { id: 'po', label: 'PO Central', subtitle: 'Permintaan PO & penerimaan barang' },
+        { id: 'stok', label: 'Stok Central', subtitle: 'Pantau sisa & stok kritis gudang' },
+      ],
+      allSteps: steps,
+    };
+  }
+
+  // BARISTA (Default Floor Role - 6 complete features)
+  const steps = [
+    {
+      id: 'bar-dashboard',
+      section: 'Shift',
+      navTarget: 'dashboard',
+      target: 'nav-dashboard',
+      route: basePath,
+      title: 'Dashboard Shift Barista',
+      body: 'Lihat ringkasan tugas harian shift, daftar bahan yang menipis di bar cabangmu, dan informasi pengiriman barang masuk.',
+      tip: 'Gunakan 3 tombol aksi cepat di atas untuk langsung memulai tugas shift.',
+    },
+    {
+      id: 'bar-daily',
+      section: 'Harian',
+      navTarget: 'daily-inventory',
+      target: 'nav-daily-inventory',
+      route: `${basePath}/daily-inventory`,
+      title: 'Stok Harian (EOD)',
+      body: 'Isi sisa stok fisik bahan di akhir shift. Perubahan otomatis tersimpan setiap 5 detik, lalu gunakan bar bawah untuk foto bukti dan Kunci EOD.',
+      tip: 'Tampilan ini sudah disederhanakan khusus untuk layar HP.',
+    },
+    {
+      id: 'bar-prep',
+      section: 'Harian',
+      navTarget: 'olah-bahan',
+      target: 'nav-olah-bahan',
+      route: `${basePath}/olah-bahan`,
+      title: 'Olah Bahan',
+      body: 'Catat bahan mentah yang diolah menjadi satu atau beberapa bahan jadi. Jika tidak ada ampas (0 waste), foto ampas tidak perlu diunggah.',
+      tip: 'Foto bahan mentah dan hasil olahan bisa diunggah setelah proses olah selesai.',
+    },
+    {
+      id: 'bar-po',
+      section: 'Pengadaan',
+      navTarget: 'invoicing',
+      target: 'nav-invoicing',
+      route: `${basePath}/procurement?tab=invoicing`,
+      title: 'Permintaan PO Cabang',
+      body: 'Ajukan permintaan pembelian bahan bar yang habis dan bantu unggah foto penerimaan saat barang dari supplier datang.',
+      tip: 'Status permintaan bisa dipantau langsung dari Requested sampai Completed.',
+    },
+    {
+      id: 'bar-transfer',
+      section: 'Distribusi',
+      navTarget: 'transfer',
+      target: 'nav-transfer',
+      route: `${basePath}/transfer`,
+      title: 'Minta Barang ke Central',
+      body: 'Ajukan permintaan stok dari Gudang Central dan konfirmasi penerimaan saat barang sampai di cabangmu.',
+      tip: 'Pastikan jumlah fisik sesuai sebelum menandai penerimaan selesai.',
+    },
+    {
+      id: 'bar-glass',
+      section: 'Peralatan',
+      navTarget: 'so-glass-tool',
+      target: 'nav-so-glass-tool',
+      route: `${basePath}/excel-so-glass-tool`,
+      title: 'Catat Gelas & Alat Pecah',
+      body: 'Laporkan gelas pecah atau alat bar yang rusak agar stok peralatan cabang selalu akurat dan otomatis tercatat untuk Head Bar.',
+      tip: 'Input angka langsung membuka keypad numerik di HP.',
+    },
+  ];
   return {
     roleKey,
-    roleLabel: getRoleDisplayName(roleKey),
-    sectionCards,
-    allSteps: config.steps
+    roleLabel,
+    sectionCards: [
+      { id: 'shift', label: 'Dashboard & Stok', subtitle: 'Tugas shift & input stok harian' },
+      { id: 'prep', label: 'Olah Bahan', subtitle: 'Catat olahan multi-hasil & 0 waste' },
+      { id: 'po_mutasi', label: 'PO & Mutasi', subtitle: 'Minta barang cabang & terima kiriman' },
+      { id: 'gelas', label: 'Gelas & Alat Bar', subtitle: 'Lapor gelas pecah & alat rusak' },
+    ],
+    allSteps: steps,
   };
 }

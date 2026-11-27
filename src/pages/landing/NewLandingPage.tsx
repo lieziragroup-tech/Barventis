@@ -514,7 +514,7 @@ export default function App() {
                   {/* Collage-style Hero Image Section */}
                   <div className="lg:col-span-5 relative mt-8 lg:mt-0">
                     <div className="relative max-w-sm mx-auto">
-                      <div className="relative z-10 organic-shape-1 overflow-hidden shadow-2xl border-4 border-white transform rotate-2 transition-transform hover:rotate-0 duration-500">
+                      <div className="relative z-10 organic-shape-1 overflow-hidden shadow-2xl border-4 border-white bg-emerald-50/40 min-h-[360px] transform rotate-2 transition-transform hover:rotate-0 duration-500">
                         <img 
                           className="w-full h-auto object-cover aspect-[4/5]" 
                           src="https://lh3.googleusercontent.com/aida-public/AB6AXuABtykWVJEIUKga4mgjvh_DEMKIMneSPgCxpuj1SeZfjfirLf_fbnP9144g2io_yHn1E9-NZZ4QISUbv6bM2UVXgyC0VuEprpHrs35rirbXzD6qw9DewinVlsaBp_8fXPThM0tMaN1EREVote707hN6MxKAHY1iUV9CC_bPEDWsBrY18W5anxj9Js-VWpC0eCsGw6BFTbnkGmUauqzXRINGChO5MtBNe4LkZGCFp5lMMDKgDDJkrhjb5A" 
@@ -525,12 +525,12 @@ export default function App() {
                       {/* Floating graphical cards — positioned against the
                           actual image box (not the wider outer grid column)
                           so they stay visually attached to the image on mobile */}
-                      <div className="absolute top-10 left-0 md:-left-6 glass-card p-4 rounded-2xl shadow-xl z-20 flex flex-col gap-0.5 transform -rotate-3 border border-[#bcc9c6]/30 max-w-[45%]">
+                      <div className="absolute top-10 left-0 md:-left-6 glass-card p-4 rounded-2xl shadow-xl z-20 flex flex-col gap-0.5 transform -rotate-3 border border-[#bcc9c6]/30 min-w-[160px] whitespace-nowrap">
                         <span className="text-[10px] text-[#515f74] uppercase tracking-wider font-bold">Kebocoran Bahan</span>
                         <span className="text-sm font-bold text-emerald-700">-37% Less Waste</span>
                       </div>
 
-                      <div className="absolute bottom-8 right-0 md:-right-4 glass-card p-4 rounded-2xl shadow-xl z-20 flex flex-col gap-0.5 transform rotate-3 border border-[#bcc9c6]/30 max-w-[45%]">
+                      <div className="absolute bottom-8 right-0 md:-right-4 glass-card p-4 rounded-2xl shadow-xl z-20 flex flex-col gap-0.5 transform rotate-3 border border-[#bcc9c6]/30 min-w-[160px] whitespace-nowrap">
                         <span className="text-[10px] text-[#515f74] uppercase tracking-wider font-bold">Rekomendasi AI</span>
                         <span className="text-sm font-bold text-primary">Saran HPP Akurat</span>
                       </div>

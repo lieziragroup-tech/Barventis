@@ -68,8 +68,31 @@ export default function RoleSpotlightGuide({
     const vh = window.innerHeight;
     setViewport({ width: vw, height: vh });
 
-    const selector = currentStep.target ? `[data-tour="${currentStep.target}"]` : null;
-    const el = (selector ? document.querySelector(selector) : null) || document.querySelector('[data-tour="main-workspace"]');
+    const isMobile = vw < 768;
+    const navSlug = currentStep.navTarget || (currentStep.target ? currentStep.target.replace(/^nav-/, '') : '');
+    const candidates = isMobile
+      ? [
+          navSlug ? `[data-tour="mob-${navSlug}"]` : null,
+          currentStep.target ? `[data-tour="${currentStep.target}"]` : null,
+          '[data-tour="main-workspace"]'
+        ]
+      : [
+          navSlug ? `[data-tour="nav-${navSlug}"]` : null,
+          currentStep.target ? `[data-tour="${currentStep.target}"]` : null,
+          '[data-tour="sidebar-nav"]',
+          '[data-tour="main-workspace"]'
+        ];
+    let el = null;
+    for (const sel of candidates.filter(Boolean)) {
+      const found = document.querySelector(sel);
+      if (found) {
+        const rect = found.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) { el = found; break; }
+      }
+    }
+    if (el && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
     if (!el) {
       setTargetRect(null);
       return;
