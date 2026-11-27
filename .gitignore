@@ -1,82 +1,43 @@
-
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-
-# Environment secrets — NEVER commit
+node_modules/
+dist/
+dev-dist/
+build/
+.vercel
 .env
 .env.*
 !.env.example
-*.local
-
-# Reference projects (not part of Barventis)
-**/!Reference/
-scratch/
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+*.log
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+coverage/
 
-# Python script & cache
-*.py
-__pycache__/
+# Local evidence photo storage (dev fallback only — production uses Supabase Storage)
+uploads/*
+!uploads/.gitkeep
+.vscode/
+.idea/
+*.swp
+*.swo
+.env*
+!.env.example
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+Styling-Reference/
+Data Gudang/
+Data Penawaran/
 
-# Raw Data & Generated Templates
-*.xlsx
-~$*.xlsx
-*.csv
-Hasil yang diinginkan (Utama)/
-
-# Temp analysis files
-Manual_Setup_Required.md
-SQL.txt
-
-# Sensitive Data & Database Dumps
-Data Source/
-db/*.sql
-db/SQL.txt
-
-# Obsidian Local Workspace (UI state, prevents merge conflicts)
-.obsidian/workspace.json
-.obsidian/workspace-mobile.json
-.obsidian/plugins/*/data.json
-
-# ---------------------------------------------------
-# Agent, Obsidian Memory & Docs (DO NOT UPLOAD)
-# ---------------------------------------------------
-.obsidian/
-QA_Testing/
+# Local AI agents, skills, and prompts (development & memory only)
 .agents/
-.gemini/
+skills/
+AGENTS.md
+agent_lean_prompt_v2.md
+antislop.md
 
-# ---------------------------------------------------
-# Block ALL Markdown files except README
-# ---------------------------------------------------
-.agents/
-.gemini/
+# Obsidian Vault configuration & machine memory
 .obsidian/
-QA_Testing/
-
-# ---------------------------------------------------
-# Memory & Docs (Local Only)
-# ---------------------------------------------------
-_memory/
-prd/
-roadmap/
-diagrams/
+vault-guci/
+docs/_index.md
+docs/diagrams/
+docs/memory/
+docs/prd/
+docs/roadmap/

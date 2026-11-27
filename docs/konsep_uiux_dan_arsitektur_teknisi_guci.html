@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Guci-App / Fieldwork — Whole-App Product &amp; UI/UX Design System &amp; 13-Page Figma Prototype</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --green: #1A5C38;
+      --green-hover: #13462A;
+      --green-soft: #EDF2EE;
+      --canvas: #F4F6F4;
+      --surface: #FFFFFF;
+      --subtle: #EDF2EE;
+      --text: #17231C;
+      --secondary: #66736B;
+      --muted: #66736B;
+      --border: #DCE5DE;
+      --success: #237A4B;
+      --warning: #A96B16;
+      --danger: #B54141;
+      --info: #356C91;
+    }
+    html.dark-preview {
+      --green: #4B9B70;
+      --green-hover: #61AD83;
+      --green-soft: #222C26;
+      --canvas: #101613;
+      --surface: #1A211D;
+      --subtle: #222C26;
+      --text: #F0F4F1;
+      --secondary: #A8B4AC;
+      --muted: #87968C;
+      --border: #344239;
+      --success: #55B980;
+      --warning: #E7B35D;
+      --danger: #E47D7D;
+      --info: #79ABD0;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--canvas);
+      color: var(--text);
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+    .font-display { font-family: 'Outfit', 'Inter', sans-serif; }
+    .font-mono-code { font-family: 'JetBrains Mono', monospace; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    .phone-frame {
+      width: 100%;
+      max-width: 390px;
+      height: 760px;
+      border-radius: 28px;
+      border: 8px solid #17231C;
+      background: #F4F6F4;
+      box-shadow: 0 20px 45px rgba(23, 35, 28, 0.16);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      color: #17231C;
+    }
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: #1A5C38;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 2.5px;
+      padding: 8px;
+      box-shadow: 0 1px 2px rgba(0,0,0,.08);
+      flex: none;
+    }
+    .brand-mark span {
+      display: block;
+      width: 5px;
+      background: #fff;
+      border-radius: 5px 5px 1px 1px;
+    }
+    .brand-mark span:nth-child(1) { height: 10px; }
+    .brand-mark span:nth-child(2) { height: 17px; }
+    .brand-mark span:nth-child(3) { height: 13px; }
+
+    .badge-lite {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      line-height: 1.25;
+    }
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .badge-lite.info { color: #356C91; background: #EAF2F8; }
+    .badge-lite.success { color: #237A4B; background: #E8F4EC; }
+    .badge-lite.warning { color: #A96B16; background: #FFF4DF; }
+    .badge-lite.danger { color: #B54141; background: #FCECEC; }
+    .badge-lite.neutral { color: #66736B; background: #EDF2EE; }
+
+    .map-illustration {
+      height: 155px;
+      border-radius: 12px;
+      position: relative;
+      overflow: hidden;
+      background-color: #EDF2EE;
+      background-image: linear-gradient(#DCE5DE 1px,transparent 1px),linear-gradient(90deg,#DCE5DE 1px,transparent 1px);
+      background-size: 34px 34px;
+      border: 1px solid #DCE5DE;
+    }
+    .map-illustration .road {
+      position: absolute;
+      height: 18px;
+      background: #fff;
+      box-shadow: 0 0 0 1px #DCE5DE;
+      transform: rotate(-15deg);
+      width: 130%;
+      left: -15%;
+      top: 45%;
+    }
+    .map-illustration .road.two { transform: rotate(58deg); top: 25%; left: -30%; }
+    .map-illustration .map-pin {
+      position: absolute;
+      width: 34px;
+      height: 34px;
+      border-radius: 50% 50% 50% 4px;
+      transform: rotate(-45deg);
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: #1A5C38;
+      left: 46%;
+      top: 32%;
+      box-shadow: 0 4px 10px rgba(23,35,28,.18);
+    }
+    .map-illustration .map-pin span { transform: rotate(45deg); font-size: 12px; font-weight: 800; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Top Navigation Header -->
+  <header class="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-[#DCE5DE] px-4 sm:px-6 py-3">
+    <div class="max-w-7xl mx-auto flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="brand-mark">
+          <span></span><span></span><span></span>
+        </div>
+        <div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <h1 class="text-sm sm:text-base font-extrabold text-[#17231C] tracking-tight font-display">
+              Guci-App / Fieldwork — Whole-App Design System &amp; 13-Page Figma Prototype
+            </h1>
+            <span class="px-2 py-0.5 rounded-md bg-[#EDF2EE] border border-[#DCE5DE] text-[#1A5C38] text-[10.5px] font-bold">
+              Data Demo • 6 Role Terisolasi
+            </span>
+          </div>
+          <p class="text-xs text-[#66736B]">
+            Source of Truth: GUCI-APP-WHOLE-APP-DESIGN.md • Brand Green (#1A5C38 Light / #4B9B70 Dark) • 00–12 Figma Architecture
+          </p>
+        </div>
+      </div>
+
+      <!-- Main View Switcher -->
+      <div class="flex items-center gap-2 flex-wrap">
+        <div class="inline-flex rounded-xl bg-[#EDF2EE] p-1 border border-[#DCE5DE]">
+          <button
+            id="nav-btn-simulator"
+            type="button"
+            onclick="switchMainView('simulator')"
+            class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white text-[#1A5C38] shadow-sm cursor-pointer"
+          >
+            1. 6-Role Workspace &amp; PWA
+          </button>
+          <button
+            id="nav-btn-architecture"
+            type="button"
+            onclick="switchMainView('architecture')"
+            class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-[#66736B] hover:text-[#17231C] cursor-pointer"
+          >
+            2. 13-Page Figma Structure (00–12)
+          </button>
+          <button
+            id="nav-btn-mapping"
+            type="button"
+            onclick="switchMainView('mapping')"
+            class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-[#66736B] hover:text-[#17231C] cursor-pointer"
+          >
+            3. Status Taxonomy &amp; NEEDS CONFIRMATION
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
+
+    <!-- ===================================================================== -->
+    <!-- VIEW 1: 6-ROLE WORKSPACE EXPLORER & INTERACTIVE TECHNICIAN PWA        -->
+    <!-- ===================================================================== -->
+    <section id="view-simulator" class="space-y-6">
+
+      <!-- 6-Role Interactive Workspace Selector Bar -->
+      <div class="bg-white rounded-2xl border border-[#DCE5DE] p-4 shadow-xs space-y-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <span class="text-[11px] font-bold uppercase tracking-wider text-[#1A5C38] block">
+              ENAM ROLE TERPISAH (ROLE-FIRST, TASK-FIRST WORKSPACES)
+            </span>
+            <h2 class="text-base font-extrabold text-[#17231C]">
+              Pilih Role untuk Meninjau Navigasi, Hak Akses, &amp; Layar Utama Masing-Masing
+            </h2>
+          </div>
+          <span class="px-2.5 py-1 rounded-md bg-[#EDF2EE] text-[#17231C] text-xs font-mono-code font-bold" id="active-role-indicator">
+            Role Aktif: SUPERADMIN (Direktur)
+          </span>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2" id="role-selector-grid">
+          <button type="button" onclick="selectRoleWorkspace('MASTER_SUPER_ADMIN')" id="role-btn-MASTER_SUPER_ADMIN" class="p-2.5 rounded-xl border border-[#DCE5DE] bg-[#F4F6F4] hover:border-[#1A5C38] text-left cursor-pointer">
+            <span class="text-[10px] font-mono-code font-bold text-[#66736B] block">ROLE 01</span>
+            <strong class="text-xs text-[#17231C] block mt-0.5">MASTER_SUPER_ADMIN</strong>
+            <span class="text-[10.5px] text-[#66736B]">Pemilik Platform SaaS</span>
+          </button>
+          <button type="button" onclick="selectRoleWorkspace('SUPERADMIN')" id="role-btn-SUPERADMIN" class="p-2.5 rounded-xl border-2 border-[#1A5C38] bg-[#EDF2EE] text-left cursor-pointer">
+            <span class="text-[10px] font-mono-code font-bold text-[#1A5C38] block">ROLE 02</span>
+            <strong class="text-xs text-[#17231C] block mt-0.5">SUPERADMIN</strong>
+            <span class="text-[10.5px] text-[#1A5C38] font-medium">Direktur Perusahaan</span>
+          </button>
+          <button type="button" onclick="selectRoleWorkspace('ADMIN')" id="role-btn-ADMIN" class="p-2.5 rounded-xl border border-[#DCE5DE] bg-[#F4F6F4] hover:border-[#1A5C38] text-left cursor-pointer">
+            <span class="text-[10px] font-mono-code font-bold text-[#66736B] block">ROLE 03</span>
+            <strong class="text-xs text-[#17231C] block mt-0.5">ADMIN</strong>
+            <span class="text-[10.5px] text-[#66736B]">Admin Operasional</span>
+          </button>
+          <button type="button" onclick="selectRoleWorkspace('MARKETING')" id="role-btn-MARKETING" class="p-2.5 rounded-xl border border-[#DCE5DE] bg-[#F4F6F4] hover:border-[#1A5C38] text-left cursor-pointer">
+            <span class="text-[10px] font-mono-code font-bold text-[#66736B] block">ROLE 04</span>
+            <strong class="text-xs text-[#17231C] block mt-0.5">MARKETING</strong>
+            <span class="text-[10.5px] text-[#66736B]">Surveyor / Sales</span>
+          </button>
+          <button type="button" onclick="selectRoleWorkspace('INVENTORY')" id="role-btn-INVENTORY" class="p-2.5 rounded-xl border border-[#DCE5DE] bg-[#F4F6F4] hover:border-[#1A5C38] text-left cursor-pointer">
+            <span class="text-[10px] font-mono-code font-bold text-[#66736B] block">ROLE 05</span>
+            <strong class="text-xs text-[#17231C] block mt-0.5">INVENTORY</strong>
+            <span class="text-[10.5px] text-[#66736B]">Staf Gudang</span>
+          </button>
+          <button type="button" onclick="selectRoleWorkspace('TEKNISI_LAPANGAN')" id="role-btn-TEKNISI_LAPANGAN" class="p-2.5 rounded-xl border border-[#DCE5DE] bg-[#F4F6F4] hover:border-[#1A5C38] text-left cursor-pointer">
+            <span class="text-[10px] font-mono-code font-bold text-[#66736B] block">ROLE 06</span>
+            <strong class="text-xs text-[#17231C] block mt-0.5">TEKNISI_LAPANGAN</strong>
+            <span class="text-[10.5px] text-[#66736B]">Mobile PWA (390×844)</span>
+          </button>
+        </div>
+
+        <!-- Dynamic Role Workspace Preview Panel -->
+        <div id="role-workspace-preview" class="rounded-2xl border border-[#DCE5DE] bg-[#F4F6F4] p-4"></div>
+      </div>
+
+      <!-- Bottom Grid: Interactive Technician PWA Phone Frame + Live Scenario Controls -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <!-- Left Column: Interactive Phone Frame (390x760) -->
+        <div class="lg:col-span-5 flex flex-col items-center">
+          <div class="phone-frame">
+            <span id="sim-network-badge" class="sr-only">Online</span>
+            <button id="sim-category-pill" type="button" onclick="toggleSimServiceCategory()" class="sr-only">PCO</button>
+            <span id="phone-header-title" class="sr-only">Beranda</span>
+
+            <div id="phone-toast" class="hidden absolute top-14 inset-x-3 z-50 rounded-2xl bg-emerald-950/95 text-white p-3 shadow-xl border border-emerald-500/50">
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <p id="phone-toast-title" class="text-xs font-extrabold text-emerald-300">Check-In &amp; Foto Tersimpan</p>
+                  <p id="phone-toast-desc" class="text-[11px] text-slate-200 mt-0.5">Koordinat GPS valid di dalam radius (14m).</p>
+                </div>
+                <button type="button" onclick="hidePhoneToast()" class="text-xs font-bold text-slate-300 hover:text-white px-1">✕</button>
+              </div>
+            </div>
+
+            <div id="phone-body" class="flex-1 overflow-y-auto no-scrollbar bg-[#F4F6F4] flex flex-col"></div>
+
+            <!-- FLOATING BOTTOM PILL (4 Items: Tugas Hari Ini | Daftar Proyek | Riwayat | Profil) -->
+            <div
+              id="phone-bottom-nav"
+              class="absolute bottom-3.5 left-1/2 -translate-x-1/2 z-30 bg-white/95 backdrop-blur-md border border-[#DCE5DE] shadow-[0_8px_24px_rgba(23,35,28,0.14)] rounded-full p-1 flex items-center gap-1 transition-all duration-200"
+            >
+              <button type="button" id="tab-btn-home" onclick="setPhoneTab('home')" class="px-3.5 py-1.5 rounded-full text-xs font-bold bg-[#1A5C38] text-white transition-all cursor-pointer">
+                Beranda
+              </button>
+              <button type="button" id="tab-btn-projects" onclick="setPhoneTab('projects')" class="px-3 py-1.5 rounded-full text-xs font-semibold text-[#66736B] hover:text-[#17231C] transition-all cursor-pointer">
+                Tugas
+              </button>
+              <button type="button" id="tab-btn-history" onclick="setPhoneTab('history')" class="px-3 py-1.5 rounded-full text-xs font-semibold text-[#66736B] hover:text-[#17231C] transition-all cursor-pointer">
+                Riwayat
+              </button>
+              <button type="button" id="tab-btn-profile" onclick="setPhoneTab('profile')" class="px-3 py-1.5 rounded-full text-xs font-semibold text-[#66736B] hover:text-[#17231C] transition-all cursor-pointer">
+                Profil
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Technician PWA & Critical Edge States Control Deck -->
+        <div class="lg:col-span-7 space-y-4">
+          <div class="bg-white rounded-2xl border border-[#DCE5DE] p-5 shadow-xs space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[#EDF2EE] pb-3">
+              <div>
+                <span class="text-[11px] font-bold uppercase tracking-wider text-[#1A5C38] block">
+                  PAGE 10 — TECHNICIAN PWA SIMULATOR (TK-00 s.d. TK-12)
+                </span>
+                <h2 class="text-base font-extrabold text-[#17231C]">
+                  Uji Alur Lapangan Mobile-First &amp; State Jujur (Offline vs Server-Confirmed)
+                </h2>
+              </div>
+              <span id="sim-active-state-badge" class="px-2.5 py-1 rounded-lg bg-[#EDF2EE] text-[#17231C] text-xs font-mono-code font-bold">
+                Frame: TK-00 Home
+              </span>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <button type="button" onclick="setSimJobStage('READY')" class="p-2.5 rounded-xl border border-[#DCE5DE] hover:border-[#1A5C38] bg-[#F4F6F4] text-left cursor-pointer">
+                <span class="text-[10px] font-bold uppercase text-[#66736B] block">TK-00 / TK-02</span>
+                <span class="text-xs font-bold text-[#17231C] block mt-0.5">Siap Check-In</span>
+                <span class="text-[10.5px] text-[#66736B]">Beranda &amp; Detail Tugas</span>
+              </button>
+
+              <button type="button" onclick="openCameraSimulation('CHECK_IN')" class="p-2.5 rounded-xl border border-[#DCE5DE] hover:border-[#1A5C38] bg-[#F4F6F4] text-left cursor-pointer">
+                <span class="text-[10px] font-bold uppercase text-[#1A5C38] block">TK-03 / TK-05</span>
+                <span class="text-xs font-bold text-[#17231C] block mt-0.5">Kamera &amp; GPS Aktif</span>
+                <span class="text-[10.5px] text-[#66736B]">Floating nav auto-hide</span>
+              </button>
+
+              <button type="button" onclick="setSimJobStage('WORKING')" class="p-2.5 rounded-xl border border-[#DCE5DE] hover:border-[#1A5C38] bg-[#F4F6F4] text-left cursor-pointer">
+                <span class="text-[10px] font-bold uppercase text-[#356C91] block">TK-04 Stepper</span>
+                <span class="text-xs font-bold text-[#17231C] block mt-0.5">Sedang Dikerjakan</span>
+                <span class="text-[10.5px] text-[#66736B]">6 Langkah Berurutan</span>
+              </button>
+
+              <button type="button" onclick="openTreatmentModalSimulation()" class="p-2.5 rounded-xl border border-[#DCE5DE] hover:border-[#1A5C38] bg-[#F4F6F4] text-left cursor-pointer">
+                <span class="text-[10px] font-bold uppercase text-[#A96B16] block">TK-06 Treatment</span>
+                <span class="text-xs font-bold text-[#17231C] block mt-0.5">Form Temuan &amp; Obat</span>
+                <span class="text-[10.5px] text-[#66736B]">PCO vs Anti Rayap (&gt; 0)</span>
+              </button>
+
+              <button type="button" onclick="openNewTaskModal()" class="p-2.5 rounded-xl border border-[#DCE5DE] hover:border-[#1A5C38] bg-[#F4F6F4] text-left cursor-pointer">
+                <span class="text-[10px] font-bold uppercase text-[#1A5C38] block">TK-10 Offline Sync</span>
+                <span class="text-xs font-bold text-[#17231C] block mt-0.5">Buat Tugas Baru</span>
+                <span class="text-[10.5px] text-[#66736B]">2 Layanan + DB Klien</span>
+              </button>
+
+              <button type="button" onclick="toggleSimServiceCategory()" class="p-2.5 rounded-xl border border-[#1A5C38] bg-[#EDF2EE] text-left cursor-pointer">
+                <span class="text-[10px] font-bold uppercase text-[#1A5C38] block">Metode Layanan</span>
+                <span id="ctrl-cat-label" class="text-xs font-bold text-[#17231C] block mt-0.5">Mode: Pest Control (PCO)</span>
+                <span class="text-[10.5px] text-[#1A5C38]">Klik ubah ke Anti Rayap (AR)</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Token Foundation & Dark-Mode Brand Green Compliance Card -->
+          <div class="bg-white rounded-2xl border border-[#DCE5DE] p-5 shadow-xs space-y-3">
+            <h3 class="text-sm font-extrabold text-[#17231C]">
+              Page 01 — Foundations &amp; Tokens (Konsistensi Hijau Guci di Light &amp; Dark Mode)
+            </h3>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+              <div class="p-3 rounded-xl border border-[#DCE5DE] bg-[#F4F6F4]">
+                <div class="w-full h-6 rounded-md bg-[#1A5C38] mb-2"></div>
+                <strong class="block text-[#17231C]">Brand Light</strong>
+                <span class="font-mono-code text-[11px] text-[#66736B]">#1A5C38 (Hover #13462A)</span>
+              </div>
+              <div class="p-3 rounded-xl border border-[#344239] bg-[#101613] text-[#F0F4F1]">
+                <div class="w-full h-6 rounded-md bg-[#4B9B70] mb-2"></div>
+                <strong class="block">Brand Dark</strong>
+                <span class="font-mono-code text-[11px] text-[#A8B4AC]">#4B9B70 (Hover #61AD83)</span>
+              </div>
+              <div class="p-3 rounded-xl border border-[#DCE5DE] bg-[#FFFFFF]">
+                <div class="flex gap-1 mb-2">
+                  <span class="w-1/2 h-6 rounded bg-[#F4F6F4] border border-[#DCE5DE]"></span>
+                  <span class="w-1/2 h-6 rounded bg-[#FFFFFF] border border-[#DCE5DE]"></span>
+                </div>
+                <strong class="block text-[#17231C]">Light Surfaces</strong>
+                <span class="font-mono-code text-[11px] text-[#66736B]">#F4F6F4 / #FFFFFF</span>
+              </div>
+              <div class="p-3 rounded-xl border border-[#344239] bg-[#1A211D] text-[#F0F4F1]">
+                <div class="flex gap-1 mb-2">
+                  <span class="w-1/2 h-6 rounded bg-[#101613] border border-[#344239]"></span>
+                  <span class="w-1/2 h-6 rounded bg-[#1A211D] border border-[#344239]"></span>
+                </div>
+                <strong class="block">Dark Surfaces</strong>
+                <span class="font-mono-code text-[11px] text-[#A8B4AC]">#101613 / #1A211D</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- VIEW 2: 13-PAGE FIGMA ARCHITECTURE & PROTOTYPE FLOWS (00–12)          -->
+    <!-- ===================================================================== -->
+    <section id="view-architecture" class="hidden space-y-6">
+      <div class="bg-white rounded-2xl border border-[#DCE5DE] p-5 sm:p-6 shadow-xs space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#EDF2EE] pb-4">
+          <div>
+            <span class="text-[11px] font-bold uppercase tracking-wider text-[#1A5C38] block">
+              STRUKTUR FILE FIGMA (PAGES 00 s.d. 12) &amp; 7 ALUR PROTOTIPE UTAMA
+            </span>
+            <h2 class="text-base sm:text-lg font-extrabold text-[#17231C]">
+              Inventaris Lengkap 75+ Frame Layar Berdasarkan Role, Modul, &amp; State Kritis
+            </h2>
+          </div>
+          <span class="text-xs text-[#66736B]">Klik grup halaman di bawah untuk melihat spesifikasi frame &amp; handler</span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <button type="button" onclick="selectHandlerNode(0)" id="handler-node-0" class="p-3.5 rounded-xl border-2 border-[#1A5C38] bg-[#EDF2EE] text-left cursor-pointer">
+            <span class="text-[10px] font-mono-code font-bold text-[#1A5C38] block">PAGES 00–03</span>
+            <span class="text-xs font-extrabold text-[#17231C] block mt-1">Foundations &amp; Auth</span>
+            <span class="text-[11px] text-[#66736B] block mt-1">Tokens, Components, &amp; SH-00..SH-05</span>
+          </button>
+          <button type="button" onclick="selectHandlerNode(1)" id="handler-node-1" class="p-3.5 rounded-xl border border-[#DCE5DE] bg-[#F4F6F4] text-left cursor-pointer">
+            <span class="text-[10px] font-mono-code font-bold text-[#66736B] block">PAGES 04–05</span>
+            <span class="text-xs font-extrabold text-[#17231C] block mt-1">SaaS &amp; Superadmin</span>
+            <span class="text-[11px] text-[#66736B] block mt-1">MSA-00..05 &amp; SA-00..06 Direktur</span>
+          </button>
+          <button type="button" onclick="selectHandlerNode(2)" id="handler-node-2" class="p-3.5 rounded-xl border border-[#DCE5DE] bg-[#F4F6F4] text-left cursor-pointer">
+            <span class="text-[10px] font-mono-code font-bold text-[#66736B] block">PAGE 06</span>
+            <span class="text-xs font-extrabold text-[#17231C] block mt-1">Admin Operations</span>
+            <span class="text-[11px] text-[#66736B] block mt-1">AD-00..AD-28 (10 Menu Sidebar)</span>
+          </button>
+          <button type="button" onclick="selectHandlerNode(3)" id="handler-node-3" class="p-3.5 rounded-xl border border-[#DCE5DE] bg-[#F4F6F4] text-left cursor-pointer">
+            <span class="text-[10px] font-mono-code font-bold text-[#66736B] block">PAGES 07–09</span>
+            <span class="text-xs font-extrabold text-[#17231C] block mt-1">Marketing, Gudang, FN</span>
+            <span class="text-[11px] text-[#66736B] block mt-1">MK-00..08, IV-00..09, FN-00..05</span>
+          </button>
+          <button type="button" onclick="selectHandlerNode(4)" id="handler-node-4" class="p-3.5 rounded-xl border border-[#DCE5DE] bg-[#F4F6F4] text-left cursor-pointer">
+            <span class="text-[10px] font-mono-code font-bold text-[#66736B] block">PAGE 10</span>
+            <span class="text-xs font-extrabold text-[#17231C] block mt-1">Technician PWA</span>
+            <span class="text-[11px] text-[#66736B] block mt-1">TK-00..TK-12 + Floating Pill</span>
+          </button>
+          <button type="button" onclick="selectHandlerNode(5)" id="handler-node-5" class="p-3.5 rounded-xl border border-[#DCE5DE] bg-[#F4F6F4] text-left cursor-pointer">
+            <span class="text-[10px] font-mono-code font-bold text-[#66736B] block">PAGES 11–12</span>
+            <span class="text-xs font-extrabold text-[#17231C] block mt-1">Responsive &amp; Flows</span>
+            <span class="text-[11px] text-[#66736B] block mt-1">6 Breakpoints &amp; 7 Prototype Flows</span>
+          </button>
+        </div>
+
+        <div id="handler-detail-box" class="rounded-2xl border border-slate-200 bg-slate-900 text-slate-100 p-5 space-y-4"></div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- VIEW 3: CANONICAL STATUS TAXONOMY & NEEDS CONFIRMATION LOG            -->
+    <!-- ===================================================================== -->
+    <section id="view-mapping" class="hidden space-y-6">
+      <!-- Canonical Status Taxonomy (Do Not Mix!) -->
+      <div class="bg-white rounded-2xl border border-[#DCE5DE] p-5 sm:p-6 shadow-xs space-y-4">
+        <div>
+          <span class="text-[11px] font-bold uppercase tracking-wider text-[#1A5C38] block">
+            SECTION 10.2 — CANONICAL STATUS TAXONOMY (DO NOT MIX)
+          </span>
+          <h2 class="text-base sm:text-lg font-extrabold text-[#17231C]">
+            Pemisahan Tegas Status Quotation, SPK, Work Report, &amp; Risk Level
+          </h2>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+          <div class="p-4 rounded-xl bg-[#F4F6F4] border border-[#DCE5DE] space-y-2">
+            <strong class="block text-[#17231C] text-sm">1. Quotation Status (7)</strong>
+            <p class="text-[#66736B]">Digunakan khusus pada modul Penawaran Harga &amp; Pipeline:</p>
+            <div class="flex flex-wrap gap-1.5 pt-1 font-mono-code text-[11px]">
+              <span class="px-2 py-0.5 rounded bg-white border border-[#DCE5DE]">draft</span>
+              <span class="px-2 py-0.5 rounded bg-[#FFF4DF] text-[#A96B16]">pending</span>
+              <span class="px-2 py-0.5 rounded bg-[#E8F4EC] text-[#237A4B]">approved</span>
+              <span class="px-2 py-0.5 rounded bg-[#FCECEC] text-[#B54141]">rejected</span>
+              <span class="px-2 py-0.5 rounded bg-[#EAF2F8] text-[#356C91]">sent_to_client</span>
+              <span class="px-2 py-0.5 rounded bg-[#1A5C38] text-white">deal</span>
+              <span class="px-2 py-0.5 rounded bg-slate-200 text-slate-700">cancelled</span>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-xl bg-[#F4F6F4] border border-[#DCE5DE] space-y-2">
+            <strong class="block text-[#17231C] text-sm">2. SPK Status (3)</strong>
+            <p class="text-[#66736B]">Digunakan khusus pada jadwal perintah kerja (SPK):</p>
+            <div class="flex flex-wrap gap-1.5 pt-1 font-mono-code text-[11px]">
+              <span class="px-2 py-0.5 rounded bg-[#EAF2F8] text-[#356C91]">assigned</span>
+              <span class="px-2 py-0.5 rounded bg-[#FFF4DF] text-[#A96B16]">in_progress</span>
+              <span class="px-2 py-0.5 rounded bg-[#E8F4EC] text-[#237A4B]">done</span>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-xl bg-[#F4F6F4] border border-[#DCE5DE] space-y-2">
+            <strong class="block text-[#17231C] text-sm">3. Work Report Status (6)</strong>
+            <p class="text-[#66736B]">Status pelaksanaan laporan kerja lapangan:</p>
+            <div class="flex flex-wrap gap-1.5 pt-1 font-mono-code text-[11px]">
+              <span class="px-2 py-0.5 rounded bg-white border border-[#DCE5DE]">DRAFT</span>
+              <span class="px-2 py-0.5 rounded bg-[#EAF2F8] text-[#356C91]">READY</span>
+              <span class="px-2 py-0.5 rounded bg-[#EAF2F8] text-[#356C91]">WORKING</span>
+              <span class="px-2 py-0.5 rounded bg-[#E8F4EC] text-[#237A4B]">COMPLETED</span>
+              <span class="px-2 py-0.5 rounded bg-[#FCECEC] text-[#B54141]">FLAGGED</span>
+              <span class="px-2 py-0.5 rounded bg-[#EDF2EE] text-[#1A5C38]">REVIEWED</span>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-xl bg-[#F4F6F4] border border-[#DCE5DE] space-y-2">
+            <strong class="block text-[#17231C] text-sm">4. Risk Level (5 — Terpisah!)</strong>
+            <p class="text-[#66736B]">Indikator evaluasi risiko GPS/durasi (wajib disertai penjelasan teks):</p>
+            <div class="flex flex-wrap gap-1.5 pt-1 font-mono-code text-[11px]">
+              <span class="px-2 py-0.5 rounded bg-[#E8F4EC] text-[#237A4B]">NORMAL</span>
+              <span class="px-2 py-0.5 rounded bg-[#EAF2F8] text-[#356C91]">LOW_RISK</span>
+              <span class="px-2 py-0.5 rounded bg-[#FFF4DF] text-[#A96B16]">REVIEW</span>
+              <span class="px-2 py-0.5 rounded bg-[#FCECEC] text-[#B54141]">HIGH_RISK</span>
+              <span class="px-2 py-0.5 rounded bg-[#B54141] text-white">CRITICAL</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- NEEDS CONFIRMATION Log (Section 2.3 & Section 14) -->
+      <div class="bg-white rounded-2xl border border-[#DCE5DE] p-5 sm:p-6 shadow-xs space-y-4">
+        <div>
+          <span class="text-[11px] font-bold uppercase tracking-wider text-[#A96B16] block">
+            SECTION 2.3 &amp; 14 — CATATAN ASUMSI &amp; ITEM "NEEDS CONFIRMATION"
+          </span>
+          <h2 class="text-base sm:text-lg font-extrabold text-[#17231C]">
+            Daftar Keputusan Arsitektur &amp; Bisnis yang Ditandai NEEDS CONFIRMATION
+          </h2>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs border-collapse min-w-[720px]">
+            <thead>
+              <tr class="bg-[#EDF2EE] text-[#17231C] border-b border-[#DCE5DE]">
+                <th class="py-3 px-4 font-bold">Kode</th>
+                <th class="py-3 px-4 font-bold">Area / Modul</th>
+                <th class="py-3 px-4 font-bold">Fakta Source Code Saat Ini</th>
+                <th class="py-3 px-4 font-bold">Status &amp; Pertanyaan Validasi Stakeholder</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[#DCE5DE]">
+              <tr>
+                <td class="py-3 px-4 font-mono-code font-bold text-[#A96B16]">NC-01</td>
+                <td class="py-3 px-4 font-bold">Routing Role Non-Teknisi (`App.tsx`)</td>
+                <td class="py-3 px-4 text-[#66736B]">Semua role non-teknisi diarahkan ke <code>AdminDashboard.tsx</code> lalu disaring via <code>sidebarItems</code> &amp; guard role.</td>
+                <td class="py-3 px-4"><span class="px-2 py-0.5 rounded bg-[#FFF4DF] text-[#A96B16] font-bold">NEEDS CONFIRMATION</span> — Apakah ke depan perlu dipisah menjadi route URL tersendiri per role atau tetap satu shell terfilter?</td>
+              </tr>
+              <tr>
+                <td class="py-3 px-4 font-mono-code font-bold text-[#A96B16]">NC-02</td>
+                <td class="py-3 px-4 font-bold">Akses Marketing pada Tagihan &amp; Performa</td>
+                <td class="py-3 px-4 text-[#66736B]">Marketing melihat modul <code>order-tracking</code> (Tagihan &amp; Performa MoM) terbatas pada kuotasi miliknya.</td>
+                <td class="py-3 px-4"><span class="px-2 py-0.5 rounded bg-[#FFF4DF] text-[#A96B16] font-bold">NEEDS CONFIRMATION</span> — Apakah Marketing memerlukan visibilitas status cicilan/tagihan klien atau cukup pipeline &amp; MoM miliknya?</td>
+              </tr>
+              <tr>
+                <td class="py-3 px-4 font-mono-code font-bold text-[#A96B16]">NC-03</td>
+                <td class="py-3 px-4 font-bold">Aksi Review Laporan Kerja (`Work Reports`)</td>
+                <td class="py-3 px-4 text-[#66736B]">Backend mendukung transisi <code>reviewReport()</code> ke status <code>REVIEWED</code>; belum ada endpoint <code>Reject / Request Revision</code>.</td>
+                <td class="py-3 px-4"><span class="px-2 py-0.5 rounded bg-[#FFF4DF] text-[#A96B16] font-bold">NEEDS CONFIRMATION</span> — Tombol Reject/Revisi tidak ditampilkan agar tidak mengarang aksi backend.</td>
+              </tr>
+              <tr>
+                <td class="py-3 px-4 font-mono-code font-bold text-[#A96B16]">NC-04</td>
+                <td class="py-3 px-4 font-bold">Pengiriman Pengingat WhatsApp Garansi</td>
+                <td class="py-3 px-4 text-[#66736B]">Membuka deep-link WhatsApp (<code>wa.me</code>) dengan teks pre-filled, bukan pengiriman otomatis via WhatsApp Business API.</td>
+                <td class="py-3 px-4"><span class="px-2 py-0.5 rounded bg-[#FFF4DF] text-[#A96B16] font-bold">NEEDS CONFIRMATION</span> — Label tombol menyebutkan &ldquo;Buka Draft WhatsApp&rdquo;, bukan klaim otomatis terkirim.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    var ROLE_SPECS = {
+      MASTER_SUPER_ADMIN: {
+        title: 'MASTER_SUPER_ADMIN — Pemilik Platform SaaS',
+        device: 'Desktop (1440×1000 / 1280×800)',
+        contextBadge: 'KONTEKS PLATFORM SAAS • ISOLASI MULTI-TENANT',
+        navItems: ['1. Perusahaan / Tenant (MSA-01..04)', '2. Profil & Preferensi (MSA-05)'],
+        summary: 'Mengelola daftar perusahaan/tenant SaaS (ACTIVE, TRIAL, SUSPENDED, EXPIRED) dan menerbitkan Token Undangan khusus akun SUPERADMIN. Tidak menampilkan data operasional, finansial, stok, atau pelanggan tenant secara default.',
+        keyFrames: 'MSA-00 SaaS Overview • MSA-01 Company List • MSA-02 Company Detail • MSA-03 Company Users • MSA-04 Superadmin Invite Tokens • MSA-05 SaaS Profile'
+      },
+      SUPERADMIN: {
+        title: 'SUPERADMIN — Direktur Perusahaan / Tenant',
+        device: 'Desktop (1440×1000) & Tablet (1024×768)',
+        contextBadge: 'DIREKTUR UTAMA • EXECUTIVE & APPROVAL',
+        navItems: [
+          'Grup 1: Dashboard Utama (4 Sub-Tab) • Penawaran & Approval • Pelanggan & Garansi',
+          'Grup 2: Penugasan SPK & Proyek • Hasil & Verifikasi Kerja • Tracking & Perjalanan',
+          'Grup 3: Gudang, Tren & Untung Rugi (Direktur) • Keuangan & Performa • Tim & Akun Staf • Pengaturan & Audit'
+        ],
+        summary: 'Memiliki akses penuh ke 4 sub-tab Dashboard (Operation Center, Live Map, Performance Team, Bisnis), berwenang menyetujui (Approve) Penawaran Harga, melihat analisis Profitabilitas Chemical per ID Proyek, serta mengelola akun Admin.',
+        keyFrames: 'SA-00 Operation Center • SA-01 Live Map • SA-02 Performance Team • SA-03 Bisnis • SA-04 Approval Penawaran • SA-05 Profitabilitas Chemical'
+      },
+      ADMIN: {
+        title: 'ADMIN — Administrator Operasional Perusahaan',
+        device: 'Desktop (1440×1000 / 1280×800) & Tablet',
+        contextBadge: 'OPERASIONAL TENANT • 10 MENU TERKONSOLIDASI',
+        navItems: [
+          'Grup 1: Dashboard Ringkasan • Buat & Cek Penawaran • Pelanggan & Garansi (4 Tab)',
+          'Grup 2: Penugasan SPK & Proyek • Hasil & Verifikasi (Termasuk Queue Anomali) • Tracking & Perjalanan',
+          'Grup 3: Gudang & Alokasi • Keuangan & Performa • Tim & Akun Staf • Pengaturan, Kop & Audit'
+        ],
+        summary: 'Menjalankan operasional harian dari penawaran, penjadwalan SPK (termasuk Recurring SPK Builder), verifikasi Work Report & sinyal risiko, cetak Laporan Kunjungan & Rekapitulasi Bulanan Permenkes 2023, tanpa aksi khusus Direktur yang tidak diizinkan.',
+        keyFrames: 'AD-00..AD-28 (Quotation, Customers 4 Tab, SPK & Recurring Preview, Work Reports & Anomalies, Live/Journey Tracking, Team, Settings)'
+      },
+      MARKETING: {
+        title: 'MARKETING — Surveyor / Sales Komersial',
+        device: 'Desktop, Tablet & Mobile Lapangan',
+        contextBadge: 'WORKSPACE KOMERSIAL & SURVEY',
+        navItems: [
+          '1. Penawaran Harga (Daftar, Buat Survey AR/PCO, Pipeline Deal, Buku Nomor Surat)',
+          '2. Pelanggan & Garansi (Master Pelanggan, Peta, Jadwal Garansi)',
+          '3. SPK & Proyek (Konteks jadwal proyek)',
+          '4. Tagihan & Performa MoM (Survey vs Approval Rate vs Deal Rate)',
+          'Profil & Preferensi di menu Avatar atas'
+        ],
+        summary: 'Fokus pada pembuatan penawaran berbasis hasil survey (rumus ukuran m¹/m² & matriks garansi), memantau pipeline (draft → pending → approved → sent_to_client → deal), serta evaluasi performa MoM tanpa melihat laporan kerja internal atau gudang.',
+        keyFrames: 'MK-00 Starting Page • MK-01 My Quotations • MK-02 Survey Form • MK-03 Sticky Pricing & Preview • MK-04 Deal Pipeline • MK-07 MoM Performance'
+      },
+      INVENTORY: {
+        title: 'INVENTORY — Staf Gudang & Alokasi Chemical',
+        device: 'Desktop, Tablet & Mobile',
+        contextBadge: 'WORKSPACE GUDANG • MUTASI AMAN TANPA DEFAULT [0]',
+        navItems: [
+          '1. Gudang & Chemical (Katalog Stok, Stok Hampir Habis, Alokasi Proyek, Tren Cair/Padat, Riwayat Mutasi, Rekap Bulanan)',
+          '2. Lokasi & Daftar Proyek',
+          'Profil & Preferensi di menu Avatar atas'
+        ],
+        summary: 'Mencatat Stok Masuk (IN) dan Keluar ke Proyek (OUT) dengan pemilihan barang dan proyek secara eksplisit (tidak pernah default ke items[0] atau projects[0]), menampilkan stok saat ini vs stok baru, tanpa melihat margin laba/rugi perusahaan.',
+        keyFrames: 'IV-00 Overview • IV-01 Catalog • IV-02 Stock In • IV-03 Explicit Stock Out to Project • IV-04 Low Stock • IV-05 Allocation • IV-06 Trend'
+      },
+      TEKNISI_LAPANGAN: {
+        title: 'TEKNISI_LAPANGAN — Mobile PWA Eksekutor Lapangan',
+        device: 'Mobile-First PWA (390×844 & 360×800)',
+        contextBadge: 'MOBILE PWA • FLOATING BOTTOM PILL',
+        navItems: [
+          '1. Beranda (Tugas Hari Ini)',
+          '2. Tugas (Daftar Proyek/Tugas)',
+          '3. Riwayat',
+          '4. Profil (Floating Bottom Pill otomatis sembunyi saat masuk ke Detail Tugas / 6 Langkah Kerja)'
+        ],
+        summary: 'Menjalankan alur 6 langkah di lapangan (Check-in GPS → Dokumentasi Foto Kondisi Awal & Hasil → Form Treatment PCO/AR → Check-out → Tanda Tangan PIC → Review & Kirim) dengan pembedaan jujur antara "Tersimpan lokal" vs "Tersinkron ke server".',
+        keyFrames: 'TK-00 Home • TK-01 Task List • TK-02 Task Detail • TK-03 GPS Check-in • TK-04 Work Stepper • TK-05 Photo • TK-06 Treatment • TK-10 Offline Sync'
+      }
+    };
+
+    function selectRoleWorkspace(roleKey) {
+      var roles = ['MASTER_SUPER_ADMIN', 'SUPERADMIN', 'ADMIN', 'MARKETING', 'INVENTORY', 'TEKNISI_LAPANGAN'];
+      for (var i = 0; i < roles.length; i++) {
+        var r = roles[i];
+        var btn = document.getElementById('role-btn-' + r);
+        if (btn) {
+          btn.className = (r === roleKey)
+            ? 'p-2.5 rounded-xl border-2 border-[#1A5C38] bg-[#EDF2EE] text-left cursor-pointer'
+            : 'p-2.5 rounded-xl border border-[#DCE5DE] bg-[#F4F6F4] hover:border-[#1A5C38] text-left cursor-pointer';
+        }
+      }
+      var ind = document.getElementById('active-role-indicator');
+      if (ind) ind.textContent = 'Role Aktif: ' + roleKey;
+
+      var spec = ROLE_SPECS[roleKey];
+      var box = document.getElementById('role-workspace-preview');
+      if (!box || !spec) return;
+
+      var navHtml = '';
+      for (var n = 0; n < spec.navItems.length; n++) {
+        navHtml += '<li class="text-xs text-[#17231C] font-medium">' + spec.navItems[n] + '</li>';
+      }
+
+      box.innerHTML =
+        '<div class="flex flex-wrap items-center justify-between gap-2 border-b border-[#DCE5DE] pb-2.5 mb-3">' +
+          '<div>' +
+            '<span class="px-2 py-0.5 rounded bg-[#1A5C38] text-white text-[10px] font-mono-code font-bold">' + spec.contextBadge + '</span>' +
+            '<h3 class="text-sm sm:text-base font-extrabold text-[#17231C] mt-1">' + spec.title + '</h3>' +
+          '</div>' +
+          '<span class="text-xs text-[#66736B] font-mono-code">' + spec.device + '</span>' +
+        '</div>' +
+        '<div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">' +
+          '<div class="bg-white p-3.5 rounded-xl border border-[#DCE5DE] space-y-1.5">' +
+            '<strong class="block text-[#1A5C38] uppercase text-[10.5px] tracking-wider">Struktur Navigasi Khusus Role Ini:</strong>' +
+            '<ul class="list-disc pl-4 space-y-1">' + navHtml + '</ul>' +
+          '</div>' +
+          '<div class="bg-white p-3.5 rounded-xl border border-[#DCE5DE] space-y-1.5">' +
+            '<strong class="block text-[#1A5C38] uppercase text-[10.5px] tracking-wider">Batasan Hak Akses &amp; Frame Figma:</strong>' +
+            '<p class="text-[#66736B] leading-relaxed">' + spec.summary + '</p>' +
+            '<p class="font-mono-code text-[10.5px] text-[#17231C] pt-1 border-t border-[#EDF2EE]">' + spec.keyFrames + '</p>' +
+          '</div>' +
+        '</div>';
+    }
+
+    var simState = {
+      mainView: 'simulator',
+      phoneTab: 'home',
+      subPage: null,
+      serviceCategory: 'PCO',
+      jobStage: 'READY',
+      modalOpen: null,
+      photosCount: 1,
+      newTaskService: 'PCO',
+      newTaskClient: 'RS PON Prof. Dr. dr. Mahar Mardjono',
+      newTaskIsNewClient: false,
+      focusCheckboxes: ['Kecoa', 'Lalat', 'Nyamuk', 'Semut', 'Tikus'],
+      checkedFocus: ['Kecoa', 'Semut', 'Tikus'],
+      findingsList: [
+        { pest: 'Kecoa', qty: 4, loc: 'Gedung A - Lt. 1 - Dapur Gizi' },
+        { pest: 'Semut', qty: 12, loc: 'Gedung A - Lt. 11 - R. VVIP' }
+      ],
+      selectedHandlerIdx: 0
+    };
+
+    var EXTRA_PESTS_PCO = ['Kumbang / Kupu-Kupu', 'Kelelawar', 'Kelabang', 'Tawon', 'Laba-Laba'];
+    var EXTRA_PESTS_AR = ['Rayap Tanah (Coptotermes sp.)', 'Rayap Kayu Kering (Cryptotermes sp.)', 'Jalur Kembara / Mud Tubes Aktif', 'Titik Drilling & Injeksi Pondasi'];
+
+    function switchMainView(view) {
+      simState.mainView = view;
+      var views = ['simulator', 'architecture', 'mapping'];
+      for (var i = 0; i < views.length; i++) {
+        var v = views[i];
+        var sec = document.getElementById('view-' + v);
+        var btn = document.getElementById('nav-btn-' + v);
+        if (sec) {
+          sec.className = (v === view) ? 'space-y-6' : 'hidden';
+        }
+        if (btn) {
+          btn.className = (v === view)
+            ? 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white text-[#1A5C38] shadow-sm cursor-pointer'
+            : 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-[#66736B] hover:text-[#17231C] cursor-pointer';
+        }
+      }
+      if (view === 'architecture') {
+        selectHandlerNode(simState.selectedHandlerIdx);
+      }
+    }
+
+    function setPhoneTab(tab) {
+      simState.phoneTab = tab;
+      simState.subPage = null;
+      simState.modalOpen = null;
+      renderPhoneScreen();
+    }
+
+    function openSubPage(sp) {
+      simState.subPage = sp;
+      simState.modalOpen = null;
+      renderPhoneScreen();
+    }
+
+    function setSimJobStage(stage) {
+      simState.phoneTab = 'home';
+      simState.jobStage = stage;
+      simState.modalOpen = null;
+      simState.subPage = (stage === 'WORKING') ? 'work' : null;
+      renderPhoneScreen();
+    }
+
+    function toggleSimServiceCategory() {
+      simState.serviceCategory = (simState.serviceCategory === 'PCO') ? 'AR' : 'PCO';
+      renderPhoneScreen();
+    }
+
+    function openCameraSimulation(photoType) {
+      simState.modalOpen = 'CAMERA';
+      simState.cameraType = photoType || 'CHECK_IN';
+      renderPhoneScreen();
+    }
+
+    function captureSimulatedPhoto() {
+      simState.photosCount += 1;
+      simState.modalOpen = null;
+      simState.jobStage = 'WORKING';
+      simState.subPage = 'work';
+      showPhoneToast('✓ CHECK-IN & FOTO TERSIMPAN', 'Anda berada di alur Pekerjaan Berlangsung (TK-04 Stepper).');
+      renderPhoneScreen();
+    }
+
+    function openTreatmentModalSimulation() {
+      simState.modalOpen = 'TREATMENT';
+      renderPhoneScreen();
+    }
+
+    function saveTreatmentSimulation() {
+      simState.modalOpen = null;
+      simState.jobStage = 'COMPLETED';
+      simState.subPage = 'sync';
+      showPhoneToast('✓ SERVER-CONFIRMED', 'Laporan telah dikonfirmasi oleh server Admin.');
+      renderPhoneScreen();
+    }
+
+    function openNewTaskModal() {
+      simState.modalOpen = 'NEW_TASK';
+      renderPhoneScreen();
+    }
+
+    function closeSimModal() {
+      simState.modalOpen = null;
+      renderPhoneScreen();
+    }
+
+    function showPhoneToast(title, desc) {
+      var t = document.getElementById('phone-toast');
+      var tt = document.getElementById('phone-toast-title');
+      var td = document.getElementById('phone-toast-desc');
+      if (t && tt && td) {
+        tt.textContent = title;
+        td.textContent = desc;
+        t.classList.remove('hidden');
+      }
+    }
+
+    function hidePhoneToast() {
+      var t = document.getElementById('phone-toast');
+      if (t) t.classList.add('hidden');
+    }
+
+    function addFindingRowSim() {
+      var sel = document.getElementById('sim-finding-pest');
+      var qtyEl = document.getElementById('sim-finding-qty');
+      var locEl = document.getElementById('sim-finding-loc');
+      if (!sel || !qtyEl) return;
+      simState.findingsList.push({
+        pest: sel.value,
+        qty: parseInt(qtyEl.value, 10) || 1,
+        loc: (locEl && locEl.value.trim()) ? locEl.value.trim() : 'Gedung Utama'
+      });
+      renderPhoneScreen();
+    }
+
+    function removeFindingRowSim(idx) {
+      simState.findingsList.splice(idx, 1);
+      renderPhoneScreen();
+    }
+
+    function selectSimCustomer(idx) {
+      simState.newTaskIsNewClient = (idx === -1);
+      simState.newTaskClient = (idx === -1) ? 'Klinik Pratama Sehat Sentosa' : 'PT Arunika Properti';
+      renderPhoneScreen();
+    }
+
+    function renderPhoneScreen() {
+      var body = document.getElementById('phone-body');
+      var bottomNav = document.getElementById('phone-bottom-nav');
+      var ctrlCatLabel = document.getElementById('ctrl-cat-label');
+      var stateBadge = document.getElementById('sim-active-state-badge');
+
+      var isAR = simState.serviceCategory === 'AR';
+      if (ctrlCatLabel) {
+        ctrlCatLabel.textContent = isAR ? 'Mode: Anti Rayap (AR)' : 'Mode: Pest Control (PCO)';
+      }
+
+      var hideFloating = (simState.modalOpen !== null || simState.subPage !== null);
+      if (bottomNav) {
+        if (hideFloating) bottomNav.classList.add('hidden');
+        else bottomNav.classList.remove('hidden');
+      }
+
+      var tabs = ['home', 'projects', 'history', 'profile'];
+      for (var i = 0; i < tabs.length; i++) {
+        var tBtn = document.getElementById('tab-btn-' + tabs[i]);
+        if (tBtn) {
+          tBtn.className = (simState.phoneTab === tabs[i])
+            ? 'px-3.5 py-1.5 rounded-full text-xs font-bold bg-[#1A5C38] text-white transition-all cursor-pointer shadow-2xs'
+            : 'px-3 py-1.5 rounded-full text-xs font-semibold text-[#66736B] hover:text-[#17231C] transition-all cursor-pointer';
+        }
+      }
+
+      if (stateBadge) {
+        stateBadge.textContent = simState.modalOpen
+          ? 'Frame: TK-05 / TK-06 (' + simState.modalOpen + ')'
+          : simState.subPage
+          ? 'Frame: ' + simState.subPage.toUpperCase()
+          : 'Frame: TK-00 (' + simState.phoneTab.toUpperCase() + ')';
+      }
+
+      if (!body) return;
+
+      var activeProjectTitle = isAR ? 'Kantor Nusa · Serpong' : 'Gedung Arunika · Tangerang';
+      var activeCustomerName = isAR ? 'PT Nusa Karya' : 'PT Arunika Properti';
+      var activeServiceName = isAR ? 'Termite Control (Anti Rayap)' : 'General Pest Control';
+
+      if (simState.modalOpen === 'CAMERA') {
+        body.innerHTML =
+          '<div class="p-4 flex-1 flex flex-col justify-between bg-slate-950 text-white">' +
+            '<div class="flex items-center justify-between">' +
+              '<span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/40">GPS VALID (±8m) • DALAM RADIUS 100M</span>' +
+              '<button type="button" onclick="closeSimModal()" class="text-xs text-slate-400 hover:text-white font-bold">Tutup ✕</button>' +
+            '</div>' +
+            '<div class="my-auto h-64 rounded-xl bg-slate-900 border border-slate-800 flex flex-col items-center justify-center p-4 text-center">' +
+              '<div class="w-16 h-16 rounded-full border-2 border-dashed border-emerald-400/70 flex items-center justify-center text-emerald-400 text-xs font-mono-code mb-2">TK-03/05</div>' +
+              '<p class="text-xs font-bold">Check-in Lokasi &amp; Bukti Foto</p>' +
+              '<p class="text-[10px] text-slate-400 mt-1">Floating bottom pill otomatis disembunyikan</p>' +
+            '</div>' +
+            '<button type="button" onclick="captureSimulatedPhoto()" class="w-full py-3.5 rounded-xl bg-[#1A5C38] hover:bg-[#13462A] text-white font-bold text-xs cursor-pointer">Konfirmasi Check-in &amp; Simpan Foto</button>' +
+          '</div>';
+        return;
+      }
+
+      if (simState.modalOpen === 'TREATMENT') {
+        var catalog = isAR ? EXTRA_PESTS_AR : ['Kecoa', 'Lalat', 'Nyamuk', 'Semut', 'Tikus'];
+        var optsHtml = '';
+        for (var cIdx = 0; cIdx < catalog.length; cIdx++) {
+          optsHtml += '<option value="' + catalog[cIdx] + '">' + catalog[cIdx] + '</option>';
+        }
+        var rowsHtml = '';
+        for (var rIdx = 0; rIdx < simState.findingsList.length; rIdx++) {
+          var item = simState.findingsList[rIdx];
+          rowsHtml +=
+            '<div class="flex items-center justify-between bg-white border border-[#DCE5DE] rounded-lg px-2.5 py-1.5 text-[11px]">' +
+              '<div><span class="font-bold">' + item.pest + '</span> <span class="font-mono-code font-bold text-[#1A5C38]">(' + item.qty + ')</span> • <span class="text-[#66736B]">' + item.loc + '</span></div>' +
+              '<button type="button" onclick="removeFindingRowSim(' + rIdx + ')" class="text-rose-600 font-bold px-1">✕</button>' +
+            '</div>';
+        }
+        body.innerHTML =
+          '<header class="h-14 bg-white border-b border-[#DCE5DE] px-3 flex items-center justify-between shrink-0">' +
+            '<button type="button" onclick="closeSimModal()" class="text-sm font-bold text-[#17231C]">←</button>' +
+            '<strong class="text-sm font-bold">TK-06 Form Treatment (Langkah 3/6)</strong>' +
+            '<span class="w-6"></span>' +
+          '</header>' +
+          '<div class="p-4 space-y-3 flex-1 overflow-y-auto">' +
+            '<div class="p-3 rounded-xl bg-white border border-[#DCE5DE] space-y-2">' +
+              '<label class="block text-[11px] font-bold text-[#17231C]">' + (isAR ? 'Parameter Rayap Ditemukan (> 0)' : 'Hama Ditemukan (Dropdown > 0)') + '</label>' +
+              '<div class="grid grid-cols-3 gap-1.5">' +
+                '<select id="sim-finding-pest" class="col-span-2 rounded-lg border border-[#DCE5DE] bg-white px-2 py-1.5 text-xs">' + optsHtml + '</select>' +
+                '<input id="sim-finding-qty" type="number" min="1" value="3" class="rounded-lg border border-[#DCE5DE] bg-white px-2 py-1.5 text-xs font-mono-code" />' +
+              '</div>' +
+              '<div class="flex gap-1.5">' +
+                '<input id="sim-finding-loc" type="text" placeholder="Area yang ditangani..." class="flex-1 rounded-lg border border-[#DCE5DE] bg-white px-2 py-1.5 text-xs" />' +
+                '<button type="button" onclick="addFindingRowSim()" class="px-3 py-1.5 rounded-lg bg-[#1A5C38] text-white text-xs font-semibold cursor-pointer">+ Catat</button>' +
+              '</div>' +
+              '<div class="space-y-1 pt-1">' + rowsHtml + '</div>' +
+            '</div>' +
+            '<button type="button" onclick="saveTreatmentSimulation()" class="w-full py-3 rounded-xl bg-[#1A5C38] hover:bg-[#13462A] text-white font-semibold text-xs cursor-pointer">Simpan &amp; Kirim Laporan →</button>' +
+          '</div>';
+        return;
+      }
+
+      if (simState.modalOpen === 'NEW_TASK') {
+        body.innerHTML =
+          '<header class="h-14 bg-white border-b border-[#DCE5DE] px-3 flex items-center justify-between shrink-0">' +
+            '<button type="button" onclick="closeSimModal()" class="text-sm font-bold text-[#17231C]">←</button>' +
+            '<strong class="text-sm font-bold">Buat Penugasan Baru</strong>' +
+            '<span class="w-6"></span>' +
+          '</header>' +
+          '<div class="p-4 space-y-3 flex-1 overflow-y-auto">' +
+            '<div class="bg-white rounded-xl border border-[#DCE5DE] p-3.5 space-y-3">' +
+              '<span class="text-[11px] font-bold text-[#17231C] block">1. Pilih Layanan (Pest Control vs Anti Rayap)</span>' +
+              '<div class="grid grid-cols-2 gap-2">' +
+                '<button type="button" onclick="simState.newTaskService=\'PCO\';renderPhoneScreen();" class="p-2.5 rounded-xl border text-left text-xs font-bold cursor-pointer ' + (simState.newTaskService === 'PCO' ? 'bg-[#1A5C38] text-white border-[#1A5C38]' : 'bg-white text-[#17231C] border-[#DCE5DE]') + '">Pest Control</button>' +
+                '<button type="button" onclick="simState.newTaskService=\'AR\';renderPhoneScreen();" class="p-2.5 rounded-xl border text-left text-xs font-bold cursor-pointer ' + (simState.newTaskService === 'AR' ? 'bg-[#1A5C38] text-white border-[#1A5C38]' : 'bg-white text-[#17231C] border-[#DCE5DE]') + '">Anti Rayap</button>' +
+              '</div>' +
+              '<span class="text-[11px] font-bold text-[#17231C] block">2. Pelanggan (Database / Input Baru)</span>' +
+              '<select onchange="selectSimCustomer(parseInt(this.value,10))" class="w-full rounded-lg border border-[#DCE5DE] bg-white px-2.5 py-2 text-xs">' +
+                '<option value="0">PT Arunika Properti (Database)</option>' +
+                '<option value="-1">+ Input Pelanggan Baru: Klinik Pratama Sehat Sentosa</option>' +
+              '</select>' +
+              '<button type="button" onclick="closeSimModal();showPhoneToast(\'✓ PENUGASAN DISIMPAN\', simState.newTaskClient);" class="w-full py-3 rounded-xl bg-[#1A5C38] text-white font-semibold text-xs cursor-pointer">Simpan Penugasan</button>' +
+            '</div>' +
+          '</div>';
+        return;
+      }
+
+      if (simState.subPage === 'task-detail') {
+        body.innerHTML =
+          '<header class="h-14 bg-white border-b border-[#DCE5DE] px-3 flex items-center justify-between shrink-0">' +
+            '<button type="button" onclick="openSubPage(null)" class="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-[#17231C] cursor-pointer">←</button>' +
+            '<strong class="text-sm font-bold">TK-02 Detail Tugas</strong>' +
+            '<span class="text-lg text-[#66736B] px-2">⋯</span>' +
+          '</header>' +
+          '<div class="p-4 space-y-4 flex-1 overflow-y-auto">' +
+            '<div>' +
+              '<div class="flex items-center justify-between">' +
+                '<span class="badge-lite info"><span class="badge-dot"></span>READY (Siap Dikerjakan)</span>' +
+                '<small class="text-[10.5px] text-[#66736B] font-mono-code">SPK-2026-0184</small>' +
+              '</div>' +
+              '<h1 class="text-lg font-bold text-[#17231C] mt-2">' + activeProjectTitle + '</h1>' +
+              '<p class="text-xs text-[#66736B]">' + activeCustomerName + '</p>' +
+            '</div>' +
+            '<div class="map-illustration">' +
+              '<div class="road"></div><div class="road two"></div>' +
+              '<div class="map-pin"><span>📍</span></div>' +
+            '</div>' +
+            '<div class="border-b border-[#DCE5DE] pb-3 space-y-2.5 text-xs">' +
+              '<h2 class="font-bold text-sm text-[#17231C]">Informasi pekerjaan</h2>' +
+              '<div><small class="text-[10px] text-[#66736B] block">Jadwal</small><strong class="text-[#17231C]">10 Nov 2026 · 09.00</strong></div>' +
+              '<div><small class="text-[10px] text-[#66736B] block">Layanan</small><strong class="text-[#17231C]">' + activeServiceName + '</strong></div>' +
+              '<div><small class="text-[10px] text-[#66736B] block">Lokasi</small><strong class="text-[#17231C]">Kawasan Bisnis Tangerang (Radius 100m)</strong></div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="bg-white border-t border-[#DCE5DE] p-3.5 shrink-0">' +
+            '<button type="button" onclick="openCameraSimulation(\'CHECK_IN\')" class="w-full py-3 rounded-[10px] bg-[#1A5C38] hover:bg-[#13462A] text-white font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer">Mulai Pekerjaan / Check-in →</button>' +
+          '</div>';
+        return;
+      }
+
+      if (simState.subPage === 'work') {
+        body.innerHTML =
+          '<header class="h-14 bg-white border-b border-[#DCE5DE] px-3 flex items-center justify-between shrink-0">' +
+            '<button type="button" onclick="openSubPage(null)" class="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-[#17231C] cursor-pointer">←</button>' +
+            '<strong class="text-sm font-bold">TK-04 Pekerjaan Berlangsung</strong>' +
+            '<span class="w-8"></span>' +
+          '</header>' +
+          '<div class="p-4 space-y-3.5 flex-1 overflow-y-auto">' +
+            '<div>' +
+              '<div class="flex items-center justify-between">' +
+                '<span class="badge-lite info"><span class="badge-dot"></span>WORKING (Sedang Berlangsung)</span>' +
+                '<small class="text-[10.5px] text-[#66736B] font-mono-code">SPK-2026-0184</small>' +
+              '</div>' +
+              '<h1 class="text-lg font-bold text-[#17231C] mt-2">' + activeProjectTitle + '</h1>' +
+              '<p class="text-[11.5px] text-[#66736B] mt-0.5">Ikuti langkah secara berurutan. Progres tersimpan lokal bila offline.</p>' +
+            '</div>' +
+            '<div class="bg-white border border-[#DCE5DE] rounded-[13px] px-3.5 divide-y divide-[#DCE5DE] text-xs">' +
+              '<div class="py-3 flex items-center gap-3">' +
+                '<span class="w-6 h-6 rounded-full bg-[#E8F4EC] text-[#237A4B] font-bold flex items-center justify-center text-[11px]">✓</span>' +
+                '<div class="flex-1"><strong class="block text-[#17231C]">1. Check-in GPS</strong><small class="text-[10px] text-[#66736B]">Selesai · Dalam radius</small></div>' +
+              '</div>' +
+              '<button type="button" onclick="openCameraSimulation(\'BEFORE\')" class="w-full py-3 flex items-center gap-3 text-left cursor-pointer">' +
+                '<span class="w-6 h-6 rounded-full bg-[#1A5C38] text-white font-bold flex items-center justify-center text-[11px]">2</span>' +
+                '<div class="flex-1"><strong class="block text-[#1A5C38]">2. Dokumentasi Foto</strong><small class="text-[10px] text-[#66736B]">Berikutnya (' + simState.photosCount + ' foto)</small></div>' +
+                '<span class="text-[#66736B]">›</span>' +
+              '</button>' +
+              '<button type="button" onclick="openTreatmentModalSimulation()" class="w-full py-3 flex items-center gap-3 text-left cursor-pointer">' +
+                '<span class="w-6 h-6 rounded-full bg-[#EDF2EE] text-[#66736B] font-bold flex items-center justify-center text-[11px]">3</span>' +
+                '<div class="flex-1"><strong class="block text-[#17231C]">3. Form Treatment</strong><small class="text-[10px] text-[#66736B]">Catat temuan &amp; dosis</small></div>' +
+                '<span class="text-[#66736B]">›</span>' +
+              '</button>' +
+              '<div class="py-3 flex items-center gap-3">' +
+                '<span class="w-6 h-6 rounded-full bg-[#EDF2EE] text-[#66736B] font-bold flex items-center justify-center text-[11px]">4</span>' +
+                '<div class="flex-1"><strong class="block text-[#17231C]">4. Check-out GPS</strong><small class="text-[10px] text-[#66736B]">Belum dimulai</small></div>' +
+              '</div>' +
+              '<div class="py-3 flex items-center gap-3">' +
+                '<span class="w-6 h-6 rounded-full bg-[#EDF2EE] text-[#66736B] font-bold flex items-center justify-center text-[11px]">5</span>' +
+                '<div class="flex-1"><strong class="block text-[#17231C]">5. Tanda Tangan Pelanggan</strong><small class="text-[10px] text-[#66736B]">Bila diperlukan</small></div>' +
+              '</div>' +
+              '<div class="py-3 flex items-center gap-3">' +
+                '<span class="w-6 h-6 rounded-full bg-[#EDF2EE] text-[#66736B] font-bold flex items-center justify-center text-[11px]">6</span>' +
+                '<div class="flex-1"><strong class="block text-[#17231C]">6. Kirim Laporan</strong><small class="text-[10px] text-[#66736B]">Belum dimulai</small></div>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="bg-white border-t border-[#DCE5DE] p-3.5 shrink-0">' +
+            '<button type="button" onclick="openTreatmentModalSimulation()" class="w-full py-3 rounded-[10px] bg-[#1A5C38] hover:bg-[#13462A] text-white font-semibold text-xs cursor-pointer">Lanjut ke Form Treatment →</button>' +
+          '</div>';
+        return;
+      }
+
+      if (simState.subPage === 'sync') {
+        body.innerHTML =
+          '<header class="h-14 bg-white border-b border-[#DCE5DE] px-3 flex items-center justify-center shrink-0">' +
+            '<strong class="text-sm font-bold">TK-10 Status Pengiriman</strong>' +
+          '</header>' +
+          '<div class="p-6 text-center space-y-4 my-auto">' +
+            '<div class="w-16 h-16 rounded-full bg-[#E8F4EC] text-[#237A4B] flex items-center justify-center text-2xl font-bold mx-auto">✓</div>' +
+            '<h1 class="text-xl font-bold text-[#17231C]">Laporan terkirim ke server</h1>' +
+            '<p class="text-xs text-[#66736B]">Server telah mengonfirmasi laporan diterima (tidak pernah melabeli simpanan lokal sebagai terkirim sebelum konfirmasi server).</p>' +
+            '<div class="bg-white border border-[#DCE5DE] rounded-xl p-3 flex items-center justify-between text-left text-xs">' +
+              '<div><strong class="block text-[#17231C]">SPK-2026-0184</strong><small class="text-[#66736B]">' + activeProjectTitle + '</small></div>' +
+              '<span class="badge-lite success"><span class="badge-dot"></span>Tersinkron</span>' +
+            '</div>' +
+            '<button type="button" onclick="setSimJobStage(\'READY\')" class="w-full py-3 rounded-[10px] bg-white border border-[#DCE5DE] text-[#17231C] font-semibold text-xs cursor-pointer">Kembali ke Beranda</button>' +
+          '</div>';
+        return;
+      }
+
+      if (simState.phoneTab === 'home') {
+        body.innerHTML =
+          '<div class="bg-white px-4 pt-4 pb-3 border-b border-[#DCE5DE] flex items-center justify-between shrink-0">' +
+            '<div>' +
+              '<div class="flex items-center gap-2.5">' +
+                '<div class="brand-mark"><span></span><span></span><span></span></div>' +
+                '<div><strong class="block text-sm font-bold leading-tight">Fieldwork</strong><small class="block text-[10.5px] text-[#66736B]">GuciMas Pratama · Data Demo</small></div>' +
+              '</div>' +
+              '<p class="text-[10px] text-[#66736B] mt-1.5 ml-[44px]">Selasa, 10 November 2026</p>' +
+            '</div>' +
+            '<button type="button" onclick="openNewTaskModal()" class="px-2.5 py-1.5 rounded-lg bg-[#EDF2EE] text-[#1A5C38] text-[11px] font-bold cursor-pointer">+ Baru</button>' +
+          '</div>' +
+          '<div class="p-4 pb-24 space-y-4">' +
+            '<div class="flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] bg-[#E8F4EC] text-[#237A4B] text-[10.5px]">' +
+              '<span>●</span>' +
+              '<div class="flex-1"><strong class="block text-[11px]">Online</strong>Data akan dikirim ke server.</div>' +
+            '</div>' +
+            '<div class="flex items-center justify-between">' +
+              '<div><span class="text-xs text-[#66736B] block">Selamat pagi, Agung</span><h1 class="text-lg font-bold text-[#17231C] tracking-tight">Ringkasan Hari Ini</h1></div>' +
+              '<button type="button" onclick="simState.scopeOpen=!simState.scopeOpen;renderPhoneScreen();" class="px-2.5 py-1 rounded-full bg-[#EDF2EE] text-[#1A5C38] text-[10px] font-bold cursor-pointer">' + (simState.scopeOpen ? 'Mode Detail ▲' : 'Mode Ringkas ▼') + '</button>' +
+            '</div>' +
+            '<div class="grid grid-cols-3 bg-white border border-[#DCE5DE] rounded-xl py-2 px-1 text-center text-xs shadow-2xs">' +
+              '<div class="border-r border-[#EDF2EE]"><strong class="block text-sm font-extrabold text-[#17231C]">3</strong><span class="text-[10px] text-[#66736B]">Hari Ini</span></div>' +
+              '<div class="border-r border-[#EDF2EE]"><strong class="block text-sm font-extrabold text-[#1A5C38]">1</strong><span class="text-[10px] text-[#1A5C38] font-bold">Selesai</span></div>' +
+              '<div><strong class="block text-sm font-extrabold text-[#17231C]">2</strong><span class="text-[10px] text-[#66736B]">Pending</span></div>' +
+            '</div>' +
+            '<article class="bg-white border border-[#DCE5DE] rounded-[15px] p-4 relative overflow-hidden shadow-xs">' +
+              '<div class="absolute top-0 left-0 right-0 h-1 bg-[#1A5C38]"></div>' +
+              '<div class="flex items-center justify-between">' +
+                '<span class="badge-lite info"><span class="badge-dot"></span>' + (simState.jobStage === 'WORKING' ? 'WORKING' : 'READY · Siap Dikerjakan') + '</span>' +
+                '<span class="text-xs font-bold text-[#17231C]">09.00</span>' +
+              '</div>' +
+              '<h2 class="text-base font-bold text-[#17231C] mt-3 mb-0.5">' + activeProjectTitle + '</h2>' +
+              '<p class="text-xs text-[#66736B]">' + activeCustomerName + '</p>' +
+              '<div class="my-2.5 rounded-lg border border-[#DCE5DE] bg-[#F4F6F4] overflow-hidden text-xs">' +
+                '<button type="button" onclick="simState.scopeOpen=!simState.scopeOpen;renderPhoneScreen();" class="w-full px-3 py-2 flex items-center justify-between font-bold text-[#1A5C38] cursor-pointer"><span>Lihat Detail Rute &amp; Scope (On-Click)</span><span>' + (simState.scopeOpen ? '▲' : '▼') + '</span></button>' +
+                (simState.scopeOpen ? '<div class="px-3 pb-2.5 pt-1 border-t border-[#DCE5DE] space-y-1 text-[11px] text-[#17231C]"><div>📍 Kawasan Bisnis Tangerang (12 mnt · Lancar)</div><div>📋 Scope: ' + activeServiceName + ' (14 Titik Stasiun)</div><div>👤 PIC: Hendra Gunawan (0812-8899-XXXX)</div></div>' : '') +
+              '</div>' +
+              '<button type="button" onclick="openSubPage(\'task-detail\')" class="w-full py-3 rounded-[10px] bg-[#1A5C38] hover:bg-[#13462A] text-white font-semibold text-xs flex items-center justify-center gap-1.5 cursor-pointer">' +
+                '<span>Lihat Tugas</span><span>→</span>' +
+              '</button>' +
+            '</article>' +
+            '<div class="flex items-center justify-between pt-2">' +
+              '<div><h2 class="text-sm font-bold text-[#17231C]">Jadwal hari ini</h2><p class="text-[11px] text-[#66736B]">Data Demo · 2 penugasan</p></div>' +
+              '<button type="button" onclick="setPhoneTab(\'projects\')" class="text-xs font-semibold text-[#1A5C38] cursor-pointer">Lihat semua</button>' +
+            '</div>' +
+            '<button type="button" onclick="openSubPage(\'task-detail\')" class="w-full grid grid-cols-[54px_1fr_auto] gap-2.5 items-center bg-white border border-[#DCE5DE] rounded-xl p-3 text-left cursor-pointer">' +
+              '<div class="border-r border-[#DCE5DE] pr-2"><strong class="block text-xs text-[#17231C]">13.30</strong><span class="text-[10px] text-[#66736B]">Hari ini</span></div>' +
+              '<div class="min-w-0"><strong class="block text-xs text-[#17231C] truncate">Kantor Nusa · Serpong</strong><small class="text-[10.5px] text-[#66736B]">Termite Control</small></div>' +
+              '<span class="badge-lite info"><span class="badge-dot"></span>READY</span>' +
+            '</button>' +
+          '</div>';
+      } else if (simState.phoneTab === 'projects') {
+        body.innerHTML =
+          '<header class="h-14 bg-white border-b border-[#DCE5DE] px-3 flex items-center justify-between shrink-0">' +
+            '<div class="brand-mark"><span></span><span></span><span></span></div>' +
+            '<strong class="text-sm font-bold">TK-01 Daftar Tugas</strong>' +
+            '<button type="button" onclick="openNewTaskModal()" class="text-lg font-bold text-[#1A5C38] px-2 cursor-pointer">+</button>' +
+          '</header>' +
+          '<div class="p-4 pb-24 space-y-3">' +
+            '<input type="text" placeholder="Cari tugas atau lokasi..." class="w-full h-10 rounded-[10px] border border-[#DCE5DE] bg-white px-3 text-xs" />' +
+            '<div class="space-y-2.5">' +
+              '<button type="button" onclick="openSubPage(\'task-detail\')" class="w-full bg-white border border-[#DCE5DE] rounded-xl p-3.5 text-left cursor-pointer block">' +
+                '<div class="flex items-center justify-between mb-2"><small class="text-[10.5px] text-[#66736B]">10 Nov 2026 · 09.00</small><span class="badge-lite info"><span class="badge-dot"></span>WORKING</span></div>' +
+                '<strong class="block text-sm text-[#17231C]">Gedung Arunika · Tangerang</strong>' +
+                '<span class="block text-xs text-[#66736B] mt-0.5">General Pest Control</span>' +
+                '<p class="text-[11px] text-[#66736B] mt-2.5 pt-2 border-t border-[#DCE5DE]">📍 PT Arunika Properti</p>' +
+              '</button>' +
+              '<button type="button" onclick="openSubPage(\'task-detail\')" class="w-full bg-white border border-[#DCE5DE] rounded-xl p-3.5 text-left cursor-pointer block">' +
+                '<div class="flex items-center justify-between mb-2"><small class="text-[10.5px] text-[#66736B]">10 Nov 2026 · 13.30</small><span class="badge-lite info"><span class="badge-dot"></span>READY</span></div>' +
+                '<strong class="block text-sm text-[#17231C]">Kantor Nusa · Serpong</strong>' +
+                '<span class="block text-xs text-[#66736B] mt-0.5">Termite Control</span>' +
+                '<p class="text-[11px] text-[#66736B] mt-2.5 pt-2 border-t border-[#DCE5DE]">📍 PT Nusa Karya</p>' +
+              '</button>' +
+            '</div>' +
+          '</div>';
+      } else if (simState.phoneTab === 'history') {
+        body.innerHTML =
+          '<header class="h-14 bg-white border-b border-[#DCE5DE] px-3 flex items-center justify-between shrink-0">' +
+            '<div class="brand-mark"><span></span><span></span><span></span></div>' +
+            '<strong class="text-sm font-bold">TK-11 Riwayat</strong>' +
+            '<span class="w-8"></span>' +
+          '</header>' +
+          '<div class="p-4 pb-24 space-y-3">' +
+            '<button type="button" onclick="openSubPage(\'task-detail\')" class="w-full bg-white border border-[#DCE5DE] rounded-xl p-3.5 text-left cursor-pointer block">' +
+              '<div class="flex items-center justify-between mb-2"><small class="text-[10.5px] text-[#66736B]">8 Nov 2026 · 08.00</small><span class="badge-lite success"><span class="badge-dot"></span>COMPLETED</span></div>' +
+              '<strong class="block text-sm text-[#17231C]">Gudang Kemuning · Balaraja</strong>' +
+              '<span class="block text-xs text-[#66736B] mt-0.5">Fumigation &amp; Pest Control</span>' +
+              '<p class="text-[11px] text-[#66736B] mt-2.5 pt-2 border-t border-[#DCE5DE]">✓ Laporan tersinkron ke server</p>' +
+            '</button>' +
+          '</div>';
+      } else {
+        body.innerHTML =
+          '<header class="h-14 bg-white border-b border-[#DCE5DE] px-3 flex items-center justify-between shrink-0">' +
+            '<div class="brand-mark"><span></span><span></span><span></span></div>' +
+            '<strong class="text-sm font-bold">TK-12 Profil</strong>' +
+            '<span class="w-8"></span>' +
+          '</header>' +
+          '<div class="p-4 pb-24 space-y-4">' +
+            '<div class="text-center py-2">' +
+              '<div class="w-16 h-16 rounded-full bg-[#EDF2EE] text-[#1A5C38] font-bold text-lg flex items-center justify-center mx-auto">AP</div>' +
+              '<h1 class="text-lg font-bold text-[#17231C] mt-2.5">Andi Pratama</h1>' +
+              '<p class="text-xs text-[#66736B]">TEKNISI_LAPANGAN · GuciMas Pratama</p>' +
+            '</div>' +
+            '<div class="bg-white border border-[#DCE5DE] rounded-xl divide-y divide-[#DCE5DE] text-xs overflow-hidden">' +
+              '<div class="p-3.5 flex items-center justify-between"><div><strong class="block text-[#17231C]">Informasi akun</strong><small class="text-[#66736B]">Data profil Anda</small></div><span>›</span></div>' +
+              '<div class="p-3.5 flex items-center justify-between"><div><strong class="block text-[#17231C]">Bantuan &amp; prosedur</strong><small class="text-[#66736B]">Panduan penggunaan aplikasi</small></div><span>›</span></div>' +
+              '<div class="p-3.5 flex items-center justify-between text-[#B54141]"><div><strong class="block">Keluar</strong><small>Akhiri sesi pada perangkat ini</small></div></div>' +
+            '</div>' +
+          '</div>';
+      }
+    }
+
+    var HANDLER_SPECS = [
+      {
+        code: 'FIGMA PAGES 00–03 — Foundations, Tokens, Components & Shared Auth',
+        name: '00 Read Me • 01 Foundations & Tokens • 02 Components • 03 Shared Auth (SH-00..SH-05)',
+        summary: 'Membangun fondasi sistem desain tunggal: warna hijau Guci konsisten di Light (#1A5C38 / Canvas #F4F6F4) dan Dark Mode (#4B9B70 / Canvas #101613 — tidak berubah menjadi biru), tipografi Inter + Outfit + JetBrains Mono, grid 4px, serta frame autentikasi SH-00 s.d. SH-05.',
+        input: 'Light/Dark Tokens, Brand Mark, Sidebar 252px/64px, Topbar 64px, Status Badges, Risk Badges',
+        logic: '1. SH-00 Login: Split 2 kolom dengan Role Switcher.\n2. SH-01 Sign Up: Hanya melalui token undangan yang valid (bukan open registration).\n3. SH-02..05: Access Denied, Change Password, Profile & Theme, Session Expired.',
+        output: 'Seluruh 6 role berbagi komponen dasar yang konsisten namun masuk ke workspace yang terpisah.'
+      },
+      {
+        code: 'FIGMA PAGES 04–05 — Master Super Admin (MSA-00..05) & Superadmin Director (SA-00..06)',
+        name: '04 Master Super Admin Console • 05 Superadmin / Director Workspace',
+        summary: 'Memisahkan mental model pemilik platform SaaS (MASTER_SUPER_ADMIN) dari Direktur perusahaan tenant (SUPERADMIN).',
+        input: 'MSA: Company List, Status (ACTIVE/TRIAL/SUSPENDED), Invite Tokens. SA: 4 Dashboard Tabs, Quotation Approval, Chemical Profitability.',
+        logic: '1. MASTER_SUPER_ADMIN menampilkan banner KONTEKS PLATFORM SAAS dan konfirmasi perubahan status tenant.\n2. SUPERADMIN memiliki akses eksklusif ke Approval Penawaran (SA-04) dan Profitabilitas Chemical per proyek (SA-05).',
+        output: 'Isolasi multi-tenant terjaga dan kewenangan direktur terpisah jelas dari admin operasional.'
+      },
+      {
+        code: 'FIGMA PAGE 06 — Admin Operations (AD-00 s.d. AD-28)',
+        name: '10 Menu Sidebar Terkonsolidasi dalam 3 Grup Logis (Tanpa Duplikasi Anomali / Garansi)',
+        summary: 'Menyatukan operasional Admin ke dalam 10 menu utama: Dashboard, Penawaran, Pelanggan & Garansi (4 tab), SPK & Proyek (termasuk Recurring SPK Builder), Hasil & Verifikasi (dengan Queue Anomali & Risk Signals terpisah), Tracking (Live vs Journey), Gudang, Keuangan, Tim, dan Pengaturan & Audit.',
+        input: 'Quotation (7 status), SPK (3 status), Work Report (6 status), Risk Level (5 level), Permenkes 2023 Recap Engine',
+        logic: '1. Anomali menjadi filter/queue di dalam Hasil & Verifikasi Kerja, bukan menu sidebar terpisah.\n2. Pelanggan tanpa pin koordinat ditampilkan sebagai filter kualitas data di Analisis Peta.',
+        output: 'Navigasi satu level yang tenang, terstruktur, dan bebas duplikasi menu.'
+      },
+      {
+        code: 'FIGMA PAGES 07–09 — Marketing (MK-00..08), Inventory (IV-00..09) & Finance (FN-00..05)',
+        name: 'Workspace Fokus untuk Marketing, Gudang (Tanpa Default [0]), & Keuangan/Performa',
+        summary: 'Menyediakan ruang kerja spesifik untuk Marketing (Survey & Quotation + Sticky Summary + Deal Pipeline), Inventory (Mutasi Stok Eksplisit tanpa default items[0]/projects[0]), serta Finance & MoM Performance.',
+        input: 'Survey Volume Formula (m¹/m²), Explicit Item & Project Selector, Billing Installments, MoM Survey vs Approval vs Deal Rate',
+        logic: '1. Inventory Stock Out mewajibkan pemilihan barang dan proyek secara sadar (tidak pernah default ke items[0] atau projects[0]).\n2. MoM Performance membedakan secara tegas antara Approved Rate dan Deal Rate.',
+        output: 'Nol risiko salah transaksi stok gudang dan metrik komersial yang transparan.'
+      },
+      {
+        code: 'FIGMA PAGE 10 — Technician PWA (TK-00 s.d. TK-12)',
+        name: 'Mobile-First 390×844 & 360×800 dengan 6 Langkah Kerja + Floating Bottom Pill',
+        summary: 'Menggunakan alur bertahap dari referensi Lite (Beranda, Daftar Tugas, Detail Tugas, Check-in GPS, Work Stepper, Foto Kondisi Awal/Hasil, Form Treatment PCO vs AR, Check-out, Tanda Tangan, Review, & Sync Status) dengan Floating Bottom Pill.',
+        input: 'GPS Haversine & Accuracy, Watermarked Photos, PCO (26 Hama > 0) vs AR (9 Parameter Rayap), Offline Queue',
+        logic: '1. Floating Bottom Pill otomatis disembunyikan saat masuk ke sub-halaman workflow atau kamera.\n2. Data offline dilabeli "Tersimpan lokal (Menunggu sinkronisasi)", bukan "Terkirim".',
+        output: 'Pengalaman lapangan satu tangan yang jujur, cepat, dan tahan kondisi sinyal lemah.'
+      },
+      {
+        code: 'FIGMA PAGES 11–12 — Responsive Breakpoints, Edge States & 7 Prototype Flows',
+        name: '6 Target Viewport (1440px s.d. 360px), State Kritis GPS/Kamera/Sync & 7 Alur Klik',
+        summary: 'Mendokumentasikan adaptasi responsif (tabel menjadi kartu pada mobile, filter menjadi drawer) serta 7 alur prototipe end-to-end dari Quotation hingga SaaS Tenant Management.',
+        input: 'Viewports: 1440×1000, 1280×800, 1024×768, 768×1024, 390×844, 360×800',
+        logic: 'Menyediakan skeleton loading, empty state, no-result state, permission denied, stale data warning, dan konfirmasi aksi destruktif di setiap modul.',
+        output: 'Prototipe enterprise yang siap diuji dengan metrik Task Completion Rate, Time on Task, dan SUS.'
+      }
+    ];
+
+    function selectHandlerNode(idx) {
+      simState.selectedHandlerIdx = idx;
+      for (var i = 0; i < 6; i++) {
+        var btn = document.getElementById('handler-node-' + i);
+        if (btn) {
+          btn.className = (i === idx)
+            ? 'p-3.5 rounded-xl border-2 border-[#1A5C38] bg-[#EDF2EE] text-left cursor-pointer shadow-xs'
+            : 'p-3.5 rounded-xl border border-[#DCE5DE] bg-[#F4F6F4] text-left cursor-pointer';
+        }
+      }
+      var box = document.getElementById('handler-detail-box');
+      var spec = HANDLER_SPECS[idx];
+      if (!box || !spec) return;
+      box.innerHTML =
+        '<div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">' +
+          '<div>' +
+            '<span class="text-[11px] font-mono-code font-bold text-emerald-400 block">' + spec.code + '</span>' +
+            '<h3 class="text-sm sm:text-base font-mono-code font-bold text-white mt-0.5">' + spec.name + '</h3>' +
+          '</div>' +
+          '<span class="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30">Whole-App Spec Verified</span>' +
+        '</div>' +
+        '<p class="text-xs text-slate-300 leading-relaxed">' + spec.summary + '</p>' +
+        '<div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs pt-1">' +
+          '<div class="p-3 rounded-xl bg-slate-800/90 border border-slate-700 space-y-1">' +
+            '<span class="text-[10px] font-mono-code font-bold uppercase text-sky-400 block">1. Cakupan Komponen &amp; Data</span>' +
+            '<p class="text-slate-200 font-mono-code text-[11px] leading-relaxed">' + spec.input + '</p>' +
+          '</div>' +
+          '<div class="p-3 rounded-xl bg-slate-800/90 border border-slate-700 space-y-1">' +
+            '<span class="text-[10px] font-mono-code font-bold uppercase text-amber-400 block">2. Aturan UX &amp; Guard</span>' +
+            '<p class="text-slate-200 whitespace-pre-line text-[11px] leading-relaxed">' + spec.logic + '</p>' +
+          '</div>' +
+          '<div class="p-3 rounded-xl bg-slate-800/90 border border-slate-700 space-y-1">' +
+            '<span class="text-[10px] font-mono-code font-bold uppercase text-emerald-400 block">3. Hasil Akhir</span>' +
+            '<p class="text-slate-200 text-[11px] leading-relaxed">' + spec.output + '</p>' +
+          '</div>' +
+        '</div>';
+    }
+
+    window.onload = function () {
+      selectRoleWorkspace('SUPERADMIN');
+      renderPhoneScreen();
+      selectHandlerNode(0);
+    };
+  </script>
+</body>
+</html>
